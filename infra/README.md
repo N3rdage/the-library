@@ -45,6 +45,24 @@ What the script does:
 5. Registers the App Service's Easy Auth callback URL on the app registration.
 6. Connects to the new SQL DB with AAD auth and grants the App Service managed identity `db_datareader/writer/ddladmin`.
 
+## GitHub Actions CI/CD
+
+After the first `deploy.ps1` run, set up the GitHub → Azure OIDC link:
+
+```powershell
+./setup-github-oidc.ps1 -TenantId '<tenant>' -SubscriptionId '<sub>' `
+    -GitHubOrg 'N3rdage' -GitHubRepo 'the-library'
+```
+
+The script creates a `booktracker-ci` app registration with federated identity credentials (one for pushes to `main`, one for pull requests), assigns it Contributor on `rg-booktracker-prod`, and prints six GitHub repository variables for you to configure at `Settings → Secrets and variables → Actions → Variables`.
+
+Workflows under `.github/workflows/`:
+- `ci.yml` — build on PRs.
+- `deploy.yml` — on push to `main`: build, publish, deploy to the **staging** slot.
+- `swap.yml` — manual: `az webapp deployment slot swap staging -> production`. TODO in the file to wire up a GitHub Environment with required reviewers.
+
+Schema migrations currently run on app startup via `db.Database.MigrateAsync()`. Fine for a single-instance app; there's a TODO in `Program.cs` to switch to a deploy-time migration bundle once the app scales out.
+
 ## Post-deploy
 
 Assign users/groups to the enterprise app so they can sign in:
