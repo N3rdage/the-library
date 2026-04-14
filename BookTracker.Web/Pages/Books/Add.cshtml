@@ -6,14 +6,14 @@
 
 <h1 class="mb-3">Add a book</h1>
 
-<form method="post" class="row g-4">
+<form method="post" class="row g-4" novalidate>
     <div class="col-12">
         <div class="card">
             <div class="card-body">
                 <label asp-for="Input.LookupIsbn" class="form-label fw-semibold">Look up by ISBN</label>
                 <div class="input-group">
                     <input asp-for="Input.LookupIsbn" class="form-control" placeholder="9780345391803" />
-                    <button type="submit" asp-page-handler="Lookup" class="btn btn-outline-primary">Look up</button>
+                    <button type="submit" asp-page-handler="Lookup" formnovalidate class="btn btn-outline-primary">Look up</button>
                 </div>
                 <div class="form-text">Searches Open Library, then Google Books. Prefills the fields below — you can edit anything before saving.</div>
                 @if (!string.IsNullOrEmpty(Model.LookupMessage))
@@ -145,5 +145,24 @@
 </form>
 
 @section Scripts {
+    @* Lookup + save share one form, so a small script tells jQuery unobtrusive validation
+       to skip validation when the Look up button is clicked. Save still validates normally. *@
     <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            document.querySelectorAll('button[formnovalidate]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var form = btn.form;
+                    if (!form) return;
+                    if (window.jQuery) {
+                        var v = jQuery(form).data('validator');
+                        if (v) {
+                            v.settings.ignore = '*';
+                            v.cancelSubmit = true;
+                        }
+                    }
+                });
+            });
+        });
+    </script>
 }
