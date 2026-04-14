@@ -9,5 +9,9 @@ public class Genre
     [Required, MaxLength(100)]
     public string Name { get; set; } = string.Empty;
 
+    public int? ParentGenreId { get; set; }
+    public Genre? ParentGenre { get; set; }
+    public List<Genre> Children { get; set; } = [];
+
     public List<Book> Books { get; set; } = [];
 }

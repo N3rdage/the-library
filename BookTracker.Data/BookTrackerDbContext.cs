@@ -32,6 +32,12 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .HasIndex(g => g.Name)
             .IsUnique();
 
+        modelBuilder.Entity<Genre>()
+            .HasOne(g => g.ParentGenre)
+            .WithMany(g => g.Children)
+            .HasForeignKey(g => g.ParentGenreId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         modelBuilder.Entity<Publisher>()
             .HasIndex(p => p.Name)
             .IsUnique();

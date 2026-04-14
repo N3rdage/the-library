@@ -113,30 +113,38 @@
             <div class="card">
                 <div class="card-header bg-white"><h2 class="h5 mb-0">Genres</h2></div>
                 <div class="card-body">
-                    @if (existingGenres.Count == 0)
-                    {
-                        <p class="text-muted small mb-3">No genres yet — add some below.</p>
-                    }
-                    else
-                    {
-                        <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-2 mb-3">
-                            @foreach (var g in existingGenres)
-                            {
-                                var id = $"genre-{g.Id}";
-                                <div class="col">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="@id"
-                                               checked="@Input.SelectedGenreIds.Contains(g.Id)"
-                                               @onchange="e => ToggleGenre(g.Id, (bool)e.Value!)" />
-                                        <label class="form-check-label" for="@id">@g.Name</label>
-                                    </div>
+                    <div class="row g-3">
+                        @foreach (var top in topLevelGenres)
+                        {
+                            <div class="col-md-6 col-lg-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="@($"genre-{top.Id}")"
+                                           checked="@Input.SelectedGenreIds.Contains(top.Id)"
+                                           @onchange="e => ToggleGenre(top.Id, (bool)e.Value!)" />
+                                    <label class="form-check-label fw-semibold" for="@($"genre-{top.Id}")">@top.Name</label>
                                 </div>
+                                @foreach (var child in top.Children.OrderBy(c => c.Name))
+                                {
+                                    <div class="form-check ms-4">
+                                        <input class="form-check-input" type="checkbox" id="@($"genre-{child.Id}")"
+                                               checked="@Input.SelectedGenreIds.Contains(child.Id)"
+                                               @onchange="e => ToggleGenre(child.Id, (bool)e.Value!)" />
+                                        <label class="form-check-label" for="@($"genre-{child.Id}")">@child.Name</label>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                    @if (lookupCandidates.Count > 0)
+                    {
+                        <div class="mt-3 pt-3 border-top">
+                            <small class="text-muted d-block mb-1">Lookup returned (fuzzy-matched against the list above):</small>
+                            @foreach (var c in lookupCandidates)
+                            {
+                                <span class="badge bg-light text-dark border me-1 mb-1">@c</span>
                             }
                         </div>
                     }
-                    <label class="form-label">Additional genres (comma-separated)</label>
-                    <InputText @bind-Value="Input.NewGenres" class="form-control" placeholder="Science Fiction, Satire" />
-                    <div class="form-text">Any new names will be added to the shared genre list.</div>
                 </div>
             </div>
         </div>
@@ -212,16 +220,28 @@
     bool lookingUp;
     bool saving;
 
-    List<GenreOption> existingGenres = [];
+    List<GenreNode> topLevelGenres = [];
+    Dictionary<int, GenreNode> genreById = [];
     List<PublisherOption> existingPublishers = [];
+    List<string> lookupCandidates = [];
 
     protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
-        existingGenres = await db.Genres
+        var all = await db.Genres
             .OrderBy(g => g.Name)
-            .Select(g => new GenreOption(g.Id, g.Name))
+            .Select(g => new GenreNode(g.Id, g.Name, g.ParentGenreId))
             .ToListAsync();
+        genreById = all.ToDictionary(g => g.Id);
+        foreach (var g in all.Where(g => g.ParentGenreId.HasValue))
+        {
+            if (genreById.TryGetValue(g.ParentGenreId!.Value, out var parent))
+            {
+                parent.Children.Add(g);
+            }
+        }
+        topLevelGenres = all.Where(g => g.ParentGenreId is null).OrderBy(g => g.Name).ToList();
+
         existingPublishers = await db.Publishers
             .OrderBy(p => p.Name)
             .Select(p => new PublisherOption(p.Id, p.Name))
@@ -233,10 +253,17 @@
         if (isChecked)
         {
             if (!Input.SelectedGenreIds.Contains(id)) Input.SelectedGenreIds.Add(id);
+            // Auto-select the parent so a sub-genre tick implies its top-level genre.
+            if (genreById.TryGetValue(id, out var node) && node.ParentGenreId is int parentId
+                && !Input.SelectedGenreIds.Contains(parentId))
+            {
+                Input.SelectedGenreIds.Add(parentId);
+            }
         }
         else
         {
             Input.SelectedGenreIds.Remove(id);
+            // Un-checking a parent leaves children alone — they're independent picks.
         }
     }
 
@@ -267,24 +294,15 @@
             if (string.IsNullOrWhiteSpace(Input.Isbn)) Input.Isbn = result.Isbn;
             Input.DatePrinted ??= result.DatePrinted;
 
-            var extras = new List<string>();
-            foreach (var candidate in result.GenreCandidates)
+            lookupCandidates = result.GenreCandidates.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            foreach (var candidate in lookupCandidates)
             {
-                var match = existingGenres.FirstOrDefault(g => string.Equals(g.Name, candidate, StringComparison.OrdinalIgnoreCase));
+                var match = genreById.Values.FirstOrDefault(g => FuzzyGenreMatch(candidate, g.Name));
                 if (match is not null)
                 {
-                    if (!Input.SelectedGenreIds.Contains(match.Id)) Input.SelectedGenreIds.Add(match.Id);
-                }
-                else
-                {
-                    extras.Add(candidate);
+                    ToggleGenre(match.Id, true);
                 }
             }
-            var merged = (Input.NewGenres ?? "")
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Concat(extras)
-                .Distinct(StringComparer.OrdinalIgnoreCase);
-            Input.NewGenres = string.Join(", ", merged);
 
             lookupMessage = $"Prefilled from {result.Source}. Edit anything before saving.";
         }
@@ -304,29 +322,6 @@
             var selectedGenres = await db.Genres
                 .Where(g => Input.SelectedGenreIds.Contains(g.Id))
                 .ToListAsync();
-
-            var newGenreNames = (Input.NewGenres ?? "")
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            foreach (var name in newGenreNames)
-            {
-                var existing = await db.Genres.FirstOrDefaultAsync(g => g.Name == name);
-                if (existing is not null)
-                {
-                    if (!selectedGenres.Any(g => g.Id == existing.Id))
-                    {
-                        selectedGenres.Add(existing);
-                    }
-                }
-                else
-                {
-                    var created = new Genre { Name = name };
-                    db.Genres.Add(created);
-                    selectedGenres.Add(created);
-                }
-            }
 
             Publisher? publisher = null;
             var publisherName = Input.Publisher?.Trim();
@@ -389,7 +384,28 @@
         _ => c.ToString()
     };
 
-    public record GenreOption(int Id, string Name);
+    // Match looser-than-exact: normalize (lowercase, alphanumeric only) and
+    // accept either-side substring containment. Lets "Fantasy fiction",
+    // "Epic fantasy", "Fantasy — High" etc. all match the relevant preset.
+    private static bool FuzzyGenreMatch(string candidate, string preset)
+    {
+        var nc = Normalize(candidate);
+        var np = Normalize(preset);
+        if (nc.Length == 0 || np.Length == 0) return false;
+        return nc == np || nc.Contains(np) || np.Contains(nc);
+    }
+
+    private static string Normalize(string s) =>
+        new string(s.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+
+    public class GenreNode(int id, string name, int? parentGenreId)
+    {
+        public int Id { get; } = id;
+        public string Name { get; } = name;
+        public int? ParentGenreId { get; } = parentGenreId;
+        public List<GenreNode> Children { get; } = [];
+    }
+
     public record PublisherOption(int Id, string Name);
 
     public class AddBookInput
@@ -416,8 +432,6 @@
         public string? DefaultCoverArtUrl { get; set; }
 
         public List<int> SelectedGenreIds { get; set; } = [];
-
-        public string? NewGenres { get; set; }
 
         [Required, StringLength(20)]
         [RegularExpression(@"^(97(8|9))?\d{9}(\d|X|x)$", ErrorMessage = "Enter a valid 10- or 13-digit ISBN.")]
