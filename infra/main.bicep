@@ -24,6 +24,9 @@ param sqlAadAdminObjectId string
 @description('Display name / UPN of the SQL Server AAD admin. Shown in the portal only.')
 param sqlAadAdminLogin string
 
+@description('Optional custom hostname to bind to the production slot (e.g. books.silly.ninja). Leave blank to skip.')
+param customDomain string = ''
+
 var tags = {
   Client: 'Drew'
   Environment: 'Production'
@@ -49,12 +52,15 @@ module resources './modules/resources.bicep' = {
     authClientSecret: authClientSecret
     sqlAadAdminObjectId: sqlAadAdminObjectId
     sqlAadAdminLogin: sqlAadAdminLogin
+    customDomain: customDomain
   }
 }
 
 output resourceGroupName string = rg.name
 output appServiceUrl string = resources.outputs.appServiceUrl
 output appServiceName string = resources.outputs.appServiceName
+output defaultHostName string = resources.outputs.defaultHostName
+output customDomainVerificationId string = resources.outputs.customDomainVerificationId
 output appServicePrincipalId string = resources.outputs.appServicePrincipalId
 output stagingHostName string = resources.outputs.stagingHostName
 output stagingPrincipalId string = resources.outputs.stagingPrincipalId
