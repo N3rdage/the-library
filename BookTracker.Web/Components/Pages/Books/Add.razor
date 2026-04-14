@@ -1,0 +1,380 @@
+@page "/books/add"
+@inject IDbContextFactory<BookTrackerDbContext> DbFactory
+@inject IBookLookupService Lookup
+@inject NavigationManager Nav
+
+@* TODO: once we settle on a component library (see TODO in Program.cs),
+   replace the hand-rolled Bootstrap form below with library components
+   (dialogs, autocomplete, chips, etc.) — especially for the genres picker. *@
+
+<PageTitle>Add a book - BookTracker</PageTitle>
+
+<h1 class="mb-3">Add a book</h1>
+
+<EditForm Model="Input" OnValidSubmit="SaveAsync" FormName="addBook">
+    <DataAnnotationsValidator />
+
+    <div class="row g-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <label class="form-label fw-semibold">Look up by ISBN</label>
+                    <div class="input-group">
+                        <InputText @bind-Value="lookupIsbn" class="form-control" placeholder="9780345391803" />
+                        <button type="button" class="btn btn-outline-primary" @onclick="LookupAsync" disabled="@lookingUp">
+                            @if (lookingUp)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            }
+                            Look up
+                        </button>
+                    </div>
+                    <div class="form-text">Searches Open Library, then Google Books. Prefills the fields below — you can edit anything before saving.</div>
+                    @if (!string.IsNullOrEmpty(lookupMessage))
+                    {
+                        <div class="alert alert-info mt-3 mb-0 py-2">@lookupMessage</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card h-100">
+                <div class="card-header bg-white"><h2 class="h5 mb-0">Book</h2></div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label">Title</label>
+                            <InputText @bind-Value="Input.Title" class="form-control" />
+                            <ValidationMessage For="() => Input.Title" class="text-danger small" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Author</label>
+                            <InputText @bind-Value="Input.Author" class="form-control" />
+                            <ValidationMessage For="() => Input.Author" class="text-danger small" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Status</label>
+                            <InputSelect @bind-Value="Input.Status" class="form-select">
+                                @foreach (var s in Enum.GetValues<BookStatus>())
+                                {
+                                    <option value="@s">@s</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Rating (0–5)</label>
+                            <InputNumber @bind-Value="Input.Rating" min="0" max="5" class="form-control" />
+                            <ValidationMessage For="() => Input.Rating" class="text-danger small" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Default cover URL</label>
+                            <InputText @bind-Value="Input.DefaultCoverArtUrl" class="form-control" placeholder="https://..." />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Notes</label>
+                            <InputTextArea @bind-Value="Input.Notes" class="form-control" rows="3" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header bg-white"><h2 class="h5 mb-0">Cover preview</h2></div>
+                <div class="card-body text-center">
+                    @if (!string.IsNullOrWhiteSpace(Input.DefaultCoverArtUrl))
+                    {
+                        <img src="@Input.DefaultCoverArtUrl" alt="Cover preview" class="img-fluid rounded" style="max-height: 220px;" />
+                    }
+                    else
+                    {
+                        <div class="text-muted small py-5">No cover set yet.</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-white"><h2 class="h5 mb-0">Genres</h2></div>
+                <div class="card-body">
+                    @if (existingGenres.Count == 0)
+                    {
+                        <p class="text-muted small mb-3">No genres yet — add some below.</p>
+                    }
+                    else
+                    {
+                        <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-2 mb-3">
+                            @foreach (var g in existingGenres)
+                            {
+                                var id = $"genre-{g.Id}";
+                                <div class="col">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="@id"
+                                               checked="@Input.SelectedGenreIds.Contains(g.Id)"
+                                               @onchange="e => ToggleGenre(g.Id, (bool)e.Value!)" />
+                                        <label class="form-check-label" for="@id">@g.Name</label>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    <label class="form-label">Additional genres (comma-separated)</label>
+                    <InputText @bind-Value="Input.NewGenres" class="form-control" placeholder="Science Fiction, Satire" />
+                    <div class="form-text">Any new names will be added to the shared genre list.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-white"><h2 class="h5 mb-0">First copy</h2></div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">ISBN</label>
+                            <InputText @bind-Value="Input.Isbn" class="form-control" />
+                            <ValidationMessage For="() => Input.Isbn" class="text-danger small" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Format</label>
+                            <InputSelect @bind-Value="Input.Format" class="form-select">
+                                @foreach (var f in Enum.GetValues<BookFormat>())
+                                {
+                                    <option value="@f">@f</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Date printed</label>
+                            <InputDate @bind-Value="Input.DatePrinted" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Condition</label>
+                            <InputSelect @bind-Value="Input.Condition" class="form-select">
+                                @foreach (var c in Enum.GetValues<BookCondition>())
+                                {
+                                    <option value="@c">@FormatCondition(c)</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Custom cover for this copy (optional)</label>
+                            <InputText @bind-Value="Input.CustomCoverArtUrl" class="form-control" placeholder="Overrides the book's default cover" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 d-flex gap-2">
+            <button type="submit" class="btn btn-primary" disabled="@saving">
+                @if (saving)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                }
+                Save book
+            </button>
+            <a class="btn btn-outline-secondary" href="/">Cancel</a>
+        </div>
+    </div>
+</EditForm>
+
+@code {
+    AddBookInput Input { get; set; } = new();
+    string? lookupIsbn;
+    string? lookupMessage;
+    bool lookingUp;
+    bool saving;
+
+    List<GenreOption> existingGenres = [];
+
+    protected override async Task OnInitializedAsync() => await LoadExistingGenresAsync();
+
+    private async Task LoadExistingGenresAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        existingGenres = await db.Genres
+            .OrderBy(g => g.Name)
+            .Select(g => new GenreOption(g.Id, g.Name))
+            .ToListAsync();
+    }
+
+    private void ToggleGenre(int id, bool isChecked)
+    {
+        if (isChecked)
+        {
+            if (!Input.SelectedGenreIds.Contains(id)) Input.SelectedGenreIds.Add(id);
+        }
+        else
+        {
+            Input.SelectedGenreIds.Remove(id);
+        }
+    }
+
+    private async Task LookupAsync()
+    {
+        lookupMessage = null;
+        if (string.IsNullOrWhiteSpace(lookupIsbn))
+        {
+            lookupMessage = "Enter an ISBN to look up.";
+            return;
+        }
+
+        lookingUp = true;
+        try
+        {
+            var result = await Lookup.LookupByIsbnAsync(lookupIsbn, CancellationToken.None);
+            if (result is null)
+            {
+                lookupMessage = $"No match found for ISBN {lookupIsbn}.";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(Input.Title)) Input.Title = result.Title ?? "";
+            if (string.IsNullOrWhiteSpace(Input.Author)) Input.Author = result.Author ?? "";
+            if (string.IsNullOrWhiteSpace(Input.DefaultCoverArtUrl)) Input.DefaultCoverArtUrl = result.CoverUrl;
+            if (string.IsNullOrWhiteSpace(Input.Isbn)) Input.Isbn = result.Isbn;
+            Input.DatePrinted ??= result.DatePrinted;
+
+            var extras = new List<string>();
+            foreach (var candidate in result.GenreCandidates)
+            {
+                var match = existingGenres.FirstOrDefault(g => string.Equals(g.Name, candidate, StringComparison.OrdinalIgnoreCase));
+                if (match is not null)
+                {
+                    if (!Input.SelectedGenreIds.Contains(match.Id)) Input.SelectedGenreIds.Add(match.Id);
+                }
+                else
+                {
+                    extras.Add(candidate);
+                }
+            }
+            var merged = (Input.NewGenres ?? "")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Concat(extras)
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+            Input.NewGenres = string.Join(", ", merged);
+
+            lookupMessage = $"Prefilled from {result.Source}. Edit anything before saving.";
+        }
+        finally
+        {
+            lookingUp = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        saving = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+
+            var selectedGenres = await db.Genres
+                .Where(g => Input.SelectedGenreIds.Contains(g.Id))
+                .ToListAsync();
+
+            var newGenreNames = (Input.NewGenres ?? "")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            foreach (var name in newGenreNames)
+            {
+                var existing = await db.Genres.FirstOrDefaultAsync(g => g.Name == name);
+                if (existing is not null)
+                {
+                    if (!selectedGenres.Any(g => g.Id == existing.Id))
+                    {
+                        selectedGenres.Add(existing);
+                    }
+                }
+                else
+                {
+                    var created = new Genre { Name = name };
+                    db.Genres.Add(created);
+                    selectedGenres.Add(created);
+                }
+            }
+
+            var book = new Book
+            {
+                Title = Input.Title!.Trim(),
+                Author = Input.Author!.Trim(),
+                Notes = string.IsNullOrWhiteSpace(Input.Notes) ? null : Input.Notes.Trim(),
+                Status = Input.Status,
+                Rating = Input.Rating,
+                DefaultCoverArtUrl = string.IsNullOrWhiteSpace(Input.DefaultCoverArtUrl) ? null : Input.DefaultCoverArtUrl.Trim(),
+                Genres = selectedGenres,
+                Copies =
+                [
+                    new BookCopy
+                    {
+                        Isbn = Input.Isbn!.Trim(),
+                        Format = Input.Format,
+                        DatePrinted = Input.DatePrinted,
+                        Condition = Input.Condition,
+                        CustomCoverArtUrl = string.IsNullOrWhiteSpace(Input.CustomCoverArtUrl) ? null : Input.CustomCoverArtUrl.Trim()
+                    }
+                ]
+            };
+
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+
+            Nav.NavigateTo("/");
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private static string FormatCondition(BookCondition c) => c switch
+    {
+        BookCondition.AsNew => "As New",
+        BookCondition.VeryGood => "Very Good",
+        _ => c.ToString()
+    };
+
+    public record GenreOption(int Id, string Name);
+
+    public class AddBookInput
+    {
+        [Required, StringLength(300)]
+        public string? Title { get; set; }
+
+        [Required, StringLength(200)]
+        public string? Author { get; set; }
+
+        public BookStatus Status { get; set; } = BookStatus.Unread;
+
+        [Range(0, 5)]
+        public int Rating { get; set; }
+
+        public string? Notes { get; set; }
+
+        [StringLength(500)]
+        public string? DefaultCoverArtUrl { get; set; }
+
+        public List<int> SelectedGenreIds { get; set; } = [];
+
+        public string? NewGenres { get; set; }
+
+        [Required, StringLength(20)]
+        [RegularExpression(@"^(97(8|9))?\d{9}(\d|X|x)$", ErrorMessage = "Enter a valid 10- or 13-digit ISBN.")]
+        public string? Isbn { get; set; }
+
+        public BookFormat Format { get; set; } = BookFormat.Hardcopy;
+
+        public DateOnly? DatePrinted { get; set; }
+
+        public BookCondition Condition { get; set; } = BookCondition.Good;
+
+        [StringLength(500)]
+        public string? CustomCoverArtUrl { get; set; }
+    }
+}

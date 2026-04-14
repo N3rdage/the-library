@@ -1,13 +1,20 @@
 using BookTracker.Data;
+using BookTracker.Web.Components;
 using BookTracker.Web.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-builder.Services.AddRazorPages();
+// TODO: evaluate a Blazor-native component library (MudBlazor, Radzen, FluentUI)
+// instead of hand-rolling Bootstrap markup in every component. The current pages
+// work but the genres picker, dialogs, and form feedback would all benefit.
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents();
 
-builder.Services.AddDbContext<BookTrackerDbContext>(options =>
+// Blazor Server circuits are long-lived while DbContext is scoped and not
+// thread-safe, so components take IDbContextFactory<T> and create a short-lived
+// context per operation rather than injecting DbContext directly.
+builder.Services.AddDbContextFactory<BookTrackerDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddHttpClient<IBookLookupService, BookLookupService>(client =>
@@ -18,22 +25,21 @@ builder.Services.AddHttpClient<IBookLookupService, BookLookupService>(client =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// TODO: replace the default /Error page and exception handler with proper error
+// handling — structured logging, user-friendly messages by category, correlation
+// ids surfaced to the user, and separate 404 handling.
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+    app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
 }
 
 app.UseHttpsRedirection();
 
-app.UseRouting();
-
-app.UseAuthorization();
+app.UseAntiforgery();
 
 app.MapStaticAssets();
-app.MapRazorPages()
-   .WithStaticAssets();
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode();
 
 app.Run();
