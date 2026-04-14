@@ -18,6 +18,9 @@ x86/
 .idea/
 *.swp
 
+# Claude Code — per-machine local settings (shared .claude/settings.json may be tracked)
+.claude/settings.local.json
+
 # .NET
 project.lock.json
 project.fragment.lock.json
