@@ -19,8 +19,7 @@ public class Book
     [Required, MaxLength(200)]
     public string Author { get; set; } = string.Empty;
 
-    [MaxLength(100)]
-    public string? Genre { get; set; }
+    public List<Genre> Genres { get; set; } = [];
 
     public BookStatus Status { get; set; } = BookStatus.Unread;
 

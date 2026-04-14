@@ -7,6 +7,7 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
 {
     public DbSet<Book> Books => Set<Book>();
     public DbSet<BookCopy> BookCopies => Set<BookCopy>();
+    public DbSet<Genre> Genres => Set<Genre>();
     public DbSet<WishlistItem> WishlistItems => Set<WishlistItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -19,5 +20,9 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
 
         modelBuilder.Entity<BookCopy>()
             .HasIndex(c => c.Isbn);
+
+        modelBuilder.Entity<Genre>()
+            .HasIndex(g => g.Name)
+            .IsUnique();
     }
 }

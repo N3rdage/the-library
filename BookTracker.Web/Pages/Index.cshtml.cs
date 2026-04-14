@@ -29,10 +29,9 @@ public class IndexModel(BookTrackerDbContext db) : PageModel
             .ToListAsync(ct);
         TopAuthors = topAuthors.Select(x => new AuthorCount(x.Author, x.Count)).ToList();
 
-        var topGenres = await db.Books
-            .Where(b => b.Genre != null && b.Genre != "")
-            .GroupBy(b => b.Genre!)
-            .Select(g => new { Genre = g.Key, Count = g.Count() })
+        var topGenres = await db.Genres
+            .Select(g => new { Genre = g.Name, Count = g.Books.Count })
+            .Where(x => x.Count > 0)
             .OrderByDescending(x => x.Count)
             .ThenBy(x => x.Genre)
             .Take(10)

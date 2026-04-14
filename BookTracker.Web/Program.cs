@@ -1,4 +1,5 @@
 using BookTracker.Data;
+using BookTracker.Web.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,6 +9,12 @@ builder.Services.AddRazorPages();
 
 builder.Services.AddDbContext<BookTrackerDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddHttpClient<IBookLookupService, BookLookupService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("BookTracker/0.1 (+github.com/N3rdage/the-library)");
+});
 
 var app = builder.Build();
 
