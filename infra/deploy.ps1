@@ -144,7 +144,25 @@ if ($currentUris -notcontains $expectedRedirect) {
 # ---- Grant the App Service managed identity access to the SQL DB -------------
 # With AAD-only SQL, this is the only way the app can reach the database.
 Write-Host "Granting App Service managed identity access to SQL..."
-$sqlScript = @"
+
+# The "Allow Azure services" firewall rule lets the App Service in but not this
+# machine, so punch a temporary hole for the script's public IP.
+$sqlServerResourceName = ($sqlFqdn -split '\.')[0]
+$rgName = $deployment.Outputs.resourceGroupName.Value
+$myIp = (Invoke-RestMethod -Uri 'https://api.ipify.org' -TimeoutSec 10).Trim()
+$tempRuleName = "deploy-script-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+Write-Host "  Adding temporary SQL firewall rule for $myIp ($tempRuleName)..."
+New-AzSqlServerFirewallRule `
+    -ResourceGroupName $rgName `
+    -ServerName $sqlServerResourceName `
+    -FirewallRuleName $tempRuleName `
+    -StartIpAddress $myIp `
+    -EndIpAddress $myIp | Out-Null
+# Server-side propagation can lag the API response by a few seconds.
+Start-Sleep -Seconds 10
+
+try {
+    $sqlScript = @"
 IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = '$appServiceName')
 BEGIN
     CREATE USER [$appServiceName] FROM EXTERNAL PROVIDER;
@@ -154,8 +172,17 @@ BEGIN
 END
 "@
 
-$token = (Get-AzAccessToken -ResourceUrl 'https://database.windows.net').Token
-Invoke-Sqlcmd -ServerInstance $sqlFqdn -Database $sqlDb -AccessToken $token -Query $sqlScript -Encrypt Mandatory
+    $token = (Get-AzAccessToken -ResourceUrl 'https://database.windows.net').Token
+    Invoke-Sqlcmd -ServerInstance $sqlFqdn -Database $sqlDb -AccessToken $token -Query $sqlScript -Encrypt Mandatory
+}
+finally {
+    Write-Host "  Removing temporary SQL firewall rule..."
+    Remove-AzSqlServerFirewallRule `
+        -ResourceGroupName $rgName `
+        -ServerName $sqlServerResourceName `
+        -FirewallRuleName $tempRuleName `
+        -Force -ErrorAction SilentlyContinue | Out-Null
+}
 
 Write-Host ""
 Write-Host "Done."
