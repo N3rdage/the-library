@@ -9,6 +9,12 @@ public enum BookStatus
     Read
 }
 
+public enum BookCategory
+{
+    Fiction,
+    NonFiction
+}
+
 public class Book
 {
     public int Id { get; set; }
@@ -16,12 +22,17 @@ public class Book
     [Required, MaxLength(300)]
     public string Title { get; set; } = string.Empty;
 
+    [MaxLength(300)]
+    public string? Subtitle { get; set; }
+
     [Required, MaxLength(200)]
     public string Author { get; set; } = string.Empty;
 
     public List<Genre> Genres { get; set; } = [];
 
-    public BookStatus Status { get; set; } = BookStatus.Unread;
+    public BookCategory Category { get; set; } = BookCategory.Fiction;
+
+    public BookStatus Status { get; set; } = BookStatus.Read;
 
     [Range(0, 5)]
     public int Rating { get; set; }

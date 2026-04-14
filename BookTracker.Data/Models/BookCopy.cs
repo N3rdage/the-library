@@ -29,7 +29,7 @@ public class BookCopy
     [Required, MaxLength(20)]
     public string Isbn { get; set; } = string.Empty;
 
-    public BookFormat Format { get; set; }
+    public BookFormat Format { get; set; } = BookFormat.Softcopy;
 
     public DateOnly? DatePrinted { get; set; }
 
@@ -37,4 +37,7 @@ public class BookCopy
 
     [MaxLength(500)]
     public string? CustomCoverArtUrl { get; set; }
+
+    public int? PublisherId { get; set; }
+    public Publisher? Publisher { get; set; }
 }
