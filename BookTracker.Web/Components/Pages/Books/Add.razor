@@ -53,7 +53,20 @@
                             <InputText @bind-Value="Input.Author" class="form-control" />
                             <ValidationMessage For="() => Input.Author" class="text-danger small" />
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-12">
+                            <label class="form-label">Subtitle</label>
+                            <InputText @bind-Value="Input.Subtitle" class="form-control" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Category</label>
+                            <InputSelect @bind-Value="Input.Category" class="form-select">
+                                @foreach (var c in Enum.GetValues<BookCategory>())
+                                {
+                                    <option value="@c">@FormatCategory(c)</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="col-md-3">
                             <label class="form-label">Status</label>
                             <InputSelect @bind-Value="Input.Status" class="form-select">
                                 @foreach (var s in Enum.GetValues<BookStatus>())
@@ -62,12 +75,12 @@
                                 }
                             </InputSelect>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label">Rating (0–5)</label>
                             <InputNumber @bind-Value="Input.Rating" min="0" max="5" class="form-control" />
                             <ValidationMessage For="() => Input.Rating" class="text-danger small" />
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label">Default cover URL</label>
                             <InputText @bind-Value="Input.DefaultCoverArtUrl" class="form-control" placeholder="https://..." />
                         </div>
@@ -160,6 +173,16 @@
                                 }
                             </InputSelect>
                         </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Publisher</label>
+                            <InputText @bind-Value="Input.Publisher" class="form-control" list="publisher-options" placeholder="Penguin Books" />
+                            <datalist id="publisher-options">
+                                @foreach (var p in existingPublishers)
+                                {
+                                    <option value="@p.Name"></option>
+                                }
+                            </datalist>
+                        </div>
                         <div class="col-12">
                             <label class="form-label">Custom cover for this copy (optional)</label>
                             <InputText @bind-Value="Input.CustomCoverArtUrl" class="form-control" placeholder="Overrides the book's default cover" />
@@ -190,15 +213,18 @@
     bool saving;
 
     List<GenreOption> existingGenres = [];
+    List<PublisherOption> existingPublishers = [];
 
-    protected override async Task OnInitializedAsync() => await LoadExistingGenresAsync();
-
-    private async Task LoadExistingGenresAsync()
+    protected override async Task OnInitializedAsync()
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         existingGenres = await db.Genres
             .OrderBy(g => g.Name)
             .Select(g => new GenreOption(g.Id, g.Name))
+            .ToListAsync();
+        existingPublishers = await db.Publishers
+            .OrderBy(p => p.Name)
+            .Select(p => new PublisherOption(p.Id, p.Name))
             .ToListAsync();
     }
 
@@ -234,7 +260,9 @@
             }
 
             if (string.IsNullOrWhiteSpace(Input.Title)) Input.Title = result.Title ?? "";
+            if (string.IsNullOrWhiteSpace(Input.Subtitle)) Input.Subtitle = result.Subtitle;
             if (string.IsNullOrWhiteSpace(Input.Author)) Input.Author = result.Author ?? "";
+            if (string.IsNullOrWhiteSpace(Input.Publisher)) Input.Publisher = result.Publisher;
             if (string.IsNullOrWhiteSpace(Input.DefaultCoverArtUrl)) Input.DefaultCoverArtUrl = result.CoverUrl;
             if (string.IsNullOrWhiteSpace(Input.Isbn)) Input.Isbn = result.Isbn;
             Input.DatePrinted ??= result.DatePrinted;
@@ -300,11 +328,25 @@
                 }
             }
 
+            Publisher? publisher = null;
+            var publisherName = Input.Publisher?.Trim();
+            if (!string.IsNullOrEmpty(publisherName))
+            {
+                publisher = await db.Publishers.FirstOrDefaultAsync(p => p.Name == publisherName);
+                if (publisher is null)
+                {
+                    publisher = new Publisher { Name = publisherName };
+                    db.Publishers.Add(publisher);
+                }
+            }
+
             var book = new Book
             {
                 Title = Input.Title!.Trim(),
+                Subtitle = string.IsNullOrWhiteSpace(Input.Subtitle) ? null : Input.Subtitle.Trim(),
                 Author = Input.Author!.Trim(),
                 Notes = string.IsNullOrWhiteSpace(Input.Notes) ? null : Input.Notes.Trim(),
+                Category = Input.Category,
                 Status = Input.Status,
                 Rating = Input.Rating,
                 DefaultCoverArtUrl = string.IsNullOrWhiteSpace(Input.DefaultCoverArtUrl) ? null : Input.DefaultCoverArtUrl.Trim(),
@@ -317,6 +359,7 @@
                         Format = Input.Format,
                         DatePrinted = Input.DatePrinted,
                         Condition = Input.Condition,
+                        Publisher = publisher,
                         CustomCoverArtUrl = string.IsNullOrWhiteSpace(Input.CustomCoverArtUrl) ? null : Input.CustomCoverArtUrl.Trim()
                     }
                 ]
@@ -340,17 +383,29 @@
         _ => c.ToString()
     };
 
+    private static string FormatCategory(BookCategory c) => c switch
+    {
+        BookCategory.NonFiction => "Non-Fiction",
+        _ => c.ToString()
+    };
+
     public record GenreOption(int Id, string Name);
+    public record PublisherOption(int Id, string Name);
 
     public class AddBookInput
     {
         [Required, StringLength(300)]
         public string? Title { get; set; }
 
+        [StringLength(300)]
+        public string? Subtitle { get; set; }
+
         [Required, StringLength(200)]
         public string? Author { get; set; }
 
-        public BookStatus Status { get; set; } = BookStatus.Unread;
+        public BookCategory Category { get; set; } = BookCategory.Fiction;
+
+        public BookStatus Status { get; set; } = BookStatus.Read;
 
         [Range(0, 5)]
         public int Rating { get; set; }
@@ -368,11 +423,14 @@
         [RegularExpression(@"^(97(8|9))?\d{9}(\d|X|x)$", ErrorMessage = "Enter a valid 10- or 13-digit ISBN.")]
         public string? Isbn { get; set; }
 
-        public BookFormat Format { get; set; } = BookFormat.Hardcopy;
+        public BookFormat Format { get; set; } = BookFormat.Softcopy;
 
         public DateOnly? DatePrinted { get; set; }
 
         public BookCondition Condition { get; set; } = BookCondition.Good;
+
+        [StringLength(200)]
+        public string? Publisher { get; set; }
 
         [StringLength(500)]
         public string? CustomCoverArtUrl { get; set; }

@@ -42,7 +42,9 @@ public class BookLookupService(HttpClient http, ILogger<BookLookupService> logge
             return new BookLookupResult(
                 Isbn: isbn,
                 Title: book.Title,
+                Subtitle: book.Subtitle,
                 Author: book.Authors?.FirstOrDefault()?.Name,
+                Publisher: book.Publishers?.FirstOrDefault()?.Name,
                 GenreCandidates: genres,
                 DatePrinted: ParseLooseDate(book.PublishDate),
                 CoverUrl: book.Cover?.Large ?? book.Cover?.Medium ?? $"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg",
@@ -82,7 +84,9 @@ public class BookLookupService(HttpClient http, ILogger<BookLookupService> logge
             return new BookLookupResult(
                 Isbn: isbn,
                 Title: item.Title,
+                Subtitle: item.Subtitle,
                 Author: item.Authors?.FirstOrDefault(),
+                Publisher: item.Publisher,
                 GenreCandidates: genres,
                 DatePrinted: ParseLooseDate(item.PublishedDate),
                 CoverUrl: cover,
@@ -125,12 +129,15 @@ public class BookLookupService(HttpClient http, ILogger<BookLookupService> logge
     private sealed class OpenLibraryBook
     {
         [JsonPropertyName("title")] public string? Title { get; set; }
+        [JsonPropertyName("subtitle")] public string? Subtitle { get; set; }
         [JsonPropertyName("authors")] public List<OpenLibraryAuthor>? Authors { get; set; }
+        [JsonPropertyName("publishers")] public List<OpenLibraryPublisher>? Publishers { get; set; }
         [JsonPropertyName("subjects")] public List<OpenLibrarySubject>? Subjects { get; set; }
         [JsonPropertyName("publish_date")] public string? PublishDate { get; set; }
         [JsonPropertyName("cover")] public OpenLibraryCover? Cover { get; set; }
     }
     private sealed class OpenLibraryAuthor { [JsonPropertyName("name")] public string? Name { get; set; } }
+    private sealed class OpenLibraryPublisher { [JsonPropertyName("name")] public string? Name { get; set; } }
     private sealed class OpenLibrarySubject { [JsonPropertyName("name")] public string Name { get; set; } = ""; }
     private sealed class OpenLibraryCover
     {
@@ -144,7 +151,9 @@ public class BookLookupService(HttpClient http, ILogger<BookLookupService> logge
     private sealed class GoogleVolumeInfo
     {
         [JsonPropertyName("title")] public string? Title { get; set; }
+        [JsonPropertyName("subtitle")] public string? Subtitle { get; set; }
         [JsonPropertyName("authors")] public List<string>? Authors { get; set; }
+        [JsonPropertyName("publisher")] public string? Publisher { get; set; }
         [JsonPropertyName("categories")] public List<string>? Categories { get; set; }
         [JsonPropertyName("publishedDate")] public string? PublishedDate { get; set; }
         [JsonPropertyName("imageLinks")] public GoogleImageLinks? ImageLinks { get; set; }
