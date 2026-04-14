@@ -9,6 +9,9 @@ param authClientSecret string
 param sqlAadAdminObjectId string
 param sqlAadAdminLogin string
 
+@description('Optional custom hostname to bind to the production slot (e.g. books.silly.ninja). Leave blank to skip.')
+param customDomain string = ''
+
 // Short suffix to keep globally-unique names (App Service hostname, SQL server
 // name) stable across re-deploys while still being unique per-subscription.
 var uniqueSuffix = substring(uniqueString(resourceGroup().id), 0, 6)
@@ -58,8 +61,20 @@ module app './appservice.bicep' = {
   }
 }
 
+module customdomain './customdomain.bicep' = if (!empty(customDomain)) {
+  name: 'customdomain'
+  params: {
+    appServiceName: app.outputs.appServiceName
+    customDomain: customDomain
+    location: location
+    tags: tags
+  }
+}
+
 output appServiceUrl string = app.outputs.appServiceUrl
 output appServiceName string = app.outputs.appServiceName
+output defaultHostName string = app.outputs.defaultHostName
+output customDomainVerificationId string = app.outputs.customDomainVerificationId
 output appServicePrincipalId string = app.outputs.principalId
 output stagingHostName string = app.outputs.stagingHostName
 output stagingPrincipalId string = app.outputs.stagingPrincipalId

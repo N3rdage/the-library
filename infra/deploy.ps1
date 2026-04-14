@@ -8,7 +8,10 @@ param(
     [Parameter(Mandatory)] [string] $SubscriptionId,
     [string] $Location = 'australiaeast',
     [string] $AppName = 'booktracker',
-    [string] $EnterpriseAppName = 'Library-Patrons'
+    [string] $EnterpriseAppName = 'Library-Patrons',
+    # Optional custom hostname (e.g. books.silly.ninja). DNS records must be in
+    # place first — the script prints them at the end of every run.
+    [string] $CustomDomain = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -103,6 +106,7 @@ $templateParams = @{
     authClientSecret    = $clientSecret
     sqlAadAdminObjectId = $me.Id
     sqlAadAdminLogin    = $me.UserPrincipalName
+    customDomain        = $CustomDomain
 }
 
 $deployment = New-AzSubscriptionDeployment `
@@ -133,6 +137,9 @@ $redirects = @(
     "https://$appHost/.auth/login/aad/callback"
     "https://$stagingHost/.auth/login/aad/callback"
 )
+if ($CustomDomain) {
+    $redirects += "https://$CustomDomain/.auth/login/aad/callback"
+}
 $currentUris = @($app.Web.RedirectUris)
 $missing = $redirects | Where-Object { $currentUris -notcontains $_ }
 if ($missing) {
@@ -203,7 +210,27 @@ finally {
 Write-Host ""
 Write-Host "Done."
 Write-Host "  App URL: $appUrl"
+if ($CustomDomain) {
+    Write-Host "  Custom URL: https://$CustomDomain"
+}
 Write-Host ""
 Write-Host "Next step — assign users/groups to the '$EnterpriseAppName' enterprise app:"
 Write-Host "  https://entra.microsoft.com -> Identity -> Applications -> Enterprise applications -> $EnterpriseAppName -> Users and groups"
 Write-Host "Only assigned principals will be able to sign in."
+
+# ---- DNS records required for a custom domain (print every run) -------------
+$defaultHost = $deployment.Outputs.defaultHostName.Value
+$verificationId = $deployment.Outputs.customDomainVerificationId.Value
+Write-Host ""
+Write-Host "----"
+Write-Host "To bind a custom domain (like books.silly.ninja), add these DNS records"
+Write-Host "at your registrar (Gandi, Cloudflare, etc.), wait for propagation, then re-run"
+Write-Host "this script with -CustomDomain <hostname>:"
+Write-Host ""
+Write-Host "  TXT   asuid.<subdomain>    $verificationId"
+Write-Host "  CNAME <subdomain>          $defaultHost"
+Write-Host ""
+Write-Host "e.g. for books.silly.ninja:"
+Write-Host "  TXT   asuid.books          $verificationId"
+Write-Host "  CNAME books                $defaultHost"
+Write-Host "----"
