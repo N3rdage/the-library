@@ -30,4 +30,9 @@ public class Book
     public string? Notes { get; set; }
 
     public DateTime DateAdded { get; set; } = DateTime.UtcNow;
+
+    [MaxLength(500)]
+    public string? DefaultCoverArtUrl { get; set; }
+
+    public List<BookCopy> Copies { get; set; } = [];
 }
