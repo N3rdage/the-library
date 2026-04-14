@@ -71,6 +71,19 @@ Assign users/groups to the enterprise app so they can sign in:
 
 Unassigned users attempting to sign in will see `AADSTS501051`.
 
+## Custom domain
+
+Bind a custom hostname (e.g. `books.silly.ninja`) to the production slot with a free App Service Managed Certificate:
+
+1. Run `./deploy.ps1 -TenantId … -SubscriptionId …` **without** `-CustomDomain`. The last block of output shows the `asuid.<subdomain>` TXT value and the CNAME target.
+2. At your DNS host (Gandi in our case), add:
+   - `TXT  asuid.books  <customDomainVerificationId>`
+   - `CNAME books  <app>.azurewebsites.net`
+3. Wait for DNS to propagate (a few minutes to an hour; `nslookup books.silly.ninja` should resolve).
+4. Re-run `./deploy.ps1 -TenantId … -SubscriptionId … -CustomDomain books.silly.ninja`. Bicep adds the hostname binding, issues the managed cert, and binds SSL. The script also registers the custom-domain redirect URI on the `Library-Patrons` app registration.
+
+Works for CNAME-pointed subdomains only. Apex domains (`silly.ninja`) need a different cert issuance path (A record + ALIAS or equivalent) — not covered here.
+
 ## TODOs
 
 - Move the Easy Auth client secret from an app setting to a Key Vault reference and schedule rotation.

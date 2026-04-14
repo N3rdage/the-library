@@ -207,6 +207,8 @@ resource stagingAuthConfig 'Microsoft.Web/sites/slots/config@2023-12-01' = {
 
 output appServiceUrl string = 'https://${app.properties.defaultHostName}'
 output appServiceName string = app.name
+output defaultHostName string = app.properties.defaultHostName
+output customDomainVerificationId string = app.properties.customDomainVerificationId
 output principalId string = app.identity.principalId
 output stagingHostName string = stagingSlot.properties.defaultHostName
 output stagingPrincipalId string = stagingSlot.identity.principalId
