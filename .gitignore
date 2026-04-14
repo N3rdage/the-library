@@ -33,6 +33,10 @@ appsettings.*.json
 !appsettings.Example.json
 !appsettings.*.Example.json
 
+# Bicep build output (ARM JSON is generated from .bicep on the fly)
+infra/**/*.json
+!infra/**/*.bicepparam
+
 # OS
 Thumbs.db
 ehthumbs.db
