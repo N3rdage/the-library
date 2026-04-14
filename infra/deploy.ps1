@@ -37,15 +37,18 @@ Write-Host "Connecting to Microsoft Graph..."
 Connect-MgGraph -TenantId $TenantId -Scopes 'Application.ReadWrite.All','Directory.Read.All','User.Read' -NoWelcome
 
 # ---- Resolve the signed-in user for the SQL AAD admin role -------------------
-$azCtx = Get-AzContext
-$me = Get-MgUser -Filter "userPrincipalName eq '$($azCtx.Account.Id)'" -ErrorAction SilentlyContinue
-if (-not $me) {
-    $me = Get-MgUser -UserId $azCtx.Account.Id -ErrorAction SilentlyContinue
+# Use Graph's /me — the Az sign-in identifier (email, B2B UPN, etc.) doesn't
+# always match the directory UPN, so we let Graph tell us who we actually are.
+$meResponse = Invoke-MgGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/me' -ErrorAction Stop
+$me = [pscustomobject]@{
+    Id                = $meResponse.id
+    UserPrincipalName = $meResponse.userPrincipalName
+    DisplayName       = $meResponse.displayName
 }
-if (-not $me) {
-    throw "Unable to resolve current user '$($azCtx.Account.Id)' via Graph. The signed-in identity must be a user (not a service principal)."
+if (-not $me.Id) {
+    throw "Unable to resolve current user via Microsoft Graph /me. The signed-in identity must be a user, not a service principal."
 }
-Write-Host "SQL AAD admin will be set to: $($me.UserPrincipalName)"
+Write-Host "SQL AAD admin will be set to: $($me.DisplayName) <$($me.UserPrincipalName)>"
 
 # ---- Ensure the "Library-Patrons" App Registration + SP ----------------------
 Write-Host "Ensuring App Registration '$EnterpriseAppName'..."
