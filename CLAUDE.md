@@ -8,16 +8,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-BookTracker — ASP.NET Core Razor Pages app (net10.0) backed by EF Core + SQL Server. Target deployment is Azure App Service against Azure SQL (Basic tier) via GitHub Actions. Planned: AI book recommendations via the Anthropic API.
+BookTracker — ASP.NET Core Blazor Web App (net10.0) using **Interactive Server** render mode, backed by EF Core + SQL Server. Target deployment is Azure App Service against Azure SQL (Basic tier) via GitHub Actions. Planned: AI book recommendations via the Anthropic API.
 
 ## Architecture
 
 Two-project solution (`BookTracker.slnx`, the new XML solution format):
 
-- **`BookTracker.Web\`** — Razor Pages host. Owns `Program.cs`, `appsettings*.json`, and all UI under `Pages\`. Registers `BookTrackerDbContext` with SQL Server using the `DefaultConnection` connection string. Uses net9+ `MapStaticAssets()` pipeline.
+- **`BookTracker.Web\`** — Blazor Web App host. Owns `Program.cs`, `appsettings*.json`, Razor components under `Components\` (`App.razor`, `Routes.razor`, `Layout\MainLayout.razor`, pages under `Components\Pages\`), and lookup service under `Services\`. The whole app is rendered with `@rendermode="InteractiveServer"` set globally via `<Routes>` in `App.razor` — no per-page render-mode attributes. Uses net9+ `MapStaticAssets()` pipeline.
 - **`BookTracker.Data\`** — Class library holding `BookTrackerDbContext`, entities in `Models\`, and EF migrations in `Migrations\`. EF tooling (`Microsoft.EntityFrameworkCore.Tools`) lives here, so migrations run against this project with `BookTracker.Web` as the startup project (so config + connection string resolve).
 
-Entity model: `Book` (Title, Author, Genre, `BookStatus` enum Unread/Reading/Read, Rating 0–5, Notes, DateAdded) and `WishlistItem` (Title, Author, `WishlistPriority` enum, nullable Price `decimal(10,2)`, DateAdded).
+**DbContext lifetime:** Blazor Server circuits are long-lived while `DbContext` is scoped and not thread-safe. `Program.cs` registers `AddDbContextFactory<BookTrackerDbContext>`; components inject `IDbContextFactory<T>` and create/dispose a context per operation (`await using var db = await DbFactory.CreateDbContextAsync();`). Do **not** switch back to `AddDbContext` + direct injection.
+
+Entity model: `Book` (Title, Author, many-to-many `Genres`, `BookStatus` enum Unread/Reading/Read, Rating 0–5, Notes, DateAdded, DefaultCoverArtUrl, one-to-many `Copies`), `BookCopy` (Isbn, `BookFormat`, DatePrinted, `BookCondition` default Good, optional CustomCoverArtUrl), `Genre` (unique Name), and `WishlistItem` (Title, Author, `WishlistPriority`, nullable Price `decimal(10,2)`, DateAdded).
 
 Config convention: connection string name is **`DefaultConnection`**. Dev value lives in `appsettings.Development.json` and points at the Docker SQL container. Prod value comes from Azure App Service configuration. `appsettings*.json` is **gitignored**; committed templates live alongside them as `appsettings.Example.json` and `appsettings.Development.Example.json` — on a fresh clone, copy each `.Example.json` to the real filename and fill in secrets.
 
