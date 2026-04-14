@@ -120,17 +120,23 @@ $appServiceName = $deployment.Outputs.appServiceName.Value
 $sqlFqdn = $deployment.Outputs.sqlServerFqdn.Value
 $sqlDb = $deployment.Outputs.sqlDatabaseName.Value
 $appHost = ([Uri]$appUrl).Host
+$stagingHost = $deployment.Outputs.stagingHostName.Value
+$stagingSlotSqlUserName = "$appServiceName/slots/staging"
 
 Write-Host ""
 Write-Host "Infrastructure deployed."
 Write-Host "  App Service: $appUrl"
 Write-Host "  SQL Server:  $sqlFqdn / $sqlDb"
 
-# ---- Ensure the Easy Auth redirect URI is registered -------------------------
-$expectedRedirect = "https://$appHost/.auth/login/aad/callback"
+# ---- Ensure the Easy Auth redirect URIs are registered (prod + staging) -----
+$redirects = @(
+    "https://$appHost/.auth/login/aad/callback"
+    "https://$stagingHost/.auth/login/aad/callback"
+)
 $currentUris = @($app.Web.RedirectUris)
-if ($currentUris -notcontains $expectedRedirect) {
-    $newUris = @($currentUris + $expectedRedirect | Where-Object { $_ } | Select-Object -Unique)
+$missing = $redirects | Where-Object { $currentUris -notcontains $_ }
+if ($missing) {
+    $newUris = @(($currentUris + $redirects) | Where-Object { $_ } | Select-Object -Unique)
     Update-MgApplication -ApplicationId $app.Id -Web @{
         RedirectUris = $newUris
         ImplicitGrantSettings = @{
@@ -138,7 +144,7 @@ if ($currentUris -notcontains $expectedRedirect) {
             EnableAccessTokenIssuance = $false
         }
     }
-    Write-Host "  Added redirect URI: $expectedRedirect"
+    foreach ($r in $missing) { Write-Host "  Added redirect URI: $r" }
 }
 
 # ---- Grant the App Service managed identity access to the SQL DB -------------
@@ -162,6 +168,8 @@ New-AzSqlServerFirewallRule `
 Start-Sleep -Seconds 10
 
 try {
+    # Both slots get their own system-assigned managed identity. The SQL user
+    # name for a slot is "<app-service-name>/slots/<slot-name>".
     $sqlScript = @"
 IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = '$appServiceName')
 BEGIN
@@ -169,6 +177,14 @@ BEGIN
     ALTER ROLE db_datareader ADD MEMBER [$appServiceName];
     ALTER ROLE db_datawriter ADD MEMBER [$appServiceName];
     ALTER ROLE db_ddladmin  ADD MEMBER [$appServiceName];
+END
+
+IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = '$stagingSlotSqlUserName')
+BEGIN
+    CREATE USER [$stagingSlotSqlUserName] FROM EXTERNAL PROVIDER;
+    ALTER ROLE db_datareader ADD MEMBER [$stagingSlotSqlUserName];
+    ALTER ROLE db_datawriter ADD MEMBER [$stagingSlotSqlUserName];
+    ALTER ROLE db_ddladmin  ADD MEMBER [$stagingSlotSqlUserName];
 END
 "@
 

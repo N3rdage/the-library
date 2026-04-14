@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet restore BookTracker.slnx
+      - run: dotnet build BookTracker.slnx --configuration Release --no-restore
