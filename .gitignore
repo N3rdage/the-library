@@ -1,0 +1,38 @@
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]uild/
+[Pp]ublish/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+
+# .NET
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.pdb
+
+# App config with secrets — committed only as *.Example.json templates
+appsettings.json
+appsettings.*.json
+!appsettings.Example.json
+!appsettings.*.Example.json
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
