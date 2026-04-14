@@ -21,6 +21,18 @@ Entity model: `Book` (Title, Author, Genre, `BookStatus` enum Unread/Reading/Rea
 
 Config convention: connection string name is **`DefaultConnection`**. Dev value lives in `appsettings.Development.json` and points at the Docker SQL container. Prod value comes from Azure App Service configuration. `appsettings*.json` is **gitignored**; committed templates live alongside them as `appsettings.Example.json` and `appsettings.Development.Example.json` — on a fresh clone, copy each `.Example.json` to the real filename and fill in secrets.
 
+## Branching
+
+**Never commit or push to `main`.** All changes go through a feature branch + PR. Branch-name prefixes: `feat/`, `fix/`, `chore/`, `docs/`, `refactor/`. Large features may use sub-branches (`feat/parent/sub-branch`) that PR into the parent feature branch before the parent PRs into `main`. Squash-merge into `main`. See `CONTRIBUTING.md` for full details.
+
+Before starting new work:
+
+```powershell
+git checkout main
+git pull
+git checkout -b feat/<short-name>
+```
+
 ## Commands (PowerShell)
 
 Run from the repo root. Quote the path because it contains a space.
