@@ -83,7 +83,11 @@ $pwdCred = Add-MgApplicationPassword -ApplicationId $app.Id -PasswordCredential 
     DisplayName = "easyauth-$(Get-Date -Format yyyyMMdd)"
     EndDateTime = (Get-Date).ToUniversalTime().AddYears(2)
 }
-$clientSecret = ConvertTo-SecureString -String $pwdCred.SecretText -AsPlainText -Force
+# New-AzSubscriptionDeployment can't serialize a [SecureString] inside
+# -TemplateParameterObject, so we pass the secret as a plain string. Azure
+# encrypts it in transit, and the @secure() decorator on the Bicep param keeps
+# it out of deployment history / logs.
+$clientSecret = $pwdCred.SecretText
 Write-Host "  Secret expires $($pwdCred.EndDateTime). TODO: schedule rotation."
 
 # ---- Deploy the Bicep template at subscription scope -------------------------
