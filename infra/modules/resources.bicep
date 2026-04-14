@@ -61,5 +61,7 @@ module app './appservice.bicep' = {
 output appServiceUrl string = app.outputs.appServiceUrl
 output appServiceName string = app.outputs.appServiceName
 output appServicePrincipalId string = app.outputs.principalId
+output stagingHostName string = app.outputs.stagingHostName
+output stagingPrincipalId string = app.outputs.stagingPrincipalId
 output sqlServerFqdn string = sql.outputs.sqlServerFqdn
 output sqlDatabaseName string = sqlDatabaseName

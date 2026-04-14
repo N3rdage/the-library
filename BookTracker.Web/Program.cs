@@ -25,6 +25,17 @@ builder.Services.AddHttpClient<IBookLookupService, BookLookupService>(client =>
 
 var app = builder.Build();
 
+// TODO: replace migrate-on-startup with a dedicated deploy-time migration step
+// (e.g. `dotnet ef migrations bundle` run from the GitHub Actions workflow)
+// once the app goes multi-instance or needs zero-downtime deploys. For now,
+// the single-instance App Service makes this simple and safe.
+using (var scope = app.Services.CreateScope())
+{
+    var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<BookTrackerDbContext>>();
+    await using var db = await dbFactory.CreateDbContextAsync();
+    await db.Database.MigrateAsync();
+}
+
 // TODO: replace the default /Error page and exception handler with proper error
 // handling — structured logging, user-friendly messages by category, correlation
 // ids surfaced to the user, and separate 404 handling.
