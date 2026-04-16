@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "Dependency manifest for Dependabot — not used for builds. Vendored JS libraries are tracked here so Dependabot can flag updates and security patches.",
+  "dependencies": {
+    "html5-qrcode": "2.3.8"
+  }
+}
