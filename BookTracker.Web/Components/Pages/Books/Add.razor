@@ -1,6 +1,5 @@
 @page "/books/add"
-@inject IDbContextFactory<BookTrackerDbContext> DbFactory
-@inject IBookLookupService Lookup
+@inject BookAddViewModel VM
 @inject NavigationManager Nav
 
 <PageTitle>Add a book - BookTracker</PageTitle>
@@ -16,9 +15,9 @@
                 <div class="card-body">
                     <label class="form-label fw-semibold">Look up by ISBN</label>
                     <div class="input-group">
-                        <InputText @bind-Value="lookupIsbn" class="form-control" placeholder="9780345391803" />
-                        <button type="button" class="btn btn-outline-primary" @onclick="LookupAsync" disabled="@lookingUp">
-                            @if (lookingUp)
+                        <InputText @bind-Value="VM.LookupIsbn" class="form-control" placeholder="9780345391803" />
+                        <button type="button" class="btn btn-outline-primary" @onclick="LookupAsync" disabled="@VM.LookingUp">
+                            @if (VM.LookingUp)
                             {
                                 <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                             }
@@ -26,32 +25,32 @@
                         </button>
                     </div>
                     <div class="form-text">Searches Open Library, then Google Books. Prefills the fields below — you can edit anything before saving.</div>
-                    @if (!string.IsNullOrEmpty(lookupMessage))
+                    @if (!string.IsNullOrEmpty(VM.LookupMessage))
                     {
-                        <div class="alert alert-info mt-3 mb-0 py-2">@lookupMessage</div>
+                        <div class="alert alert-info mt-3 mb-0 py-2">@VM.LookupMessage</div>
                     }
                 </div>
             </div>
         </div>
 
         <div class="col-12">
-            <BookForm Input="bookInput" />
+            <BookForm Input="VM.BookInput" />
         </div>
 
         <div class="col-12">
             <GenrePicker @ref="genrePicker"
                          SelectedGenreIds="selectedGenreIds"
                          SelectedGenreIdsChanged="ids => selectedGenreIds = ids"
-                         LookupCandidates="lookupCandidates" />
+                         LookupCandidates="VM.LookupCandidates" />
         </div>
 
         <div class="col-12">
-            <CopyForm Input="copyInput" Title="First copy" />
+            <CopyForm Input="VM.CopyInput" Title="First copy" />
         </div>
 
         <div class="col-12 d-flex gap-2">
-            <button type="submit" class="btn btn-primary" disabled="@saving">
-                @if (saving)
+            <button type="submit" class="btn btn-primary" disabled="@VM.Saving">
+                @if (VM.Saving)
                 {
                     <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                 }
@@ -63,114 +62,22 @@
 </EditForm>
 
 @code {
-    private BookForm.BookFormInput bookInput = new();
-    private CopyForm.CopyFormInput copyInput = new();
     private List<int> selectedGenreIds = [];
-    private List<string> lookupCandidates = [];
     private GenrePicker? genrePicker;
-
-    private string? lookupIsbn;
-    private string? lookupMessage;
-    private bool lookingUp;
-    private bool saving;
 
     private async Task LookupAsync()
     {
-        lookupMessage = null;
-        if (string.IsNullOrWhiteSpace(lookupIsbn))
+        if (genrePicker is not null)
         {
-            lookupMessage = "Enter an ISBN to look up.";
-            return;
-        }
-
-        lookingUp = true;
-        try
-        {
-            var result = await Lookup.LookupByIsbnAsync(lookupIsbn, CancellationToken.None);
-            if (result is null)
-            {
-                lookupMessage = $"No match found for ISBN {lookupIsbn}.";
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(bookInput.Title)) bookInput.Title = result.Title ?? "";
-            if (string.IsNullOrWhiteSpace(bookInput.Subtitle)) bookInput.Subtitle = result.Subtitle;
-            if (string.IsNullOrWhiteSpace(bookInput.Author)) bookInput.Author = result.Author ?? "";
-            if (string.IsNullOrWhiteSpace(bookInput.DefaultCoverArtUrl)) bookInput.DefaultCoverArtUrl = result.CoverUrl;
-            if (string.IsNullOrWhiteSpace(copyInput.Isbn)) copyInput.Isbn = result.Isbn;
-            if (string.IsNullOrWhiteSpace(copyInput.Publisher)) copyInput.Publisher = result.Publisher;
-            copyInput.DatePrinted ??= result.DatePrinted;
-
-            lookupCandidates = result.GenreCandidates.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            if (genrePicker is not null)
-            {
-                await genrePicker.ApplyLookupCandidatesAsync(lookupCandidates);
-            }
-
-            lookupMessage = $"Prefilled from {result.Source}. Edit anything before saving.";
-        }
-        finally
-        {
-            lookingUp = false;
+            await VM.LookupAsync(genrePicker.ViewModel);
         }
     }
 
     private async Task SaveAsync()
     {
-        saving = true;
-        try
+        if (await VM.SaveAsync(selectedGenreIds))
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-
-            var selectedGenres = await db.Genres
-                .Where(g => selectedGenreIds.Contains(g.Id))
-                .ToListAsync();
-
-            Publisher? publisher = null;
-            var publisherName = copyInput.Publisher?.Trim();
-            if (!string.IsNullOrEmpty(publisherName))
-            {
-                publisher = await db.Publishers.FirstOrDefaultAsync(p => p.Name == publisherName);
-                if (publisher is null)
-                {
-                    publisher = new Publisher { Name = publisherName };
-                    db.Publishers.Add(publisher);
-                }
-            }
-
-            var book = new Book
-            {
-                Title = bookInput.Title!.Trim(),
-                Subtitle = string.IsNullOrWhiteSpace(bookInput.Subtitle) ? null : bookInput.Subtitle.Trim(),
-                Author = bookInput.Author!.Trim(),
-                Notes = string.IsNullOrWhiteSpace(bookInput.Notes) ? null : bookInput.Notes.Trim(),
-                Category = bookInput.Category,
-                Status = bookInput.Status,
-                Rating = bookInput.Rating,
-                DefaultCoverArtUrl = string.IsNullOrWhiteSpace(bookInput.DefaultCoverArtUrl) ? null : bookInput.DefaultCoverArtUrl.Trim(),
-                Genres = selectedGenres,
-                Copies =
-                [
-                    new BookCopy
-                    {
-                        Isbn = copyInput.Isbn!.Trim(),
-                        Format = copyInput.Format,
-                        DatePrinted = copyInput.DatePrinted,
-                        Condition = copyInput.Condition,
-                        Publisher = publisher,
-                        CustomCoverArtUrl = string.IsNullOrWhiteSpace(copyInput.CustomCoverArtUrl) ? null : copyInput.CustomCoverArtUrl.Trim()
-                    }
-                ]
-            };
-
-            db.Books.Add(book);
-            await db.SaveChangesAsync();
-
             Nav.NavigateTo("/");
-        }
-        finally
-        {
-            saving = false;
         }
     }
 }

@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="BookTracker.Data/BookTracker.Data.csproj" />
+  <Project Path="BookTracker.Tests/BookTracker.Tests.csproj" />
   <Project Path="BookTracker.Web/BookTracker.Web.csproj" />
 </Solution>
