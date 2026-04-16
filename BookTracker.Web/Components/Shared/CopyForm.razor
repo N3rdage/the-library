@@ -1,4 +1,4 @@
-@inject IDbContextFactory<BookTrackerDbContext> DbFactory
+@inject CopyFormViewModel VM
 
 <div class="card">
     <div class="card-header bg-white"><h2 class="h5 mb-0">@Title</h2></div>
@@ -27,7 +27,7 @@
                 <InputSelect @bind-Value="Input.Condition" class="form-select">
                     @foreach (var c in Enum.GetValues<BookCondition>())
                     {
-                        <option value="@c">@FormatCondition(c)</option>
+                        <option value="@c">@CopyFormViewModel.FormatCondition(c)</option>
                     }
                 </InputSelect>
             </div>
@@ -35,7 +35,7 @@
                 <label class="form-label">Publisher</label>
                 <InputText @bind-Value="Input.Publisher" class="form-control" list="@publisherDatalistId" placeholder="Penguin Books" />
                 <datalist id="@publisherDatalistId">
-                    @foreach (var p in existingPublishers)
+                    @foreach (var p in VM.ExistingPublishers)
                     {
                         <option value="@p.Name"></option>
                     }
@@ -51,48 +51,15 @@
 
 @code {
     [Parameter, EditorRequired]
-    public CopyFormInput Input { get; set; } = default!;
+    public CopyFormViewModel.CopyFormInput Input { get; set; } = default!;
 
     [Parameter]
     public string Title { get; set; } = "Copy";
 
     private string publisherDatalistId = $"publisher-options-{Guid.NewGuid():N}";
-    private List<PublisherOption> existingPublishers = [];
 
     protected override async Task OnInitializedAsync()
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        existingPublishers = await db.Publishers
-            .OrderBy(p => p.Name)
-            .Select(p => new PublisherOption(p.Id, p.Name))
-            .ToListAsync();
-    }
-
-    public static string FormatCondition(BookCondition c) => c switch
-    {
-        BookCondition.AsNew => "As New",
-        BookCondition.VeryGood => "Very Good",
-        _ => c.ToString()
-    };
-
-    public record PublisherOption(int Id, string Name);
-
-    public class CopyFormInput
-    {
-        [Required, StringLength(20)]
-        [RegularExpression(@"^(97(8|9))?\d{9}(\d|X|x)$", ErrorMessage = "Enter a valid 10- or 13-digit ISBN.")]
-        public string? Isbn { get; set; }
-
-        public BookFormat Format { get; set; } = BookFormat.Softcopy;
-
-        public DateOnly? DatePrinted { get; set; }
-
-        public BookCondition Condition { get; set; } = BookCondition.Good;
-
-        [StringLength(200)]
-        public string? Publisher { get; set; }
-
-        [StringLength(500)]
-        public string? CustomCoverArtUrl { get; set; }
+        await VM.InitializeAsync();
     }
 }
