@@ -1,7 +1,9 @@
 @page "/books/bulk-add"
+@implements IAsyncDisposable
 @inject IDbContextFactory<BookTrackerDbContext> DbFactory
 @inject IBookLookupService Lookup
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Bulk add books - BookTracker</PageTitle>
 
@@ -17,9 +19,35 @@
                 Add
             </button>
         </div>
-        <div class="form-text">Type or paste an ISBN and press Enter. Each book is looked up automatically.</div>
+        <div class="form-text">Type or paste an ISBN and press Enter, or scan a barcode with your camera.</div>
+        <div class="mt-3">
+            <button type="button" class="btn @(scannerActive ? "btn-danger" : "btn-outline-secondary")" @onclick="ToggleScannerAsync">
+                @if (scannerActive)
+                {
+                    <span>Stop scanner</span>
+                }
+                else
+                {
+                    <span>Scan barcode</span>
+                }
+            </button>
+        </div>
+        @if (!string.IsNullOrEmpty(scannerError))
+        {
+            <div class="alert alert-warning mt-2 mb-0 py-2 small">@scannerError</div>
+        }
     </div>
 </div>
+
+@if (scannerActive)
+{
+    <div class="card mb-4">
+        <div class="card-body text-center">
+            <div id="barcode-reader" style="max-width: 500px; margin: 0 auto;"></div>
+            <div class="form-text mt-2">Point your camera at the ISBN barcode on the back of the book.</div>
+        </div>
+    </div>
+}
 
 @if (rows.Count > 0)
 {
@@ -187,6 +215,9 @@
 @code {
     private string isbnInput = "";
     private List<DiscoveryRow> rows = [];
+    private bool scannerActive;
+    private string? scannerError;
+    private DotNetObjectReference<BulkAdd>? dotNetRef;
 
     private async Task HandleIsbnKeyUp(KeyboardEventArgs e)
     {
@@ -194,6 +225,64 @@
         {
             await AddIsbnAsync();
         }
+    }
+
+    private async Task ToggleScannerAsync()
+    {
+        scannerError = null;
+        if (scannerActive)
+        {
+            await JS.InvokeVoidAsync("BarcodeScanner.stop");
+            scannerActive = false;
+        }
+        else
+        {
+            scannerActive = true;
+            dotNetRef ??= DotNetObjectReference.Create(this);
+            // Wait for the DOM element to render before starting the scanner
+            StateHasChanged();
+            await Task.Delay(100);
+            await JS.InvokeVoidAsync("BarcodeScanner.start", "barcode-reader", dotNetRef);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnBarcodeScanned(string decodedText)
+    {
+        // EAN-13 barcodes for books start with 978 or 979
+        var isbn = decodedText.Trim();
+        if (string.IsNullOrWhiteSpace(isbn)) return;
+
+        // Avoid adding the same ISBN that's already in the grid
+        if (rows.Any(r => string.Equals(r.Isbn, isbn, StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        await InvokeAsync(async () =>
+        {
+            isbnInput = isbn;
+            await AddIsbnAsync();
+            StateHasChanged();
+        });
+    }
+
+    [JSInvokable]
+    public async Task OnScannerError(string error)
+    {
+        await InvokeAsync(() =>
+        {
+            scannerError = $"Camera error: {error}";
+            scannerActive = false;
+            StateHasChanged();
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (scannerActive)
+        {
+            try { await JS.InvokeVoidAsync("BarcodeScanner.stop"); } catch { }
+        }
+        dotNetRef?.Dispose();
     }
 
     private async Task AddIsbnAsync()
