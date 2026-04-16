@@ -45,4 +45,6 @@ public class Book
     public string? DefaultCoverArtUrl { get; set; }
 
     public List<BookCopy> Copies { get; set; } = [];
+
+    public List<Tag> Tags { get; set; } = [];
 }
