@@ -147,10 +147,21 @@ else
                                                     <td>@(copy.PublisherName ?? "—")</td>
                                                     <td>@(copy.DatePrinted?.ToString("yyyy-MM-dd") ?? "—")</td>
                                                     <td>
-                                                        <div class="btn-group btn-group-sm">
-                                                            <button type="button" class="btn btn-outline-primary" @onclick="() => StartEditCopy(copy)">Edit</button>
-                                                            <button type="button" class="btn btn-outline-danger" @onclick="() => DeleteCopyAsync(copy)">Delete</button>
-                                                        </div>
+                                                        @if (confirmingDeleteCopyId == copy.Id)
+                                                        {
+                                                            <div class="d-flex align-items-center gap-1">
+                                                                <span class="text-danger small">Delete?</span>
+                                                                <button type="button" class="btn btn-danger btn-sm" @onclick="() => DeleteCopyAsync(copy)">Yes</button>
+                                                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => confirmingDeleteCopyId = null">No</button>
+                                                            </div>
+                                                        }
+                                                        else
+                                                        {
+                                                            <div class="btn-group btn-group-sm">
+                                                                <button type="button" class="btn btn-outline-primary" @onclick="() => StartEditCopy(copy)">Edit</button>
+                                                                <button type="button" class="btn btn-outline-danger" @onclick="() => confirmingDeleteCopyId = copy.Id">Delete</button>
+                                                            </div>
+                                                        }
                                                     </td>
                                                 </tr>
                                             }
@@ -183,6 +194,24 @@ else
                     Save changes
                 </button>
                 <a class="btn btn-outline-secondary" href="/books">Back to library</a>
+                <div class="ms-auto">
+                    @if (confirmingDeleteBook)
+                    {
+                        <span class="me-2 text-danger fw-semibold">Delete this book and all its copies?</span>
+                        <button type="button" class="btn btn-danger btn-sm" @onclick="DeleteBookAsync" disabled="@deleting">
+                            @if (deleting)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                            }
+                            Yes, delete
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => confirmingDeleteBook = false">Cancel</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn btn-outline-danger" @onclick="() => confirmingDeleteBook = true">Delete book</button>
+                    }
+                </div>
             </div>
         </div>
     </EditForm>
@@ -212,6 +241,11 @@ else
     // Inline copy editing
     private int? editingCopyId;
     private CopyEditInput editCopyInput = new();
+    private int? confirmingDeleteCopyId;
+
+    // Book deletion
+    private bool confirmingDeleteBook;
+    private bool deleting;
 
     protected override async Task OnInitializedAsync()
     {
@@ -401,6 +435,27 @@ else
             await db.SaveChangesAsync();
         }
         copies.RemoveAll(c => c.Id == copy.Id);
+        confirmingDeleteCopyId = null;
+    }
+
+    private async Task DeleteBookAsync()
+    {
+        deleting = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var book = await db.Books.FindAsync(BookId);
+            if (book is not null)
+            {
+                db.Books.Remove(book);
+                await db.SaveChangesAsync();
+            }
+            Nav.NavigateTo("/books");
+        }
+        finally
+        {
+            deleting = false;
+        }
     }
 
     // Save book metadata
