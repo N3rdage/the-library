@@ -1,6 +1,7 @@
 using BookTracker.Data;
 using BookTracker.Web.Components;
 using BookTracker.Web.Services;
+using BookTracker.Web.ViewModels;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,6 +23,16 @@ builder.Services.AddHttpClient<IBookLookupService, BookLookupService>(client =>
     client.Timeout = TimeSpan.FromSeconds(10);
     client.DefaultRequestHeaders.UserAgent.ParseAdd("BookTracker/0.1 (+github.com/N3rdage/the-library)");
 });
+
+// ViewModels — transient so each component instance gets its own VM.
+builder.Services.AddTransient<HomeViewModel>();
+builder.Services.AddTransient<BookFormViewModel>();
+builder.Services.AddTransient<CopyFormViewModel>();
+builder.Services.AddTransient<GenrePickerViewModel>();
+builder.Services.AddTransient<BookListViewModel>();
+builder.Services.AddTransient<BookAddViewModel>();
+builder.Services.AddTransient<BookEditViewModel>();
+builder.Services.AddTransient<BulkAddViewModel>();
 
 var app = builder.Build();
 

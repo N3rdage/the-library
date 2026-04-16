@@ -1,33 +1,35 @@
+@inject GenrePickerViewModel VM
+
 <div class="card">
     <div class="card-header bg-white"><h2 class="h5 mb-0">Genres</h2></div>
     <div class="card-body">
         <div class="row g-3">
-            @foreach (var top in topLevelGenres)
+            @foreach (var top in VM.TopLevelGenres)
             {
                 <div class="col-md-6 col-lg-4">
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="@($"genre-{top.Id}")"
-                               checked="@SelectedGenreIds.Contains(top.Id)"
-                               @onchange="e => ToggleGenre(top.Id, (bool)e.Value!)" />
+                               checked="@VM.SelectedGenreIds.Contains(top.Id)"
+                               @onchange="e => OnToggle(top.Id, (bool)e.Value!)" />
                         <label class="form-check-label fw-semibold" for="@($"genre-{top.Id}")">@top.Name</label>
                     </div>
                     @foreach (var child in top.Children.OrderBy(c => c.Name))
                     {
                         <div class="form-check ms-4">
                             <input class="form-check-input" type="checkbox" id="@($"genre-{child.Id}")"
-                                   checked="@SelectedGenreIds.Contains(child.Id)"
-                                   @onchange="e => ToggleGenre(child.Id, (bool)e.Value!)" />
+                                   checked="@VM.SelectedGenreIds.Contains(child.Id)"
+                                   @onchange="e => OnToggle(child.Id, (bool)e.Value!)" />
                             <label class="form-check-label" for="@($"genre-{child.Id}")">@child.Name</label>
                         </div>
                     }
                 </div>
             }
         </div>
-        @if (LookupCandidates.Count > 0)
+        @if (VM.LookupCandidates.Count > 0)
         {
             <div class="mt-3 pt-3 border-top">
                 <small class="text-muted d-block mb-1">Lookup returned (fuzzy-matched against the list above):</small>
-                @foreach (var c in LookupCandidates)
+                @foreach (var c in VM.LookupCandidates)
                 {
                     <span class="badge bg-light text-dark border me-1 mb-1">@c</span>
                 }
@@ -46,80 +48,22 @@
     [Parameter]
     public List<string> LookupCandidates { get; set; } = [];
 
-    [Inject]
-    private IDbContextFactory<BookTrackerDbContext> DbFactory { get; set; } = default!;
-
-    private List<GenreNode> topLevelGenres = [];
-    private Dictionary<int, GenreNode> genreById = [];
+    /// <summary>
+    /// Exposes the underlying ViewModel so parent components can call
+    /// ApplyLookupCandidates and access genre data directly.
+    /// </summary>
+    public GenrePickerViewModel ViewModel => VM;
 
     protected override async Task OnInitializedAsync()
     {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var all = await db.Genres
-            .OrderBy(g => g.Name)
-            .Select(g => new GenreNode(g.Id, g.Name, g.ParentGenreId))
-            .ToListAsync();
-        genreById = all.ToDictionary(g => g.Id);
-        foreach (var g in all.Where(g => g.ParentGenreId.HasValue))
-        {
-            if (genreById.TryGetValue(g.ParentGenreId!.Value, out var parent))
-            {
-                parent.Children.Add(g);
-            }
-        }
-        topLevelGenres = all.Where(g => g.ParentGenreId is null).OrderBy(g => g.Name).ToList();
+        VM.SelectedGenreIds = SelectedGenreIds;
+        VM.LookupCandidates = LookupCandidates;
+        await VM.InitializeAsync();
     }
 
-    private async Task ToggleGenre(int id, bool isChecked)
+    private async Task OnToggle(int id, bool isChecked)
     {
-        if (isChecked)
-        {
-            if (!SelectedGenreIds.Contains(id)) SelectedGenreIds.Add(id);
-            if (genreById.TryGetValue(id, out var node) && node.ParentGenreId is int parentId
-                && !SelectedGenreIds.Contains(parentId))
-            {
-                SelectedGenreIds.Add(parentId);
-            }
-        }
-        else
-        {
-            SelectedGenreIds.Remove(id);
-        }
-        await SelectedGenreIdsChanged.InvokeAsync(SelectedGenreIds);
-    }
-
-    /// <summary>
-    /// Applies fuzzy genre matching from lookup candidates and auto-selects matching genres.
-    /// Call this after setting LookupCandidates.
-    /// </summary>
-    public async Task ApplyLookupCandidatesAsync(IReadOnlyList<string> candidates)
-    {
-        foreach (var candidate in candidates)
-        {
-            var match = genreById.Values.FirstOrDefault(g => FuzzyGenreMatch(candidate, g.Name));
-            if (match is not null)
-            {
-                await ToggleGenre(match.Id, true);
-            }
-        }
-    }
-
-    private static bool FuzzyGenreMatch(string candidate, string preset)
-    {
-        var nc = Normalize(candidate);
-        var np = Normalize(preset);
-        if (nc.Length == 0 || np.Length == 0) return false;
-        return nc == np || nc.Contains(np) || np.Contains(nc);
-    }
-
-    private static string Normalize(string s) =>
-        new string(s.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
-
-    public class GenreNode(int id, string name, int? parentGenreId)
-    {
-        public int Id { get; } = id;
-        public string Name { get; } = name;
-        public int? ParentGenreId { get; } = parentGenreId;
-        public List<GenreNode> Children { get; } = [];
+        VM.ToggleGenre(id, isChecked);
+        await SelectedGenreIdsChanged.InvokeAsync(VM.SelectedGenreIds);
     }
 }

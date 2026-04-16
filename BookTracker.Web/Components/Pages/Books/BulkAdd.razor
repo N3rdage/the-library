@@ -1,7 +1,6 @@
 @page "/books/bulk-add"
 @implements IAsyncDisposable
-@inject IDbContextFactory<BookTrackerDbContext> DbFactory
-@inject IBookLookupService Lookup
+@inject BulkAddViewModel VM
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
@@ -13,9 +12,9 @@
     <div class="card-body">
         <label class="form-label fw-semibold">Add ISBN</label>
         <div class="input-group" style="max-width: 500px;">
-            <input type="text" class="form-control" placeholder="9780345391803" @bind="isbnInput"
+            <input type="text" class="form-control" placeholder="9780345391803" @bind="VM.IsbnInput"
                    @onkeyup="HandleIsbnKeyUp" />
-            <button type="button" class="btn btn-outline-primary" @onclick="AddIsbnAsync" disabled="@string.IsNullOrWhiteSpace(isbnInput)">
+            <button type="button" class="btn btn-outline-primary" @onclick="AddIsbnAsync" disabled="@string.IsNullOrWhiteSpace(VM.IsbnInput)">
                 Add
             </button>
         </div>
@@ -49,23 +48,23 @@
     </div>
 }
 
-@if (rows.Count > 0)
+@if (VM.Rows.Count > 0)
 {
     <div class="card mb-4">
         <div class="card-header bg-white d-flex justify-content-between align-items-center">
-            <h2 class="h5 mb-0">Discovered books (@rows.Count)</h2>
+            <h2 class="h5 mb-0">Discovered books (@VM.Rows.Count)</h2>
             <div class="d-flex gap-2">
-                @if (rows.Any(r => r.Status == RowStatus.Found && r.Action == RowAction.Pending))
+                @if (VM.Rows.Any(r => r.Status == BulkAddViewModel.RowStatus.Found && r.Action == BulkAddViewModel.RowAction.Pending))
                 {
-                    <button type="button" class="btn btn-success btn-sm" @onclick="AcceptAllFoundAsync">
+                    <button type="button" class="btn btn-success btn-sm" @onclick="VM.AcceptAllFoundAsync">
                         Accept all found
                     </button>
                 }
-                @if (rows.Any(r => r.Action == RowAction.Accepted || r.Action == RowAction.FollowUp))
+                @if (VM.Rows.Any(r => r.Action == BulkAddViewModel.RowAction.Accepted || r.Action == BulkAddViewModel.RowAction.FollowUp))
                 {
                     <span class="text-muted small align-self-center">
-                        @rows.Count(r => r.Action == RowAction.Accepted) accepted,
-                        @rows.Count(r => r.Action == RowAction.FollowUp) follow-up
+                        @VM.Rows.Count(r => r.Action == BulkAddViewModel.RowAction.Accepted) accepted,
+                        @VM.Rows.Count(r => r.Action == BulkAddViewModel.RowAction.FollowUp) follow-up
                     </span>
                 }
             </div>
@@ -85,9 +84,9 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var row in rows)
+                        @foreach (var row in VM.Rows)
                         {
-                            <tr class="@RowCssClass(row)">
+                            <tr class="@BulkAddViewModel.RowCssClass(row)">
                                 <td>
                                     @if (!string.IsNullOrWhiteSpace(row.CoverUrl))
                                     {
@@ -102,7 +101,7 @@
                                 </td>
                                 <td class="font-monospace small">@row.Isbn</td>
                                 <td>
-                                    @if (row.Status == RowStatus.NotFound && row.Action != RowAction.FollowUp)
+                                    @if (row.Status == BulkAddViewModel.RowStatus.NotFound && row.Action != BulkAddViewModel.RowAction.FollowUp)
                                     {
                                         <input type="text" class="form-control form-control-sm" placeholder="Book title..."
                                                @bind="row.Title" />
@@ -114,7 +113,7 @@
                                 </td>
                                 <td>@(row.Author ?? "—")</td>
                                 <td>
-                                    @if (row.Status == RowStatus.Searching)
+                                    @if (row.Status == BulkAddViewModel.RowStatus.Searching)
                                     {
                                         <span class="spinner-border spinner-border-sm" role="status"></span>
                                     }
@@ -126,13 +125,13 @@
                                 <td>
                                     @switch (row.Action)
                                     {
-                                        case RowAction.Accepted:
+                                        case BulkAddViewModel.RowAction.Accepted:
                                             <span class="badge bg-success">Accepted</span>
                                             break;
-                                        case RowAction.FollowUp:
+                                        case BulkAddViewModel.RowAction.FollowUp:
                                             <span class="badge bg-warning text-dark">Follow-up</span>
                                             break;
-                                        case RowAction.Duplicate:
+                                        case BulkAddViewModel.RowAction.Duplicate:
                                             <span class="badge bg-secondary">Duplicate</span>
                                             break;
                                         default:
@@ -144,13 +143,13 @@
                                             {
                                                 switch (row.Status)
                                                 {
-                                                    case RowStatus.Found:
+                                                    case BulkAddViewModel.RowStatus.Found:
                                                         <span class="badge bg-info text-dark">Found</span>
                                                         break;
-                                                    case RowStatus.NotFound:
+                                                    case BulkAddViewModel.RowStatus.NotFound:
                                                         <span class="badge bg-danger">Not found</span>
                                                         break;
-                                                    case RowStatus.Searching:
+                                                    case BulkAddViewModel.RowStatus.Searching:
                                                         <span class="badge bg-light text-dark">Searching...</span>
                                                         break;
                                                 }
@@ -160,34 +159,34 @@
                                 </td>
                                 <td>
                                     <div class="d-flex gap-1 align-items-center">
-                                        @if (row.Action == RowAction.Pending)
+                                        @if (row.Action == BulkAddViewModel.RowAction.Pending)
                                         {
-                                            @if (row.Status == RowStatus.Found)
+                                            @if (row.Status == BulkAddViewModel.RowStatus.Found)
                                             {
                                                 <div class="btn-group btn-group-sm">
                                                     @if (row.IsDuplicate)
                                                     {
-                                                        <button type="button" class="btn btn-outline-success" @onclick="() => AcceptRowAsync(row)" title="Add another copy">
+                                                        <button type="button" class="btn btn-outline-success" @onclick="() => VM.AcceptRowAsync(row)" title="Add another copy">
                                                             Add copy
                                                         </button>
-                                                        <button type="button" class="btn btn-outline-secondary" @onclick="() => row.Action = RowAction.Duplicate" title="Skip duplicate">
+                                                        <button type="button" class="btn btn-outline-secondary" @onclick="() => row.Action = BulkAddViewModel.RowAction.Duplicate" title="Skip duplicate">
                                                             Skip
                                                         </button>
                                                     }
                                                     else
                                                     {
-                                                        <button type="button" class="btn btn-outline-success" @onclick="() => AcceptRowAsync(row)">
+                                                        <button type="button" class="btn btn-outline-success" @onclick="() => VM.AcceptRowAsync(row)">
                                                             Accept
                                                         </button>
                                                     }
-                                                    <button type="button" class="btn btn-outline-warning" @onclick="() => FollowUpRowAsync(row)">
+                                                    <button type="button" class="btn btn-outline-warning" @onclick="() => VM.FollowUpRowAsync(row)">
                                                         Follow-up
                                                     </button>
                                                 </div>
                                             }
-                                            else if (row.Status == RowStatus.NotFound)
+                                            else if (row.Status == BulkAddViewModel.RowStatus.NotFound)
                                             {
-                                                <button type="button" class="btn btn-outline-warning btn-sm" @onclick="() => FollowUpNotFoundAsync(row)">
+                                                <button type="button" class="btn btn-outline-warning btn-sm" @onclick="() => VM.FollowUpNotFoundAsync(row)">
                                                     Add as follow-up
                                                 </button>
                                             }
@@ -196,7 +195,7 @@
                                         {
                                             <span class="text-muted small">Done</span>
                                         }
-                                        <button type="button" class="btn btn-outline-danger btn-sm ms-1" @onclick="() => RemoveRow(row)" title="Remove from grid">
+                                        <button type="button" class="btn btn-outline-danger btn-sm ms-1" @onclick="() => VM.RemoveRow(row)" title="Remove from grid">
                                             &times;
                                         </button>
                                     </div>
@@ -209,7 +208,7 @@
         </div>
     </div>
 
-    @if (rows.Any(r => r.Action == RowAction.Accepted || r.Action == RowAction.FollowUp))
+    @if (VM.Rows.Any(r => r.Action == BulkAddViewModel.RowAction.Accepted || r.Action == BulkAddViewModel.RowAction.FollowUp))
     {
         <div class="d-flex gap-2">
             <a href="/books" class="btn btn-primary">View library</a>
@@ -218,18 +217,25 @@
 }
 
 @code {
-    private string isbnInput = "";
-    private List<DiscoveryRow> rows = [];
     private bool scannerActive;
     private string? scannerError;
     private DotNetObjectReference<BulkAdd>? dotNetRef;
 
+    protected override void OnInitialized()
+    {
+        VM.OnStateChanged = () => InvokeAsync(StateHasChanged);
+    }
+
     private async Task HandleIsbnKeyUp(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
-        {
             await AddIsbnAsync();
-        }
+    }
+
+    private async Task AddIsbnAsync()
+    {
+        await VM.AddIsbnAsync();
+        StateHasChanged();
     }
 
     private async Task ToggleScannerAsync()
@@ -244,7 +250,6 @@
         {
             scannerActive = true;
             dotNetRef ??= DotNetObjectReference.Create(this);
-            // Wait for the DOM element to render before starting the scanner
             StateHasChanged();
             await Task.Delay(100);
             await JS.InvokeVoidAsync("BarcodeScanner.start", "barcode-reader", dotNetRef);
@@ -254,18 +259,16 @@
     [JSInvokable]
     public async Task OnBarcodeScanned(string decodedText)
     {
-        // EAN-13 barcodes for books start with 978 or 979
         var isbn = decodedText.Trim();
         if (string.IsNullOrWhiteSpace(isbn)) return;
 
-        // Avoid adding the same ISBN that's already in the grid
-        if (rows.Any(r => string.Equals(r.Isbn, isbn, StringComparison.OrdinalIgnoreCase)))
+        if (VM.Rows.Any(r => string.Equals(r.Isbn, isbn, StringComparison.OrdinalIgnoreCase)))
             return;
 
         await InvokeAsync(async () =>
         {
-            isbnInput = isbn;
-            await AddIsbnAsync();
+            VM.IsbnInput = isbn;
+            await VM.AddIsbnAsync();
             StateHasChanged();
         });
     }
@@ -289,247 +292,4 @@
         }
         dotNetRef?.Dispose();
     }
-
-    private void RemoveRow(DiscoveryRow row) => rows.Remove(row);
-
-    private async Task AddIsbnAsync()
-    {
-        var isbn = isbnInput.Trim();
-        if (string.IsNullOrWhiteSpace(isbn)) return;
-
-        // Don't add same ISBN twice to the grid
-        if (rows.Any(r => string.Equals(r.Isbn, isbn, StringComparison.OrdinalIgnoreCase)))
-        {
-            isbnInput = "";
-            return;
-        }
-
-        var row = new DiscoveryRow { Isbn = isbn, Status = RowStatus.Searching };
-        rows.Insert(0, row);
-        isbnInput = "";
-        StateHasChanged();
-
-        // Check for duplicates in the database
-        await CheckDuplicateAsync(row);
-
-        // Fire-and-forget the lookup — updates the row and re-renders
-        _ = LookupRowAsync(row);
-    }
-
-    private async Task CheckDuplicateAsync(DiscoveryRow row)
-    {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        row.IsDuplicate = await db.BookCopies.AnyAsync(c => c.Isbn == row.Isbn);
-    }
-
-    private async Task LookupRowAsync(DiscoveryRow row)
-    {
-        try
-        {
-            var result = await Lookup.LookupByIsbnAsync(row.Isbn, CancellationToken.None);
-            if (result is not null)
-            {
-                row.Title = result.Title;
-                row.Author = result.Author;
-                row.CoverUrl = result.CoverUrl;
-                row.Source = result.Source;
-                row.Publisher = result.Publisher;
-                row.Subtitle = result.Subtitle;
-                row.DatePrinted = result.DatePrinted;
-                row.GenreCandidates = result.GenreCandidates.ToList();
-                row.Status = RowStatus.Found;
-            }
-            else
-            {
-                row.Title = $"Unknown book — {row.Isbn}";
-                row.Status = RowStatus.NotFound;
-            }
-        }
-        catch
-        {
-            row.Title = $"Unknown book — {row.Isbn}";
-            row.Status = RowStatus.NotFound;
-        }
-
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task AcceptRowAsync(DiscoveryRow row)
-    {
-        await SaveBookAsync(row, followUp: false);
-        row.Action = RowAction.Accepted;
-    }
-
-    private async Task FollowUpRowAsync(DiscoveryRow row)
-    {
-        await SaveBookAsync(row, followUp: true);
-        row.Action = RowAction.FollowUp;
-    }
-
-    private async Task FollowUpNotFoundAsync(DiscoveryRow row)
-    {
-        if (string.IsNullOrWhiteSpace(row.Title))
-        {
-            row.Title = $"Unknown book — {row.Isbn}";
-        }
-        await SaveBookAsync(row, followUp: true);
-        row.Action = RowAction.FollowUp;
-    }
-
-    private async Task AcceptAllFoundAsync()
-    {
-        var pending = rows.Where(r => r.Status == RowStatus.Found && r.Action == RowAction.Pending && !r.IsDuplicate).ToList();
-        foreach (var row in pending)
-        {
-            await AcceptRowAsync(row);
-        }
-    }
-
-    private async Task SaveBookAsync(DiscoveryRow row, bool followUp)
-    {
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        // If it's a duplicate, just add a new copy to the existing book
-        if (row.IsDuplicate)
-        {
-            var existingCopy = await db.BookCopies
-                .Include(c => c.Book)
-                .FirstOrDefaultAsync(c => c.Isbn == row.Isbn);
-
-            if (existingCopy is not null)
-            {
-                var newCopy = new BookCopy
-                {
-                    BookId = existingCopy.BookId,
-                    Isbn = row.Isbn,
-                    Format = BookFormat.Softcopy,
-                    Condition = BookCondition.Good
-                };
-                db.BookCopies.Add(newCopy);
-
-                if (followUp)
-                {
-                    var book = await db.Books.Include(b => b.Tags).FirstAsync(b => b.Id == existingCopy.BookId);
-                    await EnsureFollowUpTagAsync(db, book);
-                }
-
-                await db.SaveChangesAsync();
-                return;
-            }
-        }
-
-        // Create new book with a copy
-        Publisher? publisher = null;
-        var pubName = row.Publisher?.Trim();
-        if (!string.IsNullOrEmpty(pubName))
-        {
-            publisher = await db.Publishers.FirstOrDefaultAsync(p => p.Name == pubName);
-            if (publisher is null)
-            {
-                publisher = new Publisher { Name = pubName };
-                db.Publishers.Add(publisher);
-            }
-        }
-
-        var newBook = new Book
-        {
-            Title = (row.Title ?? $"Unknown book — {row.Isbn}").Trim(),
-            Subtitle = row.Subtitle,
-            Author = (row.Author ?? "Unknown").Trim(),
-            DefaultCoverArtUrl = row.CoverUrl,
-            Copies =
-            [
-                new BookCopy
-                {
-                    Isbn = row.Isbn,
-                    Format = BookFormat.Softcopy,
-                    Condition = BookCondition.Good,
-                    DatePrinted = row.DatePrinted,
-                    Publisher = publisher
-                }
-            ]
-        };
-
-        // Fuzzy-match genres from lookup candidates
-        if (row.GenreCandidates.Count > 0)
-        {
-            var allGenres = await db.Genres.ToListAsync();
-            var matched = new HashSet<int>();
-            foreach (var candidate in row.GenreCandidates)
-            {
-                var genre = allGenres.FirstOrDefault(g => FuzzyGenreMatch(candidate, g.Name));
-                if (genre is not null && matched.Add(genre.Id))
-                {
-                    newBook.Genres.Add(genre);
-                    // Auto-add parent
-                    if (genre.ParentGenreId is int parentId && matched.Add(parentId))
-                    {
-                        var parent = allGenres.FirstOrDefault(g => g.Id == parentId);
-                        if (parent is not null) newBook.Genres.Add(parent);
-                    }
-                }
-            }
-        }
-
-        db.Books.Add(newBook);
-        await db.SaveChangesAsync();
-
-        if (followUp)
-        {
-            await EnsureFollowUpTagAsync(db, newBook);
-            await db.SaveChangesAsync();
-        }
-    }
-
-    private static async Task EnsureFollowUpTagAsync(BookTrackerDbContext db, Book book)
-    {
-        var tag = await db.Tags.FirstOrDefaultAsync(t => t.Name == "follow-up");
-        if (tag is null)
-        {
-            tag = new Tag { Name = "follow-up" };
-            db.Tags.Add(tag);
-        }
-        if (!book.Tags.Any(t => t.Name == "follow-up"))
-        {
-            book.Tags.Add(tag);
-        }
-    }
-
-    private static bool FuzzyGenreMatch(string candidate, string preset)
-    {
-        var nc = Normalize(candidate);
-        var np = Normalize(preset);
-        if (nc.Length == 0 || np.Length == 0) return false;
-        return nc == np || nc.Contains(np) || np.Contains(nc);
-    }
-
-    private static string Normalize(string s) =>
-        new string(s.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
-
-    private static string RowCssClass(DiscoveryRow row) => row.Action switch
-    {
-        RowAction.Accepted => "table-success",
-        RowAction.FollowUp => "table-warning",
-        RowAction.Duplicate => "table-secondary",
-        _ => ""
-    };
-
-    private class DiscoveryRow
-    {
-        public string Isbn { get; set; } = "";
-        public string? Title { get; set; }
-        public string? Subtitle { get; set; }
-        public string? Author { get; set; }
-        public string? CoverUrl { get; set; }
-        public string? Source { get; set; }
-        public string? Publisher { get; set; }
-        public DateOnly? DatePrinted { get; set; }
-        public List<string> GenreCandidates { get; set; } = [];
-        public RowStatus Status { get; set; }
-        public RowAction Action { get; set; } = RowAction.Pending;
-        public bool IsDuplicate { get; set; }
-    }
-
-    private enum RowStatus { Searching, Found, NotFound }
-    private enum RowAction { Pending, Accepted, FollowUp, Duplicate }
 }

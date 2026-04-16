@@ -1,16 +1,16 @@
 @page "/books/{BookId:int}/edit"
-@inject IDbContextFactory<BookTrackerDbContext> DbFactory
+@inject BookEditViewModel VM
 @inject NavigationManager Nav
 
 <PageTitle>Edit book - BookTracker</PageTitle>
 
-@if (notFound)
+@if (VM.NotFound)
 {
     <h1 class="mb-3">Book not found</h1>
     <p>No book with ID @BookId exists.</p>
     <a href="/books" class="btn btn-outline-secondary">Back to library</a>
 }
-else if (bookInput is null)
+else if (VM.BookInput is null)
 {
     <div class="text-center py-5">
         <div class="spinner-border" role="status">
@@ -22,11 +22,11 @@ else
 {
     <h1 class="mb-3">Edit book</h1>
 
-    @if (!string.IsNullOrEmpty(successMessage))
+    @if (!string.IsNullOrEmpty(VM.SuccessMessage))
     {
         <div class="alert alert-success alert-dismissible fade show" role="alert">
-            @successMessage
-            <button type="button" class="btn-close" @onclick="() => successMessage = null" aria-label="Close"></button>
+            @VM.SuccessMessage
+            <button type="button" class="btn-close" @onclick="() => VM.SuccessMessage = null" aria-label="Close"></button>
         </div>
     }
 
@@ -35,13 +35,13 @@ else
 
         <div class="row g-4">
             <div class="col-12">
-                <BookForm Input="bookInput" />
+                <BookForm Input="VM.BookInput" />
             </div>
 
             <div class="col-12">
                 <GenrePicker @ref="genrePicker"
-                             SelectedGenreIds="selectedGenreIds"
-                             SelectedGenreIdsChanged="ids => selectedGenreIds = ids"
+                             SelectedGenreIds="VM.SelectedGenreIds"
+                             SelectedGenreIdsChanged="ids => VM.SelectedGenreIds = ids"
                              LookupCandidates="[]" />
             </div>
 
@@ -52,25 +52,25 @@ else
                     </div>
                     <div class="card-body">
                         <div class="d-flex flex-wrap gap-2 mb-3">
-                            @foreach (var tag in assignedTags)
+                            @foreach (var tag in VM.AssignedTags)
                             {
                                 <span class="badge bg-info text-dark d-flex align-items-center gap-1">
                                     @tag.Name
                                     <button type="button" class="btn-close btn-close-sm" style="font-size: 0.6rem;"
-                                            @onclick="() => RemoveTag(tag)" aria-label="Remove @tag.Name"></button>
+                                            @onclick="() => VM.RemoveTag(tag)" aria-label="Remove @tag.Name"></button>
                                 </span>
                             }
-                            @if (assignedTags.Count == 0)
+                            @if (VM.AssignedTags.Count == 0)
                             {
                                 <span class="text-muted small">No tags assigned.</span>
                             }
                         </div>
                         <div class="input-group" style="max-width: 400px;">
                             <input type="text" class="form-control form-control-sm" placeholder="Add tag..."
-                                   list="available-tags" @bind="newTagName" />
-                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="AddTagAsync">Add</button>
+                                   list="available-tags" @bind="VM.NewTagName" />
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="VM.AddTagAsync">Add</button>
                             <datalist id="available-tags">
-                                @foreach (var t in availableTags)
+                                @foreach (var t in VM.AvailableTags)
                                 {
                                     <option value="@t.Name"></option>
                                 }
@@ -83,11 +83,11 @@ else
             <div class="col-12">
                 <div class="card">
                     <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                        <h2 class="h5 mb-0">Copies (@copies.Count)</h2>
-                        <button type="button" class="btn btn-outline-primary btn-sm" @onclick="ShowAddCopy">Add copy</button>
+                        <h2 class="h5 mb-0">Copies (@VM.Copies.Count)</h2>
+                        <button type="button" class="btn btn-outline-primary btn-sm" @onclick="VM.ShowAddCopy">Add copy</button>
                     </div>
                     <div class="card-body">
-                        @if (copies.Count == 0 && !showingNewCopy)
+                        @if (VM.Copies.Count == 0 && !VM.ShowingNewCopy)
                         {
                             <p class="text-muted mb-0">No copies recorded.</p>
                         }
@@ -106,14 +106,14 @@ else
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        @foreach (var copy in copies)
+                                        @foreach (var copy in VM.Copies)
                                         {
-                                            @if (editingCopyId == copy.Id)
+                                            @if (VM.EditingCopyId == copy.Id)
                                             {
                                                 <tr>
-                                                    <td><input type="text" class="form-control form-control-sm" @bind="editCopyInput.Isbn" /></td>
+                                                    <td><input type="text" class="form-control form-control-sm" @bind="VM.EditCopyInput.Isbn" /></td>
                                                     <td>
-                                                        <select class="form-select form-select-sm" @bind="editCopyInput.Format">
+                                                        <select class="form-select form-select-sm" @bind="VM.EditCopyInput.Format">
                                                             @foreach (var f in Enum.GetValues<BookFormat>())
                                                             {
                                                                 <option value="@f">@f</option>
@@ -121,19 +121,19 @@ else
                                                         </select>
                                                     </td>
                                                     <td>
-                                                        <select class="form-select form-select-sm" @bind="editCopyInput.Condition">
+                                                        <select class="form-select form-select-sm" @bind="VM.EditCopyInput.Condition">
                                                             @foreach (var c in Enum.GetValues<BookCondition>())
                                                             {
-                                                                <option value="@c">@CopyForm.FormatCondition(c)</option>
+                                                                <option value="@c">@CopyFormViewModel.FormatCondition(c)</option>
                                                             }
                                                         </select>
                                                     </td>
-                                                    <td><input type="text" class="form-control form-control-sm" @bind="editCopyInput.Publisher" /></td>
-                                                    <td><input type="date" class="form-control form-control-sm" @bind="editCopyInput.DatePrinted" /></td>
+                                                    <td><input type="text" class="form-control form-control-sm" @bind="VM.EditCopyInput.Publisher" /></td>
+                                                    <td><input type="date" class="form-control form-control-sm" @bind="VM.EditCopyInput.DatePrinted" /></td>
                                                     <td>
                                                         <div class="btn-group btn-group-sm">
-                                                            <button type="button" class="btn btn-outline-success" @onclick="SaveCopyEditAsync">Save</button>
-                                                            <button type="button" class="btn btn-outline-secondary" @onclick="CancelCopyEdit">Cancel</button>
+                                                            <button type="button" class="btn btn-outline-success" @onclick="VM.SaveCopyEditAsync">Save</button>
+                                                            <button type="button" class="btn btn-outline-secondary" @onclick="VM.CancelCopyEdit">Cancel</button>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -143,23 +143,23 @@ else
                                                 <tr>
                                                     <td>@copy.Isbn</td>
                                                     <td>@copy.Format</td>
-                                                    <td>@CopyForm.FormatCondition(copy.Condition)</td>
+                                                    <td>@CopyFormViewModel.FormatCondition(copy.Condition)</td>
                                                     <td>@(copy.PublisherName ?? "—")</td>
                                                     <td>@(copy.DatePrinted?.ToString("yyyy-MM-dd") ?? "—")</td>
                                                     <td>
-                                                        @if (confirmingDeleteCopyId == copy.Id)
+                                                        @if (VM.ConfirmingDeleteCopyId == copy.Id)
                                                         {
                                                             <div class="d-flex align-items-center gap-1">
                                                                 <span class="text-danger small">Delete?</span>
-                                                                <button type="button" class="btn btn-danger btn-sm" @onclick="() => DeleteCopyAsync(copy)">Yes</button>
-                                                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => confirmingDeleteCopyId = null">No</button>
+                                                                <button type="button" class="btn btn-danger btn-sm" @onclick="() => VM.DeleteCopyAsync(copy)">Yes</button>
+                                                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => VM.ConfirmingDeleteCopyId = null">No</button>
                                                             </div>
                                                         }
                                                         else
                                                         {
                                                             <div class="btn-group btn-group-sm">
-                                                                <button type="button" class="btn btn-outline-primary" @onclick="() => StartEditCopy(copy)">Edit</button>
-                                                                <button type="button" class="btn btn-outline-danger" @onclick="() => confirmingDeleteCopyId = copy.Id">Delete</button>
+                                                                <button type="button" class="btn btn-outline-primary" @onclick="() => VM.StartEditCopy(copy)">Edit</button>
+                                                                <button type="button" class="btn btn-outline-danger" @onclick="() => VM.ConfirmingDeleteCopyId = copy.Id">Delete</button>
                                                             </div>
                                                         }
                                                     </td>
@@ -171,13 +171,13 @@ else
                             </div>
                         }
 
-                        @if (showingNewCopy)
+                        @if (VM.ShowingNewCopy)
                         {
                             <div class="mt-3 pt-3 border-top">
-                                <CopyForm Input="newCopyInput" Title="New copy" />
+                                <CopyForm Input="VM.NewCopyInput" Title="New copy" />
                                 <div class="mt-2 d-flex gap-2">
-                                    <button type="button" class="btn btn-outline-success btn-sm" @onclick="SaveNewCopyAsync">Save copy</button>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => showingNewCopy = false">Cancel</button>
+                                    <button type="button" class="btn btn-outline-success btn-sm" @onclick="() => VM.SaveNewCopyAsync(BookId)">Save copy</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => VM.ShowingNewCopy = false">Cancel</button>
                                 </div>
                             </div>
                         }
@@ -186,8 +186,8 @@ else
             </div>
 
             <div class="col-12 d-flex gap-2">
-                <button type="submit" class="btn btn-primary" disabled="@saving">
-                    @if (saving)
+                <button type="submit" class="btn btn-primary" disabled="@VM.Saving">
+                    @if (VM.Saving)
                     {
                         <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                     }
@@ -195,21 +195,21 @@ else
                 </button>
                 <a class="btn btn-outline-secondary" href="/books">Back to library</a>
                 <div class="ms-auto">
-                    @if (confirmingDeleteBook)
+                    @if (VM.ConfirmingDeleteBook)
                     {
                         <span class="me-2 text-danger fw-semibold">Delete this book and all its copies?</span>
-                        <button type="button" class="btn btn-danger btn-sm" @onclick="DeleteBookAsync" disabled="@deleting">
-                            @if (deleting)
+                        <button type="button" class="btn btn-danger btn-sm" @onclick="DeleteBookAsync" disabled="@VM.Deleting">
+                            @if (VM.Deleting)
                             {
                                 <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
                             }
                             Yes, delete
                         </button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => confirmingDeleteBook = false">Cancel</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => VM.ConfirmingDeleteBook = false">Cancel</button>
                     }
                     else
                     {
-                        <button type="button" class="btn btn-outline-danger" @onclick="() => confirmingDeleteBook = true">Delete book</button>
+                        <button type="button" class="btn btn-outline-danger" @onclick="() => VM.ConfirmingDeleteBook = true">Delete book</button>
                     }
                 </div>
             </div>
@@ -221,297 +221,17 @@ else
     [Parameter]
     public int BookId { get; set; }
 
-    private BookForm.BookFormInput? bookInput;
-    private List<int> selectedGenreIds = [];
     private GenrePicker? genrePicker;
-    private bool notFound;
-    private bool saving;
-    private string? successMessage;
 
-    // Tags
-    private List<TagItem> assignedTags = [];
-    private List<TagItem> availableTags = [];
-    private string newTagName = "";
+    protected override async Task OnInitializedAsync() => await VM.InitializeAsync(BookId);
 
-    // Copies
-    private List<CopyRow> copies = [];
-    private bool showingNewCopy;
-    private CopyForm.CopyFormInput newCopyInput = new();
-
-    // Inline copy editing
-    private int? editingCopyId;
-    private CopyEditInput editCopyInput = new();
-    private int? confirmingDeleteCopyId;
-
-    // Book deletion
-    private bool confirmingDeleteBook;
-    private bool deleting;
-
-    protected override async Task OnInitializedAsync()
-    {
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        var book = await db.Books
-            .Include(b => b.Genres)
-            .Include(b => b.Tags)
-            .Include(b => b.Copies)
-                .ThenInclude(c => c.Publisher)
-            .FirstOrDefaultAsync(b => b.Id == BookId);
-
-        if (book is null)
-        {
-            notFound = true;
-            return;
-        }
-
-        bookInput = new BookForm.BookFormInput
-        {
-            Title = book.Title,
-            Subtitle = book.Subtitle,
-            Author = book.Author,
-            Category = book.Category,
-            Status = book.Status,
-            Rating = book.Rating,
-            Notes = book.Notes,
-            DefaultCoverArtUrl = book.DefaultCoverArtUrl
-        };
-
-        selectedGenreIds = book.Genres.Select(g => g.Id).ToList();
-        assignedTags = book.Tags.Select(t => new TagItem(t.Id, t.Name)).ToList();
-        copies = book.Copies.Select(c => new CopyRow(c.Id, c.Isbn, c.Format, c.Condition, c.Publisher?.Name, c.DatePrinted, c.CustomCoverArtUrl)).ToList();
-
-        await LoadAvailableTagsAsync();
-    }
-
-    private async Task LoadAvailableTagsAsync()
-    {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var assignedIds = assignedTags.Select(t => t.Id).ToHashSet();
-        availableTags = await db.Tags
-            .Where(t => !assignedIds.Contains(t.Id))
-            .OrderBy(t => t.Name)
-            .Select(t => new TagItem(t.Id, t.Name))
-            .ToListAsync();
-    }
-
-    private async Task AddTagAsync()
-    {
-        if (string.IsNullOrWhiteSpace(newTagName)) return;
-        var name = newTagName.Trim().ToLowerInvariant();
-
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var tag = await db.Tags.FirstOrDefaultAsync(t => t.Name == name);
-        if (tag is null)
-        {
-            tag = new Tag { Name = name };
-            db.Tags.Add(tag);
-            await db.SaveChangesAsync();
-        }
-
-        if (assignedTags.All(t => t.Id != tag.Id))
-        {
-            assignedTags.Add(new TagItem(tag.Id, tag.Name));
-            await LoadAvailableTagsAsync();
-        }
-
-        newTagName = "";
-    }
-
-    private void RemoveTag(TagItem tag)
-    {
-        assignedTags.RemoveAll(t => t.Id == tag.Id);
-        if (availableTags.All(t => t.Id != tag.Id))
-        {
-            availableTags.Add(tag);
-            availableTags = availableTags.OrderBy(t => t.Name).ToList();
-        }
-    }
-
-    // Copy management
-    private void ShowAddCopy()
-    {
-        newCopyInput = new CopyForm.CopyFormInput();
-        showingNewCopy = true;
-    }
-
-    private async Task SaveNewCopyAsync()
-    {
-        if (string.IsNullOrWhiteSpace(newCopyInput.Isbn)) return;
-
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        Publisher? publisher = null;
-        var pubName = newCopyInput.Publisher?.Trim();
-        if (!string.IsNullOrEmpty(pubName))
-        {
-            publisher = await db.Publishers.FirstOrDefaultAsync(p => p.Name == pubName);
-            if (publisher is null)
-            {
-                publisher = new Publisher { Name = pubName };
-                db.Publishers.Add(publisher);
-            }
-        }
-
-        var copy = new BookCopy
-        {
-            BookId = BookId,
-            Isbn = newCopyInput.Isbn.Trim(),
-            Format = newCopyInput.Format,
-            DatePrinted = newCopyInput.DatePrinted,
-            Condition = newCopyInput.Condition,
-            Publisher = publisher,
-            CustomCoverArtUrl = string.IsNullOrWhiteSpace(newCopyInput.CustomCoverArtUrl) ? null : newCopyInput.CustomCoverArtUrl.Trim()
-        };
-
-        db.BookCopies.Add(copy);
-        await db.SaveChangesAsync();
-
-        copies.Add(new CopyRow(copy.Id, copy.Isbn, copy.Format, copy.Condition, publisher?.Name, copy.DatePrinted, copy.CustomCoverArtUrl));
-        showingNewCopy = false;
-    }
-
-    private void StartEditCopy(CopyRow copy)
-    {
-        editingCopyId = copy.Id;
-        editCopyInput = new CopyEditInput
-        {
-            Isbn = copy.Isbn,
-            Format = copy.Format,
-            Condition = copy.Condition,
-            Publisher = copy.PublisherName,
-            DatePrinted = copy.DatePrinted
-        };
-    }
-
-    private void CancelCopyEdit() => editingCopyId = null;
-
-    private async Task SaveCopyEditAsync()
-    {
-        if (editingCopyId is not int copyId) return;
-
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var copy = await db.BookCopies.Include(c => c.Publisher).FirstOrDefaultAsync(c => c.Id == copyId);
-        if (copy is null) { editingCopyId = null; return; }
-
-        copy.Isbn = editCopyInput.Isbn?.Trim() ?? copy.Isbn;
-        copy.Format = editCopyInput.Format;
-        copy.Condition = editCopyInput.Condition;
-        copy.DatePrinted = editCopyInput.DatePrinted;
-
-        var pubName = editCopyInput.Publisher?.Trim();
-        if (!string.IsNullOrEmpty(pubName))
-        {
-            var publisher = await db.Publishers.FirstOrDefaultAsync(p => p.Name == pubName);
-            if (publisher is null)
-            {
-                publisher = new Publisher { Name = pubName };
-                db.Publishers.Add(publisher);
-            }
-            copy.Publisher = publisher;
-        }
-        else
-        {
-            copy.Publisher = null;
-            copy.PublisherId = null;
-        }
-
-        await db.SaveChangesAsync();
-
-        var idx = copies.FindIndex(c => c.Id == copyId);
-        if (idx >= 0)
-        {
-            copies[idx] = new CopyRow(copy.Id, copy.Isbn, copy.Format, copy.Condition, pubName, copy.DatePrinted, copy.CustomCoverArtUrl);
-        }
-        editingCopyId = null;
-    }
-
-    private async Task DeleteCopyAsync(CopyRow copy)
-    {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var entity = await db.BookCopies.FindAsync(copy.Id);
-        if (entity is not null)
-        {
-            db.BookCopies.Remove(entity);
-            await db.SaveChangesAsync();
-        }
-        copies.RemoveAll(c => c.Id == copy.Id);
-        confirmingDeleteCopyId = null;
-    }
+    private async Task SaveAsync() => await VM.SaveAsync(BookId);
 
     private async Task DeleteBookAsync()
     {
-        deleting = true;
-        try
+        if (await VM.DeleteBookAsync(BookId))
         {
-            await using var db = await DbFactory.CreateDbContextAsync();
-            var book = await db.Books.FindAsync(BookId);
-            if (book is not null)
-            {
-                db.Books.Remove(book);
-                await db.SaveChangesAsync();
-            }
             Nav.NavigateTo("/books");
         }
-        finally
-        {
-            deleting = false;
-        }
-    }
-
-    // Save book metadata
-    private async Task SaveAsync()
-    {
-        saving = true;
-        try
-        {
-            await using var db = await DbFactory.CreateDbContextAsync();
-
-            var book = await db.Books
-                .Include(b => b.Genres)
-                .Include(b => b.Tags)
-                .FirstOrDefaultAsync(b => b.Id == BookId);
-
-            if (book is null) { notFound = true; return; }
-
-            book.Title = bookInput!.Title!.Trim();
-            book.Subtitle = string.IsNullOrWhiteSpace(bookInput.Subtitle) ? null : bookInput.Subtitle.Trim();
-            book.Author = bookInput.Author!.Trim();
-            book.Category = bookInput.Category;
-            book.Status = bookInput.Status;
-            book.Rating = bookInput.Rating;
-            book.Notes = string.IsNullOrWhiteSpace(bookInput.Notes) ? null : bookInput.Notes.Trim();
-            book.DefaultCoverArtUrl = string.IsNullOrWhiteSpace(bookInput.DefaultCoverArtUrl) ? null : bookInput.DefaultCoverArtUrl.Trim();
-
-            var selectedGenres = await db.Genres
-                .Where(g => selectedGenreIds.Contains(g.Id))
-                .ToListAsync();
-            book.Genres.Clear();
-            book.Genres.AddRange(selectedGenres);
-
-            var selectedTags = await db.Tags
-                .Where(t => assignedTags.Select(at => at.Id).Contains(t.Id))
-                .ToListAsync();
-            book.Tags.Clear();
-            book.Tags.AddRange(selectedTags);
-
-            await db.SaveChangesAsync();
-            successMessage = "Book saved successfully.";
-        }
-        finally
-        {
-            saving = false;
-        }
-    }
-
-    private record TagItem(int Id, string Name);
-    private record CopyRow(int Id, string Isbn, BookFormat Format, BookCondition Condition, string? PublisherName, DateOnly? DatePrinted, string? CustomCoverArtUrl);
-
-    private class CopyEditInput
-    {
-        public string? Isbn { get; set; }
-        public BookFormat Format { get; set; }
-        public BookCondition Condition { get; set; }
-        public string? Publisher { get; set; }
-        public DateOnly? DatePrinted { get; set; }
     }
 }

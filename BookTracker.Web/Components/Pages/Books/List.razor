@@ -1,5 +1,5 @@
 @page "/books"
-@inject IDbContextFactory<BookTrackerDbContext> DbFactory
+@inject BookListViewModel VM
 @inject NavigationManager Nav
 
 <PageTitle>Library - BookTracker</PageTitle>
@@ -11,11 +11,11 @@
         <div class="row g-3 align-items-end">
             <div class="col-md-3">
                 <label class="form-label small text-muted">Search</label>
-                <input type="text" class="form-control" placeholder="Title or author..." @bind="searchTerm" @bind:event="oninput" @onkeyup="HandleSearchKeyUp" />
+                <input type="text" class="form-control" placeholder="Title or author..." @bind="VM.SearchTerm" @bind:event="oninput" @onkeyup="HandleSearchKeyUp" />
             </div>
             <div class="col-md-2">
                 <label class="form-label small text-muted">Category</label>
-                <select class="form-select" @bind="selectedCategory" @bind:after="ApplyFiltersAsync">
+                <select class="form-select" @bind="VM.SelectedCategory" @bind:after="() => VM.ApplyFiltersAsync()">
                     <option value="">All</option>
                     <option value="Fiction">Fiction</option>
                     <option value="NonFiction">Non-Fiction</option>
@@ -23,9 +23,9 @@
             </div>
             <div class="col-md-2">
                 <label class="form-label small text-muted">Genre</label>
-                <select class="form-select" @bind="selectedGenreId" @bind:after="ApplyFiltersAsync">
+                <select class="form-select" @bind="VM.SelectedGenreId" @bind:after="() => VM.ApplyFiltersAsync()">
                     <option value="0">All</option>
-                    @foreach (var g in allGenres)
+                    @foreach (var g in VM.AllGenres)
                     {
                         var prefix = g.ParentGenreId.HasValue ? "\u00A0\u00A0\u00A0\u00A0" : "";
                         <option value="@g.Id">@prefix@g.Name</option>
@@ -34,9 +34,9 @@
             </div>
             <div class="col-md-2">
                 <label class="form-label small text-muted">Tag</label>
-                <select class="form-select" @bind="selectedTagId" @bind:after="ApplyFiltersAsync">
+                <select class="form-select" @bind="VM.SelectedTagId" @bind:after="() => VM.ApplyFiltersAsync()">
                     <option value="0">All</option>
-                    @foreach (var t in allTags)
+                    @foreach (var t in VM.AllTags)
                     {
                         <option value="@t.Id">@t.Name</option>
                     }
@@ -44,16 +44,16 @@
             </div>
             <div class="col-md-2">
                 <label class="form-label small text-muted">Author</label>
-                <input type="text" class="form-control" placeholder="Author..." list="author-filter-options" @bind="selectedAuthor" @bind:after="ApplyFiltersAsync" />
+                <input type="text" class="form-control" placeholder="Author..." list="author-filter-options" @bind="VM.SelectedAuthor" @bind:after="() => VM.ApplyFiltersAsync()" />
                 <datalist id="author-filter-options">
-                    @foreach (var a in allAuthors)
+                    @foreach (var a in VM.AllAuthors)
                     {
                         <option value="@a"></option>
                     }
                 </datalist>
             </div>
             <div class="col-md-1">
-                <button type="button" class="btn btn-outline-secondary w-100" @onclick="ClearFiltersAsync" title="Clear filters">
+                <button type="button" class="btn btn-outline-secondary w-100" @onclick="VM.ClearFiltersAsync" title="Clear filters">
                     <span aria-hidden="true">&times;</span>
                 </button>
             </div>
@@ -61,7 +61,7 @@
     </div>
 </div>
 
-@if (loading)
+@if (VM.Loading)
 {
     <div class="text-center py-5">
         <div class="spinner-border" role="status">
@@ -69,7 +69,7 @@
         </div>
     </div>
 }
-else if (books.Count == 0)
+else if (VM.Books.Count == 0)
 {
     <div class="text-center py-5 text-muted">
         <p class="mb-2">No books found.</p>
@@ -92,7 +92,7 @@ else
                 </tr>
             </thead>
             <tbody>
-                @foreach (var book in books)
+                @foreach (var book in VM.Books)
                 {
                     <tr role="button" @onclick="() => NavigateToEdit(book.Id)" style="cursor: pointer;">
                         <td>
@@ -128,7 +128,7 @@ else
                             }
                         </td>
                         <td>
-                            <span class="badge @StatusBadgeClass(book.Status)">@book.Status</span>
+                            <span class="badge @BookListViewModel.StatusBadgeClass(book.Status)">@book.Status</span>
                         </td>
                         <td>
                             @for (int i = 1; i <= 5; i++)
@@ -143,196 +143,40 @@ else
         </table>
     </div>
 
-    @if (totalPages > 1)
+    @if (VM.TotalPages > 1)
     {
         <nav aria-label="Book list pagination">
             <ul class="pagination justify-content-center">
-                <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
-                    <button class="page-link" @onclick="() => GoToPageAsync(currentPage - 1)" disabled="@(currentPage <= 1)">Previous</button>
+                <li class="page-item @(VM.CurrentPage <= 1 ? "disabled" : "")">
+                    <button class="page-link" @onclick="() => VM.GoToPageAsync(VM.CurrentPage - 1)" disabled="@(VM.CurrentPage <= 1)">Previous</button>
                 </li>
-                @for (int p = 1; p <= totalPages; p++)
+                @for (int p = 1; p <= VM.TotalPages; p++)
                 {
-                    var page = p;
-                    <li class="page-item @(page == currentPage ? "active" : "")">
-                        <button class="page-link" @onclick="() => GoToPageAsync(page)">@(page)</button>
+                    var pageNum = p;
+                    <li class="page-item @(pageNum == VM.CurrentPage ? "active" : "")">
+                        <button class="page-link" @onclick="() => VM.GoToPageAsync(pageNum)">@(pageNum)</button>
                     </li>
                 }
-                <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
-                    <button class="page-link" @onclick="() => GoToPageAsync(currentPage + 1)" disabled="@(currentPage >= totalPages)">Next</button>
+                <li class="page-item @(VM.CurrentPage >= VM.TotalPages ? "disabled" : "")">
+                    <button class="page-link" @onclick="() => VM.GoToPageAsync(VM.CurrentPage + 1)" disabled="@(VM.CurrentPage >= VM.TotalPages)">Next</button>
                 </li>
             </ul>
         </nav>
     }
 
     <div class="text-center text-muted small mb-3">
-        Showing @((currentPage - 1) * PageSize + 1)–@Math.Min(currentPage * PageSize, totalCount) of @totalCount books
+        Showing @((VM.CurrentPage - 1) * BookListViewModel.PageSize + 1)–@Math.Min(VM.CurrentPage * BookListViewModel.PageSize, VM.TotalCount) of @VM.TotalCount books
     </div>
 }
 
 @code {
-    private const int PageSize = 20;
-
-    private bool loading = true;
-    private List<BookListItem> books = [];
-    private int totalCount;
-    private int currentPage = 1;
-    private int totalPages;
-
-    private string searchTerm = "";
-    private string selectedCategory = "";
-    private int selectedGenreId;
-    private int selectedTagId;
-    private string selectedAuthor = "";
-
-    private List<GenreOption> allGenres = [];
-    private List<TagOption> allTags = [];
-    private List<string> allAuthors = [];
-
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadFilterOptionsAsync();
-        await LoadBooksAsync();
-    }
-
-    private async Task LoadFilterOptionsAsync()
-    {
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        var genres = await db.Genres
-            .OrderBy(g => g.Name)
-            .Select(g => new GenreOption(g.Id, g.Name, g.ParentGenreId))
-            .ToListAsync();
-
-        // Build hierarchical list: parent then children
-        var topLevel = genres.Where(g => g.ParentGenreId is null).OrderBy(g => g.Name).ToList();
-        allGenres = [];
-        foreach (var parent in topLevel)
-        {
-            allGenres.Add(parent);
-            var children = genres.Where(g => g.ParentGenreId == parent.Id).OrderBy(g => g.Name);
-            allGenres.AddRange(children);
-        }
-
-        allTags = await db.Tags
-            .OrderBy(t => t.Name)
-            .Select(t => new TagOption(t.Id, t.Name))
-            .ToListAsync();
-
-        allAuthors = await db.Books
-            .Select(b => b.Author)
-            .Distinct()
-            .OrderBy(a => a)
-            .ToListAsync();
-    }
-
-    private async Task LoadBooksAsync()
-    {
-        loading = true;
-        StateHasChanged();
-
-        await using var db = await DbFactory.CreateDbContextAsync();
-
-        IQueryable<Book> query = db.Books
-            .Include(b => b.Genres)
-            .Include(b => b.Tags);
-
-        if (!string.IsNullOrWhiteSpace(searchTerm))
-        {
-            var term = searchTerm.Trim();
-            query = query.Where(b => b.Title.Contains(term) || b.Author.Contains(term));
-        }
-
-        if (!string.IsNullOrEmpty(selectedCategory) && Enum.TryParse<BookCategory>(selectedCategory, out var cat))
-        {
-            query = query.Where(b => b.Category == cat);
-        }
-
-        if (selectedGenreId > 0)
-        {
-            query = query.Where(b => b.Genres.Any(g => g.Id == selectedGenreId));
-        }
-
-        if (selectedTagId > 0)
-        {
-            query = query.Where(b => b.Tags.Any(t => t.Id == selectedTagId));
-        }
-
-        if (!string.IsNullOrWhiteSpace(selectedAuthor))
-        {
-            var author = selectedAuthor.Trim();
-            query = query.Where(b => b.Author == author);
-        }
-
-        totalCount = await query.CountAsync();
-        totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)PageSize));
-        if (currentPage > totalPages) currentPage = totalPages;
-
-        books = await query
-            .OrderByDescending(b => b.DateAdded)
-            .Skip((currentPage - 1) * PageSize)
-            .Take(PageSize)
-            .Select(b => new BookListItem(
-                b.Id,
-                b.Title,
-                b.Subtitle,
-                b.Author,
-                b.DefaultCoverArtUrl,
-                b.Status,
-                b.Rating,
-                b.Genres.Select(g => g.Name).ToList(),
-                b.Tags.Select(t => t.Name).ToList()
-            ))
-            .ToListAsync();
-
-        loading = false;
-    }
-
-    private async Task ApplyFiltersAsync()
-    {
-        currentPage = 1;
-        await LoadBooksAsync();
-    }
+    protected override async Task OnInitializedAsync() => await VM.InitializeAsync();
 
     private async Task HandleSearchKeyUp(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
-        {
-            await ApplyFiltersAsync();
-        }
-    }
-
-    private async Task ClearFiltersAsync()
-    {
-        searchTerm = "";
-        selectedCategory = "";
-        selectedGenreId = 0;
-        selectedTagId = 0;
-        selectedAuthor = "";
-        currentPage = 1;
-        await LoadBooksAsync();
-    }
-
-    private async Task GoToPageAsync(int page)
-    {
-        if (page < 1 || page > totalPages) return;
-        currentPage = page;
-        await LoadBooksAsync();
+            await VM.ApplyFiltersAsync();
     }
 
     private void NavigateToEdit(int bookId) => Nav.NavigateTo($"/books/{bookId}/edit");
-
-    private static string StatusBadgeClass(BookStatus status) => status switch
-    {
-        BookStatus.Reading => "bg-primary",
-        BookStatus.Read => "bg-success",
-        BookStatus.Unread => "bg-secondary",
-        _ => "bg-secondary"
-    };
-
-    private record BookListItem(
-        int Id, string Title, string? Subtitle, string Author, string? CoverUrl,
-        BookStatus Status, int Rating, List<string> Genres, List<string> Tags);
-
-    private record GenreOption(int Id, string Name, int? ParentGenreId);
-    private record TagOption(int Id, string Name);
 }
