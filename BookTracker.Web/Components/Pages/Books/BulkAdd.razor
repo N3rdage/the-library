@@ -159,42 +159,47 @@
                                     }
                                 </td>
                                 <td>
-                                    @if (row.Action == RowAction.Pending)
-                                    {
-                                        @if (row.Status == RowStatus.Found)
+                                    <div class="d-flex gap-1 align-items-center">
+                                        @if (row.Action == RowAction.Pending)
                                         {
-                                            <div class="btn-group btn-group-sm">
-                                                @if (row.IsDuplicate)
-                                                {
-                                                    <button type="button" class="btn btn-outline-success" @onclick="() => AcceptRowAsync(row)" title="Add another copy">
-                                                        Add copy
+                                            @if (row.Status == RowStatus.Found)
+                                            {
+                                                <div class="btn-group btn-group-sm">
+                                                    @if (row.IsDuplicate)
+                                                    {
+                                                        <button type="button" class="btn btn-outline-success" @onclick="() => AcceptRowAsync(row)" title="Add another copy">
+                                                            Add copy
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline-secondary" @onclick="() => row.Action = RowAction.Duplicate" title="Skip duplicate">
+                                                            Skip
+                                                        </button>
+                                                    }
+                                                    else
+                                                    {
+                                                        <button type="button" class="btn btn-outline-success" @onclick="() => AcceptRowAsync(row)">
+                                                            Accept
+                                                        </button>
+                                                    }
+                                                    <button type="button" class="btn btn-outline-warning" @onclick="() => FollowUpRowAsync(row)">
+                                                        Follow-up
                                                     </button>
-                                                    <button type="button" class="btn btn-outline-secondary" @onclick="() => row.Action = RowAction.Duplicate" title="Skip duplicate">
-                                                        Skip
-                                                    </button>
-                                                }
-                                                else
-                                                {
-                                                    <button type="button" class="btn btn-outline-success" @onclick="() => AcceptRowAsync(row)">
-                                                        Accept
-                                                    </button>
-                                                }
-                                                <button type="button" class="btn btn-outline-warning" @onclick="() => FollowUpRowAsync(row)">
-                                                    Follow-up
+                                                </div>
+                                            }
+                                            else if (row.Status == RowStatus.NotFound)
+                                            {
+                                                <button type="button" class="btn btn-outline-warning btn-sm" @onclick="() => FollowUpNotFoundAsync(row)">
+                                                    Add as follow-up
                                                 </button>
-                                            </div>
+                                            }
                                         }
-                                        else if (row.Status == RowStatus.NotFound)
+                                        else
                                         {
-                                            <button type="button" class="btn btn-outline-warning btn-sm" @onclick="() => FollowUpNotFoundAsync(row)">
-                                                Add as follow-up
-                                            </button>
+                                            <span class="text-muted small">Done</span>
                                         }
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted small">Done</span>
-                                    }
+                                        <button type="button" class="btn btn-outline-danger btn-sm ms-1" @onclick="() => RemoveRow(row)" title="Remove from grid">
+                                            &times;
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         }
@@ -284,6 +289,8 @@
         }
         dotNetRef?.Dispose();
     }
+
+    private void RemoveRow(DiscoveryRow row) => rows.Remove(row);
 
     private async Task AddIsbnAsync()
     {
