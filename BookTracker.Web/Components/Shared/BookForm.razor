@@ -1,0 +1,107 @@
+<div class="row g-4">
+    <div class="col-md-8">
+        <div class="card h-100">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Book</h2></div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-8">
+                        <label class="form-label">Title</label>
+                        <InputText @bind-Value="Input.Title" class="form-control" />
+                        <ValidationMessage For="() => Input.Title" class="text-danger small" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Author</label>
+                        <InputText @bind-Value="Input.Author" class="form-control" />
+                        <ValidationMessage For="() => Input.Author" class="text-danger small" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Subtitle</label>
+                        <InputText @bind-Value="Input.Subtitle" class="form-control" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Category</label>
+                        <InputSelect @bind-Value="Input.Category" class="form-select">
+                            @foreach (var c in Enum.GetValues<BookCategory>())
+                            {
+                                <option value="@c">@FormatCategory(c)</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Status</label>
+                        <InputSelect @bind-Value="Input.Status" class="form-select">
+                            @foreach (var s in Enum.GetValues<BookStatus>())
+                            {
+                                <option value="@s">@s</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Rating (0–5)</label>
+                        <InputNumber @bind-Value="Input.Rating" min="0" max="5" class="form-control" />
+                        <ValidationMessage For="() => Input.Rating" class="text-danger small" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Default cover URL</label>
+                        <InputText @bind-Value="Input.DefaultCoverArtUrl" class="form-control" placeholder="https://..." />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Notes</label>
+                        <InputTextArea @bind-Value="Input.Notes" class="form-control" rows="3" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header bg-white"><h2 class="h5 mb-0">Cover preview</h2></div>
+            <div class="card-body text-center">
+                @if (!string.IsNullOrWhiteSpace(Input.DefaultCoverArtUrl))
+                {
+                    <img src="@Input.DefaultCoverArtUrl" alt="Cover preview" class="img-fluid rounded" style="max-height: 220px;" />
+                }
+                else
+                {
+                    <div class="text-muted small py-5">No cover set yet.</div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public BookFormInput Input { get; set; } = default!;
+
+    public static string FormatCategory(BookCategory c) => c switch
+    {
+        BookCategory.NonFiction => "Non-Fiction",
+        _ => c.ToString()
+    };
+
+    public class BookFormInput
+    {
+        [Required, StringLength(300)]
+        public string? Title { get; set; }
+
+        [StringLength(300)]
+        public string? Subtitle { get; set; }
+
+        [Required, StringLength(200)]
+        public string? Author { get; set; }
+
+        public BookCategory Category { get; set; } = BookCategory.Fiction;
+
+        public BookStatus Status { get; set; } = BookStatus.Read;
+
+        [Range(0, 5)]
+        public int Rating { get; set; }
+
+        public string? Notes { get; set; }
+
+        [StringLength(500)]
+        public string? DefaultCoverArtUrl { get; set; }
+    }
+}
