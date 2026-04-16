@@ -8,6 +8,10 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 10
+    groups:
+      ef-core:
+        patterns:
+          - "Microsoft.EntityFrameworkCore*"
 
   # npm packages (vendored JS libraries like html5-qrcode)
   - package-ecosystem: "npm"
