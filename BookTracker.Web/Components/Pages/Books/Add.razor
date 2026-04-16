@@ -3,15 +3,11 @@
 @inject IBookLookupService Lookup
 @inject NavigationManager Nav
 
-@* TODO: once we settle on a component library (see TODO in Program.cs),
-   replace the hand-rolled Bootstrap form below with library components
-   (dialogs, autocomplete, chips, etc.) — especially for the genres picker. *@
-
 <PageTitle>Add a book - BookTracker</PageTitle>
 
 <h1 class="mb-3">Add a book</h1>
 
-<EditForm Model="Input" OnValidSubmit="SaveAsync" FormName="addBook">
+<EditForm Model="this" OnValidSubmit="SaveAsync" FormName="addBook">
     <DataAnnotationsValidator />
 
     <div class="row g-4">
@@ -38,166 +34,19 @@
             </div>
         </div>
 
-        <div class="col-md-8">
-            <div class="card h-100">
-                <div class="card-header bg-white"><h2 class="h5 mb-0">Book</h2></div>
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-md-8">
-                            <label class="form-label">Title</label>
-                            <InputText @bind-Value="Input.Title" class="form-control" />
-                            <ValidationMessage For="() => Input.Title" class="text-danger small" />
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Author</label>
-                            <InputText @bind-Value="Input.Author" class="form-control" />
-                            <ValidationMessage For="() => Input.Author" class="text-danger small" />
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Subtitle</label>
-                            <InputText @bind-Value="Input.Subtitle" class="form-control" />
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">Category</label>
-                            <InputSelect @bind-Value="Input.Category" class="form-select">
-                                @foreach (var c in Enum.GetValues<BookCategory>())
-                                {
-                                    <option value="@c">@FormatCategory(c)</option>
-                                }
-                            </InputSelect>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">Status</label>
-                            <InputSelect @bind-Value="Input.Status" class="form-select">
-                                @foreach (var s in Enum.GetValues<BookStatus>())
-                                {
-                                    <option value="@s">@s</option>
-                                }
-                            </InputSelect>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">Rating (0–5)</label>
-                            <InputNumber @bind-Value="Input.Rating" min="0" max="5" class="form-control" />
-                            <ValidationMessage For="() => Input.Rating" class="text-danger small" />
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">Default cover URL</label>
-                            <InputText @bind-Value="Input.DefaultCoverArtUrl" class="form-control" placeholder="https://..." />
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Notes</label>
-                            <InputTextArea @bind-Value="Input.Notes" class="form-control" rows="3" />
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="card h-100">
-                <div class="card-header bg-white"><h2 class="h5 mb-0">Cover preview</h2></div>
-                <div class="card-body text-center">
-                    @if (!string.IsNullOrWhiteSpace(Input.DefaultCoverArtUrl))
-                    {
-                        <img src="@Input.DefaultCoverArtUrl" alt="Cover preview" class="img-fluid rounded" style="max-height: 220px;" />
-                    }
-                    else
-                    {
-                        <div class="text-muted small py-5">No cover set yet.</div>
-                    }
-                </div>
-            </div>
+        <div class="col-12">
+            <BookForm Input="bookInput" />
         </div>
 
         <div class="col-12">
-            <div class="card">
-                <div class="card-header bg-white"><h2 class="h5 mb-0">Genres</h2></div>
-                <div class="card-body">
-                    <div class="row g-3">
-                        @foreach (var top in topLevelGenres)
-                        {
-                            <div class="col-md-6 col-lg-4">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="@($"genre-{top.Id}")"
-                                           checked="@Input.SelectedGenreIds.Contains(top.Id)"
-                                           @onchange="e => ToggleGenre(top.Id, (bool)e.Value!)" />
-                                    <label class="form-check-label fw-semibold" for="@($"genre-{top.Id}")">@top.Name</label>
-                                </div>
-                                @foreach (var child in top.Children.OrderBy(c => c.Name))
-                                {
-                                    <div class="form-check ms-4">
-                                        <input class="form-check-input" type="checkbox" id="@($"genre-{child.Id}")"
-                                               checked="@Input.SelectedGenreIds.Contains(child.Id)"
-                                               @onchange="e => ToggleGenre(child.Id, (bool)e.Value!)" />
-                                        <label class="form-check-label" for="@($"genre-{child.Id}")">@child.Name</label>
-                                    </div>
-                                }
-                            </div>
-                        }
-                    </div>
-                    @if (lookupCandidates.Count > 0)
-                    {
-                        <div class="mt-3 pt-3 border-top">
-                            <small class="text-muted d-block mb-1">Lookup returned (fuzzy-matched against the list above):</small>
-                            @foreach (var c in lookupCandidates)
-                            {
-                                <span class="badge bg-light text-dark border me-1 mb-1">@c</span>
-                            }
-                        </div>
-                    }
-                </div>
-            </div>
+            <GenrePicker @ref="genrePicker"
+                         SelectedGenreIds="selectedGenreIds"
+                         SelectedGenreIdsChanged="ids => selectedGenreIds = ids"
+                         LookupCandidates="lookupCandidates" />
         </div>
 
         <div class="col-12">
-            <div class="card">
-                <div class="card-header bg-white"><h2 class="h5 mb-0">First copy</h2></div>
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <label class="form-label">ISBN</label>
-                            <InputText @bind-Value="Input.Isbn" class="form-control" />
-                            <ValidationMessage For="() => Input.Isbn" class="text-danger small" />
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">Format</label>
-                            <InputSelect @bind-Value="Input.Format" class="form-select">
-                                @foreach (var f in Enum.GetValues<BookFormat>())
-                                {
-                                    <option value="@f">@f</option>
-                                }
-                            </InputSelect>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">Date printed</label>
-                            <InputDate @bind-Value="Input.DatePrinted" class="form-control" />
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">Condition</label>
-                            <InputSelect @bind-Value="Input.Condition" class="form-select">
-                                @foreach (var c in Enum.GetValues<BookCondition>())
-                                {
-                                    <option value="@c">@FormatCondition(c)</option>
-                                }
-                            </InputSelect>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Publisher</label>
-                            <InputText @bind-Value="Input.Publisher" class="form-control" list="publisher-options" placeholder="Penguin Books" />
-                            <datalist id="publisher-options">
-                                @foreach (var p in existingPublishers)
-                                {
-                                    <option value="@p.Name"></option>
-                                }
-                            </datalist>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Custom cover for this copy (optional)</label>
-                            <InputText @bind-Value="Input.CustomCoverArtUrl" class="form-control" placeholder="Overrides the book's default cover" />
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <CopyForm Input="copyInput" Title="First copy" />
         </div>
 
         <div class="col-12 d-flex gap-2">
@@ -214,58 +63,16 @@
 </EditForm>
 
 @code {
-    AddBookInput Input { get; set; } = new();
-    string? lookupIsbn;
-    string? lookupMessage;
-    bool lookingUp;
-    bool saving;
+    private BookForm.BookFormInput bookInput = new();
+    private CopyForm.CopyFormInput copyInput = new();
+    private List<int> selectedGenreIds = [];
+    private List<string> lookupCandidates = [];
+    private GenrePicker? genrePicker;
 
-    List<GenreNode> topLevelGenres = [];
-    Dictionary<int, GenreNode> genreById = [];
-    List<PublisherOption> existingPublishers = [];
-    List<string> lookupCandidates = [];
-
-    protected override async Task OnInitializedAsync()
-    {
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var all = await db.Genres
-            .OrderBy(g => g.Name)
-            .Select(g => new GenreNode(g.Id, g.Name, g.ParentGenreId))
-            .ToListAsync();
-        genreById = all.ToDictionary(g => g.Id);
-        foreach (var g in all.Where(g => g.ParentGenreId.HasValue))
-        {
-            if (genreById.TryGetValue(g.ParentGenreId!.Value, out var parent))
-            {
-                parent.Children.Add(g);
-            }
-        }
-        topLevelGenres = all.Where(g => g.ParentGenreId is null).OrderBy(g => g.Name).ToList();
-
-        existingPublishers = await db.Publishers
-            .OrderBy(p => p.Name)
-            .Select(p => new PublisherOption(p.Id, p.Name))
-            .ToListAsync();
-    }
-
-    private void ToggleGenre(int id, bool isChecked)
-    {
-        if (isChecked)
-        {
-            if (!Input.SelectedGenreIds.Contains(id)) Input.SelectedGenreIds.Add(id);
-            // Auto-select the parent so a sub-genre tick implies its top-level genre.
-            if (genreById.TryGetValue(id, out var node) && node.ParentGenreId is int parentId
-                && !Input.SelectedGenreIds.Contains(parentId))
-            {
-                Input.SelectedGenreIds.Add(parentId);
-            }
-        }
-        else
-        {
-            Input.SelectedGenreIds.Remove(id);
-            // Un-checking a parent leaves children alone — they're independent picks.
-        }
-    }
+    private string? lookupIsbn;
+    private string? lookupMessage;
+    private bool lookingUp;
+    private bool saving;
 
     private async Task LookupAsync()
     {
@@ -286,22 +93,18 @@
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(Input.Title)) Input.Title = result.Title ?? "";
-            if (string.IsNullOrWhiteSpace(Input.Subtitle)) Input.Subtitle = result.Subtitle;
-            if (string.IsNullOrWhiteSpace(Input.Author)) Input.Author = result.Author ?? "";
-            if (string.IsNullOrWhiteSpace(Input.Publisher)) Input.Publisher = result.Publisher;
-            if (string.IsNullOrWhiteSpace(Input.DefaultCoverArtUrl)) Input.DefaultCoverArtUrl = result.CoverUrl;
-            if (string.IsNullOrWhiteSpace(Input.Isbn)) Input.Isbn = result.Isbn;
-            Input.DatePrinted ??= result.DatePrinted;
+            if (string.IsNullOrWhiteSpace(bookInput.Title)) bookInput.Title = result.Title ?? "";
+            if (string.IsNullOrWhiteSpace(bookInput.Subtitle)) bookInput.Subtitle = result.Subtitle;
+            if (string.IsNullOrWhiteSpace(bookInput.Author)) bookInput.Author = result.Author ?? "";
+            if (string.IsNullOrWhiteSpace(bookInput.DefaultCoverArtUrl)) bookInput.DefaultCoverArtUrl = result.CoverUrl;
+            if (string.IsNullOrWhiteSpace(copyInput.Isbn)) copyInput.Isbn = result.Isbn;
+            if (string.IsNullOrWhiteSpace(copyInput.Publisher)) copyInput.Publisher = result.Publisher;
+            copyInput.DatePrinted ??= result.DatePrinted;
 
             lookupCandidates = result.GenreCandidates.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            foreach (var candidate in lookupCandidates)
+            if (genrePicker is not null)
             {
-                var match = genreById.Values.FirstOrDefault(g => FuzzyGenreMatch(candidate, g.Name));
-                if (match is not null)
-                {
-                    ToggleGenre(match.Id, true);
-                }
+                await genrePicker.ApplyLookupCandidatesAsync(lookupCandidates);
             }
 
             lookupMessage = $"Prefilled from {result.Source}. Edit anything before saving.";
@@ -320,11 +123,11 @@
             await using var db = await DbFactory.CreateDbContextAsync();
 
             var selectedGenres = await db.Genres
-                .Where(g => Input.SelectedGenreIds.Contains(g.Id))
+                .Where(g => selectedGenreIds.Contains(g.Id))
                 .ToListAsync();
 
             Publisher? publisher = null;
-            var publisherName = Input.Publisher?.Trim();
+            var publisherName = copyInput.Publisher?.Trim();
             if (!string.IsNullOrEmpty(publisherName))
             {
                 publisher = await db.Publishers.FirstOrDefaultAsync(p => p.Name == publisherName);
@@ -337,25 +140,25 @@
 
             var book = new Book
             {
-                Title = Input.Title!.Trim(),
-                Subtitle = string.IsNullOrWhiteSpace(Input.Subtitle) ? null : Input.Subtitle.Trim(),
-                Author = Input.Author!.Trim(),
-                Notes = string.IsNullOrWhiteSpace(Input.Notes) ? null : Input.Notes.Trim(),
-                Category = Input.Category,
-                Status = Input.Status,
-                Rating = Input.Rating,
-                DefaultCoverArtUrl = string.IsNullOrWhiteSpace(Input.DefaultCoverArtUrl) ? null : Input.DefaultCoverArtUrl.Trim(),
+                Title = bookInput.Title!.Trim(),
+                Subtitle = string.IsNullOrWhiteSpace(bookInput.Subtitle) ? null : bookInput.Subtitle.Trim(),
+                Author = bookInput.Author!.Trim(),
+                Notes = string.IsNullOrWhiteSpace(bookInput.Notes) ? null : bookInput.Notes.Trim(),
+                Category = bookInput.Category,
+                Status = bookInput.Status,
+                Rating = bookInput.Rating,
+                DefaultCoverArtUrl = string.IsNullOrWhiteSpace(bookInput.DefaultCoverArtUrl) ? null : bookInput.DefaultCoverArtUrl.Trim(),
                 Genres = selectedGenres,
                 Copies =
                 [
                     new BookCopy
                     {
-                        Isbn = Input.Isbn!.Trim(),
-                        Format = Input.Format,
-                        DatePrinted = Input.DatePrinted,
-                        Condition = Input.Condition,
+                        Isbn = copyInput.Isbn!.Trim(),
+                        Format = copyInput.Format,
+                        DatePrinted = copyInput.DatePrinted,
+                        Condition = copyInput.Condition,
                         Publisher = publisher,
-                        CustomCoverArtUrl = string.IsNullOrWhiteSpace(Input.CustomCoverArtUrl) ? null : Input.CustomCoverArtUrl.Trim()
+                        CustomCoverArtUrl = string.IsNullOrWhiteSpace(copyInput.CustomCoverArtUrl) ? null : copyInput.CustomCoverArtUrl.Trim()
                     }
                 ]
             };
@@ -369,84 +172,5 @@
         {
             saving = false;
         }
-    }
-
-    private static string FormatCondition(BookCondition c) => c switch
-    {
-        BookCondition.AsNew => "As New",
-        BookCondition.VeryGood => "Very Good",
-        _ => c.ToString()
-    };
-
-    private static string FormatCategory(BookCategory c) => c switch
-    {
-        BookCategory.NonFiction => "Non-Fiction",
-        _ => c.ToString()
-    };
-
-    // Match looser-than-exact: normalize (lowercase, alphanumeric only) and
-    // accept either-side substring containment. Lets "Fantasy fiction",
-    // "Epic fantasy", "Fantasy — High" etc. all match the relevant preset.
-    private static bool FuzzyGenreMatch(string candidate, string preset)
-    {
-        var nc = Normalize(candidate);
-        var np = Normalize(preset);
-        if (nc.Length == 0 || np.Length == 0) return false;
-        return nc == np || nc.Contains(np) || np.Contains(nc);
-    }
-
-    private static string Normalize(string s) =>
-        new string(s.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
-
-    public class GenreNode(int id, string name, int? parentGenreId)
-    {
-        public int Id { get; } = id;
-        public string Name { get; } = name;
-        public int? ParentGenreId { get; } = parentGenreId;
-        public List<GenreNode> Children { get; } = [];
-    }
-
-    public record PublisherOption(int Id, string Name);
-
-    public class AddBookInput
-    {
-        [Required, StringLength(300)]
-        public string? Title { get; set; }
-
-        [StringLength(300)]
-        public string? Subtitle { get; set; }
-
-        [Required, StringLength(200)]
-        public string? Author { get; set; }
-
-        public BookCategory Category { get; set; } = BookCategory.Fiction;
-
-        public BookStatus Status { get; set; } = BookStatus.Read;
-
-        [Range(0, 5)]
-        public int Rating { get; set; }
-
-        public string? Notes { get; set; }
-
-        [StringLength(500)]
-        public string? DefaultCoverArtUrl { get; set; }
-
-        public List<int> SelectedGenreIds { get; set; } = [];
-
-        [Required, StringLength(20)]
-        [RegularExpression(@"^(97(8|9))?\d{9}(\d|X|x)$", ErrorMessage = "Enter a valid 10- or 13-digit ISBN.")]
-        public string? Isbn { get; set; }
-
-        public BookFormat Format { get; set; } = BookFormat.Softcopy;
-
-        public DateOnly? DatePrinted { get; set; }
-
-        public BookCondition Condition { get; set; } = BookCondition.Good;
-
-        [StringLength(200)]
-        public string? Publisher { get; set; }
-
-        [StringLength(500)]
-        public string? CustomCoverArtUrl { get; set; }
     }
 }
