@@ -358,6 +358,72 @@ Suggest 5-10 books to look for. Respond with JSON only.";
         }
     }
 
+    public async Task<BookAdvisorResult> AssessBookAsync(string query, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+
+        // Build library context — richer than shopping since Opus can handle more
+        var allBooks = await db.Books
+            .Include(b => b.Genres)
+            .OrderBy(b => b.Author)
+            .ThenBy(b => b.Title)
+            .Select(b => new { b.Title, b.Author, b.Rating, Genres = b.Genres.Select(g => g.Name).ToList() })
+            .ToListAsync(ct);
+
+        var booksText = allBooks.Count > 0
+            ? string.Join("\n", allBooks.Select(b =>
+                $"- \"{b.Title}\" by {b.Author} | {b.Rating}/5 | {string.Join(", ", b.Genres)}"))
+            : "Library is empty.";
+
+        var systemPrompt = $@"You are a knowledgeable book advisor for a personal library. The reader has the following collection:
+
+{booksText}
+
+Your job: when the reader asks about a specific book or author, assess how well it fits their reading taste based on their library.
+
+Rules:
+- Consider genre overlap, author familiarity, rating patterns, and reading breadth.
+- Be honest — if the book is outside their usual taste, say so, but note if that's a positive (broadening horizons).
+- Give a suitability score from 1 (poor fit) to 10 (perfect fit).
+- Mention similar books already in their library.
+- Respond with valid JSON in this exact format:
+{{
+  ""verdict"": ""One-sentence recommendation (Buy it / Consider it / Skip it / etc.)"",
+  ""suitability_score"": 8,
+  ""analysis"": ""2-3 sentence detailed analysis of fit."",
+  ""pros"": [""Reason this is a good fit""],
+  ""cons"": [""Reason this might not work""],
+  ""similar_in_library"": [""Title already in library that's similar""]
+}}";
+
+        var userMessage = $"I'm considering: {query}\n\nShould I get it? Respond with JSON only.";
+
+        var messages = new List<Message>
+        {
+            new(RoleType.User, userMessage)
+        };
+
+        var parameters = new MessageParameters
+        {
+            Messages = messages,
+            MaxTokens = 2048,
+            Model = _options.DeepModel,
+            Stream = false,
+            System = new List<SystemMessage>
+            {
+                new(systemPrompt, new CacheControl { Type = CacheControlType.ephemeral })
+            },
+            PromptCaching = PromptCacheType.FineGrained
+        };
+
+        var client = GetClient();
+        var response = await client.Messages.GetClaudeMessageAsync(parameters, ct);
+        CallCount++;
+
+        var responseText = response.Message?.ToString() ?? "";
+        return ParseBookAdvisor(responseText);
+    }
+
     private static ShoppingSuggestionResult ParseShoppingSuggestion(string responseText)
     {
         try
@@ -393,6 +459,47 @@ Suggest 5-10 books to look for. Respond with JSON only.";
         {
             return new ShoppingSuggestionResult([], $"Could not parse AI response: {responseText[..Math.Min(200, responseText.Length)]}");
         }
+    }
+
+    private static BookAdvisorResult ParseBookAdvisor(string responseText)
+    {
+        try
+        {
+            var json = StripCodeFences(responseText);
+
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            var verdict = root.TryGetProperty("verdict", out var v) ? v.GetString() ?? "" : "";
+            var score = root.TryGetProperty("suitability_score", out var s) ? s.GetInt32() : 5;
+            var analysis = root.TryGetProperty("analysis", out var a) ? a.GetString() ?? "" : "";
+
+            var pros = ParseStringArray(root, "pros");
+            var cons = ParseStringArray(root, "cons");
+            var similar = ParseStringArray(root, "similar_in_library");
+
+            return new BookAdvisorResult(verdict, Math.Clamp(score, 1, 10), analysis, pros, cons, similar);
+        }
+        catch
+        {
+            return new BookAdvisorResult(
+                "Could not parse AI response", 5, responseText[..Math.Min(200, responseText.Length)],
+                [], [], []);
+        }
+    }
+
+    private static List<string> ParseStringArray(JsonElement root, string propertyName)
+    {
+        var list = new List<string>();
+        if (root.TryGetProperty(propertyName, out var element))
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                var val = item.GetString();
+                if (val is not null) list.Add(val);
+            }
+        }
+        return list;
     }
 
     private static string StripCodeFences(string text)

@@ -225,6 +225,41 @@ public class AIAssistantViewModel(
         ShoppingError = null;
     }
 
+    // Book advisor
+    public string BookAdvisorQuery { get; set; } = "";
+    public BookAdvisorResult? AdvisorResult { get; private set; }
+    public bool Advising { get; private set; }
+    public string? AdvisorError { get; private set; }
+
+    public async Task AssessBookAsync()
+    {
+        if (string.IsNullOrWhiteSpace(BookAdvisorQuery)) return;
+
+        Advising = true;
+        AdvisorResult = null;
+        AdvisorError = null;
+
+        try
+        {
+            AdvisorResult = await aiService.AssessBookAsync(BookAdvisorQuery.Trim());
+        }
+        catch (Exception ex)
+        {
+            AdvisorError = $"AI request failed: {ex.Message}";
+        }
+        finally
+        {
+            Advising = false;
+        }
+    }
+
+    public void ClearAdvisor()
+    {
+        AdvisorResult = null;
+        AdvisorError = null;
+        BookAdvisorQuery = "";
+    }
+
     public record BookGenreRow(
         int Id, string Title, string? Subtitle, string Author,
         List<string> CurrentGenres);
