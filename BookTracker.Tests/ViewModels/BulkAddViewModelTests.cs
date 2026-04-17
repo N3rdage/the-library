@@ -60,7 +60,7 @@ public class BulkAddViewModelTests
             {
                 Title = "Existing",
                 Author = "Author",
-                Copies = [new BookCopy { Isbn = "9780345391803" }]
+                Editions = [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }]
             });
             await db.SaveChangesAsync();
         }

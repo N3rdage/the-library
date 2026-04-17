@@ -2,24 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace BookTracker.Data.Models;
 
-public enum BookFormat
-{
-    Hardcopy,
-    Softcopy
-}
-
-// Standard used-book grading scale, best → worst.
-public enum BookCondition
-{
-    AsNew,
-    Fine,
-    VeryGood,
-    Good,
-    Fair,
-    Poor
-}
-
-public class BookCopy
+public class Edition
 {
     public int Id { get; set; }
 
@@ -33,11 +16,11 @@ public class BookCopy
 
     public DateOnly? DatePrinted { get; set; }
 
-    public BookCondition Condition { get; set; } = BookCondition.Good;
-
     [MaxLength(500)]
-    public string? CustomCoverArtUrl { get; set; }
+    public string? CoverUrl { get; set; }
 
     public int? PublisherId { get; set; }
     public Publisher? Publisher { get; set; }
+
+    public List<Copy> Copies { get; set; } = [];
 }
