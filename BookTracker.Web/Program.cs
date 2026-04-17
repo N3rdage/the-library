@@ -29,6 +29,7 @@ builder.Services.AddTransient<SeriesMatchService>();
 // ViewModels — transient so each component instance gets its own VM.
 builder.Services.AddTransient<HomeViewModel>();
 builder.Services.AddTransient<BookFormViewModel>();
+builder.Services.AddTransient<EditionFormViewModel>();
 builder.Services.AddTransient<CopyFormViewModel>();
 builder.Services.AddTransient<GenrePickerViewModel>();
 builder.Services.AddTransient<BookListViewModel>();
