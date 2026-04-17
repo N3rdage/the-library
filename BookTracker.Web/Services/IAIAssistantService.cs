@@ -8,6 +8,11 @@ public interface IAIAssistantService
     /// </summary>
     Task<GenreSuggestionResult> SuggestGenresAsync(string title, string author, string? subtitle, IReadOnlyList<string> currentGenres, CancellationToken ct = default);
 
+    /// <summary>
+    /// Analyses uncategorised books and suggests series/collection groupings.
+    /// </summary>
+    Task<CollectionSuggestionResult> SuggestCollectionsAsync(CancellationToken ct = default);
+
     /// <summary>Number of API calls made in this service instance's lifetime.</summary>
     int CallCount { get; }
 }
@@ -15,3 +20,13 @@ public interface IAIAssistantService
 public record GenreSuggestionResult(
     IReadOnlyList<string> SuggestedGenres,
     string Reasoning);
+
+public record CollectionSuggestionResult(
+    IReadOnlyList<CollectionGrouping> Groupings,
+    string Summary);
+
+public record CollectionGrouping(
+    string SuggestedName,
+    string Type,
+    string Reasoning,
+    IReadOnlyList<string> BookTitles);
