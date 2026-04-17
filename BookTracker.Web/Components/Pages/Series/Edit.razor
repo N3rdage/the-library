@@ -1,0 +1,244 @@
+@page "/series/new"
+@page "/series/{SeriesId:int}"
+@inject SeriesEditViewModel VM
+@inject NavigationManager Nav
+
+<PageTitle>@(VM.IsNew ? "New series" : "Edit series") - BookTracker</PageTitle>
+
+@if (VM.NotFound)
+{
+    <h1 class="mb-3">Series not found</h1>
+    <p>No series with ID @SeriesId exists.</p>
+    <a href="/series" class="btn btn-outline-secondary">Back to series</a>
+}
+else if (VM.Input is null)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <h1 class="mb-3">@(VM.IsNew ? "New series" : "Edit series")</h1>
+
+    @if (!string.IsNullOrEmpty(VM.SuccessMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @VM.SuccessMessage
+            <button type="button" class="btn-close" @onclick="() => VM.SuccessMessage = null" aria-label="Close"></button>
+        </div>
+    }
+
+    <EditForm Model="VM.Input" OnValidSubmit="SaveAsync" FormName="editSeries">
+        <DataAnnotationsValidator />
+
+        <div class="row g-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-white"><h2 class="h5 mb-0">Details</h2></div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Name</label>
+                                <InputText @bind-Value="VM.Input.Name" class="form-control" />
+                                <ValidationMessage For="() => VM.Input.Name" class="text-danger small" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Author</label>
+                                <InputText @bind-Value="VM.Input.Author" class="form-control" placeholder="Optional" />
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Type</label>
+                                <InputSelect @bind-Value="VM.Input.Type" class="form-select">
+                                    <option value="@SeriesType.Series">Series</option>
+                                    <option value="@SeriesType.Collection">Collection</option>
+                                </InputSelect>
+                            </div>
+                            @if (VM.Input.Type == SeriesType.Series)
+                            {
+                                <div class="col-md-3">
+                                    <label class="form-label">Expected books</label>
+                                    <InputNumber @bind-Value="VM.Input.ExpectedCount" class="form-control" placeholder="Optional" />
+                                </div>
+                            }
+                            <div class="col-12">
+                                <label class="form-label">Description</label>
+                                <InputTextArea @bind-Value="VM.Input.Description" class="form-control" rows="2" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @if (!VM.IsNew)
+            {
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                            <h2 class="h5 mb-0">Books in this series (@VM.Books.Count)</h2>
+                            <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => VM.ShowingAddBook = !VM.ShowingAddBook">
+                                @(VM.ShowingAddBook ? "Cancel" : "Add book")
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            @if (VM.ShowingAddBook)
+                            {
+                                <div class="mb-3 p-3 bg-light rounded">
+                                    <div class="input-group" style="max-width: 500px;">
+                                        <input type="text" class="form-control" placeholder="Search by title or author..."
+                                               @bind="VM.BookSearchTerm" @onkeyup="HandleBookSearchKeyUp" />
+                                        <button type="button" class="btn btn-outline-primary" @onclick="VM.SearchBooksAsync">Search</button>
+                                    </div>
+                                    @if (VM.BookSearchResults.Count > 0)
+                                    {
+                                        <div class="list-group mt-2">
+                                            @foreach (var result in VM.BookSearchResults)
+                                            {
+                                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                    <div>
+                                                        <span class="fw-semibold">@result.Title</span>
+                                                        <span class="text-muted small ms-2">@result.Author</span>
+                                                        @if (result.CurrentSeriesId.HasValue)
+                                                        {
+                                                            <span class="badge bg-warning text-dark ms-1">Already in a series</span>
+                                                        }
+                                                    </div>
+                                                    <button type="button" class="btn btn-outline-success btn-sm" @onclick="() => AddBookAsync(result.Id)">
+                                                        Add
+                                                    </button>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+
+                            @if (VM.Books.Count == 0)
+                            {
+                                <p class="text-muted mb-0">No books in this series yet.</p>
+                            }
+                            else
+                            {
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width: 80px;">#</th>
+                                                <th>Title</th>
+                                                <th>Author</th>
+                                                <th style="width: 120px;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var book in VM.Books)
+                                            {
+                                                <tr>
+                                                    <td>
+                                                        <input type="number" class="form-control form-control-sm" style="width: 70px;"
+                                                               value="@book.SeriesOrder"
+                                                               @onchange="e => UpdateOrderAsync(book.Id, e)" />
+                                                    </td>
+                                                    <td>
+                                                        <a href="@($"/books/{book.Id}/edit")" class="text-decoration-none">@book.Title</a>
+                                                    </td>
+                                                    <td>@book.Author</td>
+                                                    <td>
+                                                        <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => VM.RemoveBookFromSeriesAsync(book.Id)">
+                                                            Remove
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <div class="col-12 d-flex gap-2">
+                <button type="submit" class="btn btn-primary" disabled="@VM.Saving">
+                    @if (VM.Saving)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    }
+                    @(VM.IsNew ? "Create series" : "Save changes")
+                </button>
+                <a class="btn btn-outline-secondary" href="/series">Back to series</a>
+                @if (!VM.IsNew)
+                {
+                    <div class="ms-auto">
+                        @if (VM.ConfirmingDeleteSeries)
+                        {
+                            <span class="me-2 text-danger fw-semibold">Delete this series?</span>
+                            <button type="button" class="btn btn-danger btn-sm" @onclick="DeleteSeriesAsync" disabled="@VM.Deleting">
+                                @if (VM.Deleting)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                }
+                                Yes, delete
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => VM.ConfirmingDeleteSeries = false">Cancel</button>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-outline-danger" @onclick="() => VM.ConfirmingDeleteSeries = true">Delete series</button>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public int? SeriesId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (SeriesId.HasValue)
+            await VM.InitializeAsync(SeriesId.Value);
+        else
+            VM.InitializeNew();
+    }
+
+    private async Task SaveAsync()
+    {
+        var resultId = await VM.SaveAsync(SeriesId);
+        if (VM.IsNew && resultId.HasValue)
+        {
+            Nav.NavigateTo($"/series/{resultId.Value}");
+        }
+    }
+
+    private async Task DeleteSeriesAsync()
+    {
+        if (SeriesId.HasValue && await VM.DeleteSeriesAsync(SeriesId.Value))
+        {
+            Nav.NavigateTo("/series");
+        }
+    }
+
+    private async Task HandleBookSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await VM.SearchBooksAsync();
+    }
+
+    private async Task AddBookAsync(int bookId)
+    {
+        if (SeriesId.HasValue)
+            await VM.AddBookToSeriesAsync(SeriesId.Value, bookId);
+    }
+
+    private async Task UpdateOrderAsync(int bookId, ChangeEventArgs e)
+    {
+        int? newOrder = int.TryParse(e.Value?.ToString(), out var val) ? val : null;
+        await VM.UpdateBookOrderAsync(bookId, newOrder);
+    }
+}

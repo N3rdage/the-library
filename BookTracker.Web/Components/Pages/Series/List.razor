@@ -1,0 +1,106 @@
+@page "/series"
+@inject SeriesListViewModel VM
+@inject NavigationManager Nav
+
+<PageTitle>Series &amp; Collections - BookTracker</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">Series &amp; Collections</h1>
+    <a href="/series/new" class="btn btn-primary btn-sm">New series</a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-5">
+                <label class="form-label small text-muted">Search</label>
+                <input type="text" class="form-control" placeholder="Name or author..." @bind="VM.SearchTerm" @bind:event="oninput" @onkeyup="HandleSearchKeyUp" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small text-muted">Type</label>
+                <select class="form-select" @bind="VM.SelectedType" @bind:after="() => VM.ApplyFiltersAsync()">
+                    <option value="">All</option>
+                    <option value="Series">Series</option>
+                    <option value="Collection">Collection</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-1">
+                <button type="button" class="btn btn-outline-secondary w-100" @onclick="VM.ClearFiltersAsync" title="Clear filters">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (VM.Loading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else if (VM.AllSeries.Count == 0)
+{
+    <div class="text-center py-5 text-muted">
+        <p class="mb-2">No series or collections found.</p>
+        <a href="/series/new" class="btn btn-primary btn-sm">Create your first series</a>
+    </div>
+}
+else
+{
+    @* Desktop table *@
+    <div class="d-none d-md-block table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Name</th>
+                    <th>Author</th>
+                    <th>Type</th>
+                    <th>Books</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in VM.AllSeries)
+                {
+                    <tr role="button" @onclick="() => NavigateToEdit(item.Id)" style="cursor: pointer;">
+                        <td class="fw-semibold">@item.Name</td>
+                        <td>@(item.Author ?? "\u2014")</td>
+                        <td><span class="badge bg-light text-dark border">@item.Type</span></td>
+                        <td><span class="badge @SeriesListViewModel.CompletionBadgeClass(item)">@SeriesListViewModel.CompletionText(item)</span></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @* Mobile cards *@
+    <div class="d-md-none">
+        @foreach (var item in VM.AllSeries)
+        {
+            <div class="book-card-mobile d-flex justify-content-between align-items-center" @onclick="() => NavigateToEdit(item.Id)">
+                <div>
+                    <div class="fw-semibold">@item.Name</div>
+                    <div class="text-muted small">@(item.Author ?? "Various / unspecified")</div>
+                </div>
+                <div class="d-flex gap-1 flex-shrink-0">
+                    <span class="badge bg-light text-dark border">@item.Type</span>
+                    <span class="badge @SeriesListViewModel.CompletionBadgeClass(item)">@SeriesListViewModel.CompletionText(item)</span>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    protected override async Task OnInitializedAsync() => await VM.InitializeAsync();
+
+    private async Task HandleSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await VM.ApplyFiltersAsync();
+    }
+
+    private void NavigateToEdit(int seriesId) => Nav.NavigateTo($"/series/{seriesId}");
+}
