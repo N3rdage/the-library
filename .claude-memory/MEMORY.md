@@ -9,3 +9,4 @@
 - [Deployment safety](feedback_deployment_safety.md) — migrations must retain data; breaking changes need defaults and review tags.
 - [Performance target](project_performance_target.md) — system must handle 3000+ copies; flag designs that might struggle at scale.
 - [TODO tracking](feedback_todo_tracking.md) — all TODOs in TODO.md; "sync TODOs" reconciles memory + code + TODO.md.
+- [Memory excluded from PRs](feedback_memory_commits.md) — don't stage .claude-memory/ in feature commits; flag changes for a separate commit.
