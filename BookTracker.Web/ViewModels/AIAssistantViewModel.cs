@@ -177,6 +177,54 @@ public class AIAssistantViewModel(
         CollectionError = null;
     }
 
+    // Shopping suggestions
+    public ShoppingSuggestionResult? ShoppingSuggestion { get; private set; }
+    public bool SuggestingShopping { get; private set; }
+    public string? ShoppingError { get; private set; }
+
+    public async Task SuggestShoppingListAsync()
+    {
+        SuggestingShopping = true;
+        ShoppingSuggestion = null;
+        ShoppingError = null;
+
+        try
+        {
+            ShoppingSuggestion = await aiService.SuggestShoppingListAsync();
+        }
+        catch (Exception ex)
+        {
+            ShoppingError = $"AI request failed: {ex.Message}";
+        }
+        finally
+        {
+            SuggestingShopping = false;
+        }
+    }
+
+    public async Task AddRecommendationToWishlistAsync(BookRecommendation rec)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+
+        // Check if already on wishlist
+        if (await db.WishlistItems.AnyAsync(w => w.Title == rec.Title && w.Author == rec.Author))
+            return;
+
+        db.WishlistItems.Add(new WishlistItem
+        {
+            Title = rec.Title,
+            Author = rec.Author,
+            Priority = WishlistPriority.Medium
+        });
+        await db.SaveChangesAsync();
+    }
+
+    public void DismissShoppingSuggestions()
+    {
+        ShoppingSuggestion = null;
+        ShoppingError = null;
+    }
+
     public record BookGenreRow(
         int Id, string Title, string? Subtitle, string Author,
         List<string> CurrentGenres);

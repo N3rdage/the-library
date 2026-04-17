@@ -185,3 +185,70 @@
         }
     </div>
 </div>
+
+<div class="card mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h2 class="h5 mb-0">Shopping suggestions</h2>
+        @if (VM.ShoppingSuggestion is null && !VM.SuggestingShopping)
+        {
+            <button type="button" class="btn btn-outline-primary btn-sm" @onclick="VM.SuggestShoppingListAsync">
+                What should I look for?
+            </button>
+        }
+    </div>
+    <div class="card-body">
+        @if (VM.SuggestingShopping)
+        {
+            <div class="text-center py-3">
+                <div class="spinner-border spinner-border-sm" role="status"></div>
+                <span class="ms-2 text-muted small">Analysing your reading patterns...</span>
+            </div>
+        }
+        else if (VM.ShoppingError is not null)
+        {
+            <div class="alert alert-warning py-2 small mb-0">@VM.ShoppingError</div>
+        }
+        else if (VM.ShoppingSuggestion is not null)
+        {
+            @if (!string.IsNullOrEmpty(VM.ShoppingSuggestion.Summary))
+            {
+                <p class="text-muted small mb-3">@VM.ShoppingSuggestion.Summary</p>
+            }
+
+            @if (VM.ShoppingSuggestion.Recommendations.Count == 0)
+            {
+                <p class="text-muted small mb-0">No suggestions at this time.</p>
+            }
+            else
+            {
+                @foreach (var rec in VM.ShoppingSuggestion.Recommendations)
+                {
+                    <div class="d-flex gap-3 align-items-start py-2 @(rec != VM.ShoppingSuggestion.Recommendations.Last() ? "border-bottom" : "")">
+                        <div class="flex-grow-1 min-width-0">
+                            <div class="fw-semibold">@rec.Title</div>
+                            <div class="text-muted small">@rec.Author</div>
+                            <div class="text-muted small mt-1">@rec.Reasoning</div>
+                            @if (rec.SeriesContext is not null)
+                            {
+                                <span class="badge bg-light text-dark border mt-1">@rec.SeriesContext</span>
+                            }
+                        </div>
+                        <button type="button" class="btn btn-outline-success btn-sm flex-shrink-0"
+                                @onclick="() => VM.AddRecommendationToWishlistAsync(rec)" title="Add to shopping list">
+                            + List
+                        </button>
+                    </div>
+                }
+            }
+
+            <div class="mt-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="VM.DismissShoppingSuggestions">Dismiss</button>
+                <button type="button" class="btn btn-outline-primary btn-sm ms-1" @onclick="VM.SuggestShoppingListAsync">Refresh</button>
+            </div>
+        }
+        else
+        {
+            <p class="text-muted small mb-0">Tap "What should I look for?" to get book recommendations based on your library and reading patterns.</p>
+        }
+    </div>
+</div>
