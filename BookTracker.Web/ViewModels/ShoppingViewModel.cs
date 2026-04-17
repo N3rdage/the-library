@@ -295,8 +295,8 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     }
 
     /// <summary>
-    /// Marks a wishlist item as "bought" — creates a Book + BookCopy with
-    /// follow-up tag and default values, then removes the wishlist item.
+    /// Marks a wishlist item as "bought" — creates a Book + Edition + Copy
+    /// with follow-up tag and default values, then removes the wishlist item.
     /// Returns the new book ID for navigation.
     /// </summary>
     public async Task<int?> MarkAsBoughtAsync(ShoppingListItem item)
