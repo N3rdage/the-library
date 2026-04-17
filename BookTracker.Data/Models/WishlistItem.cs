@@ -26,4 +26,13 @@ public class WishlistItem
     public decimal? Price { get; set; }
 
     public DateTime DateAdded { get; set; } = DateTime.UtcNow;
+
+    [MaxLength(20)]
+    public string? Isbn { get; set; }
+
+    public int? SeriesId { get; set; }
+    public Series? Series { get; set; }
+
+    /// <summary>Position in the series this item would fill.</summary>
+    public int? SeriesOrder { get; set; }
 }

@@ -54,6 +54,15 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .HasForeignKey(b => b.SeriesId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        modelBuilder.Entity<WishlistItem>()
+            .HasOne(w => w.Series)
+            .WithMany()
+            .HasForeignKey(w => w.SeriesId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<WishlistItem>()
+            .HasIndex(w => w.Isbn);
+
         modelBuilder.Entity<Tag>()
             .HasIndex(t => t.Name)
             .IsUnique();
