@@ -6,7 +6,8 @@ namespace BookTracker.Data;
 public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options) : DbContext(options)
 {
     public DbSet<Book> Books => Set<Book>();
-    public DbSet<BookCopy> BookCopies => Set<BookCopy>();
+    public DbSet<Edition> Editions => Set<Edition>();
+    public DbSet<Copy> Copies => Set<Copy>();
     public DbSet<Genre> Genres => Set<Genre>();
     public DbSet<Publisher> Publishers => Set<Publisher>();
     public DbSet<Series> Series => Set<Series>();
@@ -15,20 +16,27 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<BookCopy>()
-            .HasOne(c => c.Book)
-            .WithMany(b => b.Copies)
-            .HasForeignKey(c => c.BookId)
+        modelBuilder.Entity<Edition>()
+            .HasOne(e => e.Book)
+            .WithMany(b => b.Editions)
+            .HasForeignKey(e => e.BookId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        modelBuilder.Entity<BookCopy>()
-            .HasIndex(c => c.Isbn);
+        modelBuilder.Entity<Edition>()
+            .HasIndex(e => e.Isbn)
+            .IsUnique();
 
-        modelBuilder.Entity<BookCopy>()
-            .HasOne(c => c.Publisher)
-            .WithMany(p => p.Copies)
-            .HasForeignKey(c => c.PublisherId)
+        modelBuilder.Entity<Edition>()
+            .HasOne(e => e.Publisher)
+            .WithMany(p => p.Editions)
+            .HasForeignKey(e => e.PublisherId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Copy>()
+            .HasOne(c => c.Edition)
+            .WithMany(e => e.Copies)
+            .HasForeignKey(c => c.EditionId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<Genre>()
             .HasIndex(g => g.Name)

@@ -17,12 +17,12 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     public List<TagItem> AvailableTags { get; private set; } = [];
     public string NewTagName { get; set; } = "";
 
-    // Copies
-    public List<CopyRow> Copies { get; private set; } = [];
+    // Editions & Copies
+    public List<EditionCopyRow> EditionCopies { get; private set; } = [];
     public bool ShowingNewCopy { get; set; }
     public CopyFormViewModel.CopyFormInput NewCopyInput { get; set; } = new();
 
-    // Inline copy editing
+    // Inline edition/copy editing
     public int? EditingCopyId { get; set; }
     public CopyEditInput EditCopyInput { get; set; } = new();
     public int? ConfirmingDeleteCopyId { get; set; }
@@ -43,8 +43,10 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         var book = await db.Books
             .Include(b => b.Genres)
             .Include(b => b.Tags)
-            .Include(b => b.Copies)
-                .ThenInclude(c => c.Publisher)
+            .Include(b => b.Editions)
+                .ThenInclude(e => e.Copies)
+            .Include(b => b.Editions)
+                .ThenInclude(e => e.Publisher)
             .FirstOrDefaultAsync(b => b.Id == bookId);
 
         if (book is null)
@@ -67,7 +69,12 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
 
         SelectedGenreIds = book.Genres.Select(g => g.Id).ToList();
         AssignedTags = book.Tags.Select(t => new TagItem(t.Id, t.Name)).ToList();
-        Copies = book.Copies.Select(c => new CopyRow(c.Id, c.Isbn, c.Format, c.Condition, c.Publisher?.Name, c.DatePrinted, c.CustomCoverArtUrl)).ToList();
+        EditionCopies = book.Editions
+            .SelectMany(e => e.Copies.Select(c => new EditionCopyRow(
+                e.Id, c.Id, e.Isbn, e.Format, c.Condition,
+                e.Publisher?.Name, e.DatePrinted, e.CoverUrl,
+                c.Notes, c.DateAcquired)))
+            .ToList();
 
         SelectedSeriesId = book.SeriesId;
         SeriesOrder = book.SeriesOrder;
@@ -153,34 +160,37 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             }
         }
 
-        var copy = new BookCopy
+        var edition = new Edition
         {
             BookId = bookId,
             Isbn = NewCopyInput.Isbn.Trim(),
             Format = NewCopyInput.Format,
             DatePrinted = NewCopyInput.DatePrinted,
-            Condition = NewCopyInput.Condition,
             Publisher = publisher,
-            CustomCoverArtUrl = string.IsNullOrWhiteSpace(NewCopyInput.CustomCoverArtUrl) ? null : NewCopyInput.CustomCoverArtUrl.Trim()
+            CoverUrl = string.IsNullOrWhiteSpace(NewCopyInput.CustomCoverArtUrl) ? null : NewCopyInput.CustomCoverArtUrl.Trim(),
+            Copies = [new Copy { Condition = NewCopyInput.Condition }]
         };
 
-        db.BookCopies.Add(copy);
+        db.Editions.Add(edition);
         await db.SaveChangesAsync();
 
-        Copies.Add(new CopyRow(copy.Id, copy.Isbn, copy.Format, copy.Condition, publisher?.Name, copy.DatePrinted, copy.CustomCoverArtUrl));
+        var copy = edition.Copies[0];
+        EditionCopies.Add(new EditionCopyRow(
+            edition.Id, copy.Id, edition.Isbn, edition.Format, copy.Condition,
+            publisher?.Name, edition.DatePrinted, edition.CoverUrl, copy.Notes, copy.DateAcquired));
         ShowingNewCopy = false;
     }
 
-    public void StartEditCopy(CopyRow copy)
+    public void StartEditCopy(EditionCopyRow row)
     {
-        EditingCopyId = copy.Id;
+        EditingCopyId = row.CopyId;
         EditCopyInput = new CopyEditInput
         {
-            Isbn = copy.Isbn,
-            Format = copy.Format,
-            Condition = copy.Condition,
-            Publisher = copy.PublisherName,
-            DatePrinted = copy.DatePrinted
+            Isbn = row.Isbn,
+            Format = row.Format,
+            Condition = row.Condition,
+            Publisher = row.PublisherName,
+            DatePrinted = row.DatePrinted
         };
     }
 
@@ -191,13 +201,14 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         if (EditingCopyId is not int copyId) return;
 
         await using var db = await dbFactory.CreateDbContextAsync();
-        var copy = await db.BookCopies.Include(c => c.Publisher).FirstOrDefaultAsync(c => c.Id == copyId);
+        var copy = await db.Copies.Include(c => c.Edition).ThenInclude(e => e.Publisher).FirstOrDefaultAsync(c => c.Id == copyId);
         if (copy is null) { EditingCopyId = null; return; }
 
-        copy.Isbn = EditCopyInput.Isbn?.Trim() ?? copy.Isbn;
-        copy.Format = EditCopyInput.Format;
+        var edition = copy.Edition;
+        edition.Isbn = EditCopyInput.Isbn?.Trim() ?? edition.Isbn;
+        edition.Format = EditCopyInput.Format;
+        edition.DatePrinted = EditCopyInput.DatePrinted;
         copy.Condition = EditCopyInput.Condition;
-        copy.DatePrinted = EditCopyInput.DatePrinted;
 
         var pubName = EditCopyInput.Publisher?.Trim();
         if (!string.IsNullOrEmpty(pubName))
@@ -208,34 +219,44 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
                 publisher = new Publisher { Name = pubName };
                 db.Publishers.Add(publisher);
             }
-            copy.Publisher = publisher;
+            edition.Publisher = publisher;
         }
         else
         {
-            copy.Publisher = null;
-            copy.PublisherId = null;
+            edition.Publisher = null;
+            edition.PublisherId = null;
         }
 
         await db.SaveChangesAsync();
 
-        var idx = Copies.FindIndex(c => c.Id == copyId);
+        var idx = EditionCopies.FindIndex(c => c.CopyId == copyId);
         if (idx >= 0)
         {
-            Copies[idx] = new CopyRow(copy.Id, copy.Isbn, copy.Format, copy.Condition, pubName, copy.DatePrinted, copy.CustomCoverArtUrl);
+            EditionCopies[idx] = new EditionCopyRow(
+                edition.Id, copy.Id, edition.Isbn, edition.Format, copy.Condition,
+                pubName, edition.DatePrinted, edition.CoverUrl, copy.Notes, copy.DateAcquired);
         }
         EditingCopyId = null;
     }
 
-    public async Task DeleteCopyAsync(CopyRow copy)
+    public async Task DeleteCopyAsync(EditionCopyRow row)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var entity = await db.BookCopies.FindAsync(copy.Id);
-        if (entity is not null)
+        var copy = await db.Copies.Include(c => c.Edition).ThenInclude(e => e.Copies).FirstOrDefaultAsync(c => c.Id == row.CopyId);
+        if (copy is not null)
         {
-            db.BookCopies.Remove(entity);
+            var edition = copy.Edition;
+            db.Copies.Remove(copy);
+
+            // If this was the last copy on the edition, remove the edition too
+            if (edition.Copies.Count <= 1)
+            {
+                db.Editions.Remove(edition);
+            }
+
             await db.SaveChangesAsync();
         }
-        Copies.RemoveAll(c => c.Id == copy.Id);
+        EditionCopies.RemoveAll(c => c.CopyId == row.CopyId);
         ConfirmingDeleteCopyId = null;
     }
 
@@ -309,7 +330,7 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
 
     public record SeriesOption(int Id, string Name, SeriesType Type);
     public record TagItem(int Id, string Name);
-    public record CopyRow(int Id, string Isbn, BookFormat Format, BookCondition Condition, string? PublisherName, DateOnly? DatePrinted, string? CustomCoverArtUrl);
+    public record EditionCopyRow(int EditionId, int CopyId, string Isbn, BookFormat Format, BookCondition Condition, string? PublisherName, DateOnly? DatePrinted, string? CoverUrl, string? CopyNotes, DateTime? DateAcquired);
 
     public class CopyEditInput
     {

@@ -44,7 +44,7 @@ public class BulkAddViewModel(
     private async Task CheckDuplicateAsync(DiscoveryRow row)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        row.IsDuplicate = await db.BookCopies.AnyAsync(c => c.Isbn == row.Isbn);
+        row.IsDuplicate = await db.Editions.AnyAsync(e => e.Isbn == row.Isbn);
     }
 
     private async Task LookupRowAsync(DiscoveryRow row)
@@ -119,24 +119,22 @@ public class BulkAddViewModel(
 
         if (row.IsDuplicate)
         {
-            var existingCopy = await db.BookCopies
-                .Include(c => c.Book)
-                .FirstOrDefaultAsync(c => c.Isbn == row.Isbn);
+            var existingEdition = await db.Editions
+                .Include(e => e.Book)
+                .FirstOrDefaultAsync(e => e.Isbn == row.Isbn);
 
-            if (existingCopy is not null)
+            if (existingEdition is not null)
             {
-                var newCopy = new BookCopy
+                var newCopy = new Copy
                 {
-                    BookId = existingCopy.BookId,
-                    Isbn = row.Isbn,
-                    Format = BookFormat.Softcopy,
+                    EditionId = existingEdition.Id,
                     Condition = BookCondition.Good
                 };
-                db.BookCopies.Add(newCopy);
+                db.Copies.Add(newCopy);
 
                 if (followUp)
                 {
-                    var book = await db.Books.Include(b => b.Tags).FirstAsync(b => b.Id == existingCopy.BookId);
+                    var book = await db.Books.Include(b => b.Tags).FirstAsync(b => b.Id == existingEdition.BookId);
                     await EnsureFollowUpTagAsync(db, book);
                 }
 
@@ -163,15 +161,15 @@ public class BulkAddViewModel(
             Subtitle = row.Subtitle,
             Author = (row.Author ?? "Unknown").Trim(),
             DefaultCoverArtUrl = row.CoverUrl,
-            Copies =
+            Editions =
             [
-                new BookCopy
+                new Edition
                 {
                     Isbn = row.Isbn,
                     Format = BookFormat.Softcopy,
-                    Condition = BookCondition.Good,
                     DatePrinted = row.DatePrinted,
-                    Publisher = publisher
+                    Publisher = publisher,
+                    Copies = [new Copy { Condition = BookCondition.Good }]
                 }
             ]
         };

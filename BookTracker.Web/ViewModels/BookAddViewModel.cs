@@ -98,16 +98,16 @@ public class BookAddViewModel(
                 Rating = BookInput.Rating,
                 DefaultCoverArtUrl = string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl) ? null : BookInput.DefaultCoverArtUrl.Trim(),
                 Genres = selectedGenres,
-                Copies =
+                Editions =
                 [
-                    new BookCopy
+                    new Edition
                     {
                         Isbn = CopyInput.Isbn!.Trim(),
                         Format = CopyInput.Format,
                         DatePrinted = CopyInput.DatePrinted,
-                        Condition = CopyInput.Condition,
                         Publisher = publisher,
-                        CustomCoverArtUrl = string.IsNullOrWhiteSpace(CopyInput.CustomCoverArtUrl) ? null : CopyInput.CustomCoverArtUrl.Trim()
+                        CoverUrl = string.IsNullOrWhiteSpace(CopyInput.CustomCoverArtUrl) ? null : CopyInput.CustomCoverArtUrl.Trim(),
+                        Copies = [new Copy { Condition = CopyInput.Condition }]
                     }
                 ]
             };
