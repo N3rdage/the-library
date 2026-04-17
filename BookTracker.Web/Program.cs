@@ -37,6 +37,7 @@ builder.Services.AddTransient<BookEditViewModel>();
 builder.Services.AddTransient<BulkAddViewModel>();
 builder.Services.AddTransient<SeriesListViewModel>();
 builder.Services.AddTransient<SeriesEditViewModel>();
+builder.Services.AddTransient<ShoppingViewModel>();
 
 var app = builder.Build();
 

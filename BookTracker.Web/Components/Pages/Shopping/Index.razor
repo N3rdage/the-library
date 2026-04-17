@@ -1,0 +1,269 @@
+@page "/shopping"
+@implements IAsyncDisposable
+@inject ShoppingViewModel VM
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Shopping - BookTracker</PageTitle>
+
+<h1 class="mb-3">Shopping</h1>
+
+<div class="card mb-4">
+    <div class="card-body">
+        @* Mobile: scanner first, prominent *@
+        <div class="d-md-none mb-3">
+            <button type="button" class="btn w-100 @(scannerActive ? "btn-danger" : "btn-primary")" @onclick="ToggleScannerAsync">
+                @if (scannerActive)
+                {
+                    <span>Stop scanner</span>
+                }
+                else
+                {
+                    <span>Scan ISBN</span>
+                }
+            </button>
+        </div>
+
+        <label class="form-label fw-semibold">Do I have this book?</label>
+        <div class="input-group">
+            <input type="text" class="form-control" placeholder="Search by title, author, or ISBN..." @bind="VM.SearchTerm"
+                   @onkeyup="HandleSearchKeyUp" />
+            <button type="button" class="btn btn-outline-primary" @onclick="SearchAsync" disabled="@VM.Searching">
+                @if (VM.Searching)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status"></span>
+                }
+                else
+                {
+                    <span>Search</span>
+                }
+            </button>
+        </div>
+
+        @* Desktop: scanner below *@
+        <div class="d-none d-md-block mt-3">
+            <button type="button" class="btn @(scannerActive ? "btn-danger" : "btn-outline-secondary")" @onclick="ToggleScannerAsync">
+                @if (scannerActive)
+                {
+                    <span>Stop scanner</span>
+                }
+                else
+                {
+                    <span>Scan barcode</span>
+                }
+            </button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(scannerError))
+        {
+            <div class="alert alert-warning mt-2 mb-0 py-2 small">@scannerError</div>
+        }
+    </div>
+</div>
+
+@if (scannerActive)
+{
+    <div class="card mb-4">
+        <div class="card-body text-center">
+            <div id="shopping-barcode-reader" class="scanner-container"></div>
+            <div class="form-text mt-2">Point your camera at the ISBN barcode.</div>
+        </div>
+    </div>
+}
+
+@if (VM.Result is not null)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            @if (VM.ScannedIsbn is not null)
+            {
+                <div class="text-muted small mb-2">ISBN: <span class="font-monospace">@VM.ScannedIsbn</span></div>
+            }
+
+            @if (VM.Result.MultipleResults is not null)
+            {
+                <h2 class="h6 mb-3">Found @VM.Result.MultipleResults.Count matches</h2>
+                @foreach (var item in VM.Result.MultipleResults)
+                {
+                    <div class="d-flex gap-3 align-items-center py-2 border-bottom" role="button" style="cursor: pointer;" @onclick="() => VM.SelectBookAsync(item.Id)">
+                        @if (!string.IsNullOrWhiteSpace(item.CoverUrl))
+                        {
+                            <img src="@item.CoverUrl" alt="" class="rounded flex-shrink-0" style="width: 40px; height: 56px; object-fit: cover;" />
+                        }
+                        else
+                        {
+                            <div class="rounded bg-light d-flex align-items-center justify-content-center flex-shrink-0" style="width: 40px; height: 56px;">
+                                <span class="text-muted small">--</span>
+                            </div>
+                        }
+                        <div>
+                            <div class="fw-semibold">@item.Title</div>
+                            <div class="text-muted small">@item.Author</div>
+                        </div>
+                        <span class="badge bg-success ms-auto">@item.CopyCount copies</span>
+                    </div>
+                }
+            }
+            else if (VM.Result.Found)
+            {
+                <div class="d-flex gap-3 align-items-start">
+                    @if (!string.IsNullOrWhiteSpace(VM.Result.CoverUrl))
+                    {
+                        <img src="@VM.Result.CoverUrl" alt="" class="rounded flex-shrink-0" style="width: 60px; height: 84px; object-fit: cover;" />
+                    }
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span class="badge bg-success fs-6">Yes, you have it!</span>
+                        </div>
+                        <div class="fw-semibold fs-5">@VM.Result.Title</div>
+                        <div class="text-muted">@VM.Result.Author</div>
+                        <div class="small mt-1">You own <strong>@VM.Result.CopyCount</strong> @(VM.Result.CopyCount == 1 ? "copy" : "copies")</div>
+
+                        @if (VM.Result.SeriesInfo is not null)
+                        {
+                            var si = VM.Result.SeriesInfo;
+                            <div class="mt-2 p-2 bg-light rounded">
+                                <div class="small fw-semibold">
+                                    Part of <a href="@($"/series/{si.SeriesId}")">@si.SeriesName</a>
+                                    <span class="badge bg-light text-dark border ms-1">@si.Type</span>
+                                </div>
+                                <div class="small text-muted">
+                                    You have @si.OwnedCount
+                                    @if (si.ExpectedCount.HasValue)
+                                    {
+                                        <span> of @si.ExpectedCount books</span>
+                                        @if (si.OwnedCount >= si.ExpectedCount.Value)
+                                        {
+                                            <span class="text-success ms-1">- Complete!</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-warning ms-1">- @(si.ExpectedCount.Value - si.OwnedCount) missing</span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span> books in this @si.Type.ToString().ToLowerInvariant()</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        <div class="mt-2">
+                            <a href="@($"/books/{VM.Result.BookId}/edit")" class="btn btn-outline-primary btn-sm">View book</a>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="text-center py-3">
+                    <span class="badge bg-secondary fs-6 mb-2">Not in your library</span>
+                    <p class="text-muted small mb-2">This book isn't in your collection yet.</p>
+                    <div class="d-flex gap-2 justify-content-center">
+                        <a href="@AddBookUrl()" class="btn btn-primary btn-sm">Add to library</a>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ClearAsync">New search</button>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private bool scannerActive;
+    private string? scannerError;
+    private DotNetObjectReference<Index>? dotNetRef;
+
+    private async Task HandleSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await SearchAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        var term = VM.SearchTerm.Trim();
+        if (string.IsNullOrWhiteSpace(term)) return;
+
+        // If the search term looks like an ISBN (10+ digits), search by ISBN
+        var cleaned = new string(term.Where(c => char.IsLetterOrDigit(c)).ToArray());
+        if (cleaned.Length >= 10 && cleaned.Length <= 13 && cleaned.All(c => char.IsDigit(c) || c == 'X' || c == 'x'))
+        {
+            await VM.SearchByIsbnAsync(cleaned);
+        }
+        else
+        {
+            await VM.SearchByTextAsync();
+        }
+    }
+
+    private void ClearAsync()
+    {
+        VM.SearchTerm = "";
+        VM.ClearResult();
+    }
+
+    private string AddBookUrl()
+    {
+        if (VM.ScannedIsbn is not null)
+            return $"/books/add";
+        return "/books/add";
+    }
+
+    // Scanner — reuses the same barcode-scanner.js interop
+    private async Task ToggleScannerAsync()
+    {
+        scannerError = null;
+        if (scannerActive)
+        {
+            await JS.InvokeVoidAsync("BarcodeScanner.stop");
+            scannerActive = false;
+        }
+        else
+        {
+            scannerActive = true;
+            dotNetRef ??= DotNetObjectReference.Create(this);
+            StateHasChanged();
+            await Task.Delay(100);
+            await JS.InvokeVoidAsync("BarcodeScanner.start", "shopping-barcode-reader", dotNetRef);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnBarcodeScanned(string decodedText)
+    {
+        var isbn = decodedText.Trim();
+        if (string.IsNullOrWhiteSpace(isbn)) return;
+
+        // Stop scanner after successful scan for cleaner UX
+        await JS.InvokeVoidAsync("BarcodeScanner.stop");
+
+        await InvokeAsync(async () =>
+        {
+            scannerActive = false;
+            await VM.SearchByIsbnAsync(isbn);
+            StateHasChanged();
+        });
+    }
+
+    [JSInvokable]
+    public async Task OnScannerError(string error)
+    {
+        await InvokeAsync(() =>
+        {
+            scannerError = $"Camera error: {error}";
+            scannerActive = false;
+            StateHasChanged();
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (scannerActive)
+        {
+            try { await JS.InvokeVoidAsync("BarcodeScanner.stop"); } catch { }
+        }
+        dotNetRef?.Dispose();
+    }
+}
