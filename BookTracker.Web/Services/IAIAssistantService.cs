@@ -1,0 +1,17 @@
+namespace BookTracker.Web.Services;
+
+public interface IAIAssistantService
+{
+    /// <summary>
+    /// Suggests genres for a book from the preset taxonomy.
+    /// Returns genre names that match entries in the Genres table.
+    /// </summary>
+    Task<GenreSuggestionResult> SuggestGenresAsync(string title, string author, string? subtitle, IReadOnlyList<string> currentGenres, CancellationToken ct = default);
+
+    /// <summary>Number of API calls made in this service instance's lifetime.</summary>
+    int CallCount { get; }
+}
+
+public record GenreSuggestionResult(
+    IReadOnlyList<string> SuggestedGenres,
+    string Reasoning);
