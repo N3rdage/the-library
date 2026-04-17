@@ -7,7 +7,8 @@ namespace BookTracker.Web.ViewModels;
 
 public class BulkAddViewModel(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
-    IBookLookupService lookup)
+    IBookLookupService lookup,
+    SeriesMatchService seriesMatch)
 {
     /// <summary>
     /// Callback for the component to marshal state changes back to the UI thread.
@@ -62,6 +63,8 @@ public class BulkAddViewModel(
                 row.DatePrinted = result.DatePrinted;
                 row.GenreCandidates = result.GenreCandidates.ToList();
                 row.Status = RowStatus.Found;
+
+                row.SeriesSuggestion = await seriesMatch.FindMatchAsync(result.Title, result.Author);
             }
             else
             {
@@ -238,6 +241,7 @@ public class BulkAddViewModel(
         public RowStatus Status { get; set; }
         public RowAction Action { get; set; } = RowAction.Pending;
         public bool IsDuplicate { get; set; }
+        public SeriesMatch? SeriesSuggestion { get; set; }
     }
 
     public enum RowStatus { Searching, Found, NotFound }

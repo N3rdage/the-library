@@ -24,6 +24,8 @@ builder.Services.AddHttpClient<IBookLookupService, BookLookupService>(client =>
     client.DefaultRequestHeaders.UserAgent.ParseAdd("BookTracker/0.1 (+github.com/N3rdage/the-library)");
 });
 
+builder.Services.AddTransient<SeriesMatchService>();
+
 // ViewModels — transient so each component instance gets its own VM.
 builder.Services.AddTransient<HomeViewModel>();
 builder.Services.AddTransient<BookFormViewModel>();
