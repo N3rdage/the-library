@@ -25,5 +25,6 @@ Outstanding work items for BookTracker. This is the single source of truth — c
 
 ## Planned features
 
-- [ ] AI book recommendations via the Anthropic API
-- [ ] Wishlist UI (model exists, no pages yet)
+- [x] AI book recommendations via the Anthropic API — genre cleanup, collection cataloguing, shopping suggestions, book advisor
+- [x] Wishlist UI — integrated into Shopping page (shopping list section)
+- [ ] AI cost tracking — add persistent token/cost logging beyond the session counter
