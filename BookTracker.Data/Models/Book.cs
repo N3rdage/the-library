@@ -44,7 +44,7 @@ public class Book
     [MaxLength(500)]
     public string? DefaultCoverArtUrl { get; set; }
 
-    public List<BookCopy> Copies { get; set; } = [];
+    public List<Edition> Editions { get; set; } = [];
 
     public List<Tag> Tags { get; set; } = [];
 

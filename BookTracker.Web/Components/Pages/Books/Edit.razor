@@ -116,11 +116,11 @@ else
             <div class="col-12">
                 <div class="card">
                     <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                        <h2 class="h5 mb-0">Copies (@VM.Copies.Count)</h2>
+                        <h2 class="h5 mb-0">Copies (@VM.EditionCopies.Count)</h2>
                         <button type="button" class="btn btn-outline-primary btn-sm" @onclick="VM.ShowAddCopy">Add copy</button>
                     </div>
                     <div class="card-body">
-                        @if (VM.Copies.Count == 0 && !VM.ShowingNewCopy)
+                        @if (VM.EditionCopies.Count == 0 && !VM.ShowingNewCopy)
                         {
                             <p class="text-muted mb-0">No copies recorded.</p>
                         }
@@ -139,9 +139,9 @@ else
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        @foreach (var copy in VM.Copies)
+                                        @foreach (var copy in VM.EditionCopies)
                                         {
-                                            @if (VM.EditingCopyId == copy.Id)
+                                            @if (VM.EditingCopyId == copy.CopyId)
                                             {
                                                 <tr>
                                                     <td><input type="text" class="form-control form-control-sm" @bind="VM.EditCopyInput.Isbn" /></td>
@@ -180,7 +180,7 @@ else
                                                     <td>@(copy.PublisherName ?? "—")</td>
                                                     <td>@(copy.DatePrinted?.ToString("yyyy-MM-dd") ?? "—")</td>
                                                     <td>
-                                                        @if (VM.ConfirmingDeleteCopyId == copy.Id)
+                                                        @if (VM.ConfirmingDeleteCopyId == copy.CopyId)
                                                         {
                                                             <div class="d-flex align-items-center gap-1">
                                                                 <span class="text-danger small">Delete?</span>
@@ -192,7 +192,7 @@ else
                                                         {
                                                             <div class="btn-group btn-group-sm">
                                                                 <button type="button" class="btn btn-outline-primary" @onclick="() => VM.StartEditCopy(copy)">Edit</button>
-                                                                <button type="button" class="btn btn-outline-danger" @onclick="() => VM.ConfirmingDeleteCopyId = copy.Id">Delete</button>
+                                                                <button type="button" class="btn btn-outline-danger" @onclick="() => VM.ConfirmingDeleteCopyId = copy.CopyId">Delete</button>
                                                             </div>
                                                         }
                                                     </td>

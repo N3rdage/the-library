@@ -75,22 +75,24 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             SearchTerm = "";
             await using var db = await dbFactory.CreateDbContextAsync();
 
-            var copies = await db.BookCopies
-                .Include(c => c.Book)
+            var editions = await db.Editions
+                .Include(e => e.Book)
                     .ThenInclude(b => b.Series)
-                .Where(c => c.Isbn == isbn)
+                .Include(e => e.Copies)
+                .Where(e => e.Isbn == isbn)
                 .ToListAsync();
 
-            if (copies.Count > 0)
+            if (editions.Count > 0)
             {
-                var book = copies[0].Book;
+                var book = editions[0].Book;
+                var copyCount = editions.SelectMany(e => e.Copies).Count();
                 var seriesInfo = await GetSeriesInfoAsync(db, book);
                 Result = new LookupResult(
                     Found: true,
                     BookId: book.Id,
                     Title: book.Title,
                     Author: book.Author,
-                    CopyCount: copies.Count,
+                    CopyCount: copyCount,
                     CoverUrl: book.DefaultCoverArtUrl,
                     SeriesInfo: seriesInfo);
             }
@@ -124,7 +126,8 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             await using var db = await dbFactory.CreateDbContextAsync();
 
             var books = await db.Books
-                .Include(b => b.Copies)
+                .Include(b => b.Editions)
+                    .ThenInclude(e => e.Copies)
                 .Include(b => b.Series)
                 .Where(b => b.Title.Contains(term) || b.Author.Contains(term))
                 .OrderBy(b => b.Title)
@@ -140,7 +143,7 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
                     BookId: book.Id,
                     Title: book.Title,
                     Author: book.Author,
-                    CopyCount: book.Copies.Count,
+                    CopyCount: book.Editions.SelectMany(e => e.Copies).Count(),
                     CoverUrl: book.DefaultCoverArtUrl,
                     SeriesInfo: seriesInfo);
             }
@@ -155,7 +158,7 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
                     CoverUrl: null,
                     SeriesInfo: null,
                     MultipleResults: books.Select(b => new SearchResultItem(
-                        b.Id, b.Title, b.Author, b.Copies.Count, b.DefaultCoverArtUrl
+                        b.Id, b.Title, b.Author, b.Editions.SelectMany(e => e.Copies).Count(), b.DefaultCoverArtUrl
                     )).ToList());
             }
             else
@@ -180,7 +183,8 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var book = await db.Books
-            .Include(b => b.Copies)
+            .Include(b => b.Editions)
+                .ThenInclude(e => e.Copies)
             .Include(b => b.Series)
             .FirstOrDefaultAsync(b => b.Id == bookId);
 
@@ -192,7 +196,7 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             BookId: book.Id,
             Title: book.Title,
             Author: book.Author,
-            CopyCount: book.Copies.Count,
+            CopyCount: book.Editions.SelectMany(e => e.Copies).Count(),
             CoverUrl: book.DefaultCoverArtUrl,
             SeriesInfo: seriesInfo);
     }
@@ -311,16 +315,16 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             Title = item.Title,
             Author = item.Author,
             Tags = [followUpTag],
-            Copies = []
+            Editions = []
         };
 
         if (!string.IsNullOrWhiteSpace(item.Isbn))
         {
-            book.Copies.Add(new BookCopy
+            book.Editions.Add(new Edition
             {
                 Isbn = item.Isbn,
                 Format = BookFormat.Softcopy,
-                Condition = BookCondition.Good
+                Copies = [new Copy { Condition = BookCondition.Good }]
             });
         }
 
