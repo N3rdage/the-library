@@ -9,6 +9,7 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
     public DbSet<BookCopy> BookCopies => Set<BookCopy>();
     public DbSet<Genre> Genres => Set<Genre>();
     public DbSet<Publisher> Publishers => Set<Publisher>();
+    public DbSet<Series> Series => Set<Series>();
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<WishlistItem> WishlistItems => Set<WishlistItem>();
 
@@ -42,6 +43,16 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
         modelBuilder.Entity<Publisher>()
             .HasIndex(p => p.Name)
             .IsUnique();
+
+        modelBuilder.Entity<Series>()
+            .HasIndex(s => s.Name)
+            .IsUnique();
+
+        modelBuilder.Entity<Book>()
+            .HasOne(b => b.Series)
+            .WithMany(s => s.Books)
+            .HasForeignKey(b => b.SeriesId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder.Entity<Tag>()
             .HasIndex(t => t.Name)

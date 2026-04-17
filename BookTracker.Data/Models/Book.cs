@@ -47,4 +47,10 @@ public class Book
     public List<BookCopy> Copies { get; set; } = [];
 
     public List<Tag> Tags { get; set; } = [];
+
+    public int? SeriesId { get; set; }
+    public Series? Series { get; set; }
+
+    /// <summary>Position in a Series (1-based). Defaults to publication order for Collections.</summary>
+    public int? SeriesOrder { get; set; }
 }
