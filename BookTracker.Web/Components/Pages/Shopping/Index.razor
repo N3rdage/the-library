@@ -236,6 +236,105 @@
     </div>
 </div>
 
+@* Shopping list — books you're looking for *@
+<div class="card mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h2 class="h5 mb-0">Shopping list</h2>
+        <div class="d-flex gap-2">
+            @if (VM.ShoppingListLoaded)
+            {
+                <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => VM.ShowingQuickAdd = !VM.ShowingQuickAdd">
+                    @(VM.ShowingQuickAdd ? "Cancel" : "Add item")
+                </button>
+            }
+            else
+            {
+                <button type="button" class="btn btn-outline-primary btn-sm" @onclick="VM.LoadShoppingListAsync">
+                    Load list
+                </button>
+            }
+        </div>
+    </div>
+    <div class="card-body">
+        @if (!VM.ShoppingListLoaded)
+        {
+            <p class="text-muted small mb-0">Tap "Load list" to see books you're looking for.</p>
+        }
+        else
+        {
+            @if (VM.ShowingQuickAdd)
+            {
+                <div class="p-3 bg-light rounded mb-3">
+                    <div class="row g-2">
+                        <div class="col-12 col-md-4">
+                            <input type="text" class="form-control form-control-sm" placeholder="Title" @bind="VM.QuickAdd.Title" />
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <input type="text" class="form-control form-control-sm" placeholder="Author" @bind="VM.QuickAdd.Author" />
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <input type="text" class="form-control form-control-sm" placeholder="ISBN (optional)" @bind="VM.QuickAdd.Isbn" />
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <select class="form-select form-select-sm" @bind="VM.QuickAdd.Priority">
+                                @foreach (var p in Enum.GetValues<WishlistPriority>())
+                                {
+                                    <option value="@p">@p</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-1">
+                            <button type="button" class="btn btn-success btn-sm w-100" @onclick="VM.AddToShoppingListAsync">Add</button>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if (VM.ShoppingList.Count == 0)
+            {
+                <p class="text-muted small mb-0">Your shopping list is empty.</p>
+            }
+            else
+            {
+                @foreach (var item in VM.ShoppingList)
+                {
+                    <div class="d-flex gap-3 align-items-center py-2 @(item != VM.ShoppingList.Last() ? "border-bottom" : "")">
+                        <div class="flex-grow-1 min-width-0">
+                            <div class="fw-semibold text-truncate">@item.Title</div>
+                            <div class="text-muted small">@item.Author</div>
+                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                <span class="badge @ShoppingViewModel.PriorityBadgeClass(item.Priority)">@item.Priority</span>
+                                @if (item.Isbn is not null)
+                                {
+                                    <span class="badge bg-light text-dark border font-monospace">@item.Isbn</span>
+                                }
+                                @if (item.SeriesName is not null)
+                                {
+                                    <span class="badge bg-light text-dark border">
+                                        @item.SeriesName
+                                        @if (item.SeriesOrder.HasValue)
+                                        {
+                                            <span> #@item.SeriesOrder</span>
+                                        }
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                        <div class="d-flex flex-column gap-1 flex-shrink-0">
+                            <button type="button" class="btn btn-success btn-sm" @onclick="() => BoughtAsync(item)" title="Mark as bought — adds to library with follow-up tag">
+                                Bought
+                            </button>
+                            <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => VM.RemoveFromShoppingListAsync(item.Id)" title="Remove from list">
+                                Remove
+                            </button>
+                        </div>
+                    </div>
+                }
+            }
+        }
+    </div>
+</div>
+
 @code {
     private bool scannerActive;
     private string? scannerError;
@@ -261,6 +360,15 @@
         else
         {
             await VM.SearchByTextAsync();
+        }
+    }
+
+    private async Task BoughtAsync(ShoppingViewModel.ShoppingListItem item)
+    {
+        var bookId = await VM.MarkAsBoughtAsync(item);
+        if (bookId.HasValue)
+        {
+            Nav.NavigateTo($"/books/{bookId}/edit");
         }
     }
 

@@ -229,6 +229,133 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
 
     public record SeriesInfo(int SeriesId, string SeriesName, SeriesType Type, int OwnedCount, int? ExpectedCount);
 
+    // Shopping list (wishlist)
+    public List<ShoppingListItem> ShoppingList { get; private set; } = [];
+    public bool ShoppingListLoaded { get; private set; }
+    public bool ShowingQuickAdd { get; set; }
+    public QuickAddInput QuickAdd { get; set; } = new();
+
+    public async Task LoadShoppingListAsync()
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        ShoppingList = await db.WishlistItems
+            .Include(w => w.Series)
+            .OrderByDescending(w => w.Priority)
+            .ThenBy(w => w.Title)
+            .Select(w => new ShoppingListItem(
+                w.Id, w.Title, w.Author, w.Priority, w.Isbn,
+                w.Series != null ? w.Series.Name : null,
+                w.SeriesOrder))
+            .ToListAsync();
+        ShoppingListLoaded = true;
+    }
+
+    public async Task AddToShoppingListAsync()
+    {
+        if (string.IsNullOrWhiteSpace(QuickAdd.Title)) return;
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var item = new WishlistItem
+        {
+            Title = QuickAdd.Title.Trim(),
+            Author = string.IsNullOrWhiteSpace(QuickAdd.Author) ? "Unknown" : QuickAdd.Author.Trim(),
+            Priority = QuickAdd.Priority,
+            Isbn = string.IsNullOrWhiteSpace(QuickAdd.Isbn) ? null : QuickAdd.Isbn.Trim()
+        };
+
+        db.WishlistItems.Add(item);
+        await db.SaveChangesAsync();
+
+        ShoppingList.Insert(0, new ShoppingListItem(
+            item.Id, item.Title, item.Author, item.Priority, item.Isbn, null, null));
+        // Re-sort by priority
+        ShoppingList = ShoppingList
+            .OrderByDescending(i => i.Priority)
+            .ThenBy(i => i.Title)
+            .ToList();
+
+        QuickAdd = new();
+        ShowingQuickAdd = false;
+    }
+
+    public async Task RemoveFromShoppingListAsync(int itemId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var item = await db.WishlistItems.FindAsync(itemId);
+        if (item is not null)
+        {
+            db.WishlistItems.Remove(item);
+            await db.SaveChangesAsync();
+        }
+        ShoppingList.RemoveAll(i => i.Id == itemId);
+    }
+
+    /// <summary>
+    /// Marks a wishlist item as "bought" — creates a Book + BookCopy with
+    /// follow-up tag and default values, then removes the wishlist item.
+    /// Returns the new book ID for navigation.
+    /// </summary>
+    public async Task<int?> MarkAsBoughtAsync(ShoppingListItem item)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+
+        var followUpTag = await db.Tags.FirstOrDefaultAsync(t => t.Name == "follow-up");
+        if (followUpTag is null)
+        {
+            followUpTag = new Tag { Name = "follow-up" };
+            db.Tags.Add(followUpTag);
+        }
+
+        var book = new Book
+        {
+            Title = item.Title,
+            Author = item.Author,
+            Tags = [followUpTag],
+            Copies = []
+        };
+
+        if (!string.IsNullOrWhiteSpace(item.Isbn))
+        {
+            book.Copies.Add(new BookCopy
+            {
+                Isbn = item.Isbn,
+                Format = BookFormat.Softcopy,
+                Condition = BookCondition.Good
+            });
+        }
+
+        db.Books.Add(book);
+
+        var wishlistItem = await db.WishlistItems.FindAsync(item.Id);
+        if (wishlistItem is not null)
+            db.WishlistItems.Remove(wishlistItem);
+
+        await db.SaveChangesAsync();
+
+        ShoppingList.RemoveAll(i => i.Id == item.Id);
+        return book.Id;
+    }
+
+    public static string PriorityBadgeClass(WishlistPriority p) => p switch
+    {
+        WishlistPriority.High => "bg-danger",
+        WishlistPriority.Medium => "bg-warning text-dark",
+        WishlistPriority.Low => "bg-secondary",
+        _ => "bg-light text-dark"
+    };
+
+    public class QuickAddInput
+    {
+        public string? Title { get; set; }
+        public string? Author { get; set; }
+        public string? Isbn { get; set; }
+        public WishlistPriority Priority { get; set; } = WishlistPriority.Medium;
+    }
+
+    public record ShoppingListItem(
+        int Id, string Title, string Author, WishlistPriority Priority,
+        string? Isbn, string? SeriesName, int? SeriesOrder);
+
     public record SeriesGap(
         int SeriesId, string SeriesName, string? Author,
         int OwnedCount, int ExpectedCount,
