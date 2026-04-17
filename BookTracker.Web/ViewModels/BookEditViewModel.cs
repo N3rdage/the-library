@@ -27,6 +27,11 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     public CopyEditInput EditCopyInput { get; set; } = new();
     public int? ConfirmingDeleteCopyId { get; set; }
 
+    // Series
+    public int? SelectedSeriesId { get; set; }
+    public int? SeriesOrder { get; set; }
+    public List<SeriesOption> AvailableSeries { get; private set; } = [];
+
     // Book deletion
     public bool ConfirmingDeleteBook { get; set; }
     public bool Deleting { get; private set; }
@@ -64,7 +69,20 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         AssignedTags = book.Tags.Select(t => new TagItem(t.Id, t.Name)).ToList();
         Copies = book.Copies.Select(c => new CopyRow(c.Id, c.Isbn, c.Format, c.Condition, c.Publisher?.Name, c.DatePrinted, c.CustomCoverArtUrl)).ToList();
 
+        SelectedSeriesId = book.SeriesId;
+        SeriesOrder = book.SeriesOrder;
+
         await LoadAvailableTagsAsync();
+        await LoadAvailableSeriesAsync();
+    }
+
+    public async Task LoadAvailableSeriesAsync()
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        AvailableSeries = await db.Series
+            .OrderBy(s => s.Name)
+            .Select(s => new SeriesOption(s.Id, s.Name, s.Type))
+            .ToListAsync();
     }
 
     public async Task LoadAvailableTagsAsync()
@@ -277,6 +295,9 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             book.Tags.Clear();
             book.Tags.AddRange(selectedTags);
 
+            book.SeriesId = SelectedSeriesId;
+            book.SeriesOrder = SelectedSeriesId.HasValue ? SeriesOrder : null;
+
             await db.SaveChangesAsync();
             SuccessMessage = "Book saved successfully.";
         }
@@ -286,6 +307,7 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         }
     }
 
+    public record SeriesOption(int Id, string Name, SeriesType Type);
     public record TagItem(int Id, string Name);
     public record CopyRow(int Id, string Isbn, BookFormat Format, BookCondition Condition, string? PublisherName, DateOnly? DatePrinted, string? CustomCoverArtUrl);
 
