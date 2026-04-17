@@ -170,6 +170,72 @@
     </div>
 }
 
+@* Series gaps — incomplete series where you're missing books *@
+<div class="card mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h2 class="h5 mb-0">Series gaps</h2>
+        @if (!VM.GapsLoaded)
+        {
+            <button type="button" class="btn btn-outline-primary btn-sm" @onclick="VM.LoadSeriesGapsAsync">
+                Check gaps
+            </button>
+        }
+    </div>
+    <div class="card-body">
+        @if (!VM.GapsLoaded)
+        {
+            <p class="text-muted small mb-0">Tap "Check gaps" to see which numbered series you're missing books from.</p>
+        }
+        else if (VM.SeriesGaps.Count == 0)
+        {
+            <p class="text-muted small mb-0">No gaps found — all your numbered series are complete!</p>
+        }
+        else
+        {
+            @foreach (var gap in VM.SeriesGaps)
+            {
+                <div class="mb-3 @(gap != VM.SeriesGaps.Last() ? "pb-3 border-bottom" : "")">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <a href="@($"/series/{gap.SeriesId}")" class="fw-semibold text-decoration-none">@gap.SeriesName</a>
+                            @if (gap.Author is not null)
+                            {
+                                <span class="text-muted small ms-1">by @gap.Author</span>
+                            }
+                        </div>
+                        <span class="badge bg-warning text-dark">@gap.OwnedCount / @gap.ExpectedCount</span>
+                    </div>
+                    @if (gap.MissingPositions.Count > 0)
+                    {
+                        <div class="mt-1 small">
+                            <span class="text-muted">Missing:</span>
+                            @foreach (var pos in gap.MissingPositions)
+                            {
+                                <span class="badge bg-danger me-1">#@pos</span>
+                            }
+                        </div>
+                    }
+                    <details class="mt-1">
+                        <summary class="small text-muted" style="cursor: pointer;">You have @gap.OwnedBooks.Count books</summary>
+                        <ul class="list-unstyled small mt-1 mb-0 ms-2">
+                            @foreach (var book in gap.OwnedBooks)
+                            {
+                                <li>
+                                    @if (book.SeriesOrder.HasValue)
+                                    {
+                                        <span class="text-muted">#@book.SeriesOrder</span>
+                                    }
+                                    <a href="@($"/books/{book.Id}/edit")" class="text-decoration-none">@book.Title</a>
+                                </li>
+                            }
+                        </ul>
+                    </details>
+                </div>
+            }
+        }
+    </div>
+</div>
+
 @code {
     private bool scannerActive;
     private string? scannerError;
