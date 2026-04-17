@@ -102,6 +102,81 @@ public class AIAssistantViewModel(
         GenreError = null;
     }
 
+    // Collection cataloguing
+    public CollectionSuggestionResult? CollectionSuggestion { get; private set; }
+    public bool SuggestingCollections { get; private set; }
+    public string? CollectionError { get; private set; }
+
+    public async Task SuggestCollectionsAsync()
+    {
+        SuggestingCollections = true;
+        CollectionSuggestion = null;
+        CollectionError = null;
+
+        try
+        {
+            CollectionSuggestion = await aiService.SuggestCollectionsAsync();
+        }
+        catch (Exception ex)
+        {
+            CollectionError = $"AI request failed: {ex.Message}";
+        }
+        finally
+        {
+            SuggestingCollections = false;
+        }
+    }
+
+    public async Task CreateCollectionFromSuggestionAsync(CollectionGrouping grouping)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+
+        var seriesType = grouping.Type.Equals("Series", StringComparison.OrdinalIgnoreCase)
+            ? SeriesType.Series
+            : SeriesType.Collection;
+
+        // Check if series already exists
+        var existing = await db.Series.FirstOrDefaultAsync(s => s.Name == grouping.SuggestedName);
+        if (existing is not null) return;
+
+        var series = new Series
+        {
+            Name = grouping.SuggestedName,
+            Type = seriesType,
+            Description = grouping.Reasoning
+        };
+
+        // Try to set the author if all books share the same one
+        var matchedBooks = await db.Books
+            .Where(b => grouping.BookTitles.Contains(b.Title))
+            .ToListAsync();
+
+        var authors = matchedBooks.Select(b => b.Author).Distinct().ToList();
+        if (authors.Count == 1)
+            series.Author = authors[0];
+
+        db.Series.Add(series);
+        await db.SaveChangesAsync();
+
+        // Assign books to the series
+        var order = 1;
+        foreach (var book in matchedBooks)
+        {
+            if (book.SeriesId is null)
+            {
+                book.SeriesId = series.Id;
+                book.SeriesOrder = order++;
+            }
+        }
+        await db.SaveChangesAsync();
+    }
+
+    public void DismissCollections()
+    {
+        CollectionSuggestion = null;
+        CollectionError = null;
+    }
+
     public record BookGenreRow(
         int Id, string Title, string? Subtitle, string Author,
         List<string> CurrentGenres);
