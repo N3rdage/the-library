@@ -12,6 +12,54 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     public LookupResult? Result { get; private set; }
     public bool Searching { get; private set; }
 
+    // Series gaps
+    public List<SeriesGap> SeriesGaps { get; private set; } = [];
+    public bool GapsLoaded { get; private set; }
+
+    public async Task LoadSeriesGapsAsync()
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+
+        // Structured series with a known expected count where we're missing books
+        var incompleteSeries = await db.Series
+            .Include(s => s.Books)
+            .Where(s => s.Type == SeriesType.Series && s.ExpectedCount != null)
+            .ToListAsync();
+
+        SeriesGaps = incompleteSeries
+            .Where(s => s.Books.Count < s.ExpectedCount!.Value)
+            .OrderBy(s => s.Name)
+            .Select(s =>
+            {
+                var ownedPositions = s.Books
+                    .Where(b => b.SeriesOrder.HasValue)
+                    .Select(b => b.SeriesOrder!.Value)
+                    .OrderBy(n => n)
+                    .ToList();
+
+                var missing = new List<int>();
+                for (int i = 1; i <= s.ExpectedCount!.Value; i++)
+                {
+                    if (!ownedPositions.Contains(i))
+                        missing.Add(i);
+                }
+
+                return new SeriesGap(
+                    s.Id,
+                    s.Name,
+                    s.Author,
+                    s.Books.Count,
+                    s.ExpectedCount.Value,
+                    missing,
+                    s.Books.OrderBy(b => b.SeriesOrder ?? int.MaxValue)
+                        .Select(b => new OwnedSeriesBook(b.Id, b.Title, b.SeriesOrder))
+                        .ToList());
+            })
+            .ToList();
+
+        GapsLoaded = true;
+    }
+
     public void ClearResult()
     {
         Result = null;
@@ -180,4 +228,12 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     public record SearchResultItem(int Id, string Title, string Author, int CopyCount, string? CoverUrl);
 
     public record SeriesInfo(int SeriesId, string SeriesName, SeriesType Type, int OwnedCount, int? ExpectedCount);
+
+    public record SeriesGap(
+        int SeriesId, string SeriesName, string? Author,
+        int OwnedCount, int ExpectedCount,
+        List<int> MissingPositions,
+        List<OwnedSeriesBook> OwnedBooks);
+
+    public record OwnedSeriesBook(int Id, string Title, int? SeriesOrder);
 }
