@@ -19,7 +19,8 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
 
     // Editions & Copies
     public List<EditionCopyRow> EditionCopies { get; private set; } = [];
-    public bool ShowingNewCopy { get; set; }
+    public bool ShowingNewEdition { get; set; }
+    public EditionFormViewModel.EditionFormInput NewEditionInput { get; set; } = new();
     public CopyFormViewModel.CopyFormInput NewCopyInput { get; set; } = new();
 
     // Inline edition/copy editing
@@ -136,20 +137,21 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         }
     }
 
-    public void ShowAddCopy()
+    public void ShowAddEdition()
     {
+        NewEditionInput = new EditionFormViewModel.EditionFormInput();
         NewCopyInput = new CopyFormViewModel.CopyFormInput();
-        ShowingNewCopy = true;
+        ShowingNewEdition = true;
     }
 
-    public async Task SaveNewCopyAsync(int bookId)
+    public async Task SaveNewEditionAsync(int bookId)
     {
-        if (string.IsNullOrWhiteSpace(NewCopyInput.Isbn)) return;
+        if (string.IsNullOrWhiteSpace(NewEditionInput.Isbn)) return;
 
         await using var db = await dbFactory.CreateDbContextAsync();
 
         Publisher? publisher = null;
-        var pubName = NewCopyInput.Publisher?.Trim();
+        var pubName = NewEditionInput.Publisher?.Trim();
         if (!string.IsNullOrEmpty(pubName))
         {
             publisher = await db.Publishers.FirstOrDefaultAsync(p => p.Name == pubName);
@@ -163,11 +165,11 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         var edition = new Edition
         {
             BookId = bookId,
-            Isbn = NewCopyInput.Isbn.Trim(),
-            Format = NewCopyInput.Format,
-            DatePrinted = NewCopyInput.DatePrinted,
+            Isbn = NewEditionInput.Isbn.Trim(),
+            Format = NewEditionInput.Format,
+            DatePrinted = NewEditionInput.DatePrinted,
             Publisher = publisher,
-            CoverUrl = string.IsNullOrWhiteSpace(NewCopyInput.CustomCoverArtUrl) ? null : NewCopyInput.CustomCoverArtUrl.Trim(),
+            CoverUrl = string.IsNullOrWhiteSpace(NewEditionInput.CoverUrl) ? null : NewEditionInput.CoverUrl.Trim(),
             Copies = [new Copy { Condition = NewCopyInput.Condition }]
         };
 
@@ -178,7 +180,7 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         EditionCopies.Add(new EditionCopyRow(
             edition.Id, copy.Id, edition.Isbn, edition.Format, copy.Condition,
             publisher?.Name, edition.DatePrinted, edition.CoverUrl, copy.Notes, copy.DateAcquired));
-        ShowingNewCopy = false;
+        ShowingNewEdition = false;
     }
 
     public void StartEditCopy(EditionCopyRow row)

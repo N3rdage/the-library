@@ -11,6 +11,7 @@ public class BookAddViewModel(
     SeriesMatchService seriesMatch)
 {
     public BookFormViewModel.BookFormInput BookInput { get; set; } = new();
+    public EditionFormViewModel.EditionFormInput EditionInput { get; set; } = new();
     public CopyFormViewModel.CopyFormInput CopyInput { get; set; } = new();
     public List<string> LookupCandidates { get; private set; } = [];
 
@@ -45,9 +46,9 @@ public class BookAddViewModel(
             if (string.IsNullOrWhiteSpace(BookInput.Subtitle)) BookInput.Subtitle = result.Subtitle;
             if (string.IsNullOrWhiteSpace(BookInput.Author)) BookInput.Author = result.Author ?? "";
             if (string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl)) BookInput.DefaultCoverArtUrl = result.CoverUrl;
-            if (string.IsNullOrWhiteSpace(CopyInput.Isbn)) CopyInput.Isbn = result.Isbn;
-            if (string.IsNullOrWhiteSpace(CopyInput.Publisher)) CopyInput.Publisher = result.Publisher;
-            CopyInput.DatePrinted ??= result.DatePrinted;
+            if (string.IsNullOrWhiteSpace(EditionInput.Isbn)) EditionInput.Isbn = result.Isbn;
+            if (string.IsNullOrWhiteSpace(EditionInput.Publisher)) EditionInput.Publisher = result.Publisher;
+            EditionInput.DatePrinted ??= result.DatePrinted;
 
             LookupCandidates = result.GenreCandidates.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             genrePicker.LookupCandidates = LookupCandidates;
@@ -76,7 +77,7 @@ public class BookAddViewModel(
                 .ToListAsync();
 
             Publisher? publisher = null;
-            var publisherName = CopyInput.Publisher?.Trim();
+            var publisherName = EditionInput.Publisher?.Trim();
             if (!string.IsNullOrEmpty(publisherName))
             {
                 publisher = await db.Publishers.FirstOrDefaultAsync(p => p.Name == publisherName);
@@ -102,11 +103,11 @@ public class BookAddViewModel(
                 [
                     new Edition
                     {
-                        Isbn = CopyInput.Isbn!.Trim(),
-                        Format = CopyInput.Format,
-                        DatePrinted = CopyInput.DatePrinted,
+                        Isbn = EditionInput.Isbn!.Trim(),
+                        Format = EditionInput.Format,
+                        DatePrinted = EditionInput.DatePrinted,
                         Publisher = publisher,
-                        CoverUrl = string.IsNullOrWhiteSpace(CopyInput.CustomCoverArtUrl) ? null : CopyInput.CustomCoverArtUrl.Trim(),
+                        CoverUrl = string.IsNullOrWhiteSpace(EditionInput.CoverUrl) ? null : EditionInput.CoverUrl.Trim(),
                         Copies = [new Copy { Condition = CopyInput.Condition }]
                     }
                 ]
