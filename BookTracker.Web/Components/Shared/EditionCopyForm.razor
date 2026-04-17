@@ -1,4 +1,4 @@
-@inject CopyFormViewModel VM
+@inject EditionFormViewModel EditionVM
 
 <div class="card">
     <div class="card-header bg-white"><h2 class="h5 mb-0">@Title</h2></div>
@@ -6,12 +6,12 @@
         <div class="row g-3">
             <div class="col-md-4">
                 <label class="form-label">ISBN</label>
-                <InputText @bind-Value="Input.Isbn" class="form-control" />
-                <ValidationMessage For="() => Input.Isbn" class="text-danger small" />
+                <InputText @bind-Value="EditionInput.Isbn" class="form-control" />
+                <ValidationMessage For="() => EditionInput.Isbn" class="text-danger small" />
             </div>
             <div class="col-md-2">
                 <label class="form-label">Format</label>
-                <InputSelect @bind-Value="Input.Format" class="form-select">
+                <InputSelect @bind-Value="EditionInput.Format" class="form-select">
                     @foreach (var f in Enum.GetValues<BookFormat>())
                     {
                         <option value="@f">@f</option>
@@ -20,11 +20,11 @@
             </div>
             <div class="col-md-3">
                 <label class="form-label">Date printed</label>
-                <InputDate @bind-Value="Input.DatePrinted" class="form-control" />
+                <InputDate @bind-Value="EditionInput.DatePrinted" class="form-control" />
             </div>
             <div class="col-md-3">
                 <label class="form-label">Condition</label>
-                <InputSelect @bind-Value="Input.Condition" class="form-select">
+                <InputSelect @bind-Value="CopyInput.Condition" class="form-select">
                     @foreach (var c in Enum.GetValues<BookCondition>())
                     {
                         <option value="@c">@CopyFormViewModel.FormatCondition(c)</option>
@@ -33,17 +33,17 @@
             </div>
             <div class="col-md-6">
                 <label class="form-label">Publisher</label>
-                <InputText @bind-Value="Input.Publisher" class="form-control" list="@publisherDatalistId" placeholder="Penguin Books" />
+                <InputText @bind-Value="EditionInput.Publisher" class="form-control" list="@publisherDatalistId" placeholder="Penguin Books" />
                 <datalist id="@publisherDatalistId">
-                    @foreach (var p in VM.ExistingPublishers)
+                    @foreach (var p in EditionVM.ExistingPublishers)
                     {
                         <option value="@p.Name"></option>
                     }
                 </datalist>
             </div>
-            <div class="col-12">
-                <label class="form-label">Custom cover for this copy (optional)</label>
-                <InputText @bind-Value="Input.CustomCoverArtUrl" class="form-control" placeholder="Overrides the book's default cover" />
+            <div class="col-md-6">
+                <label class="form-label">Edition cover URL (optional)</label>
+                <InputText @bind-Value="EditionInput.CoverUrl" class="form-control" placeholder="Overrides the book's default cover" />
             </div>
         </div>
     </div>
@@ -51,15 +51,18 @@
 
 @code {
     [Parameter, EditorRequired]
-    public CopyFormViewModel.CopyFormInput Input { get; set; } = default!;
+    public EditionFormViewModel.EditionFormInput EditionInput { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public CopyFormViewModel.CopyFormInput CopyInput { get; set; } = default!;
 
     [Parameter]
-    public string Title { get; set; } = "Copy";
+    public string Title { get; set; } = "Edition & Copy";
 
     private string publisherDatalistId = $"publisher-options-{Guid.NewGuid():N}";
 
     protected override async Task OnInitializedAsync()
     {
-        await VM.InitializeAsync();
+        await EditionVM.InitializeAsync();
     }
 }
