@@ -29,6 +29,19 @@
                     {
                         <div class="alert alert-info mt-3 mb-0 py-2">@VM.LookupMessage</div>
                     }
+                    @if (VM.SeriesSuggestion is not null && !VM.SeriesSuggestionDismissed)
+                    {
+                        <div class="alert alert-warning mt-3 mb-0 py-2 d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>Series suggestion:</strong> @VM.SeriesSuggestion.Message
+                                @if (VM.SeriesSuggestion.SeriesId.HasValue)
+                                {
+                                    <span> &mdash; <a href="@($"/series/{VM.SeriesSuggestion.SeriesId}")">View series</a></span>
+                                }
+                            </div>
+                            <button type="button" class="btn-close btn-close-sm ms-2" @onclick="() => VM.SeriesSuggestionDismissed = true" aria-label="Dismiss"></button>
+                        </div>
+                    }
                 </div>
             </div>
         </div>

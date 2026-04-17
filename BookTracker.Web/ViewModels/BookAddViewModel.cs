@@ -7,7 +7,8 @@ namespace BookTracker.Web.ViewModels;
 
 public class BookAddViewModel(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
-    IBookLookupService lookup)
+    IBookLookupService lookup,
+    SeriesMatchService seriesMatch)
 {
     public BookFormViewModel.BookFormInput BookInput { get; set; } = new();
     public CopyFormViewModel.CopyFormInput CopyInput { get; set; } = new();
@@ -17,6 +18,9 @@ public class BookAddViewModel(
     public string? LookupMessage { get; private set; }
     public bool LookingUp { get; private set; }
     public bool Saving { get; private set; }
+
+    public SeriesMatch? SeriesSuggestion { get; private set; }
+    public bool SeriesSuggestionDismissed { get; set; }
 
     public async Task LookupAsync(GenrePickerViewModel genrePicker)
     {
@@ -50,6 +54,9 @@ public class BookAddViewModel(
             genrePicker.ApplyLookupCandidates(LookupCandidates);
 
             LookupMessage = $"Prefilled from {result.Source}. Edit anything before saving.";
+
+            SeriesSuggestion = await seriesMatch.FindMatchAsync(result.Title, result.Author);
+            SeriesSuggestionDismissed = false;
         }
         finally
         {

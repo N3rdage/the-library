@@ -120,6 +120,7 @@
                                     {
                                         @(row.Title ?? "\u2014")
                                     }
+                                    @RenderSeriesSuggestion(row)
                                 </td>
                                 <td>@(row.Author ?? "\u2014")</td>
                                 <td>
@@ -178,6 +179,7 @@
                             <div class="mt-2">
                                 @RenderActions(row)
                             </div>
+                            @RenderSeriesSuggestion(row)
                         </div>
                     </div>
                 </div>
@@ -330,6 +332,20 @@
                     }
                 }
                 break;
+        }
+    };
+
+    private RenderFragment RenderSeriesSuggestion(BulkAddViewModel.DiscoveryRow row) => __builder =>
+    {
+        if (row.SeriesSuggestion is not null && row.Action == BulkAddViewModel.RowAction.Pending)
+        {
+            <div class="text-warning small mt-1">
+                <strong>Series:</strong> @row.SeriesSuggestion.Message
+                @if (row.SeriesSuggestion.SeriesId.HasValue)
+                {
+                    <a href="@($"/series/{row.SeriesSuggestion.SeriesId}")" class="ms-1" target="_blank">View</a>
+                }
+            </div>
         }
     };
 
