@@ -1,0 +1,117 @@
+@page "/assistant"
+@inject AIAssistantViewModel VM
+
+<PageTitle>AI Assistant - BookTracker</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">AI Assistant</h1>
+    <span class="badge bg-light text-dark border">AI calls: @VM.CallCount</span>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h2 class="h5 mb-0">Genre cleanup</h2>
+        @if (!VM.GenresLoaded)
+        {
+            <button type="button" class="btn btn-outline-primary btn-sm" @onclick="VM.LoadBooksNeedingGenresAsync">
+                Load books
+            </button>
+        }
+    </div>
+    <div class="card-body">
+        @if (!VM.GenresLoaded)
+        {
+            <p class="text-muted small mb-0">Tap "Load books" to see books that could use better genre classification.</p>
+        }
+        else if (VM.BooksNeedingGenres.Count == 0)
+        {
+            <p class="text-muted small mb-0">All books have genres assigned.</p>
+        }
+        else
+        {
+            @foreach (var book in VM.BooksNeedingGenres)
+            {
+                <div class="py-3 @(book != VM.BooksNeedingGenres.Last() ? "border-bottom" : "")">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1 min-width-0">
+                            <div class="fw-semibold">@book.Title</div>
+                            <div class="text-muted small">@book.Author</div>
+                            <div class="mt-1 d-flex flex-wrap gap-1">
+                                @if (book.CurrentGenres.Count == 0)
+                                {
+                                    <span class="badge bg-danger">No genres</span>
+                                }
+                                else
+                                {
+                                    @foreach (var genre in book.CurrentGenres)
+                                    {
+                                        <span class="badge bg-light text-dark border">@genre</span>
+                                    }
+                                }
+                            </div>
+                        </div>
+                        <div class="flex-shrink-0 ms-2">
+                            @if (VM.SuggestingForBookId == book.Id)
+                            {
+                                <button type="button" class="btn btn-outline-primary btn-sm" disabled>
+                                    <span class="spinner-border spinner-border-sm" role="status"></span>
+                                </button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => VM.SuggestGenresForBookAsync(book.Id)">
+                                    Suggest
+                                </button>
+                            }
+                        </div>
+                    </div>
+
+                    @if (VM.SuggestedBookId == book.Id && VM.CurrentSuggestion is not null)
+                    {
+                        <div class="mt-2 p-3 bg-light rounded">
+                            <div class="small fw-semibold mb-1">AI suggests:</div>
+                            <div class="d-flex flex-wrap gap-1 mb-2">
+                                @foreach (var genre in VM.CurrentSuggestion.SuggestedGenres)
+                                {
+                                    var isNew = !book.CurrentGenres.Contains(genre);
+                                    <span class="badge @(isNew ? "bg-success" : "bg-light text-dark border")">
+                                        @genre @(isNew ? "(new)" : "")
+                                    </span>
+                                }
+                            </div>
+                            @if (!string.IsNullOrEmpty(VM.CurrentSuggestion.Reasoning))
+                            {
+                                <div class="text-muted small mb-2">@VM.CurrentSuggestion.Reasoning</div>
+                            }
+                            <div class="d-flex gap-2">
+                                @{
+                                    var newGenres = VM.CurrentSuggestion.SuggestedGenres
+                                        .Where(g => !book.CurrentGenres.Contains(g)).ToList();
+                                }
+                                @if (newGenres.Count > 0)
+                                {
+                                    <button type="button" class="btn btn-success btn-sm"
+                                            @onclick="() => VM.AcceptGenreSuggestionsAsync(book.Id, newGenres)">
+                                        Accept @newGenres.Count new
+                                    </button>
+                                    <button type="button" class="btn btn-outline-success btn-sm"
+                                            @onclick="() => VM.AcceptGenreSuggestionsAsync(book.Id, VM.CurrentSuggestion.SuggestedGenres)">
+                                        Accept all
+                                    </button>
+                                }
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="VM.DismissSuggestion">
+                                    Dismiss
+                                </button>
+                            </div>
+                        </div>
+                    }
+
+                    @if (VM.SuggestedBookId == book.Id && VM.GenreError is not null)
+                    {
+                        <div class="alert alert-warning mt-2 py-2 small mb-0">@VM.GenreError</div>
+                    }
+                </div>
+            }
+        }
+    </div>
+</div>
