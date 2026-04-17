@@ -14,7 +14,7 @@ window.BarcodeScanner = {
 
         const config = {
             fps: 10,
-            qrbox: { width: 250, height: 150 },
+            qrbox: { width: 280, height: 80 },
             formatsToSupport: [
                 Html5QrcodeSupportedFormats.EAN_13,
                 Html5QrcodeSupportedFormats.EAN_8
