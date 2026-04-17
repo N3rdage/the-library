@@ -48,3 +48,40 @@ body {
   font-size: 2rem;
   line-height: 1;
 }
+
+/* Book list — mobile card layout */
+.book-card-mobile {
+  border-bottom: 1px solid #e9ecef;
+  padding: 0.75rem 0;
+  cursor: pointer;
+}
+
+.book-card-mobile:last-child {
+  border-bottom: none;
+}
+
+.book-card-mobile:active {
+  background: #f8f9fa;
+}
+
+/* Discovery grid — mobile card layout */
+.discovery-card {
+  border-bottom: 1px solid #e9ecef;
+  padding: 0.75rem 0;
+}
+
+.discovery-card:last-child {
+  border-bottom: none;
+}
+
+/* Barcode scanner — responsive container */
+.scanner-container {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+@media (max-width: 767.98px) {
+  .scanner-container {
+    max-width: 100%;
+  }
+}
