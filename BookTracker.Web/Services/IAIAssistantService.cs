@@ -18,6 +18,12 @@ public interface IAIAssistantService
     /// </summary>
     Task<ShoppingSuggestionResult> SuggestShoppingListAsync(CancellationToken ct = default);
 
+    /// <summary>
+    /// Assesses whether a specific book or author would be a good fit for the reader
+    /// based on their library, tastes, and reading patterns. Uses the deep model (Opus).
+    /// </summary>
+    Task<BookAdvisorResult> AssessBookAsync(string query, CancellationToken ct = default);
+
     /// <summary>Number of API calls made in this service instance's lifetime.</summary>
     int CallCount { get; }
 }
@@ -45,3 +51,11 @@ public record BookRecommendation(
     string Author,
     string Reasoning,
     string? SeriesContext);
+
+public record BookAdvisorResult(
+    string Verdict,
+    int SuitabilityScore,
+    string Analysis,
+    IReadOnlyList<string> Pros,
+    IReadOnlyList<string> Cons,
+    IReadOnlyList<string> SimilarInLibrary);
