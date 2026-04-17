@@ -1,0 +1,11 @@
+- [GitHub push/PR hand-off](feedback_github_push.md) — never push branches or open PRs; tell the user to do it and wait for merge confirmation.
+- ["plan:" prefix](feedback_plan_prefix.md) — when a message starts with "plan:", propose with defaults + open questions and wait; don't execute.
+- [Drew — solo developer](user_drew.md) — context on the user, their stack (Windows/PowerShell/Azure/GitHub `N3rdage/the-library`, Gandi DNS), and collaboration style.
+- [Auto-commit locally](feedback_commit_locally.md) — always stage and commit before handing off; don't wait to be asked.
+- [Delete merged branches](feedback_delete_merged_branch.md) — delete local feature branch after pulling the merge into main.
+- [Ask about mobile priority](feedback_mobile_priority.md) — when planning features, ask if mobile+web or web-only.
+- [Feature planning conventions](feedback_planning_conventions.md) — always plan first, PR breakdown for medium+, flag 5+ file changes as complex.
+- [Testing conventions](feedback_testing_conventions.md) — minimal tests for new logic to prevent regression; skip for pure markup.
+- [Deployment safety](feedback_deployment_safety.md) — migrations must retain data; breaking changes need defaults and review tags.
+- [Performance target](project_performance_target.md) — system must handle 3000+ copies; flag designs that might struggle at scale.
+- [TODO tracking](feedback_todo_tracking.md) — all TODOs in TODO.md; "sync TODOs" reconciles memory + code + TODO.md.
