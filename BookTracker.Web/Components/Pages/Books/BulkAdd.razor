@@ -10,8 +10,22 @@
 
 <div class="card mb-4">
     <div class="card-body">
+        @* Mobile: scanner button first, full-width and prominent *@
+        <div class="d-md-none mb-3">
+            <button type="button" class="btn w-100 @(scannerActive ? "btn-danger" : "btn-primary")" @onclick="ToggleScannerAsync">
+                @if (scannerActive)
+                {
+                    <span>Stop scanner</span>
+                }
+                else
+                {
+                    <span>Scan barcode</span>
+                }
+            </button>
+        </div>
+
         <label class="form-label fw-semibold">Add ISBN</label>
-        <div class="input-group" style="max-width: 500px;">
+        <div class="input-group">
             <input type="text" class="form-control" placeholder="9780345391803" @bind="VM.IsbnInput"
                    @onkeyup="HandleIsbnKeyUp" />
             <button type="button" class="btn btn-outline-primary" @onclick="AddIsbnAsync" disabled="@string.IsNullOrWhiteSpace(VM.IsbnInput)">
@@ -19,7 +33,9 @@
             </button>
         </div>
         <div class="form-text">Type or paste an ISBN and press Enter, or scan a barcode with your camera.</div>
-        <div class="mt-3">
+
+        @* Desktop: scanner button below input, secondary style *@
+        <div class="d-none d-md-block mt-3">
             <button type="button" class="btn @(scannerActive ? "btn-danger" : "btn-outline-secondary")" @onclick="ToggleScannerAsync">
                 @if (scannerActive)
                 {
@@ -31,6 +47,7 @@
                 }
             </button>
         </div>
+
         @if (!string.IsNullOrEmpty(scannerError))
         {
             <div class="alert alert-warning mt-2 mb-0 py-2 small">@scannerError</div>
@@ -42,7 +59,7 @@
 {
     <div class="card mb-4">
         <div class="card-body text-center">
-            <div id="barcode-reader" style="max-width: 500px; margin: 0 auto;"></div>
+            <div id="barcode-reader" class="scanner-container"></div>
             <div class="form-text mt-2">Point your camera at the ISBN barcode on the back of the book.</div>
         </div>
     </div>
@@ -52,24 +69,26 @@
 {
     <div class="card mb-4">
         <div class="card-header bg-white d-flex justify-content-between align-items-center">
-            <h2 class="h5 mb-0">Discovered books (@VM.Rows.Count)</h2>
-            <div class="d-flex gap-2">
+            <h2 class="h5 mb-0">Discovered (@VM.Rows.Count)</h2>
+            <div class="d-flex gap-2 align-items-center">
                 @if (VM.Rows.Any(r => r.Status == BulkAddViewModel.RowStatus.Found && r.Action == BulkAddViewModel.RowAction.Pending))
                 {
                     <button type="button" class="btn btn-success btn-sm" @onclick="VM.AcceptAllFoundAsync">
-                        Accept all found
+                        Accept all
                     </button>
                 }
                 @if (VM.Rows.Any(r => r.Action == BulkAddViewModel.RowAction.Accepted || r.Action == BulkAddViewModel.RowAction.FollowUp))
                 {
-                    <span class="text-muted small align-self-center">
+                    <span class="text-muted small d-none d-md-inline">
                         @VM.Rows.Count(r => r.Action == BulkAddViewModel.RowAction.Accepted) accepted,
                         @VM.Rows.Count(r => r.Action == BulkAddViewModel.RowAction.FollowUp) follow-up
                     </span>
                 }
             </div>
         </div>
-        <div class="card-body p-0">
+
+        @* Desktop table *@
+        <div class="card-body p-0 d-none d-md-block">
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
@@ -88,16 +107,7 @@
                         {
                             <tr class="@BulkAddViewModel.RowCssClass(row)">
                                 <td>
-                                    @if (!string.IsNullOrWhiteSpace(row.CoverUrl))
-                                    {
-                                        <img src="@row.CoverUrl" alt="" class="rounded" style="width: 40px; height: 56px; object-fit: cover;" />
-                                    }
-                                    else
-                                    {
-                                        <div class="rounded bg-light d-flex align-items-center justify-content-center" style="width: 40px; height: 56px;">
-                                            <span class="text-muted small">--</span>
-                                        </div>
-                                    }
+                                    @RenderCover(row)
                                 </td>
                                 <td class="font-monospace small">@row.Isbn</td>
                                 <td>
@@ -108,93 +118,19 @@
                                     }
                                     else
                                     {
-                                        @(row.Title ?? "—")
+                                        @(row.Title ?? "\u2014")
                                     }
                                 </td>
-                                <td>@(row.Author ?? "—")</td>
+                                <td>@(row.Author ?? "\u2014")</td>
                                 <td>
-                                    @if (row.Status == BulkAddViewModel.RowStatus.Searching)
-                                    {
-                                        <span class="spinner-border spinner-border-sm" role="status"></span>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted small">@(row.Source ?? "—")</span>
-                                    }
+                                    @RenderSource(row)
                                 </td>
                                 <td>
-                                    @switch (row.Action)
-                                    {
-                                        case BulkAddViewModel.RowAction.Accepted:
-                                            <span class="badge bg-success">Accepted</span>
-                                            break;
-                                        case BulkAddViewModel.RowAction.FollowUp:
-                                            <span class="badge bg-warning text-dark">Follow-up</span>
-                                            break;
-                                        case BulkAddViewModel.RowAction.Duplicate:
-                                            <span class="badge bg-secondary">Duplicate</span>
-                                            break;
-                                        default:
-                                            @if (row.IsDuplicate)
-                                            {
-                                                <span class="badge bg-warning text-dark">Already in library</span>
-                                            }
-                                            else
-                                            {
-                                                switch (row.Status)
-                                                {
-                                                    case BulkAddViewModel.RowStatus.Found:
-                                                        <span class="badge bg-info text-dark">Found</span>
-                                                        break;
-                                                    case BulkAddViewModel.RowStatus.NotFound:
-                                                        <span class="badge bg-danger">Not found</span>
-                                                        break;
-                                                    case BulkAddViewModel.RowStatus.Searching:
-                                                        <span class="badge bg-light text-dark">Searching...</span>
-                                                        break;
-                                                }
-                                            }
-                                            break;
-                                    }
+                                    @RenderStatusBadge(row)
                                 </td>
                                 <td>
                                     <div class="d-flex gap-1 align-items-center">
-                                        @if (row.Action == BulkAddViewModel.RowAction.Pending)
-                                        {
-                                            @if (row.Status == BulkAddViewModel.RowStatus.Found)
-                                            {
-                                                <div class="btn-group btn-group-sm">
-                                                    @if (row.IsDuplicate)
-                                                    {
-                                                        <button type="button" class="btn btn-outline-success" @onclick="() => VM.AcceptRowAsync(row)" title="Add another copy">
-                                                            Add copy
-                                                        </button>
-                                                        <button type="button" class="btn btn-outline-secondary" @onclick="() => row.Action = BulkAddViewModel.RowAction.Duplicate" title="Skip duplicate">
-                                                            Skip
-                                                        </button>
-                                                    }
-                                                    else
-                                                    {
-                                                        <button type="button" class="btn btn-outline-success" @onclick="() => VM.AcceptRowAsync(row)">
-                                                            Accept
-                                                        </button>
-                                                    }
-                                                    <button type="button" class="btn btn-outline-warning" @onclick="() => VM.FollowUpRowAsync(row)">
-                                                        Follow-up
-                                                    </button>
-                                                </div>
-                                            }
-                                            else if (row.Status == BulkAddViewModel.RowStatus.NotFound)
-                                            {
-                                                <button type="button" class="btn btn-outline-warning btn-sm" @onclick="() => VM.FollowUpNotFoundAsync(row)">
-                                                    Add as follow-up
-                                                </button>
-                                            }
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted small">Done</span>
-                                        }
+                                        @RenderActions(row)
                                         <button type="button" class="btn btn-outline-danger btn-sm ms-1" @onclick="() => VM.RemoveRow(row)" title="Remove from grid">
                                             &times;
                                         </button>
@@ -205,6 +141,47 @@
                     </tbody>
                 </table>
             </div>
+        </div>
+
+        @* Mobile card layout *@
+        <div class="card-body d-md-none">
+            @foreach (var row in VM.Rows)
+            {
+                <div class="discovery-card">
+                    <div class="d-flex gap-3 align-items-start">
+                        <div class="flex-shrink-0">
+                            @RenderCover(row)
+                        </div>
+                        <div class="flex-grow-1 min-width-0">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="min-width-0">
+                                    @if (row.Status == BulkAddViewModel.RowStatus.NotFound && row.Action != BulkAddViewModel.RowAction.FollowUp)
+                                    {
+                                        <input type="text" class="form-control form-control-sm mb-1" placeholder="Book title..."
+                                               @bind="row.Title" />
+                                    }
+                                    else
+                                    {
+                                        <div class="fw-semibold text-truncate">@(row.Title ?? "\u2014")</div>
+                                    }
+                                    <div class="text-muted small">@(row.Author ?? "\u2014")</div>
+                                    <div class="font-monospace text-muted" style="font-size: 0.7rem;">@row.Isbn</div>
+                                </div>
+                                <button type="button" class="btn btn-outline-danger btn-sm flex-shrink-0 ms-2" @onclick="() => VM.RemoveRow(row)" title="Remove">
+                                    &times;
+                                </button>
+                            </div>
+                            <div class="mt-2 d-flex flex-wrap gap-1 align-items-center">
+                                @RenderStatusBadge(row)
+                                @RenderSource(row)
+                            </div>
+                            <div class="mt-2">
+                                @RenderActions(row)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
         </div>
     </div>
 
@@ -292,4 +269,107 @@
         }
         dotNetRef?.Dispose();
     }
+
+    private RenderFragment RenderCover(BulkAddViewModel.DiscoveryRow row) => __builder =>
+    {
+        if (!string.IsNullOrWhiteSpace(row.CoverUrl))
+        {
+            <img src="@row.CoverUrl" alt="" class="rounded" style="width: 40px; height: 56px; object-fit: cover;" />
+        }
+        else
+        {
+            <div class="rounded bg-light d-flex align-items-center justify-content-center" style="width: 40px; height: 56px;">
+                <span class="text-muted small">--</span>
+            </div>
+        }
+    };
+
+    private RenderFragment RenderSource(BulkAddViewModel.DiscoveryRow row) => __builder =>
+    {
+        if (row.Status == BulkAddViewModel.RowStatus.Searching)
+        {
+            <span class="spinner-border spinner-border-sm" role="status"></span>
+        }
+        else if (row.Source is not null)
+        {
+            <span class="text-muted small">@row.Source</span>
+        }
+    };
+
+    private RenderFragment RenderStatusBadge(BulkAddViewModel.DiscoveryRow row) => __builder =>
+    {
+        switch (row.Action)
+        {
+            case BulkAddViewModel.RowAction.Accepted:
+                <span class="badge bg-success">Accepted</span>
+                break;
+            case BulkAddViewModel.RowAction.FollowUp:
+                <span class="badge bg-warning text-dark">Follow-up</span>
+                break;
+            case BulkAddViewModel.RowAction.Duplicate:
+                <span class="badge bg-secondary">Duplicate</span>
+                break;
+            default:
+                if (row.IsDuplicate)
+                {
+                    <span class="badge bg-warning text-dark">In library</span>
+                }
+                else
+                {
+                    switch (row.Status)
+                    {
+                        case BulkAddViewModel.RowStatus.Found:
+                            <span class="badge bg-info text-dark">Found</span>
+                            break;
+                        case BulkAddViewModel.RowStatus.NotFound:
+                            <span class="badge bg-danger">Not found</span>
+                            break;
+                        case BulkAddViewModel.RowStatus.Searching:
+                            <span class="badge bg-light text-dark">Searching...</span>
+                            break;
+                    }
+                }
+                break;
+        }
+    };
+
+    private RenderFragment RenderActions(BulkAddViewModel.DiscoveryRow row) => __builder =>
+    {
+        if (row.Action == BulkAddViewModel.RowAction.Pending)
+        {
+            if (row.Status == BulkAddViewModel.RowStatus.Found)
+            {
+                <div class="btn-group btn-group-sm">
+                    @if (row.IsDuplicate)
+                    {
+                        <button type="button" class="btn btn-outline-success" @onclick="() => VM.AcceptRowAsync(row)" title="Add another copy">
+                            Add copy
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" @onclick="() => row.Action = BulkAddViewModel.RowAction.Duplicate" title="Skip duplicate">
+                            Skip
+                        </button>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn btn-outline-success" @onclick="() => VM.AcceptRowAsync(row)">
+                            Accept
+                        </button>
+                    }
+                    <button type="button" class="btn btn-outline-warning" @onclick="() => VM.FollowUpRowAsync(row)">
+                        Follow-up
+                    </button>
+                </div>
+            }
+            else if (row.Status == BulkAddViewModel.RowStatus.NotFound)
+            {
+                <button type="button" class="btn btn-outline-warning btn-sm" @onclick="() => VM.FollowUpNotFoundAsync(row)">
+                    Add as follow-up
+                </button>
+            }
+        }
+        else
+        {
+            <span class="text-muted small">Done</span>
+        }
+    };
 }

@@ -64,6 +64,10 @@ docker compose down         # stop (add -v to wipe the volume)
 
 Typical first-run loop: `docker compose up -d` → `dotnet ef database update ...` → `dotnet run --project .\BookTracker.Web`.
 
+## Mobile considerations
+
+The app is used on both desktop and mobile (phones for barcode scanning and quick library checks). When planning new features, always clarify whether the feature should be **mobile-prioritised** (responsive-first, tested at small breakpoints) or **web-only** (desktop layout sufficient). Key mobile workflows: bulk ISBN scanning, library search.
+
 ## Not yet in the repo
 
-No test project, no CI workflow, no Anthropic integration. When adding tests, create a sibling `BookTracker.Tests\` project and add it to `BookTracker.slnx`.
+No Anthropic integration. When adding tests, add them to the existing `BookTracker.Tests\` project.
