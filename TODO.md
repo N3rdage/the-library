@@ -15,6 +15,14 @@ Outstanding work items for BookTracker. This is the single source of truth — c
 - [ ] Accessibility review — screen reader support, keyboard nav, ARIA labels, colour contrast, focus management
 - [ ] UI testing approach — evaluate bUnit (component-level) and/or Playwright (browser-level) for testing screens and views
 
+## Series / Collections
+
+- [ ] Revisit Collection ordering once more data is captured — currently defaults to publication order (`Series.cs`)
+- [ ] Investigate multiple authors on Series for anthology collections — e.g. "The Best Science Fiction of the Year" has different editors. Per-book authors carry the detail for now; use "Various Authors" or leave blank (`Series.cs`)
+- [ ] Investigate multi-series membership — a book like a Discworld novel could belong to both "Discworld" and "Discworld: City Watch" sub-series. Currently one series per book (`Series.cs`)
+- [ ] API enrichment for series detection — Open Library has series data that could auto-suggest series membership during ISBN lookup (`Series.cs`)
+- [ ] Context help tips in the UI explaining the difference between a "Series" (numbered, known order like The Ender's Game Saga) and a "Collection" (loose grouping like Discworld or Hercule Poirot)
+
 ## Planned features
 
 - [ ] AI book recommendations via the Anthropic API
