@@ -43,6 +43,7 @@ builder.Services.AddTransient<BulkAddViewModel>();
 builder.Services.AddTransient<SeriesListViewModel>();
 builder.Services.AddTransient<SeriesEditViewModel>();
 builder.Services.AddTransient<ShoppingViewModel>();
+builder.Services.AddScoped<AIAssistantViewModel>();
 
 var app = builder.Build();
 
