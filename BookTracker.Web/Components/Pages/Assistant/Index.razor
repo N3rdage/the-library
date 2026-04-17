@@ -115,3 +115,73 @@
         }
     </div>
 </div>
+
+<div class="card mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h2 class="h5 mb-0">Collection helper</h2>
+        @if (VM.CollectionSuggestion is null && !VM.SuggestingCollections)
+        {
+            <button type="button" class="btn btn-outline-primary btn-sm" @onclick="VM.SuggestCollectionsAsync">
+                Suggest groupings
+            </button>
+        }
+    </div>
+    <div class="card-body">
+        @if (VM.SuggestingCollections)
+        {
+            <div class="text-center py-3">
+                <div class="spinner-border spinner-border-sm" role="status"></div>
+                <span class="ms-2 text-muted small">Analysing your library...</span>
+            </div>
+        }
+        else if (VM.CollectionError is not null)
+        {
+            <div class="alert alert-warning py-2 small mb-0">@VM.CollectionError</div>
+        }
+        else if (VM.CollectionSuggestion is not null)
+        {
+            @if (!string.IsNullOrEmpty(VM.CollectionSuggestion.Summary))
+            {
+                <p class="text-muted small mb-3">@VM.CollectionSuggestion.Summary</p>
+            }
+
+            @if (VM.CollectionSuggestion.Groupings.Count == 0)
+            {
+                <p class="text-muted small mb-0">No groupings suggested — your uncategorised books don't form obvious collections.</p>
+            }
+            else
+            {
+                @foreach (var grouping in VM.CollectionSuggestion.Groupings)
+                {
+                    <div class="p-3 bg-light rounded mb-3">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <span class="fw-semibold">@grouping.SuggestedName</span>
+                                <span class="badge bg-light text-dark border ms-1">@grouping.Type</span>
+                            </div>
+                            <button type="button" class="btn btn-success btn-sm" @onclick="() => VM.CreateCollectionFromSuggestionAsync(grouping)">
+                                Create
+                            </button>
+                        </div>
+                        <div class="text-muted small mb-2">@grouping.Reasoning</div>
+                        <div class="d-flex flex-wrap gap-1">
+                            @foreach (var title in grouping.BookTitles)
+                            {
+                                <span class="badge bg-white text-dark border">@title</span>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+
+            <div class="mt-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="VM.DismissCollections">Dismiss</button>
+                <button type="button" class="btn btn-outline-primary btn-sm ms-1" @onclick="VM.SuggestCollectionsAsync">Refresh</button>
+            </div>
+        }
+        else
+        {
+            <p class="text-muted small mb-0">Tap "Suggest groupings" to have AI analyse uncategorised books and suggest series/collection groupings.</p>
+        }
+    </div>
+</div>
