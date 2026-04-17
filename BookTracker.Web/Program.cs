@@ -26,6 +26,10 @@ builder.Services.AddHttpClient<IBookLookupService, BookLookupService>(client =>
 
 builder.Services.AddTransient<SeriesMatchService>();
 
+builder.Services.Configure<AIAssistantOptions>(
+    builder.Configuration.GetSection(AIAssistantOptions.SectionName));
+builder.Services.AddScoped<IAIAssistantService, AIAssistantService>();
+
 // ViewModels — transient so each component instance gets its own VM.
 builder.Services.AddTransient<HomeViewModel>();
 builder.Services.AddTransient<BookFormViewModel>();
