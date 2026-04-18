@@ -101,9 +101,9 @@ The app supports three AI providers. Configure whichever ones you want to use �
 
 Model defaults (Sonnet for fast ops, Opus for deep analysis) are built into the app — no need to configure them unless you want to override.
 
-### Azure AI Foundry (Claude via Azure)
+### Microsoft Foundry (Claude via Azure)
 
-1. In the [Azure Portal](https://portal.azure.com), create an **Azure AI Foundry** resource (or use an existing one).
+1. In the [Azure Portal](https://portal.azure.com), create a **Microsoft Foundry** resource (or use an existing one).
 2. Deploy a Claude model (e.g. `claude-sonnet`) — note the deployment name.
 3. Optionally deploy a second model for deep analysis (e.g. `claude-opus`).
 4. From the resource's **Keys and Endpoint** page, copy the endpoint URL and a key.
@@ -111,16 +111,16 @@ Model defaults (Sonnet for fast ops, Opus for deep analysis) are built into the 
 
 | Setting | Value |
 |---------|-------|
-| `AI__DefaultProvider` | `AzureFoundry` (or keep `Anthropic` and switch at runtime) |
-| `AI__AzureFoundry__Endpoint` | `https://<resource>.services.ai.azure.com` |
-| `AI__AzureFoundry__ApiKey` | Your Azure AI Foundry key |
-| `AI__AzureFoundry__FastDeployment` | Deployment name for fast ops (e.g. `claude-sonnet`) |
-| `AI__AzureFoundry__DeepDeployment` | Deployment name for deep analysis (e.g. `claude-opus`) |
+| `AI__DefaultProvider` | `MicrosoftFoundry` (or keep `Anthropic` and switch at runtime) |
+| `AI__MicrosoftFoundry__Endpoint` | `https://<resource>.services.ai.azure.com` |
+| `AI__MicrosoftFoundry__ApiKey` | Your Microsoft Foundry key |
+| `AI__MicrosoftFoundry__FastDeployment` | Deployment name for fast ops (e.g. `claude-sonnet`) |
+| `AI__MicrosoftFoundry__DeepDeployment` | Deployment name for deep analysis (e.g. `claude-opus`) |
 
 ### Azure OpenAI (GPT-4o)
 
 1. In the [Azure Portal](https://portal.azure.com), create an **Azure OpenAI** resource.
-2. Go to **Azure AI Foundry** (linked from the resource) and deploy a model — e.g. `gpt-4o`. Note the deployment name.
+2. Go to **Microsoft Foundry** (linked from the resource) and deploy a model — e.g. `gpt-4o`. Note the deployment name.
 3. From the resource's **Keys and Endpoint** page, copy the endpoint URL and a key.
 4. Add the app settings:
 

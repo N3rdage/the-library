@@ -43,7 +43,7 @@ public class AIProviderFactory(
     private IAIAssistantService CreateService(AIProvider provider) => provider switch
     {
         AIProvider.Anthropic => new AnthropicAIAssistantService(dbFactory, _options.Anthropic),
-        AIProvider.AzureFoundry => new AzureFoundryAIAssistantService(dbFactory, _options.AzureFoundry),
+        AIProvider.MicrosoftFoundry => new MicrosoftFoundryAIAssistantService(dbFactory, _options.MicrosoftFoundry),
         AIProvider.AzureOpenAI => new AzureOpenAIAssistantService(dbFactory, _options.AzureOpenAI),
         _ => throw new ArgumentOutOfRangeException(nameof(provider))
     };
@@ -53,8 +53,8 @@ public class AIProviderFactory(
         var providers = new List<AIProvider>();
         if (!string.IsNullOrEmpty(_options.Anthropic.ApiKey))
             providers.Add(AIProvider.Anthropic);
-        if (!string.IsNullOrEmpty(_options.AzureFoundry.ApiKey) && !string.IsNullOrEmpty(_options.AzureFoundry.Endpoint))
-            providers.Add(AIProvider.AzureFoundry);
+        if (!string.IsNullOrEmpty(_options.MicrosoftFoundry.ApiKey) && !string.IsNullOrEmpty(_options.MicrosoftFoundry.Endpoint))
+            providers.Add(AIProvider.MicrosoftFoundry);
         if (!string.IsNullOrEmpty(_options.AzureOpenAI.ApiKey) && !string.IsNullOrEmpty(_options.AzureOpenAI.Endpoint))
             providers.Add(AIProvider.AzureOpenAI);
         return providers;
@@ -63,7 +63,7 @@ public class AIProviderFactory(
     private static AIProvider? GetProviderForService(IAIAssistantService service) => service switch
     {
         AnthropicAIAssistantService => AIProvider.Anthropic,
-        AzureFoundryAIAssistantService => AIProvider.AzureFoundry,
+        MicrosoftFoundryAIAssistantService => AIProvider.MicrosoftFoundry,
         AzureOpenAIAssistantService => AIProvider.AzureOpenAI,
         _ => null
     };
