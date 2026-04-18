@@ -7,11 +7,12 @@ using Microsoft.EntityFrameworkCore;
 namespace BookTracker.Web.Services;
 
 /// <summary>
-/// AI assistant implementation using the Anthropic API directly.
+/// AI assistant implementation using Claude models hosted on Azure AI Foundry.
+/// Uses the Anthropic SDK with a custom HttpClient pointing at the Azure endpoint.
 /// </summary>
-public class AnthropicAIAssistantService(
+public class AzureFoundryAIAssistantService(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
-    AnthropicOptions options) : IAIAssistantService
+    AzureFoundryOptions options) : IAIAssistantService
 {
     private AnthropicClient? _client;
 
@@ -19,7 +20,14 @@ public class AnthropicAIAssistantService(
 
     private AnthropicClient GetClient()
     {
-        _client ??= new AnthropicClient(options.ApiKey);
+        if (_client is null)
+        {
+            var httpClient = new HttpClient
+            {
+                BaseAddress = new Uri(options.Endpoint.TrimEnd('/') + "/")
+            };
+            _client = new AnthropicClient(options.ApiKey, httpClient);
+        }
         return _client;
     }
 
@@ -34,11 +42,7 @@ public class AnthropicAIAssistantService(
                 {
                     new ImageContent
                     {
-                        Source = new ImageSource
-                        {
-                            MediaType = "image/jpeg",
-                            Data = base64Jpeg
-                        }
+                        Source = new ImageSource { MediaType = "image/jpeg", Data = base64Jpeg }
                     },
                     new TextContent
                     {
@@ -48,7 +52,7 @@ public class AnthropicAIAssistantService(
             }
         };
 
-        var response = await CallAsync(messages, options.FastModel, 50, ct);
+        var response = await CallAsync(messages, options.FastDeployment, 50, ct);
         var responseText = (response.Message?.ToString() ?? "").Trim();
 
         if (responseText.Equals("NONE", StringComparison.OrdinalIgnoreCase))
@@ -93,7 +97,7 @@ Rules:
 
         var userMessage = $"Suggest genres for this book:\n{bookDescription}\n\n{currentGenresText}\n\nRespond with JSON only.";
 
-        var response = await CallWithSystemAsync(systemPrompt, userMessage, options.FastModel, options.MaxTokens, ct);
+        var response = await CallWithSystemAsync(systemPrompt, userMessage, options.FastDeployment, options.MaxTokens, ct);
         return SharedParsers.ParseGenreSuggestion(response.Message?.ToString() ?? "", allGenres.Select(g => g.Name).ToHashSet());
     }
 
@@ -101,29 +105,24 @@ Rules:
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
-        var uncategorised = await db.Books
-            .Where(b => b.SeriesId == null)
+        var uncategorised = await db.Books.Where(b => b.SeriesId == null)
             .OrderBy(b => b.Author).ThenBy(b => b.Title)
-            .Select(b => new { b.Title, b.Author })
-            .ToListAsync(ct);
+            .Select(b => new { b.Title, b.Author }).ToListAsync(ct);
 
         if (uncategorised.Count == 0)
             return new CollectionSuggestionResult([], "All books are already in a series or collection.");
 
-        var existingSeries = await db.Series
-            .OrderBy(s => s.Name)
-            .Select(s => new { s.Name, s.Type, BookCount = s.Books.Count })
-            .ToListAsync(ct);
+        var existingSeries = await db.Series.OrderBy(s => s.Name)
+            .Select(s => new { s.Name, s.Type, BookCount = s.Books.Count }).ToListAsync(ct);
 
         var booksText = string.Join("\n", uncategorised.Select(b => $"- \"{b.Title}\" by {b.Author}"));
         var seriesText = existingSeries.Count > 0
             ? "Existing series/collections:\n" + string.Join("\n", existingSeries.Select(s => $"- {s.Name} ({s.Type}, {s.BookCount} books)"))
             : "No existing series or collections.";
 
-        var systemPrompt = SharedParsers.BuildCollectionSystemPrompt(seriesText);
-        var userMessage = $"Here are the books not currently in any series or collection:\n\n{booksText}\n\nSuggest how these could be grouped. Respond with JSON only.";
-
-        var response = await CallWithSystemAsync(systemPrompt, userMessage, options.FastModel, 2048, ct);
+        var response = await CallWithSystemAsync(SharedParsers.BuildCollectionSystemPrompt(seriesText),
+            $"Here are the books not in any series:\n\n{booksText}\n\nSuggest groupings. Respond with JSON only.",
+            options.FastDeployment, 2048, ct);
         return SharedParsers.ParseCollectionSuggestion(response.Message?.ToString() ?? "");
     }
 
@@ -132,7 +131,9 @@ Rules:
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var context = await SharedParsers.BuildLibraryContextAsync(db, ct);
 
-        var response = await CallWithSystemAsync(SharedParsers.ShoppingSystemPrompt, $"{context}\n\nSuggest 5-10 books to look for. Respond with JSON only.", options.FastModel, 2048, ct);
+        var response = await CallWithSystemAsync(SharedParsers.ShoppingSystemPrompt,
+            $"{context}\n\nSuggest 5-10 books to look for. Respond with JSON only.",
+            options.FastDeployment, 2048, ct);
         return SharedParsers.ParseShoppingSuggestion(response.Message?.ToString() ?? "");
     }
 
@@ -140,8 +141,7 @@ Rules:
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
-        var allBooks = await db.Books
-            .Include(b => b.Genres)
+        var allBooks = await db.Books.Include(b => b.Genres)
             .OrderBy(b => b.Author).ThenBy(b => b.Title)
             .Select(b => new { b.Title, b.Author, b.Rating, Genres = b.Genres.Select(g => g.Name).ToList() })
             .ToListAsync(ct);
@@ -150,8 +150,9 @@ Rules:
             ? string.Join("\n", allBooks.Select(b => $"- \"{b.Title}\" by {b.Author} | {b.Rating}/5 | {string.Join(", ", b.Genres)}"))
             : "Library is empty.";
 
-        var systemPrompt = SharedParsers.BuildAdvisorSystemPrompt(booksText);
-        var response = await CallWithSystemAsync(systemPrompt, $"I'm considering: {query}\n\nShould I get it? Respond with JSON only.", options.DeepModel, 2048, ct);
+        var response = await CallWithSystemAsync(SharedParsers.BuildAdvisorSystemPrompt(booksText),
+            $"I'm considering: {query}\n\nShould I get it? Respond with JSON only.",
+            options.DeepDeployment, 2048, ct);
         return SharedParsers.ParseBookAdvisor(response.Message?.ToString() ?? "");
     }
 
