@@ -4,7 +4,7 @@ This document describes the overall design and structure of BookTracker. It shou
 
 ## Overview
 
-BookTracker is an ASP.NET Core Blazor Web App for managing a personal book library. It runs in **Interactive Server** render mode (Blazor Server), backed by EF Core + SQL Server. It includes AI-powered features via the Anthropic API (Claude).
+BookTracker is an ASP.NET Core Blazor Web App for managing a personal book library. It runs in **Interactive Server** render mode (Blazor Server), backed by EF Core + SQL Server. It includes AI-powered features via multiple providers: Anthropic (Claude), Azure AI Foundry (Claude), and Azure OpenAI (GPT-4o).
 
 Target deployment: Azure App Service + Azure SQL (Basic tier) via GitHub Actions.
 
@@ -115,6 +115,7 @@ A short-lived context is created per operation. Never inject `DbContext` directl
 | `BookForm.razor` | Book metadata fields (title, author, category, status, rating, notes, cover URL) + cover preview |
 | `GenrePicker.razor` | Hierarchical genre checkbox grid with fuzzy matching from ISBN lookup |
 | `EditionCopyForm.razor` | Edition fields (ISBN, format, publisher, date, cover) + copy condition |
+| `AIProviderToggle.razor` | Dropdown to switch AI provider at runtime + call counter badge |
 
 ## Services
 
@@ -128,21 +129,34 @@ Local series detection after ISBN lookup. Strategies:
 3. Author has 2+ ungrouped books — suggests creating a collection
 4. Title contains series indicators (Book #, Vol., Part II)
 
-### AIAssistantService (IAIAssistantService)
-Wraps the Anthropic API. Scoped lifetime for prompt caching within a session.
+### AI Assistant (IAIAssistantService)
+Multi-provider architecture with runtime switching via `AIProviderFactory`.
 
-| Method | Model | Purpose |
+**Providers:**
+- `AnthropicAIAssistantService` — Anthropic API direct. Sonnet for fast ops, Opus for deep analysis. Prompt caching via `CacheControlEphemeral`.
+- `AzureFoundryAIAssistantService` — Claude via Azure AI Foundry. Same Anthropic SDK with custom endpoint. Uses Azure credits.
+- `AzureOpenAIAssistantService` — GPT-4o via Azure OpenAI SDK. Single deployment for all operations.
+
+**Shared logic:** `SharedParsers` provides JSON parsing and prompt building used by all providers.
+
+| Method | Speed | Purpose |
 |--------|-------|---------|
-| `SuggestGenresAsync` | Sonnet | Suggest genres from preset taxonomy |
-| `SuggestCollectionsAsync` | Sonnet | Suggest series/collection groupings for uncategorised books |
-| `SuggestShoppingListAsync` | Sonnet | Recommend books based on library patterns and series gaps |
-| `AssessBookAsync` | Opus | Suitability assessment for a specific book/author |
+| `ExtractIsbnFromImageAsync` | Fast | OCR ISBN from photo (vision API) |
+| `SuggestGenresAsync` | Fast | Suggest genres from preset taxonomy |
+| `SuggestCollectionsAsync` | Fast | Suggest series/collection groupings |
+| `SuggestShoppingListAsync` | Fast | Recommend books based on library patterns |
+| `AssessBookAsync` | Deep | Suitability assessment for a book/author |
 
-All prompts use `PromptCacheType.FineGrained` with `CacheControlEphemeral` on system messages.
+### AIProviderFactory
+Scoped factory managing provider lifecycle. Auto-detects available providers from config (checks for API keys). Supports runtime switching via `SwitchProvider()`.
 
-## Barcode scanning
+## ISBN capture
 
-ISBN barcodes (EAN-13/EAN-8) are scanned via the `html5-qrcode` library (v2.3.8, static JS under `wwwroot/lib/`). A JS interop wrapper (`barcode-scanner.js`) manages the scanner lifecycle. The scanning viewport is optimised for 1D barcodes (wide and short, not square). Used on Bulk Add and Shopping pages.
+### Barcode scanning
+ISBN barcodes (EAN-13/EAN-8) are scanned via the `html5-qrcode` library (v2.3.8, static JS under `wwwroot/lib/`). A JS interop wrapper (`barcode-scanner.js`) manages the scanner lifecycle with 3-second debounce on duplicate scans. The scanning viewport is optimised for 1D barcodes (wide and short, `aspectRatio: 2.0`). Used on Bulk Add and Shopping pages.
+
+### Photo ISBN OCR
+For older books without barcodes, `photo-capture.js` opens the camera for a still photo. The image is scaled to max 800px, compressed to 70% JPEG, and sent to the active AI provider's `ExtractIsbnFromImageAsync` for vision OCR. SignalR max message size increased to 512KB for image transfer.
 
 ## Mobile responsiveness
 
@@ -164,18 +178,26 @@ CI runs `dotnet test` on all PRs to main.
 | Setting | Source | Purpose |
 |---------|--------|---------|
 | `ConnectionStrings:DefaultConnection` | appsettings / Azure config | SQL Server connection |
-| `Anthropic:ApiKey` | appsettings / Azure config | Anthropic API key |
-| `Anthropic:FastModel` | appsettings (default: Sonnet 4.5) | Model for batch AI ops |
-| `Anthropic:DeepModel` | appsettings (default: Opus 4.5) | Model for deep analysis |
+| `AI:DefaultProvider` | appsettings / Azure config | `Anthropic`, `AzureFoundry`, or `AzureOpenAI` |
+| `AI:Anthropic:ApiKey` | appsettings / Azure config | Anthropic API key |
+| `AI:Anthropic:FastModel` | appsettings (default: SDK constant) | Model for fast AI ops |
+| `AI:Anthropic:DeepModel` | appsettings (default: SDK constant) | Model for deep analysis |
+| `AI:AzureFoundry:Endpoint` | appsettings / Azure config | Azure AI Foundry endpoint URL |
+| `AI:AzureFoundry:ApiKey` | appsettings / Azure config | Azure AI Foundry key |
+| `AI:AzureFoundry:FastDeployment` | appsettings / Azure config | Deployment for fast ops |
+| `AI:AzureFoundry:DeepDeployment` | appsettings / Azure config | Deployment for deep analysis |
+| `AI:AzureOpenAI:Endpoint` | appsettings / Azure config | Azure OpenAI endpoint URL |
+| `AI:AzureOpenAI:ApiKey` | appsettings / Azure config | Azure OpenAI key |
+| `AI:AzureOpenAI:Deployment` | appsettings / Azure config | GPT-4o deployment name |
 
-Dev config templates: `appsettings.Example.json`, `appsettings.Development.Example.json`. Copy and fill in secrets.
+Dev config templates: `appsettings.Example.json`, `appsettings.Development.Example.json`. Copy and fill in secrets. Only configure providers you want to use — the toggle auto-detects available providers.
 
 ## Infrastructure
 
 - Docker Compose for local SQL Server 2022 Developer
 - GitHub Actions CI (build + test on PR)
 - Dependabot for NuGet (EF Core grouped) and npm (html5-qrcode)
-- Azure Bicep templates under `infra/`
+- Azure Bicep templates under `infra/` (includes AI provider config parameters)
 - Auto-migration on startup (TODO: deploy-time migration bundle)
 
 ## Key conventions
