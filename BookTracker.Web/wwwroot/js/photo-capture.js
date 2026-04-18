@@ -27,14 +27,17 @@ window.PhotoCapture = {
         const video = document.getElementById(videoElementId);
         if (!video || !video.srcObject) return null;
 
+        // Scale down for OCR — we only need enough resolution to read text
+        const maxWidth = 800;
+        const scale = Math.min(1, maxWidth / video.videoWidth);
         const canvas = document.createElement("canvas");
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        canvas.width = Math.round(video.videoWidth * scale);
+        canvas.height = Math.round(video.videoHeight * scale);
         const ctx = canvas.getContext("2d");
-        ctx.drawImage(video, 0, 0);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        // Return as base64 JPEG (strip the data URL prefix)
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        // Return as base64 JPEG at moderate quality (strip the data URL prefix)
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
         return dataUrl.replace(/^data:image\/jpeg;base64,/, "");
     },
 

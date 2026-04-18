@@ -277,7 +277,7 @@
         photoError = null;
         if (photoActive)
         {
-            await JS.InvokeVoidAsync("PhotoCapture.stop");
+            try { await JS.InvokeVoidAsync("PhotoCapture.stop"); } catch { }
             photoActive = false;
         }
         else
@@ -291,11 +291,20 @@
 
             photoActive = true;
             StateHasChanged();
-            await Task.Delay(100);
-            var started = await JS.InvokeAsync<bool>("PhotoCapture.start", "photo-video");
-            if (!started)
+            await Task.Delay(200);
+
+            try
             {
-                photoError = "Could not access camera.";
+                var started = await JS.InvokeAsync<bool>("PhotoCapture.start", "photo-video");
+                if (!started)
+                {
+                    photoError = "Could not access camera. Check permissions.";
+                    photoActive = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                photoError = $"Camera error: {ex.Message}";
                 photoActive = false;
             }
         }
@@ -305,14 +314,13 @@
     {
         extractingIsbn = true;
         photoError = null;
-        StateHasChanged();
 
         try
         {
             var base64 = await JS.InvokeAsync<string?>("PhotoCapture.capture", "photo-video");
             if (string.IsNullOrEmpty(base64))
             {
-                photoError = "Failed to capture image.";
+                photoError = "Failed to capture image. Make sure the camera is active.";
                 return;
             }
 
