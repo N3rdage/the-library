@@ -44,7 +44,7 @@ public class AIProviderFactory(
     {
         AIProvider.Anthropic => new AnthropicAIAssistantService(dbFactory, _options.Anthropic),
         AIProvider.AzureFoundry => new AzureFoundryAIAssistantService(dbFactory, _options.AzureFoundry),
-        AIProvider.AzureOpenAI => throw new NotImplementedException("Azure OpenAI provider coming in a future PR."),
+        AIProvider.AzureOpenAI => new AzureOpenAIAssistantService(dbFactory, _options.AzureOpenAI),
         _ => throw new ArgumentOutOfRangeException(nameof(provider))
     };
 
@@ -64,6 +64,7 @@ public class AIProviderFactory(
     {
         AnthropicAIAssistantService => AIProvider.Anthropic,
         AzureFoundryAIAssistantService => AIProvider.AzureFoundry,
+        AzureOpenAIAssistantService => AIProvider.AzureOpenAI,
         _ => null
     };
 }
