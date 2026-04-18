@@ -24,6 +24,54 @@ public class AIAssistantService(
         return _client;
     }
 
+    public async Task<string?> ExtractIsbnFromImageAsync(string base64Jpeg, CancellationToken ct = default)
+    {
+        var messages = new List<Message>
+        {
+            new()
+            {
+                Role = RoleType.User,
+                Content = new List<ContentBase>
+                {
+                    new ImageContent
+                    {
+                        Source = new ImageSource
+                        {
+                            MediaType = "image/jpeg",
+                            Data = base64Jpeg
+                        }
+                    },
+                    new TextContent
+                    {
+                        Text = "Extract the ISBN number from this image. Return ONLY the digits (10 or 13 digits), nothing else. If you cannot find an ISBN, return the word NONE."
+                    }
+                }
+            }
+        };
+
+        var parameters = new MessageParameters
+        {
+            Messages = messages,
+            MaxTokens = 50,
+            Model = _options.FastModel,
+            Stream = false
+        };
+
+        var client = GetClient();
+        var response = await client.Messages.GetClaudeMessageAsync(parameters, ct);
+        CallCount++;
+
+        var responseText = (response.Message?.ToString() ?? "").Trim();
+
+        if (responseText.Equals("NONE", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        // Clean: keep only digits and X (for ISBN-10)
+        var cleaned = new string(responseText.Where(c => char.IsDigit(c) || c == 'X' || c == 'x').ToArray());
+
+        return cleaned.Length is 10 or 13 ? cleaned : null;
+    }
+
     public async Task<GenreSuggestionResult> SuggestGenresAsync(
         string title, string author, string? subtitle,
         IReadOnlyList<string> currentGenres, CancellationToken ct = default)

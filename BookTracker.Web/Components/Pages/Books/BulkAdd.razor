@@ -3,6 +3,7 @@
 @inject BulkAddViewModel VM
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject IAIAssistantService AI
 
 <PageTitle>Bulk add books - BookTracker</PageTitle>
 
@@ -10,9 +11,9 @@
 
 <div class="card mb-4">
     <div class="card-body">
-        @* Mobile: scanner button first, full-width and prominent *@
-        <div class="d-md-none mb-3">
-            <button type="button" class="btn w-100 @(scannerActive ? "btn-danger" : "btn-primary")" @onclick="ToggleScannerAsync">
+        @* Mobile: scanner buttons first, full-width and prominent *@
+        <div class="d-md-none mb-3 d-flex gap-2">
+            <button type="button" class="btn flex-grow-1 @(scannerActive ? "btn-danger" : "btn-primary")" @onclick="ToggleScannerAsync">
                 @if (scannerActive)
                 {
                     <span>Stop scanner</span>
@@ -20,6 +21,16 @@
                 else
                 {
                     <span>Scan barcode</span>
+                }
+            </button>
+            <button type="button" class="btn flex-grow-1 @(photoActive ? "btn-danger" : "btn-outline-primary")" @onclick="TogglePhotoCaptureAsync">
+                @if (photoActive)
+                {
+                    <span>Cancel photo</span>
+                }
+                else
+                {
+                    <span>Photo ISBN</span>
                 }
             </button>
         </div>
@@ -34,8 +45,8 @@
         </div>
         <div class="form-text">Type or paste an ISBN and press Enter, or scan a barcode with your camera.</div>
 
-        @* Desktop: scanner button below input, secondary style *@
-        <div class="d-none d-md-block mt-3">
+        @* Desktop: scanner buttons below input *@
+        <div class="d-none d-md-flex mt-3 gap-2">
             <button type="button" class="btn @(scannerActive ? "btn-danger" : "btn-outline-secondary")" @onclick="ToggleScannerAsync">
                 @if (scannerActive)
                 {
@@ -44,6 +55,16 @@
                 else
                 {
                     <span>Scan barcode</span>
+                }
+            </button>
+            <button type="button" class="btn @(photoActive ? "btn-danger" : "btn-outline-secondary")" @onclick="TogglePhotoCaptureAsync">
+                @if (photoActive)
+                {
+                    <span>Cancel photo</span>
+                }
+                else
+                {
+                    <span>Photo ISBN</span>
                 }
             </button>
         </div>
@@ -61,6 +82,35 @@
         <div class="card-body text-center">
             <div id="barcode-reader" class="scanner-container"></div>
             <div class="form-text mt-2">Point your camera at the ISBN barcode on the back of the book.</div>
+        </div>
+    </div>
+}
+
+@if (photoActive)
+{
+    <div class="card mb-4">
+        <div class="card-body text-center">
+            <div class="scanner-container">
+                <video id="photo-video" autoplay playsinline muted style="width: 100%; border-radius: 0.25rem;"></video>
+            </div>
+            <div class="mt-2 d-flex justify-content-center gap-2">
+                <button type="button" class="btn btn-primary" @onclick="CapturePhotoAsync" disabled="@extractingIsbn">
+                    @if (extractingIsbn)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        <span>Reading ISBN...</span>
+                    }
+                    else
+                    {
+                        <span>Capture</span>
+                    }
+                </button>
+            </div>
+            <div class="form-text mt-2">Frame the printed ISBN number and tap Capture.</div>
+            @if (photoError is not null)
+            {
+                <div class="alert alert-warning mt-2 py-2 small">@photoError</div>
+            }
         </div>
     </div>
 }
@@ -200,6 +250,11 @@
     private string? scannerError;
     private DotNetObjectReference<BulkAdd>? dotNetRef;
 
+    // Photo ISBN capture
+    private bool photoActive;
+    private bool extractingIsbn;
+    private string? photoError;
+
     protected override void OnInitialized()
     {
         VM.OnStateChanged = () => InvokeAsync(StateHasChanged);
@@ -217,6 +272,75 @@
         StateHasChanged();
     }
 
+    private async Task TogglePhotoCaptureAsync()
+    {
+        photoError = null;
+        if (photoActive)
+        {
+            await JS.InvokeVoidAsync("PhotoCapture.stop");
+            photoActive = false;
+        }
+        else
+        {
+            // Stop barcode scanner if active
+            if (scannerActive)
+            {
+                await JS.InvokeVoidAsync("BarcodeScanner.stop");
+                scannerActive = false;
+            }
+
+            photoActive = true;
+            StateHasChanged();
+            await Task.Delay(100);
+            var started = await JS.InvokeAsync<bool>("PhotoCapture.start", "photo-video");
+            if (!started)
+            {
+                photoError = "Could not access camera.";
+                photoActive = false;
+            }
+        }
+    }
+
+    private async Task CapturePhotoAsync()
+    {
+        extractingIsbn = true;
+        photoError = null;
+        StateHasChanged();
+
+        try
+        {
+            var base64 = await JS.InvokeAsync<string?>("PhotoCapture.capture", "photo-video");
+            if (string.IsNullOrEmpty(base64))
+            {
+                photoError = "Failed to capture image.";
+                return;
+            }
+
+            var isbn = await AI.ExtractIsbnFromImageAsync(base64);
+            if (isbn is null)
+            {
+                photoError = "Could not find an ISBN in the photo. Try again with clearer framing.";
+                return;
+            }
+
+            // Feed the extracted ISBN into the discovery grid
+            VM.IsbnInput = isbn;
+            await VM.AddIsbnAsync();
+
+            // Stop camera after successful capture
+            await JS.InvokeVoidAsync("PhotoCapture.stop");
+            photoActive = false;
+        }
+        catch (Exception ex)
+        {
+            photoError = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            extractingIsbn = false;
+        }
+    }
+
     private async Task ToggleScannerAsync()
     {
         scannerError = null;
@@ -227,6 +351,13 @@
         }
         else
         {
+            // Stop photo capture if active
+            if (photoActive)
+            {
+                await JS.InvokeVoidAsync("PhotoCapture.stop");
+                photoActive = false;
+            }
+
             scannerActive = true;
             dotNetRef ??= DotNetObjectReference.Create(this);
             StateHasChanged();
@@ -268,6 +399,10 @@
         if (scannerActive)
         {
             try { await JS.InvokeVoidAsync("BarcodeScanner.stop"); } catch { }
+        }
+        if (photoActive)
+        {
+            try { await JS.InvokeVoidAsync("PhotoCapture.stop"); } catch { }
         }
         dotNetRef?.Dispose();
     }
