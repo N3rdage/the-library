@@ -69,6 +69,10 @@
             </button>
         </div>
 
+        <div class="mt-2">
+            <AIProviderToggle />
+        </div>
+
         @if (!string.IsNullOrEmpty(scannerError))
         {
             <div class="alert alert-warning mt-2 mb-0 py-2 small">@scannerError</div>
