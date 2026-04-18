@@ -3,7 +3,7 @@
 @inject BulkAddViewModel VM
 @inject NavigationManager Nav
 @inject IJSRuntime JS
-@inject IAIAssistantService AI
+@inject AIProviderFactory AIFactory
 
 <PageTitle>Bulk add books - BookTracker</PageTitle>
 
@@ -328,7 +328,7 @@
                 return;
             }
 
-            var isbn = await AI.ExtractIsbnFromImageAsync(base64);
+            var isbn = await AIFactory.GetService().ExtractIsbnFromImageAsync(base64);
             if (isbn is null)
             {
                 photoError = "Could not find an ISBN in the photo. Try again with clearer framing.";

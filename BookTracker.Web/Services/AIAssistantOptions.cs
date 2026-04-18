@@ -1,3 +1,5 @@
+using Anthropic.SDK.Constants;
+
 namespace BookTracker.Web.Services;
 
 public enum AIProvider
@@ -21,8 +23,8 @@ public class AIOptions
 public class AnthropicOptions
 {
     public string ApiKey { get; set; } = "";
-    public string FastModel { get; set; } = "claude-sonnet-4-20250514";
-    public string DeepModel { get; set; } = "claude-opus-4-20250514";
+    public string FastModel { get; set; } = AnthropicModels.Claude46Sonnet;
+    public string DeepModel { get; set; } = AnthropicModels.Claude46Opus;
     public int MaxTokens { get; set; } = 1024;
 }
 
