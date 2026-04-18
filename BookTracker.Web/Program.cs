@@ -3,6 +3,7 @@ using BookTracker.Web.Components;
 using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,13 +35,16 @@ builder.Services.AddTransient<SeriesMatchService>();
 
 builder.Services.Configure<AIOptions>(
     builder.Configuration.GetSection(AIOptions.SectionName));
-builder.Services.AddScoped<AIProviderFactory>();
-builder.Services.AddScoped<IAIAssistantService>(sp =>
+builder.Services.AddScoped<AIProviderFactory>(sp =>
 {
-    var factory = sp.GetRequiredService<AIProviderFactory>();
+    var factory = new AIProviderFactory(
+        sp.GetRequiredService<IDbContextFactory<BookTrackerDbContext>>(),
+        sp.GetRequiredService<IOptions<AIOptions>>());
     factory.Initialize();
-    return factory.GetService();
+    return factory;
 });
+builder.Services.AddScoped<IAIAssistantService>(sp =>
+    sp.GetRequiredService<AIProviderFactory>().GetService());
 
 // ViewModels — transient so each component instance gets its own VM.
 builder.Services.AddTransient<HomeViewModel>();
