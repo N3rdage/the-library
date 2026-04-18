@@ -7,7 +7,7 @@
     <base href="/" />
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
     <link rel="stylesheet" href="@Assets["css/site.css"]" />
-    <link rel="stylesheet" href="@Assets["BookTracker.Web.styles.css"]" />
+    @* Only include scoped styles bundle if scoped .razor.css files exist *@
     <ImportMap />
     <HeadOutlet @rendermode="InteractiveServer" />
 </head>
