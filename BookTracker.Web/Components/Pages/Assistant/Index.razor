@@ -12,7 +12,7 @@
     <div class="card-header bg-white"><h2 class="h5 mb-0">Book advisor</h2></div>
     <div class="card-body">
         <div class="input-group">
-            <input type="text" class="form-control" placeholder="e.g. &quot;Dune by Frank Herbert&quot; or &quot;anything by Brandon Sanderson&quot;"
+            <input type="text" class="form-control" placeholder='e.g. "Dune by Frank Herbert" or "anything by Brandon Sanderson"'
                    @bind="VM.BookAdvisorQuery" @bind:event="oninput" @onkeyup="HandleAdvisorKeyUp" />
             <button type="button" class="btn btn-primary" @onclick="VM.AssessBookAsync" disabled="@(VM.Advising || string.IsNullOrWhiteSpace(VM.BookAdvisorQuery))">
                 @if (VM.Advising)
