@@ -20,6 +20,7 @@ var appServicePlanName = '${appName}-plan'
 var sqlServerName = '${appName}-sql-${uniqueSuffix}'
 var sqlDatabaseName = appName
 var vnetName = '${appName}-vnet'
+var keyVaultName = '${appName}-kv-${uniqueSuffix}'
 var logAnalyticsName = '${appName}-logs'
 var appInsightsName = '${appName}-ai'
 
@@ -72,6 +73,23 @@ module app './appservice.bicep' = {
   }
 }
 
+// Key Vault stores secrets and grants access to App Service managed identities.
+// Secrets are stored alongside the raw values in App Settings — to switch to
+// Key Vault references, update the App Settings to use the KV reference outputs
+// (e.g. via a second deploy.ps1 run or manual portal update).
+module kv './keyvault.bicep' = {
+  name: 'keyvault'
+  params: {
+    location: location
+    tags: tags
+    keyVaultName: keyVaultName
+    tenantId: tenantId
+    appServicePrincipalId: app.outputs.principalId
+    stagingSlotPrincipalId: app.outputs.stagingPrincipalId
+    authClientSecret: authClientSecret
+  }
+}
+
 module customdomain './customdomain.bicep' = if (!empty(customDomain)) {
   name: 'customdomain'
   params: {
@@ -91,5 +109,7 @@ output stagingHostName string = app.outputs.stagingHostName
 output stagingPrincipalId string = app.outputs.stagingPrincipalId
 output sqlServerFqdn string = sql.outputs.sqlServerFqdn
 output sqlDatabaseName string = sqlDatabaseName
+output keyVaultName string = kv.outputs.keyVaultName
+output keyVaultUri string = kv.outputs.keyVaultUri
 output vnetName string = network.outputs.vnetName
 output privateEndpointSubnetId string = network.outputs.privateEndpointSubnetId
