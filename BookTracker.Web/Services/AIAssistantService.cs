@@ -5,22 +5,19 @@ using Anthropic.SDK.Messaging;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-
 namespace BookTracker.Web.Services;
 
-public class AIAssistantService(
+public class AnthropicAIAssistantService(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
-    IOptions<AIAssistantOptions> options) : IAIAssistantService
+    AnthropicOptions options) : IAIAssistantService
 {
-    private readonly AIAssistantOptions _options = options.Value;
     private AnthropicClient? _client;
 
     public int CallCount { get; private set; }
 
     private AnthropicClient GetClient()
     {
-        _client ??= new AnthropicClient(_options.ApiKey);
+        _client ??= new AnthropicClient(options.ApiKey);
         return _client;
     }
 
@@ -53,7 +50,7 @@ public class AIAssistantService(
         {
             Messages = messages,
             MaxTokens = 50,
-            Model = _options.FastModel,
+            Model = options.FastModel,
             Stream = false
         };
 
@@ -124,8 +121,8 @@ Respond with JSON only.";
         var parameters = new MessageParameters
         {
             Messages = messages,
-            MaxTokens = _options.MaxTokens,
-            Model = _options.FastModel,
+            MaxTokens = options.MaxTokens,
+            Model = options.FastModel,
             Stream = false,
             System = new List<SystemMessage>
             {
@@ -209,7 +206,7 @@ Suggest how these could be grouped. Respond with JSON only.";
         {
             Messages = messages,
             MaxTokens = 2048,
-            Model = _options.FastModel,
+            Model = options.FastModel,
             Stream = false,
             System = new List<SystemMessage>
             {
@@ -314,7 +311,7 @@ Suggest 5-10 books to look for. Respond with JSON only.";
         {
             Messages = messages,
             MaxTokens = 2048,
-            Model = _options.FastModel,
+            Model = options.FastModel,
             Stream = false,
             System = new List<SystemMessage>
             {
@@ -455,7 +452,7 @@ Rules:
         {
             Messages = messages,
             MaxTokens = 2048,
-            Model = _options.DeepModel,
+            Model = options.DeepModel,
             Stream = false,
             System = new List<SystemMessage>
             {

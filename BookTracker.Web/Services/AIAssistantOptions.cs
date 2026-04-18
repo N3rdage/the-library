@@ -1,16 +1,44 @@
 namespace BookTracker.Web.Services;
 
-public class AIAssistantOptions
+public enum AIProvider
 {
-    public const string SectionName = "Anthropic";
+    Anthropic,
+    AzureFoundry,
+    AzureOpenAI
+}
 
+public class AIOptions
+{
+    public const string SectionName = "AI";
+
+    public AIProvider DefaultProvider { get; set; } = AIProvider.Anthropic;
+
+    public AnthropicOptions Anthropic { get; set; } = new();
+    public AzureFoundryOptions AzureFoundry { get; set; } = new();
+    public AzureOpenAIOptions AzureOpenAI { get; set; } = new();
+}
+
+public class AnthropicOptions
+{
     public string ApiKey { get; set; } = "";
-
-    /// <summary>Model for fast/cheap operations (genre suggestions, collection cataloguing).</summary>
     public string FastModel { get; set; } = "claude-sonnet-4-5-20250514";
-
-    /// <summary>Model for deeper analysis (book recommendations, suitability assessment).</summary>
     public string DeepModel { get; set; } = "claude-opus-4-5-20250514";
+    public int MaxTokens { get; set; } = 1024;
+}
 
+public class AzureFoundryOptions
+{
+    public string Endpoint { get; set; } = "";
+    public string ApiKey { get; set; } = "";
+    public string FastDeployment { get; set; } = "";
+    public string DeepDeployment { get; set; } = "";
+    public int MaxTokens { get; set; } = 1024;
+}
+
+public class AzureOpenAIOptions
+{
+    public string Endpoint { get; set; } = "";
+    public string ApiKey { get; set; } = "";
+    public string Deployment { get; set; } = "";
     public int MaxTokens { get; set; } = 1024;
 }
