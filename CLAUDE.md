@@ -73,7 +73,7 @@ The app is used on both desktop and mobile (phones for barcode scanning and quic
 Three AI providers supported, selectable at runtime via toggle on the AI Assistant and Bulk Add pages:
 
 - **Anthropic** (direct API) — Claude Sonnet for fast ops, Opus for deep analysis
-- **Azure Foundry** — Claude via Azure endpoint (uses Azure credits)
+- **Microsoft Foundry** — Claude via Azure endpoint (uses Azure credits)
 - **Azure OpenAI** — GPT-4o
 
 Config under `AI:` section in appsettings. Only providers with API keys configured are available. See `appsettings.Example.json` for structure.

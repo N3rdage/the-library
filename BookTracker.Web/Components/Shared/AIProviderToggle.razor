@@ -26,7 +26,7 @@
     private static string FormatProvider(AIProvider p) => p switch
     {
         AIProvider.Anthropic => "Anthropic (Claude)",
-        AIProvider.AzureFoundry => "Azure Foundry (Claude)",
+        AIProvider.MicrosoftFoundry => "Microsoft Foundry (Claude)",
         AIProvider.AzureOpenAI => "Azure OpenAI (GPT-4o)",
         _ => p.ToString()
     };

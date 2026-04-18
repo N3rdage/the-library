@@ -15,10 +15,10 @@ param appInsightsConnectionString string
 @secure()
 param aiAnthropicApiKey string = ''
 @secure()
-param aiAzureFoundryApiKey string = ''
-param aiAzureFoundryEndpoint string = ''
-param aiAzureFoundryFastDeployment string = ''
-param aiAzureFoundryDeepDeployment string = ''
+param aiMicrosoftFoundryApiKey string = ''
+param aiMicrosoftFoundryEndpoint string = ''
+param aiMicrosoftFoundryFastDeployment string = ''
+param aiMicrosoftFoundryDeepDeployment string = ''
 @secure()
 param aiAzureOpenAIApiKey string = ''
 param aiAzureOpenAIEndpoint string = ''
@@ -75,10 +75,10 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
     MICROSOFT_PROVIDER_AUTHENTICATION_SECRET: authClientSecret
     AI__DefaultProvider: aiDefaultProvider
     AI__Anthropic__ApiKey: aiAnthropicApiKey
-    AI__AzureFoundry__Endpoint: aiAzureFoundryEndpoint
-    AI__AzureFoundry__ApiKey: aiAzureFoundryApiKey
-    AI__AzureFoundry__FastDeployment: aiAzureFoundryFastDeployment
-    AI__AzureFoundry__DeepDeployment: aiAzureFoundryDeepDeployment
+    AI__MicrosoftFoundry__Endpoint: aiMicrosoftFoundryEndpoint
+    AI__MicrosoftFoundry__ApiKey: aiMicrosoftFoundryApiKey
+    AI__MicrosoftFoundry__FastDeployment: aiMicrosoftFoundryFastDeployment
+    AI__MicrosoftFoundry__DeepDeployment: aiMicrosoftFoundryDeepDeployment
     AI__AzureOpenAI__Endpoint: aiAzureOpenAIEndpoint
     AI__AzureOpenAI__ApiKey: aiAzureOpenAIApiKey
     AI__AzureOpenAI__Deployment: aiAzureOpenAIDeployment
@@ -177,10 +177,10 @@ resource stagingAppSettings 'Microsoft.Web/sites/slots/config@2023-12-01' = {
     MICROSOFT_PROVIDER_AUTHENTICATION_SECRET: authClientSecret
     AI__DefaultProvider: aiDefaultProvider
     AI__Anthropic__ApiKey: aiAnthropicApiKey
-    AI__AzureFoundry__Endpoint: aiAzureFoundryEndpoint
-    AI__AzureFoundry__ApiKey: aiAzureFoundryApiKey
-    AI__AzureFoundry__FastDeployment: aiAzureFoundryFastDeployment
-    AI__AzureFoundry__DeepDeployment: aiAzureFoundryDeepDeployment
+    AI__MicrosoftFoundry__Endpoint: aiMicrosoftFoundryEndpoint
+    AI__MicrosoftFoundry__ApiKey: aiMicrosoftFoundryApiKey
+    AI__MicrosoftFoundry__FastDeployment: aiMicrosoftFoundryFastDeployment
+    AI__MicrosoftFoundry__DeepDeployment: aiMicrosoftFoundryDeepDeployment
     AI__AzureOpenAI__Endpoint: aiAzureOpenAIEndpoint
     AI__AzureOpenAI__ApiKey: aiAzureOpenAIApiKey
     AI__AzureOpenAI__Deployment: aiAzureOpenAIDeployment
