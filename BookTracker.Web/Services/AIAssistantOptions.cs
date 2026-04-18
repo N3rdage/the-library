@@ -21,8 +21,8 @@ public class AIOptions
 public class AnthropicOptions
 {
     public string ApiKey { get; set; } = "";
-    public string FastModel { get; set; } = "claude-sonnet-4-5-20250514";
-    public string DeepModel { get; set; } = "claude-opus-4-5-20250514";
+    public string FastModel { get; set; } = "claude-sonnet-4-20250514";
+    public string DeepModel { get; set; } = "claude-opus-4-20250514";
     public int MaxTokens { get; set; } = 1024;
 }
 
