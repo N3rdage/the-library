@@ -32,9 +32,15 @@ builder.Services.AddHttpClient<IBookLookupService, BookLookupService>(client =>
 
 builder.Services.AddTransient<SeriesMatchService>();
 
-builder.Services.Configure<AIAssistantOptions>(
-    builder.Configuration.GetSection(AIAssistantOptions.SectionName));
-builder.Services.AddScoped<IAIAssistantService, AIAssistantService>();
+builder.Services.Configure<AIOptions>(
+    builder.Configuration.GetSection(AIOptions.SectionName));
+builder.Services.AddScoped<AIProviderFactory>();
+builder.Services.AddScoped<IAIAssistantService>(sp =>
+{
+    var factory = sp.GetRequiredService<AIProviderFactory>();
+    factory.Initialize();
+    return factory.GetService();
+});
 
 // ViewModels — transient so each component instance gets its own VM.
 builder.Services.AddTransient<HomeViewModel>();
