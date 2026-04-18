@@ -7,8 +7,15 @@ namespace BookTracker.Web.ViewModels;
 
 public class AIAssistantViewModel(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
-    IAIAssistantService aiService)
+    AIProviderFactory providerFactory)
 {
+    private IAIAssistantService AiService => providerFactory.GetService();
+
+    public AIProvider ActiveProvider => providerFactory.ActiveProvider;
+    public IReadOnlyList<AIProvider> AvailableProviders => providerFactory.AvailableProviders;
+
+    public void SwitchProvider(AIProvider provider) => providerFactory.SwitchProvider(provider);
+
     // Genre cleanup
     public List<BookGenreRow> BooksNeedingGenres { get; private set; } = [];
     public bool GenresLoaded { get; private set; }
@@ -17,7 +24,7 @@ public class AIAssistantViewModel(
     public GenreSuggestionResult? CurrentSuggestion { get; private set; }
     public string? GenreError { get; private set; }
 
-    public int CallCount => aiService.CallCount;
+    public int CallCount => AiService.CallCount;
 
     public async Task LoadBooksNeedingGenresAsync()
     {
@@ -51,7 +58,7 @@ public class AIAssistantViewModel(
 
         try
         {
-            CurrentSuggestion = await aiService.SuggestGenresAsync(
+            CurrentSuggestion = await AiService.SuggestGenresAsync(
                 book.Title, book.Author, book.Subtitle, book.CurrentGenres);
         }
         catch (Exception ex)
@@ -115,7 +122,7 @@ public class AIAssistantViewModel(
 
         try
         {
-            CollectionSuggestion = await aiService.SuggestCollectionsAsync();
+            CollectionSuggestion = await AiService.SuggestCollectionsAsync();
         }
         catch (Exception ex)
         {
@@ -190,7 +197,7 @@ public class AIAssistantViewModel(
 
         try
         {
-            ShoppingSuggestion = await aiService.SuggestShoppingListAsync();
+            ShoppingSuggestion = await AiService.SuggestShoppingListAsync();
         }
         catch (Exception ex)
         {
@@ -241,7 +248,7 @@ public class AIAssistantViewModel(
 
         try
         {
-            AdvisorResult = await aiService.AssessBookAsync(BookAdvisorQuery.Trim());
+            AdvisorResult = await AiService.AssessBookAsync(BookAdvisorQuery.Trim());
         }
         catch (Exception ex)
         {
