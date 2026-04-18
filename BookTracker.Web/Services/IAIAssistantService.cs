@@ -24,6 +24,12 @@ public interface IAIAssistantService
     /// </summary>
     Task<BookAdvisorResult> AssessBookAsync(string query, CancellationToken ct = default);
 
+    /// <summary>
+    /// Extracts an ISBN number from a photo using vision OCR.
+    /// Returns the extracted ISBN or null if not found.
+    /// </summary>
+    Task<string?> ExtractIsbnFromImageAsync(string base64Jpeg, CancellationToken ct = default);
+
     /// <summary>Number of API calls made in this service instance's lifetime.</summary>
     int CallCount { get; }
 }
