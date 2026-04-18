@@ -19,8 +19,18 @@ var appServiceName = '${appName}-${uniqueSuffix}'
 var appServicePlanName = '${appName}-plan'
 var sqlServerName = '${appName}-sql-${uniqueSuffix}'
 var sqlDatabaseName = appName
+var vnetName = '${appName}-vnet'
 var logAnalyticsName = '${appName}-logs'
 var appInsightsName = '${appName}-ai'
+
+module network './network.bicep' = {
+  name: 'network'
+  params: {
+    location: location
+    tags: tags
+    vnetName: vnetName
+  }
+}
 
 module obs './observability.bicep' = {
   name: 'obs'
@@ -58,6 +68,7 @@ module app './appservice.bicep' = {
     sqlServerFqdn: sql.outputs.sqlServerFqdn
     sqlDatabaseName: sqlDatabaseName
     appInsightsConnectionString: obs.outputs.appInsightsConnectionString
+    appIntegrationSubnetId: network.outputs.appIntegrationSubnetId
   }
 }
 
@@ -80,3 +91,5 @@ output stagingHostName string = app.outputs.stagingHostName
 output stagingPrincipalId string = app.outputs.stagingPrincipalId
 output sqlServerFqdn string = sql.outputs.sqlServerFqdn
 output sqlDatabaseName string = sqlDatabaseName
+output vnetName string = network.outputs.vnetName
+output privateEndpointSubnetId string = network.outputs.privateEndpointSubnetId
