@@ -12,6 +12,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// Increase SignalR max message size for photo ISBN capture (base64 images).
+builder.Services.AddSignalR(options =>
+{
+    options.MaximumReceiveMessageSize = 512 * 1024; // 512KB
+});
+
 // Blazor Server circuits are long-lived while DbContext is scoped and not
 // thread-safe, so components take IDbContextFactory<T> and create a short-lived
 // context per operation rather than injecting DbContext directly.

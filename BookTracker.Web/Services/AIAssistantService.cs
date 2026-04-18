@@ -43,7 +43,7 @@ public class AIAssistantService(
                     },
                     new TextContent
                     {
-                        Text = "Extract the ISBN number from this image. Return ONLY the digits (10 or 13 digits), nothing else. If you cannot find an ISBN, return the word NONE."
+                        Text = "Extract the ISBN number from this image. Return ONLY the ISBN (10 or 13 characters). ISBN-10 may end with the letter X as a check digit — include it if present. Return nothing else. If you cannot find an ISBN, return the word NONE."
                     }
                 }
             }
