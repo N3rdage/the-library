@@ -10,6 +10,21 @@ param sqlServerFqdn string
 param sqlDatabaseName string
 param appInsightsConnectionString string
 
+// AI provider config — set via Azure Portal or CLI for secrets.
+// Only configure the providers you want to use.
+@secure()
+param aiAnthropicApiKey string = ''
+@secure()
+param aiAzureFoundryApiKey string = ''
+param aiAzureFoundryEndpoint string = ''
+param aiAzureFoundryFastDeployment string = ''
+param aiAzureFoundryDeepDeployment string = ''
+@secure()
+param aiAzureOpenAIApiKey string = ''
+param aiAzureOpenAIEndpoint string = ''
+param aiAzureOpenAIDeployment string = ''
+param aiDefaultProvider string = 'Anthropic'
+
 // App Service plan: Linux, S1 (AlwaysOn + slots available, suits Blazor Server).
 resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: appServicePlanName
@@ -58,6 +73,15 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
     ASPNETCORE_ENVIRONMENT: 'Production'
     APPLICATIONINSIGHTS_CONNECTION_STRING: appInsightsConnectionString
     MICROSOFT_PROVIDER_AUTHENTICATION_SECRET: authClientSecret
+    AI__DefaultProvider: aiDefaultProvider
+    AI__Anthropic__ApiKey: aiAnthropicApiKey
+    AI__AzureFoundry__Endpoint: aiAzureFoundryEndpoint
+    AI__AzureFoundry__ApiKey: aiAzureFoundryApiKey
+    AI__AzureFoundry__FastDeployment: aiAzureFoundryFastDeployment
+    AI__AzureFoundry__DeepDeployment: aiAzureFoundryDeepDeployment
+    AI__AzureOpenAI__Endpoint: aiAzureOpenAIEndpoint
+    AI__AzureOpenAI__ApiKey: aiAzureOpenAIApiKey
+    AI__AzureOpenAI__Deployment: aiAzureOpenAIDeployment
   }
 }
 
@@ -151,6 +175,15 @@ resource stagingAppSettings 'Microsoft.Web/sites/slots/config@2023-12-01' = {
     ASPNETCORE_ENVIRONMENT: 'Production'
     APPLICATIONINSIGHTS_CONNECTION_STRING: appInsightsConnectionString
     MICROSOFT_PROVIDER_AUTHENTICATION_SECRET: authClientSecret
+    AI__DefaultProvider: aiDefaultProvider
+    AI__Anthropic__ApiKey: aiAnthropicApiKey
+    AI__AzureFoundry__Endpoint: aiAzureFoundryEndpoint
+    AI__AzureFoundry__ApiKey: aiAzureFoundryApiKey
+    AI__AzureFoundry__FastDeployment: aiAzureFoundryFastDeployment
+    AI__AzureFoundry__DeepDeployment: aiAzureFoundryDeepDeployment
+    AI__AzureOpenAI__Endpoint: aiAzureOpenAIEndpoint
+    AI__AzureOpenAI__ApiKey: aiAzureOpenAIApiKey
+    AI__AzureOpenAI__Deployment: aiAzureOpenAIDeployment
   }
 }
 

@@ -19,7 +19,7 @@ Two-project solution (`BookTracker.slnx`, the new XML solution format):
 
 **DbContext lifetime:** Blazor Server circuits are long-lived while `DbContext` is scoped and not thread-safe. `Program.cs` registers `AddDbContextFactory<BookTrackerDbContext>`; components inject `IDbContextFactory<T>` and create/dispose a context per operation (`await using var db = await DbFactory.CreateDbContextAsync();`). Do **not** switch back to `AddDbContext` + direct injection.
 
-Entity model: `Book` (Title, Author, many-to-many `Genres`, `BookStatus` enum Unread/Reading/Read, Rating 0–5, Notes, DateAdded, DefaultCoverArtUrl, one-to-many `Copies`), `BookCopy` (Isbn, `BookFormat`, DatePrinted, `BookCondition` default Good, optional CustomCoverArtUrl), `Genre` (unique Name), and `WishlistItem` (Title, Author, `WishlistPriority`, nullable Price `decimal(10,2)`, DateAdded).
+Entity model: `Book` (Title, Author, many-to-many `Genres`, `BookStatus` enum, Rating, Notes, DateAdded, DefaultCoverArtUrl, one-to-many `Editions`, optional `Series`), `Edition` (unique Isbn, `BookFormat`, DatePrinted, CoverUrl, Publisher, one-to-many `Copies`), `Copy` (Condition, DateAcquired, Notes), `Genre` (hierarchical with parent/child), `Series` (Name, Author, `SeriesType` Series/Collection, ExpectedCount), `Tag` (many-to-many with Book), `Publisher`, and `WishlistItem` (Title, Author, Priority, optional Isbn/Series link).
 
 Config convention: connection string name is **`DefaultConnection`**. Dev value lives in `appsettings.Development.json` and points at the Docker SQL container. Prod value comes from Azure App Service configuration. `appsettings*.json` is **gitignored**; committed templates live alongside them as `appsettings.Example.json` and `appsettings.Development.Example.json` — on a fresh clone, copy each `.Example.json` to the real filename and fill in secrets.
 
@@ -68,6 +68,16 @@ Typical first-run loop: `docker compose up -d` → `dotnet ef database update ..
 
 The app is used on both desktop and mobile (phones for barcode scanning and quick library checks). When planning new features, always clarify whether the feature should be **mobile-prioritised** (responsive-first, tested at small breakpoints) or **web-only** (desktop layout sufficient). Key mobile workflows: bulk ISBN scanning, library search.
 
-## Not yet in the repo
+## AI integration
 
-No Anthropic integration. When adding tests, add them to the existing `BookTracker.Tests\` project.
+Three AI providers supported, selectable at runtime via toggle on the AI Assistant and Bulk Add pages:
+
+- **Anthropic** (direct API) — Claude Sonnet for fast ops, Opus for deep analysis
+- **Azure Foundry** — Claude via Azure endpoint (uses Azure credits)
+- **Azure OpenAI** — GPT-4o
+
+Config under `AI:` section in appsettings. Only providers with API keys configured are available. See `appsettings.Example.json` for structure.
+
+## Tests
+
+Tests live in `BookTracker.Tests\` (xUnit + NSubstitute + EF InMemory). CI runs tests on all PRs to main.

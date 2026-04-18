@@ -84,8 +84,62 @@ Bind a custom hostname (e.g. `books.silly.ninja`) to the production slot with a 
 
 Works for CNAME-pointed subdomains only. Apex domains (`silly.ninja`) need a different cert issuance path (A record + ALIAS or equivalent) — not covered here.
 
+## AI provider configuration
+
+The app supports three AI providers. Configure whichever ones you want to use — only providers with API keys will appear in the runtime toggle. Set these as App Settings in the Azure Portal (`Configuration > Application settings`) or pass them via Bicep parameters.
+
+### Anthropic (direct API)
+
+1. Create an account at [console.anthropic.com](https://console.anthropic.com).
+2. Go to **API Keys** and create a new key.
+3. Add the app setting:
+
+| Setting | Value |
+|---------|-------|
+| `AI__DefaultProvider` | `Anthropic` |
+| `AI__Anthropic__ApiKey` | `sk-ant-...` (your API key) |
+
+Model defaults (Sonnet for fast ops, Opus for deep analysis) are built into the app — no need to configure them unless you want to override.
+
+### Azure AI Foundry (Claude via Azure)
+
+1. In the [Azure Portal](https://portal.azure.com), create an **Azure AI Foundry** resource (or use an existing one).
+2. Deploy a Claude model (e.g. `claude-sonnet`) — note the deployment name.
+3. Optionally deploy a second model for deep analysis (e.g. `claude-opus`).
+4. From the resource's **Keys and Endpoint** page, copy the endpoint URL and a key.
+5. Add the app settings:
+
+| Setting | Value |
+|---------|-------|
+| `AI__DefaultProvider` | `AzureFoundry` (or keep `Anthropic` and switch at runtime) |
+| `AI__AzureFoundry__Endpoint` | `https://<resource>.services.ai.azure.com` |
+| `AI__AzureFoundry__ApiKey` | Your Azure AI Foundry key |
+| `AI__AzureFoundry__FastDeployment` | Deployment name for fast ops (e.g. `claude-sonnet`) |
+| `AI__AzureFoundry__DeepDeployment` | Deployment name for deep analysis (e.g. `claude-opus`) |
+
+### Azure OpenAI (GPT-4o)
+
+1. In the [Azure Portal](https://portal.azure.com), create an **Azure OpenAI** resource.
+2. Go to **Azure AI Foundry** (linked from the resource) and deploy a model — e.g. `gpt-4o`. Note the deployment name.
+3. From the resource's **Keys and Endpoint** page, copy the endpoint URL and a key.
+4. Add the app settings:
+
+| Setting | Value |
+|---------|-------|
+| `AI__DefaultProvider` | `AzureOpenAI` (or keep another default and switch at runtime) |
+| `AI__AzureOpenAI__Endpoint` | `https://<resource>.openai.azure.com` |
+| `AI__AzureOpenAI__ApiKey` | Your Azure OpenAI key |
+| `AI__AzureOpenAI__Deployment` | Deployment name (e.g. `gpt-4o`) |
+
+### Notes
+
+- You can configure multiple providers simultaneously. The app auto-detects which ones have valid keys and shows them in the provider toggle dropdown.
+- `AI__DefaultProvider` determines which provider is active on page load. Users can switch at runtime via the dropdown on the AI Assistant and Bulk Add pages.
+- For local development, add the same settings to `appsettings.Development.json` under the `AI` section (using `:` instead of `__` as the separator). See `appsettings.Example.json` for the structure.
+
 ## TODOs
 
 - Move the Easy Auth client secret from an app setting to a Key Vault reference and schedule rotation.
 - Consider Private Endpoint + VNet integration instead of the "Allow Azure services" SQL firewall rule.
 - Add a staging slot to the App Service once the deploy pipeline is in place.
+- Consider moving AI API keys to Key Vault references for better secret management.
