@@ -9,6 +9,7 @@ param authClientSecret string
 param sqlServerFqdn string
 param sqlDatabaseName string
 param appInsightsConnectionString string
+param appIntegrationSubnetId string
 
 // AI provider config — set via Azure Portal or CLI for secrets.
 // Only configure the providers you want to use.
@@ -53,6 +54,8 @@ resource app 'Microsoft.Web/sites@2023-12-01' = {
     serverFarmId: plan.id
     httpsOnly: true
     clientAffinityEnabled: true
+    virtualNetworkSubnetId: appIntegrationSubnetId
+    vnetRouteAllEnabled: true
     siteConfig: {
       linuxFxVersion: 'DOTNETCORE|10.0'
       alwaysOn: true
@@ -157,6 +160,8 @@ resource stagingSlot 'Microsoft.Web/sites/slots@2023-12-01' = {
     serverFarmId: plan.id
     httpsOnly: true
     clientAffinityEnabled: true
+    virtualNetworkSubnetId: appIntegrationSubnetId
+    vnetRouteAllEnabled: true
     siteConfig: {
       linuxFxVersion: 'DOTNETCORE|10.0'
       alwaysOn: true
