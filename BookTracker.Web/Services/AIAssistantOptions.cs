@@ -5,7 +5,7 @@ namespace BookTracker.Web.Services;
 public enum AIProvider
 {
     Anthropic,
-    AzureFoundry,
+    MicrosoftFoundry,
     AzureOpenAI
 }
 
@@ -16,7 +16,7 @@ public class AIOptions
     public AIProvider DefaultProvider { get; set; } = AIProvider.Anthropic;
 
     public AnthropicOptions Anthropic { get; set; } = new();
-    public AzureFoundryOptions AzureFoundry { get; set; } = new();
+    public MicrosoftFoundryOptions MicrosoftFoundry { get; set; } = new();
     public AzureOpenAIOptions AzureOpenAI { get; set; } = new();
 }
 
@@ -28,7 +28,7 @@ public class AnthropicOptions
     public int MaxTokens { get; set; } = 1024;
 }
 
-public class AzureFoundryOptions
+public class MicrosoftFoundryOptions
 {
     public string Endpoint { get; set; } = "";
     public string ApiKey { get; set; } = "";

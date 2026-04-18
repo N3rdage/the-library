@@ -7,12 +7,12 @@ using Microsoft.EntityFrameworkCore;
 namespace BookTracker.Web.Services;
 
 /// <summary>
-/// AI assistant implementation using Claude models hosted on Azure AI Foundry.
+/// AI assistant implementation using Claude models hosted on Microsoft Foundry.
 /// Uses the Anthropic SDK with a custom HttpClient pointing at the Azure endpoint.
 /// </summary>
-public class AzureFoundryAIAssistantService(
+public class MicrosoftFoundryAIAssistantService(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
-    AzureFoundryOptions options) : IAIAssistantService
+    MicrosoftFoundryOptions options) : IAIAssistantService
 {
     private AnthropicClient? _client;
 

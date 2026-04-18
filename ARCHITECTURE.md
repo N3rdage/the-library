@@ -4,7 +4,7 @@ This document describes the overall design and structure of BookTracker. It shou
 
 ## Overview
 
-BookTracker is an ASP.NET Core Blazor Web App for managing a personal book library. It runs in **Interactive Server** render mode (Blazor Server), backed by EF Core + SQL Server. It includes AI-powered features via multiple providers: Anthropic (Claude), Azure AI Foundry (Claude), and Azure OpenAI (GPT-4o).
+BookTracker is an ASP.NET Core Blazor Web App for managing a personal book library. It runs in **Interactive Server** render mode (Blazor Server), backed by EF Core + SQL Server. It includes AI-powered features via multiple providers: Anthropic (Claude), Microsoft Foundry (Claude), and Azure OpenAI (GPT-4o).
 
 Target deployment: Azure App Service + Azure SQL (Basic tier) via GitHub Actions.
 
@@ -134,7 +134,7 @@ Multi-provider architecture with runtime switching via `AIProviderFactory`.
 
 **Providers:**
 - `AnthropicAIAssistantService` — Anthropic API direct. Sonnet for fast ops, Opus for deep analysis. Prompt caching via `CacheControlEphemeral`.
-- `AzureFoundryAIAssistantService` — Claude via Azure AI Foundry. Same Anthropic SDK with custom endpoint. Uses Azure credits.
+- `MicrosoftFoundryAIAssistantService` — Claude via Microsoft Foundry. Same Anthropic SDK with custom endpoint. Uses Azure credits.
 - `AzureOpenAIAssistantService` — GPT-4o via Azure OpenAI SDK. Single deployment for all operations.
 
 **Shared logic:** `SharedParsers` provides JSON parsing and prompt building used by all providers.
@@ -178,14 +178,14 @@ CI runs `dotnet test` on all PRs to main.
 | Setting | Source | Purpose |
 |---------|--------|---------|
 | `ConnectionStrings:DefaultConnection` | appsettings / Azure config | SQL Server connection |
-| `AI:DefaultProvider` | appsettings / Azure config | `Anthropic`, `AzureFoundry`, or `AzureOpenAI` |
+| `AI:DefaultProvider` | appsettings / Azure config | `Anthropic`, `MicrosoftFoundry`, or `AzureOpenAI` |
 | `AI:Anthropic:ApiKey` | appsettings / Azure config | Anthropic API key |
 | `AI:Anthropic:FastModel` | appsettings (default: SDK constant) | Model for fast AI ops |
 | `AI:Anthropic:DeepModel` | appsettings (default: SDK constant) | Model for deep analysis |
-| `AI:AzureFoundry:Endpoint` | appsettings / Azure config | Azure AI Foundry endpoint URL |
-| `AI:AzureFoundry:ApiKey` | appsettings / Azure config | Azure AI Foundry key |
-| `AI:AzureFoundry:FastDeployment` | appsettings / Azure config | Deployment for fast ops |
-| `AI:AzureFoundry:DeepDeployment` | appsettings / Azure config | Deployment for deep analysis |
+| `AI:MicrosoftFoundry:Endpoint` | appsettings / Azure config | Microsoft Foundry endpoint URL |
+| `AI:MicrosoftFoundry:ApiKey` | appsettings / Azure config | Microsoft Foundry key |
+| `AI:MicrosoftFoundry:FastDeployment` | appsettings / Azure config | Deployment for fast ops |
+| `AI:MicrosoftFoundry:DeepDeployment` | appsettings / Azure config | Deployment for deep analysis |
 | `AI:AzureOpenAI:Endpoint` | appsettings / Azure config | Azure OpenAI endpoint URL |
 | `AI:AzureOpenAI:ApiKey` | appsettings / Azure config | Azure OpenAI key |
 | `AI:AzureOpenAI:Deployment` | appsettings / Azure config | GPT-4o deployment name |
