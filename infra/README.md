@@ -1,29 +1,74 @@
 # Azure infrastructure
 
-Provisions the Azure footprint for BookTracker into a single resource group.
+Provisions the Azure footprint for BookTracker into a single resource group. Everything reachable from the App Service is locked behind Private Endpoints; the only public surface is the App Service itself (gated by Easy Auth).
 
 ## What gets created
 
 All tagged with `Client = Drew` and `Environment = Production`.
 
-| Resource | Name pattern | Notes |
-|---|---|---|
-| Resource group | `rg-booktracker-prod` | holds everything; tags inherited |
-| App Service plan | `booktracker-plan` | Linux, S1 |
-| App Service | `booktracker-<hash>` | Linux, DOTNETCORE\|10.0, WebSockets + AlwaysOn + ARR Affinity on |
-| System-assigned managed identity | on the App Service | granted `db_datareader/writer/ddladmin` on the SQL DB |
-| Azure SQL logical server | `booktracker-sql-<hash>` | **AAD-only auth**; the user running `deploy.ps1` becomes the AAD admin |
-| Azure SQL database | `booktracker` | Basic tier, 5 DTU |
-| Log Analytics workspace | `booktracker-logs` | 30-day retention |
-| Application Insights | `booktracker-ai` | workspace-based, wired to the App Service |
+| Resource | Name pattern | Region | Notes |
+|---|---|---|---|
+| Resource group | `rg-booktracker-prod` | `australiaeast` | holds everything; tags inherited |
+| Primary VNet | `booktracker-vnet` (`10.0.0.0/16`) | `australiaeast` | `app-integration` (`10.0.1.0/24`, delegated to App Service) + `private-endpoints` (`10.0.2.0/24`) |
+| Secondary VNet | `booktracker-vnet-eastus2` (`10.1.0.0/16`) | `eastus2` | `private-endpoints` (`10.1.2.0/24`); hosts the OpenAI PE |
+| VNet peering | `to-…` (both directions) | — | bidirectional pair so the App Service can reach the OpenAI PE |
+| App Service plan | `booktracker-plan` | `australiaeast` | Linux, S1 |
+| App Service | `booktracker-<hash>` | `australiaeast` | Linux, DOTNETCORE\|10.0; VNet integration with `vnetRouteAllEnabled` |
+| Staging slot | `staging` on the App Service | `australiaeast` | own system-assigned identity; CI deploys here, `swap.yml` promotes |
+| System-assigned managed identities | on prod + staging slots | — | granted SQL DB roles + Key Vault Secrets User + Cognitive Services User on OpenAI |
+| Azure SQL logical server | `booktracker-sql-<hash>` | `australiaeast` | **AAD-only auth**; `publicNetworkAccess = Disabled` by default |
+| Azure SQL database | `booktracker` | `australiaeast` | Basic tier, 5 DTU |
+| Azure SQL Private Endpoint | `booktracker-sql-<hash>-pe` | `australiaeast` | in primary `private-endpoints` subnet |
+| Key Vault | `booktracker-kv-<hash>` | `australiaeast` | Standard, RBAC auth, `defaultAction = Deny`; holds AuthClientSecret + AI keys |
+| Key Vault Private Endpoint | `booktracker-kv-<hash>-pe` | `australiaeast` | in primary `private-endpoints` subnet |
+| Azure OpenAI account | `booktracker-openai-<hash>` | `eastus2` | S0; `publicNetworkAccess = Disabled`; `gpt-4o` deployment, Standard SKU, capacity 10 |
+| Azure OpenAI Private Endpoint | `booktracker-openai-<hash>-pe` | `eastus2` | in secondary `private-endpoints` subnet |
+| Private DNS zones | `privatelink.database.windows.net`, `privatelink.vaultcore.azure.net`, `privatelink.openai.azure.com` | global | each linked to both VNets so the App resolves PE IPs |
+| Log Analytics workspace | `booktracker-logs` | `australiaeast` | 30-day retention |
+| Application Insights | `booktracker-ai` | `australiaeast` | workspace-based, wired to the App Service |
 
 The App Service uses **Easy Auth v2** pointed at the `Library-Patrons` Entra app registration. With `appRoleAssignmentRequired = true` set on its service principal, only users/groups assigned to the enterprise app can sign in.
+
+### Why eastus2
+
+The Azure OpenAI account lives in `eastus2`, not `australiaeast`. Microsoft is retiring `gpt-4o` in `australiaeast` on 2026-06-03 with no announced successor, so a second region is required regardless. The eastus2 VNet exists solely to host the OpenAI PE; cross-region traffic from the App Service flows through the VNet peering.
+
+Microsoft Foundry (Claude on Azure) is **not provisioned** — Drew's subscription is `Sponsored_2016-01-01`, which Microsoft excludes from Claude eligibility on Foundry. The `MicrosoftFoundry` provider therefore won't appear in the app's runtime picker; direct Anthropic API (public, no Azure resource) remains the way to reach Claude. See `TODO.md` for the follow-up to add Foundry once on an EA / MCA-E subscription.
+
+## Network topology
+
+```
+Internet → App Service (australiaeast, public, Easy Auth)
+              │ VNet integration (vnetRouteAllEnabled)
+              ▼
+       primary VNet (10.0.0.0/16, australiaeast)
+           ├── PE → SQL (australiaeast)
+           └── PE → Key Vault (australiaeast)
+              │ peering
+              ▼
+       secondary VNet (10.1.0.0/16, eastus2)
+           └── PE → Azure OpenAI (eastus2)
+```
+
+Each Private DNS Zone is linked to both VNets so the App Service (resolving via the australiaeast VNet) gets the private IP regardless of which side of the peer hosts the resource.
+
+## Secrets and Key Vault references
+
+All secret App Settings resolve via `@Microsoft.KeyVault(SecretUri=…)` references:
+
+| App setting | KV secret | Source |
+|---|---|---|
+| `MICROSOFT_PROVIDER_AUTHENTICATION_SECRET` | `AuthClientSecret` | rotated by `deploy.ps1` (2-year expiry) |
+| `AI__AzureOpenAI__ApiKey` | `AIAzureOpenAIApiKey` | written by `ai-services.bicep` via `listKeys()` — never seen by the deploy script |
+| `AI__Anthropic__ApiKey` | `AIAnthropicApiKey` | optional; supplied via `-AnthropicApiKey` |
+
+App Service caches resolved KV values; rotating a secret takes effect on the next reference refresh (~24h, or immediate via portal "Refresh Key Vault references").
 
 ## Prereqs
 
 - PowerShell 7+ on Windows.
 - An Azure subscription where you have Owner (or Contributor + User Access Administrator).
-- An Entra tenant where you can create app registrations (global admin consent is not required; `Application.ReadWrite.All` + `Directory.Read.All` on the signed-in user is).
+- An Entra tenant where you can create app registrations (`Application.ReadWrite.All` + `Directory.Read.All` on the signed-in user is sufficient).
 - You must run `deploy.ps1` as a **user** (not a service principal) — the script sets the signed-in user as the SQL AAD admin.
 
 Required PowerShell modules (auto-installed to `CurrentUser` on first run): `Az.Accounts`, `Az.Resources`, `Microsoft.Graph.Applications`, `Microsoft.Graph.Users`, `SqlServer` (v22+ for AAD token auth).
@@ -35,7 +80,17 @@ cd infra
 ./deploy.ps1 -TenantId '<tenant-guid>' -SubscriptionId '<sub-guid>'
 ```
 
-Optional parameters: `-Location` (default `australiaeast`), `-AppName` (default `booktracker`), `-EnterpriseAppName` (default `Library-Patrons`).
+Optional parameters:
+
+| Param | Default | Purpose |
+|---|---|---|
+| `-Location` | `australiaeast` | primary region |
+| `-AppName` | `booktracker` | base name for resources |
+| `-EnterpriseAppName` | `Library-Patrons` | enterprise app name for Easy Auth |
+| `-CustomDomain` | _empty_ | bind a custom hostname (e.g. `books.silly.ninja`) — see below |
+| `-SecondaryLocation` | `eastus2` | region for the AI VNet + OpenAI account |
+| `-DevClientIp` | _empty_ | optional IPv4 to whitelist on the SQL firewall for ad-hoc local EF migrations; leave blank to keep SQL fully private |
+| `-AnthropicApiKey` | _empty_ | optional `sk-ant-…`; when supplied it's stored in Key Vault and exposed via a KV ref |
 
 What the script does:
 1. Signs you in to Azure + Microsoft Graph.
@@ -43,7 +98,14 @@ What the script does:
 3. Rotates a 2-year client secret for Easy Auth.
 4. Runs `main.bicep` at subscription scope (creates the RG + everything else).
 5. Registers the App Service's Easy Auth callback URL on the app registration.
-6. Connects to the new SQL DB with AAD auth and grants the App Service managed identity `db_datareader/writer/ddladmin`.
+6. Temporarily flips SQL `publicNetworkAccess` on, opens a temp firewall rule for the script's public IP, connects with AAD auth, grants the prod + staging managed identities `db_datareader/writer/ddladmin`, then restores SQL back to private.
+
+### Local EF migrations after the cutover
+
+With SQL on a Private Endpoint by default, `dotnet ef database update` from a developer laptop won't reach the server. Two options:
+
+- Re-run `deploy.ps1` with `-DevClientIp <your.ipv4>`. This both creates a `DevClient` firewall rule and flips `publicNetworkAccess` to `Enabled`. Re-run without the flag later to seal it back up.
+- Or let CI run migrations (the existing on-startup `MigrateAsync` path still works since the App Service hits SQL through the PE).
 
 ## GitHub Actions CI/CD
 
@@ -59,9 +121,9 @@ The script creates a `booktracker-ci` app registration with federated identity c
 Workflows under `.github/workflows/`:
 - `ci.yml` — build on PRs.
 - `deploy.yml` — on push to `main`: build, publish, deploy to the **staging** slot.
-- `swap.yml` — manual: `az webapp deployment slot swap staging -> production`. TODO in the file to wire up a GitHub Environment with required reviewers.
+- `swap.yml` — manual: `az webapp deployment slot swap staging -> production`. (Adding a GitHub Environment with required reviewers is tracked in `TODO.md`.)
 
-Schema migrations currently run on app startup via `db.Database.MigrateAsync()`. Fine for a single-instance app; there's a TODO in `Program.cs` to switch to a deploy-time migration bundle once the app scales out.
+Schema migrations currently run on app startup via `db.Database.MigrateAsync()`. Fine for a single-instance app; switching to a deploy-time migration bundle is tracked in `TODO.md`.
 
 ## Post-deploy
 
@@ -86,60 +148,31 @@ Works for CNAME-pointed subdomains only. Apex domains (`silly.ninja`) need a dif
 
 ## AI provider configuration
 
-The app supports three AI providers. Configure whichever ones you want to use — only providers with API keys will appear in the runtime toggle. Set these as App Settings in the Azure Portal (`Configuration > Application settings`) or pass them via Bicep parameters.
+The app supports up to three AI providers; only providers with valid config appear in the runtime toggle. App Settings are wired by `app-config.bicep` and resolve secrets from Key Vault automatically — there's no portal step for the provisioned providers.
 
-### Anthropic (direct API)
+### Anthropic (direct, public API)
 
-1. Create an account at [console.anthropic.com](https://console.anthropic.com).
-2. Go to **API Keys** and create a new key.
-3. Add the app setting:
+The Anthropic provider hits `api.anthropic.com` directly (no Azure resource needed). To enable it, supply the key on a deploy:
 
-| Setting | Value |
-|---------|-------|
-| `AI__DefaultProvider` | `Anthropic` |
-| `AI__Anthropic__ApiKey` | `sk-ant-...` (your API key) |
+```powershell
+./deploy.ps1 -TenantId … -SubscriptionId … -AnthropicApiKey 'sk-ant-…'
+```
 
-Model defaults (Sonnet for fast ops, Opus for deep analysis) are built into the app — no need to configure them unless you want to override.
+The script passes the key to Bicep, which writes it to Key Vault as `AIAnthropicApiKey`. The `AI__Anthropic__ApiKey` App Setting becomes a KV reference. Rotate later by re-running the deploy with a new key.
 
-### Microsoft Foundry (Claude via Azure)
+### Azure OpenAI (gpt-4o, eastus2)
 
-1. In the [Azure Portal](https://portal.azure.com), create a **Microsoft Foundry** resource (or use an existing one).
-2. Deploy a Claude model (e.g. `claude-sonnet`) — note the deployment name.
-3. Optionally deploy a second model for deep analysis (e.g. `claude-opus`).
-4. From the resource's **Keys and Endpoint** page, copy the endpoint URL and a key.
-5. Add the app settings:
+Provisioned automatically by `ai-services.bicep` — no manual portal step, no key handling. The Bicep:
+- Creates the `booktracker-openai-<hash>` account in eastus2 with `publicNetworkAccess = Disabled`.
+- Deploys `gpt-4o` (version `2024-11-20`, Standard, capacity 10).
+- Writes `key1` into KV as `AIAzureOpenAIApiKey` via `listKeys()` (the deploy script never sees it).
+- Adds a Private Endpoint in the eastus2 VNet so the App Service can reach it.
+- Grants both App Service slot identities the `Cognitive Services User` role on the account so a future managed-identity migration is just a code change.
 
-| Setting | Value |
-|---------|-------|
-| `AI__DefaultProvider` | `MicrosoftFoundry` (or keep `Anthropic` and switch at runtime) |
-| `AI__MicrosoftFoundry__Endpoint` | `https://<resource>.services.ai.azure.com` |
-| `AI__MicrosoftFoundry__ApiKey` | Your Microsoft Foundry key |
-| `AI__MicrosoftFoundry__FastDeployment` | Deployment name for fast ops (e.g. `claude-sonnet`) |
-| `AI__MicrosoftFoundry__DeepDeployment` | Deployment name for deep analysis (e.g. `claude-opus`) |
+### Microsoft Foundry (deferred)
 
-### Azure OpenAI (GPT-4o)
+Not provisioned. See "Why eastus2" above and `TODO.md`.
 
-1. In the [Azure Portal](https://portal.azure.com), create an **Azure OpenAI** resource.
-2. Go to **Microsoft Foundry** (linked from the resource) and deploy a model — e.g. `gpt-4o`. Note the deployment name.
-3. From the resource's **Keys and Endpoint** page, copy the endpoint URL and a key.
-4. Add the app settings:
+### Local development
 
-| Setting | Value |
-|---------|-------|
-| `AI__DefaultProvider` | `AzureOpenAI` (or keep another default and switch at runtime) |
-| `AI__AzureOpenAI__Endpoint` | `https://<resource>.openai.azure.com` |
-| `AI__AzureOpenAI__ApiKey` | Your Azure OpenAI key |
-| `AI__AzureOpenAI__Deployment` | Deployment name (e.g. `gpt-4o`) |
-
-### Notes
-
-- You can configure multiple providers simultaneously. The app auto-detects which ones have valid keys and shows them in the provider toggle dropdown.
-- `AI__DefaultProvider` determines which provider is active on page load. Users can switch at runtime via the dropdown on the AI Assistant and Bulk Add pages.
-- For local development, add the same settings to `appsettings.Development.json` under the `AI` section (using `:` instead of `__` as the separator). See `appsettings.Example.json` for the structure.
-
-## TODOs
-
-- Move the Easy Auth client secret from an app setting to a Key Vault reference and schedule rotation.
-- Consider Private Endpoint + VNet integration instead of the "Allow Azure services" SQL firewall rule.
-- Add a staging slot to the App Service once the deploy pipeline is in place.
-- Consider moving AI API keys to Key Vault references for better secret management.
+For local dev, copy `appsettings.Example.json` → `appsettings.Development.json` and fill in the `AI:` section with the providers you want to test (using `:` instead of `__` as the separator). Local dev hits the Azure resources only if you supply real endpoints/keys; otherwise stub or skip.

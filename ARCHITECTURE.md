@@ -4,9 +4,9 @@ This document describes the overall design and structure of BookTracker. It shou
 
 ## Overview
 
-BookTracker is an ASP.NET Core Blazor Web App for managing a personal book library. It runs in **Interactive Server** render mode (Blazor Server), backed by EF Core + SQL Server. It includes AI-powered features via multiple providers: Anthropic (Claude), Microsoft Foundry (Claude), and Azure OpenAI (GPT-4o).
+BookTracker is an ASP.NET Core Blazor Web App for managing a personal book library. It runs in **Interactive Server** render mode (Blazor Server), backed by EF Core + SQL Server. It includes AI-powered features via multiple providers: Anthropic (Claude, public API) and Azure OpenAI (GPT-4o, Azure-hosted). Microsoft Foundry (Claude on Azure) is supported in code but not currently provisioned — see `infra/README.md` and `TODO.md`.
 
-Target deployment: Azure App Service + Azure SQL (Basic tier) via GitHub Actions.
+Target deployment: Azure App Service + Azure SQL (Basic tier) via GitHub Actions. SQL, Key Vault, and Azure OpenAI sit behind Private Endpoints; the App Service reaches them through VNet integration + a peered eastus2 VNet for the OpenAI account.
 
 ## Solution structure
 
@@ -177,18 +177,20 @@ CI runs `dotnet test` on all PRs to main.
 
 | Setting | Source | Purpose |
 |---------|--------|---------|
-| `ConnectionStrings:DefaultConnection` | appsettings / Azure config | SQL Server connection |
-| `AI:DefaultProvider` | appsettings / Azure config | `Anthropic`, `MicrosoftFoundry`, or `AzureOpenAI` |
-| `AI:Anthropic:ApiKey` | appsettings / Azure config | Anthropic API key |
+| `ConnectionStrings:DefaultConnection` | appsettings / Azure config | SQL Server connection (AAD via managed identity in Azure) |
+| `AI:DefaultProvider` | Azure App Setting | `Anthropic`, `MicrosoftFoundry`, or `AzureOpenAI` |
+| `AI:Anthropic:ApiKey` | Key Vault ref (prod) / appsettings (dev) | Anthropic API key |
 | `AI:Anthropic:FastModel` | appsettings (default: SDK constant) | Model for fast AI ops |
 | `AI:Anthropic:DeepModel` | appsettings (default: SDK constant) | Model for deep analysis |
-| `AI:MicrosoftFoundry:Endpoint` | appsettings / Azure config | Microsoft Foundry endpoint URL |
-| `AI:MicrosoftFoundry:ApiKey` | appsettings / Azure config | Microsoft Foundry key |
-| `AI:MicrosoftFoundry:FastDeployment` | appsettings / Azure config | Deployment for fast ops |
-| `AI:MicrosoftFoundry:DeepDeployment` | appsettings / Azure config | Deployment for deep analysis |
-| `AI:AzureOpenAI:Endpoint` | appsettings / Azure config | Azure OpenAI endpoint URL |
-| `AI:AzureOpenAI:ApiKey` | appsettings / Azure config | Azure OpenAI key |
-| `AI:AzureOpenAI:Deployment` | appsettings / Azure config | GPT-4o deployment name |
+| `AI:MicrosoftFoundry:Endpoint` | _(not set in prod — provider deferred)_ | Microsoft Foundry endpoint URL |
+| `AI:MicrosoftFoundry:ApiKey` | _(not set in prod — provider deferred)_ | Microsoft Foundry key |
+| `AI:MicrosoftFoundry:FastDeployment` | _(not set in prod — provider deferred)_ | Deployment for fast ops |
+| `AI:MicrosoftFoundry:DeepDeployment` | _(not set in prod — provider deferred)_ | Deployment for deep analysis |
+| `AI:AzureOpenAI:Endpoint` | Bicep output | Azure OpenAI endpoint URL |
+| `AI:AzureOpenAI:ApiKey` | Key Vault ref (written by Bicep via `listKeys()`) | Azure OpenAI key |
+| `AI:AzureOpenAI:Deployment` | Bicep output | GPT-4o deployment name |
+
+In prod, secret App Settings resolve via `@Microsoft.KeyVault(SecretUri=…)` references — the App Service's managed identity has `Key Vault Secrets User` on the vault. `deploy.ps1` writes `AuthClientSecret` + optionally `AIAnthropicApiKey` to the vault; `ai-services.bicep` writes `AIAzureOpenAIApiKey` via `listKeys()` against the newly-created OpenAI account.
 
 Dev config templates: `appsettings.Example.json`, `appsettings.Development.Example.json`. Copy and fill in secrets. Only configure providers you want to use — the toggle auto-detects available providers.
 
@@ -197,8 +199,8 @@ Dev config templates: `appsettings.Example.json`, `appsettings.Development.Examp
 - Docker Compose for local SQL Server 2022 Developer
 - GitHub Actions CI (build + test on PR)
 - Dependabot for NuGet (EF Core grouped) and npm (html5-qrcode)
-- Azure Bicep templates under `infra/` (includes AI provider config parameters)
-- Auto-migration on startup (TODO: deploy-time migration bundle)
+- Azure Bicep templates under `infra/`. SQL, Key Vault, and Azure OpenAI are reachable only via Private Endpoints; the App Service uses VNet integration + a peered eastus2 VNet to reach OpenAI. See `infra/README.md` for the full topology.
+- Auto-migration on startup (`TODO.md`: switch to deploy-time migration bundle when going multi-instance)
 
 ## Key conventions
 
