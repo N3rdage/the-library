@@ -15,6 +15,13 @@ param customDomain string = ''
 @description('Optional public IPv4 address allowed through the SQL firewall for ad-hoc access. Leave blank to keep SQL fully private.')
 param devClientIp string = ''
 
+@description('Region for Azure-hosted AI services (Azure OpenAI). Defaults to eastus2 because the gpt-4o deployment in australiaeast is being retired in June 2026.')
+param secondaryLocation string = 'eastus2'
+
+@description('Optional Anthropic public-API key. When supplied it is stored in Key Vault and exposed as the AI__Anthropic__ApiKey app setting via a KV reference.')
+@secure()
+param anthropicApiKey string = ''
+
 // Short suffix to keep globally-unique names (App Service hostname, SQL server
 // name) stable across re-deploys while still being unique per-subscription.
 var uniqueSuffix = substring(uniqueString(resourceGroup().id), 0, 6)
@@ -23,9 +30,11 @@ var appServicePlanName = '${appName}-plan'
 var sqlServerName = '${appName}-sql-${uniqueSuffix}'
 var sqlDatabaseName = appName
 var vnetName = '${appName}-vnet'
+var vnetSecondaryName = '${appName}-vnet-${secondaryLocation}'
 var keyVaultName = '${appName}-kv-${uniqueSuffix}'
 var logAnalyticsName = '${appName}-logs'
 var appInsightsName = '${appName}-ai'
+var openAIAccountName = '${appName}-openai-${uniqueSuffix}'
 
 module network './network.bicep' = {
   name: 'network'
@@ -33,6 +42,25 @@ module network './network.bicep' = {
     location: location
     tags: tags
     vnetName: vnetName
+  }
+}
+
+module networkSecondary './network-secondary.bicep' = {
+  name: 'networkSecondary'
+  params: {
+    location: secondaryLocation
+    tags: tags
+    vnetName: vnetSecondaryName
+  }
+}
+
+module peering './vnet-peering.bicep' = {
+  name: 'peering'
+  params: {
+    primaryVnetName: network.outputs.vnetName
+    secondaryVnetName: networkSecondary.outputs.vnetName
+    primaryVnetId: network.outputs.vnetId
+    secondaryVnetId: networkSecondary.outputs.vnetId
   }
 }
 
@@ -72,6 +100,12 @@ module sqlPe './sql-private-endpoint.bicep' = {
   }
 }
 
+// App Service is just plan + site + slot here so its identity exists for
+// downstream RBAC (KV, AI services). All actual configuration (app settings,
+// connection strings, Easy Auth) is applied later by app-config.bicep, after
+// KV and AI services are in place. This avoids a reference cycle where AI
+// services need the app's principal IDs while app settings need the AI
+// endpoints.
 module app './appservice.bicep' = {
   name: 'app'
   params: {
@@ -79,20 +113,10 @@ module app './appservice.bicep' = {
     tags: tags
     appServiceName: appServiceName
     appServicePlanName: appServicePlanName
-    tenantId: tenantId
-    authClientId: authClientId
-    authClientSecret: authClientSecret
-    sqlServerFqdn: sql.outputs.sqlServerFqdn
-    sqlDatabaseName: sqlDatabaseName
-    appInsightsConnectionString: obs.outputs.appInsightsConnectionString
     appIntegrationSubnetId: network.outputs.appIntegrationSubnetId
   }
 }
 
-// Key Vault stores secrets and grants access to App Service managed identities.
-// Secrets are stored alongside the raw values in App Settings — to switch to
-// Key Vault references, update the App Settings to use the KV reference outputs
-// (e.g. via a second deploy.ps1 run or manual portal update).
 module kv './keyvault.bicep' = {
   name: 'keyvault'
   params: {
@@ -103,7 +127,85 @@ module kv './keyvault.bicep' = {
     appServicePrincipalId: app.outputs.principalId
     stagingSlotPrincipalId: app.outputs.stagingPrincipalId
     authClientSecret: authClientSecret
+    anthropicApiKey: anthropicApiKey
   }
+}
+
+module kvPe './private-endpoint.bicep' = {
+  name: 'kvPe'
+  params: {
+    location: location
+    tags: tags
+    privateDnsZoneName: 'privatelink.vaultcore.azure.net'
+    linkedVnetIds: [
+      network.outputs.vnetId
+      networkSecondary.outputs.vnetId
+    ]
+    privateEndpointSubnetId: network.outputs.privateEndpointSubnetId
+    targetResourceId: kv.outputs.keyVaultId
+    groupId: 'vault'
+    privateEndpointName: '${keyVaultName}-pe'
+  }
+}
+
+// Azure OpenAI lives in the secondary region. The KV that holds its API key
+// is in the primary region — that's fine, KV cross-region writes work as long
+// as the deploying principal has RBAC.
+module ai './ai-services.bicep' = {
+  name: 'ai'
+  params: {
+    location: secondaryLocation
+    tags: tags
+    openAIAccountName: openAIAccountName
+    keyVaultName: keyVaultName
+    openAICustomSubDomain: openAIAccountName
+    appPrincipalIds: [
+      app.outputs.principalId
+      app.outputs.stagingPrincipalId
+    ]
+  }
+  // KV must exist before ai-services tries to write secrets into it.
+  dependsOn: [
+    kv
+  ]
+}
+
+module openAIPe './private-endpoint.bicep' = {
+  name: 'openAIPe'
+  params: {
+    location: secondaryLocation
+    tags: tags
+    privateDnsZoneName: 'privatelink.openai.azure.com'
+    linkedVnetIds: [
+      network.outputs.vnetId
+      networkSecondary.outputs.vnetId
+    ]
+    privateEndpointSubnetId: networkSecondary.outputs.privateEndpointSubnetId
+    targetResourceId: ai.outputs.openAIId
+    groupId: 'account'
+    privateEndpointName: '${openAIAccountName}-pe'
+  }
+}
+
+module appConfig './app-config.bicep' = {
+  name: 'appConfig'
+  params: {
+    appServiceName: app.outputs.appServiceName
+    stagingSlotName: app.outputs.stagingSlotName
+    tenantId: tenantId
+    authClientId: authClientId
+    sqlServerFqdn: sql.outputs.sqlServerFqdn
+    sqlDatabaseName: sqlDatabaseName
+    appInsightsConnectionString: obs.outputs.appInsightsConnectionString
+    keyVaultName: keyVaultName
+    hasAnthropicKey: !empty(anthropicApiKey)
+    aiAzureOpenAIEndpoint: ai.outputs.openAIEndpoint
+    aiAzureOpenAIDeployment: ai.outputs.openAIDeploymentName
+  }
+  // Wait for KV (so KV refs resolve) and AI deployments (so endpoints exist).
+  dependsOn: [
+    kv
+  ]
 }
 
 module customdomain './customdomain.bicep' = if (!empty(customDomain)) {
@@ -129,3 +231,5 @@ output keyVaultName string = kv.outputs.keyVaultName
 output keyVaultUri string = kv.outputs.keyVaultUri
 output vnetName string = network.outputs.vnetName
 output privateEndpointSubnetId string = network.outputs.privateEndpointSubnetId
+output secondaryVnetName string = networkSecondary.outputs.vnetName
+output openAIEndpoint string = ai.outputs.openAIEndpoint
