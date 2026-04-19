@@ -157,11 +157,12 @@ public class BulkAddViewModel(
         }
 
         var bookTitle = (row.Title ?? $"Unknown book — {row.Isbn}").Trim();
+        var author = await AuthorResolver.FindOrCreateAsync(row.Author ?? "Unknown", db);
         var work = new Work
         {
             Title = bookTitle,
             Subtitle = row.Subtitle,
-            Author = (row.Author ?? "Unknown").Trim(),
+            Author = author,
         };
 
         if (row.GenreCandidates.Count > 0)

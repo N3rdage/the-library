@@ -18,22 +18,34 @@ public class HomeViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
 
         TotalBooks = await db.Books.CountAsync();
 
-        TotalAuthors = await db.Works
-            .Select(w => w.Author)
-            .Distinct()
+        // "Authors" counts canonical Author entities — pen-name aliases roll
+        // up under their canonical (e.g. Bachman titles count toward King).
+        TotalAuthors = await db.Authors
+            .Where(a => a.CanonicalAuthorId == null)
             .CountAsync();
 
-        // Author counts come from Works now — a compendium counts each
-        // contained Work toward its author's tally, which matches "books
-        // by author" in spirit better than counting Book containers.
-        var authors = await db.Works
-            .GroupBy(w => w.Author)
-            .Select(g => new { Author = g.Key, Count = g.Count() })
+        // Group works by their author's canonical id (or own id if canonical),
+        // then look up the canonical name for display. A compendium contributes
+        // one tally per contained Work to its author's count.
+        var authorTotals = await db.Works
+            .Include(w => w.Author).ThenInclude(a => a.CanonicalAuthor)
+            .GroupBy(w => w.Author.CanonicalAuthorId ?? w.Author.Id)
+            .Select(g => new { CanonicalId = g.Key, Count = g.Count() })
             .OrderByDescending(x => x.Count)
-            .ThenBy(x => x.Author)
             .Take(10)
             .ToListAsync();
-        TopAuthors = authors.Select(x => new AuthorCount(x.Author, x.Count)).ToList();
+
+        var canonicalIds = authorTotals.Select(t => t.CanonicalId).ToList();
+        var nameLookup = await db.Authors
+            .Where(a => canonicalIds.Contains(a.Id))
+            .Select(a => new { a.Id, a.Name })
+            .ToDictionaryAsync(x => x.Id, x => x.Name);
+
+        TopAuthors = authorTotals
+            .Select(t => new AuthorCount(nameLookup.GetValueOrDefault(t.CanonicalId) ?? "(unknown)", t.Count))
+            .OrderByDescending(a => a.Count)
+            .ThenBy(a => a.Author)
+            .ToList();
 
         var genres = await db.Genres
             .Select(g => new { Genre = g.Name, Count = g.Works.Count })

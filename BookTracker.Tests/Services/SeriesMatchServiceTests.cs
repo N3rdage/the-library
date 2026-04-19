@@ -49,9 +49,10 @@ public class SeriesMatchServiceTests
         var factory = new TestDbContextFactory();
         using (var db = factory.CreateDbContext())
         {
+            var someAuthor = new Author { Name = "Some Author" };
             db.Books.AddRange(
-                new Book { Title = "Book A", Works = [new Work { Title = "Book A", Author = "Some Author" }] },
-                new Book { Title = "Book B", Works = [new Work { Title = "Book B", Author = "Some Author" }] }
+                new Book { Title = "Book A", Works = [new Work { Title = "Book A", Author = someAuthor }] },
+                new Book { Title = "Book B", Works = [new Work { Title = "Book B", Author = someAuthor }] }
             );
             await db.SaveChangesAsync();
         }
