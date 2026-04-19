@@ -60,7 +60,7 @@ public class BulkAddViewModelTests
             db.Books.Add(new Book
             {
                 Title = "Existing",
-                Author = "Author",
+                Works = [new Work { Title = "Existing", Author = "Author" }],
                 Editions = [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }]
             });
             await db.SaveChangesAsync();
@@ -104,17 +104,17 @@ public class BulkAddViewModelTests
         Assert.Equal(BulkAddViewModel.RowAction.Accepted, row.Action);
 
         using var db = _factory.CreateDbContext();
-        var book = db.Books.FirstOrDefault(b => b.Title == "The Hobbit");
+        var book = db.Books.Include(b => b.Works).FirstOrDefault(b => b.Title == "The Hobbit");
         Assert.NotNull(book);
-        Assert.Equal("J.R.R. Tolkien", book.Author);
+        Assert.Equal("J.R.R. Tolkien", book.Works.Single().Author);
     }
 
     [Fact]
-    public async Task AcceptRowAsync_DualWritesAMirroringWork()
+    public async Task AcceptRowAsync_CreatesWorkAlongsideBook()
     {
-        // PR 1 of the Work refactor: every saved Book must have exactly one
-        // mirroring Work via WorkSync.EnsureWork. This test guards the
-        // dual-write at the BulkAdd save site.
+        // After the Work cutover the bulk-add flow saves a Book and a
+        // single Work in one go. The Work carries the author and any
+        // genres derived from the lookup.
         var vm = CreateVm();
         var row = new BulkAddViewModel.DiscoveryRow
         {

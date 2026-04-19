@@ -22,27 +22,31 @@ All projects target `net10.0`.
 ## Data model
 
 ```
-Book
-  Title, Subtitle, Author, Category (Fiction/NonFiction), Status (Unread/Reading/Read),
-  Rating (0-5), Notes, DateAdded, DefaultCoverArtUrl
+Book                                                ← physical-object grouping
+  Title, Category (Fiction/NonFiction),
+  Status (Unread/Reading/Read), Rating (0-5),
+  Notes, DateAdded, DefaultCoverArtUrl
+  ├── Works (many-to-many)                          ← what's actually inside the book
+  │     Title, Subtitle, Author, FirstPublishedDate
+  │     ├── Genres (many-to-many → Genre)
+  │     └── Series (many-to-1, optional) + SeriesOrder
   ├── Editions (1-to-many)
-  │     ISBN (unique), Format (Hardcopy/Softcopy), DatePrinted, CoverUrl
+  │     ISBN (filtered unique, nullable for pre-ISBN books),
+  │     Format, DatePrinted, CoverUrl
   │     ├── Copies (1-to-many)
   │     │     Condition (AsNew..Poor), DateAcquired, Notes
   │     └── Publisher (many-to-1, optional)
-  ├── Genres (many-to-many, hierarchical — parent/child)
-  ├── Tags (many-to-many, e.g. "follow-up")
-  └── Series (many-to-1, optional)
-        SeriesOrder (position in series)
+  └── Tags (many-to-many, e.g. "follow-up")
 
 Series
   Name (unique), Author (optional), Type (Series/Collection),
   ExpectedCount (for numbered series), Description
-  └── Books (1-to-many)
+  └── Works (1-to-many)
 
 Genre
   Name (unique), ParentGenre (self-referential)
   └── Children (1-to-many)
+  └── Works (many-to-many)
 
 Publisher
   Name (unique)
@@ -57,15 +61,15 @@ WishlistItem
   ISBN (optional), Series (optional FK), SeriesOrder
 
 GenreSeed
-  Static seed data — 48 curated genres in a hierarchical taxonomy
+  Static seed data — 48+ curated genres in a hierarchical taxonomy
 ```
 
 Key design decisions:
-- **Book vs Edition vs Copy**: A Book is a physical-object grouping. An Edition is a specific printing with a unique ISBN (hardcover vs softcover are different Editions). A Copy is a physical item you own.
+- **Work vs Book vs Edition vs Copy**: A `Work` is the abstract creative unit (a story / novel / play / poem). A `Book` is the physical-object grouping containing one or more Works (a compendium contains many; a novel contains one). An `Edition` is a specific printing of the Book with a unique ISBN. A `Copy` is the physical item you own. Authorship, subtitle, genres, and series membership belong to the Work, not the Book — a Christie short-story collection is "horror" because each contained story is, not because the volume itself is tagged.
+- **Single-Work books are the common case** — the Add page auto-creates one Work alongside the Book and mirrors the title between them. Compendium support (multiple Works per Book) lives on the Edit page's "Other works" section.
 - **Edition.ISBN is unique** (filtered — pre-1974 books with no ISBN coexist as nullable rows).
-- **Series.Type**: `Series` = numbered with known order; `Collection` = loose grouping.
+- **Series.Type**: `Series` = numbered with known order; `Collection` = loose grouping. Series membership is per-Work — a short story republished in three compendiums shows once in the series with three book references.
 - **Genre hierarchy**: top-level genres with sub-genres. Selecting a sub-genre auto-selects its parent.
-- **Work refactor (in progress)**: a `Work` is the abstract creative unit (a story/novel/play). PR 1 introduced the entity with an additive schema (`Works`, `BookWork`, `GenreWork` join tables) and a transitional `WorkSync.EnsureWork(book)` helper that's called at every Book save site to keep a 1:1 mirroring Work in step with `Book.{Subtitle, Author, Genres, SeriesId, SeriesOrder}`. Reads still come from the Book columns. PR 2 will cut over reads, allow N Works per Book (compendiums), and drop the legacy Book columns + `BookGenre` join table.
 
 ## Architecture pattern — MVVM
 

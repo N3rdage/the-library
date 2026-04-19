@@ -18,13 +18,16 @@ public class HomeViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
 
         TotalBooks = await db.Books.CountAsync();
 
-        TotalAuthors = await db.Books
-            .Select(b => b.Author)
+        TotalAuthors = await db.Works
+            .Select(w => w.Author)
             .Distinct()
             .CountAsync();
 
-        var authors = await db.Books
-            .GroupBy(b => b.Author)
+        // Author counts come from Works now — a compendium counts each
+        // contained Work toward its author's tally, which matches "books
+        // by author" in spirit better than counting Book containers.
+        var authors = await db.Works
+            .GroupBy(w => w.Author)
             .Select(g => new { Author = g.Key, Count = g.Count() })
             .OrderByDescending(x => x.Count)
             .ThenBy(x => x.Author)
@@ -33,7 +36,7 @@ public class HomeViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
         TopAuthors = authors.Select(x => new AuthorCount(x.Author, x.Count)).ToList();
 
         var genres = await db.Genres
-            .Select(g => new { Genre = g.Name, Count = g.Books.Count })
+            .Select(g => new { Genre = g.Name, Count = g.Works.Count })
             .Where(x => x.Count > 0)
             .OrderByDescending(x => x.Count)
             .ThenBy(x => x.Genre)

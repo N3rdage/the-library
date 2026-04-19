@@ -193,35 +193,49 @@ Rules:
 
     public static async Task<string> BuildLibraryContextAsync(BookTrackerDbContext db, CancellationToken ct)
     {
-        var topAuthors = await db.Books
-            .GroupBy(b => b.Author)
-            .Select(g => new { Author = g.Key, Count = g.Count(), AvgRating = g.Average(b => (double)b.Rating) })
+        // Author stats come from Works — author-per-work is the model now,
+        // and a compendium contributes one entry per contained work to the
+        // author's tally, which matches the reader's reading experience.
+        var topAuthors = await db.Works
+            .GroupBy(w => w.Author)
+            .Select(g => new
+            {
+                Author = g.Key,
+                Count = g.Count(),
+                AvgRating = g.SelectMany(w => w.Books).Average(b => (double?)b.Rating) ?? 0.0
+            })
             .OrderByDescending(a => a.Count)
             .Take(15)
             .ToListAsync(ct);
 
         var topGenres = await db.Genres
-            .Select(g => new { g.Name, Count = g.Books.Count })
+            .Select(g => new { g.Name, Count = g.Works.Count })
             .Where(g => g.Count > 0)
             .OrderByDescending(g => g.Count)
             .Take(10)
             .ToListAsync(ct);
 
         var highlyRated = await db.Books
+            .Include(b => b.Works)
             .Where(b => b.Rating >= 4)
             .OrderByDescending(b => b.Rating).ThenBy(b => b.Title)
             .Take(20)
-            .Select(b => new { b.Title, b.Author, b.Rating })
+            .Select(b => new
+            {
+                b.Title,
+                Author = string.Join(", ", b.Works.Select(w => w.Author).Distinct()),
+                b.Rating
+            })
             .ToListAsync(ct);
 
         var incompleteSeries = await db.Series
-            .Include(s => s.Books)
+            .Include(s => s.Works)
             .Where(s => s.Type == SeriesType.Series && s.ExpectedCount != null)
             .ToListAsync(ct);
 
         var gapsText = incompleteSeries
-            .Where(s => s.Books.Count < s.ExpectedCount!.Value)
-            .Select(s => $"- {s.Name} by {s.Author ?? "various"}: have {s.Books.Count}/{s.ExpectedCount!.Value}, missing: {string.Join(", ", Enumerable.Range(1, s.ExpectedCount.Value).Where(i => !s.Books.Any(b => b.SeriesOrder == i)))}")
+            .Where(s => s.Works.Count < s.ExpectedCount!.Value)
+            .Select(s => $"- {s.Name} by {s.Author ?? "various"}: have {s.Works.Count}/{s.ExpectedCount!.Value}, missing: {string.Join(", ", Enumerable.Range(1, s.ExpectedCount.Value).Where(i => !s.Works.Any(w => w.SeriesOrder == i)))}")
             .ToList();
 
         return $@"Here's the reader's library profile:

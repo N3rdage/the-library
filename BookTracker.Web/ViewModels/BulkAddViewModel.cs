@@ -156,12 +156,38 @@ public class BulkAddViewModel(
             }
         }
 
-        var newBook = new Book
+        var bookTitle = (row.Title ?? $"Unknown book — {row.Isbn}").Trim();
+        var work = new Work
         {
-            Title = (row.Title ?? $"Unknown book — {row.Isbn}").Trim(),
+            Title = bookTitle,
             Subtitle = row.Subtitle,
             Author = (row.Author ?? "Unknown").Trim(),
+        };
+
+        if (row.GenreCandidates.Count > 0)
+        {
+            var allGenres = await db.Genres.ToListAsync();
+            var matched = new HashSet<int>();
+            foreach (var candidate in row.GenreCandidates)
+            {
+                var genre = allGenres.FirstOrDefault(g => GenrePickerViewModel.FuzzyGenreMatch(candidate, g.Name));
+                if (genre is not null && matched.Add(genre.Id))
+                {
+                    work.Genres.Add(genre);
+                    if (genre.ParentGenreId is int parentId && matched.Add(parentId))
+                    {
+                        var parent = allGenres.FirstOrDefault(g => g.Id == parentId);
+                        if (parent is not null) work.Genres.Add(parent);
+                    }
+                }
+            }
+        }
+
+        var newBook = new Book
+        {
+            Title = bookTitle,
             DefaultCoverArtUrl = row.CoverUrl,
+            Works = [work],
             Editions =
             [
                 new Edition
@@ -175,27 +201,7 @@ public class BulkAddViewModel(
             ]
         };
 
-        if (row.GenreCandidates.Count > 0)
-        {
-            var allGenres = await db.Genres.ToListAsync();
-            var matched = new HashSet<int>();
-            foreach (var candidate in row.GenreCandidates)
-            {
-                var genre = allGenres.FirstOrDefault(g => GenrePickerViewModel.FuzzyGenreMatch(candidate, g.Name));
-                if (genre is not null && matched.Add(genre.Id))
-                {
-                    newBook.Genres.Add(genre);
-                    if (genre.ParentGenreId is int parentId && matched.Add(parentId))
-                    {
-                        var parent = allGenres.FirstOrDefault(g => g.Id == parentId);
-                        if (parent is not null) newBook.Genres.Add(parent);
-                    }
-                }
-            }
-        }
-
         db.Books.Add(newBook);
-        WorkSync.EnsureWork(newBook);
         await db.SaveChangesAsync();
 
         if (followUp)

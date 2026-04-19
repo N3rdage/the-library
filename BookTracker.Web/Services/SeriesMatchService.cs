@@ -21,9 +21,9 @@ public partial class SeriesMatchService(IDbContextFactory<BookTrackerDbContext> 
 
         await using var db = await dbFactory.CreateDbContextAsync();
 
-        // Strategy 1: Check if the author already has books in a series
+        // Strategy 1: Check if the author already has works in a series
         var authorSeries = await db.Series
-            .Include(s => s.Books)
+            .Include(s => s.Works)
             .Where(s => s.Author != null && s.Author == author.Trim())
             .ToListAsync();
 
@@ -52,15 +52,15 @@ public partial class SeriesMatchService(IDbContextFactory<BookTrackerDbContext> 
                 $"This author has {authorSeries.Count} series/collections in the library");
         }
 
-        // Strategy 2: Check if the author has other books (not yet in a series)
+        // Strategy 2: Check if the author has other works (not yet in a series)
         // that might suggest grouping
-        var authorBookCount = await db.Books
-            .CountAsync(b => b.Author == author.Trim() && b.SeriesId == null);
+        var authorWorkCount = await db.Works
+            .CountAsync(w => w.Author == author.Trim() && w.SeriesId == null);
 
-        if (authorBookCount >= 2)
+        if (authorWorkCount >= 2)
         {
             return new SeriesMatch(null, null, null, MatchReason.AuthorHasMultipleBooks,
-                $"This author has {authorBookCount} other books not in any series — consider creating a collection");
+                $"This author has {authorWorkCount} other works not in any series — consider creating a collection");
         }
 
         // Strategy 3: Title pattern matching for series indicators

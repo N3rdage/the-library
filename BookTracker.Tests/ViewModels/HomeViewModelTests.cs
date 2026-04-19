@@ -24,13 +24,12 @@ public class HomeViewModelTests
     {
         var factory = new TestDbContextFactory();
 
-        // Seed some books
         using (var db = factory.CreateDbContext())
         {
             db.Books.AddRange(
-                new Book { Title = "Book A", Author = "Author 1" },
-                new Book { Title = "Book B", Author = "Author 1" },
-                new Book { Title = "Book C", Author = "Author 2" }
+                new Book { Title = "Book A", Works = [new Work { Title = "Book A", Author = "Author 1" }] },
+                new Book { Title = "Book B", Works = [new Work { Title = "Book B", Author = "Author 1" }] },
+                new Book { Title = "Book C", Works = [new Work { Title = "Book C", Author = "Author 2" }] }
             );
             await db.SaveChangesAsync();
         }
@@ -56,9 +55,9 @@ public class HomeViewModelTests
             var sciFi = new Genre { Name = "Science Fiction" };
 
             db.Books.AddRange(
-                new Book { Title = "Book A", Author = "A", Genres = [fantasy] },
-                new Book { Title = "Book B", Author = "B", Genres = [fantasy, sciFi] },
-                new Book { Title = "Book C", Author = "C", Genres = [sciFi] }
+                new Book { Title = "Book A", Works = [new Work { Title = "Book A", Author = "A", Genres = [fantasy] }] },
+                new Book { Title = "Book B", Works = [new Work { Title = "Book B", Author = "B", Genres = [fantasy, sciFi] }] },
+                new Book { Title = "Book C", Works = [new Work { Title = "Book C", Author = "C", Genres = [sciFi] }] }
             );
             await db.SaveChangesAsync();
         }

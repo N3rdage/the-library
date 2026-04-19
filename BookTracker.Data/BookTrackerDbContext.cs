@@ -61,12 +61,6 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .HasIndex(s => s.Name)
             .IsUnique();
 
-        modelBuilder.Entity<Book>()
-            .HasOne(b => b.Series)
-            .WithMany(s => s.Books)
-            .HasForeignKey(b => b.SeriesId)
-            .OnDelete(DeleteBehavior.SetNull);
-
         modelBuilder.Entity<WishlistItem>()
             .HasOne(w => w.Series)
             .WithMany()
@@ -93,15 +87,15 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .WithMany(b => b.Works);
 
         // Work ↔ Genre is many-to-many; conventional join table GenreWork.
-        // Book ↔ Genre stays in place during PR 1 (dual-write); PR 2 drops it.
         modelBuilder.Entity<Work>()
             .HasMany(w => w.Genres)
-            .WithMany();
+            .WithMany(g => g.Works);
 
-        // Work belongs to at most one Series; matches the existing Book↔Series shape.
+        // Work belongs to at most one Series. Series.Works is the inverse
+        // navigation — a Series exposes its constituent Works directly.
         modelBuilder.Entity<Work>()
             .HasOne(w => w.Series)
-            .WithMany()
+            .WithMany(s => s.Works)
             .HasForeignKey(w => w.SeriesId)
             .OnDelete(DeleteBehavior.SetNull);
     }

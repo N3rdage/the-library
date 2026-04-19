@@ -53,8 +53,11 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             .Select(t => new TagOption(t.Id, t.Name))
             .ToListAsync();
 
-        AllAuthors = await db.Books
-            .Select(b => b.Author)
+        // Authors live on Works now. A compendium contributes one entry per
+        // author across its Works, deduped here so a single name appears
+        // once in the filter dropdown.
+        AllAuthors = await db.Works
+            .Select(w => w.Author)
             .Distinct()
             .OrderBy(a => a)
             .ToListAsync();
@@ -67,13 +70,15 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         await using var db = await dbFactory.CreateDbContextAsync();
 
         IQueryable<Book> query = db.Books
-            .Include(b => b.Genres)
-            .Include(b => b.Tags);
+            .Include(b => b.Tags)
+            .Include(b => b.Works).ThenInclude(w => w.Genres);
 
         if (!string.IsNullOrWhiteSpace(SearchTerm))
         {
             var term = SearchTerm.Trim();
-            query = query.Where(b => b.Title.Contains(term) || b.Author.Contains(term));
+            query = query.Where(b =>
+                b.Title.Contains(term) ||
+                b.Works.Any(w => w.Title.Contains(term) || w.Author.Contains(term)));
         }
 
         if (!string.IsNullOrEmpty(SelectedCategory) && Enum.TryParse<BookCategory>(SelectedCategory, out var cat))
@@ -83,7 +88,7 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
 
         if (SelectedGenreId > 0)
         {
-            query = query.Where(b => b.Genres.Any(g => g.Id == SelectedGenreId));
+            query = query.Where(b => b.Works.Any(w => w.Genres.Any(g => g.Id == SelectedGenreId)));
         }
 
         if (SelectedTagId > 0)
@@ -94,29 +99,33 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         if (!string.IsNullOrWhiteSpace(SelectedAuthor))
         {
             var author = SelectedAuthor.Trim();
-            query = query.Where(b => b.Author == author);
+            query = query.Where(b => b.Works.Any(w => w.Author == author));
         }
 
         TotalCount = await query.CountAsync();
         TotalPages = Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
         if (CurrentPage > TotalPages) CurrentPage = TotalPages;
 
-        Books = await query
+        var raw = await query
             .OrderByDescending(b => b.DateAdded)
             .Skip((CurrentPage - 1) * PageSize)
             .Take(PageSize)
-            .Select(b => new BookListItem(
-                b.Id,
-                b.Title,
-                b.Subtitle,
-                b.Author,
-                b.DefaultCoverArtUrl,
-                b.Status,
-                b.Rating,
-                b.Genres.Select(g => g.Name).ToList(),
-                b.Tags.Select(t => t.Name).ToList()
-            ))
             .ToListAsync();
+
+        // Aggregate Work-level fields into the row shape — one row per Book,
+        // joining the contained Works' authors and genres for display. Most
+        // books have a single Work so this is a no-op join in practice.
+        Books = raw.Select(b => new BookListItem(
+            b.Id,
+            b.Title,
+            b.Works.FirstOrDefault()?.Subtitle,
+            string.Join(", ", b.Works.Select(w => w.Author).Distinct()),
+            b.DefaultCoverArtUrl,
+            b.Status,
+            b.Rating,
+            b.Works.SelectMany(w => w.Genres).Select(g => g.Name).Distinct().ToList(),
+            b.Tags.Select(t => t.Name).ToList()
+        )).ToList();
 
         Loading = false;
     }

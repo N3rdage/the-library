@@ -1,6 +1,7 @@
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
+using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 
 namespace BookTracker.Tests.ViewModels;
@@ -84,10 +85,13 @@ public class BookAddViewModelTests
 
         await vm.ApplyCandidateAsync(candidate, CreateGenrePicker());
 
+        // Author and title flow into both BookInput (for the Book record) and
+        // WorkInput (for the auto-created primary Work).
         Assert.Equal("And Then There Were None", vm.BookInput.Title);
-        Assert.Equal("Agatha Christie", vm.BookInput.Author);
+        Assert.Equal("And Then There Were None", vm.WorkInput.Title);
+        Assert.Equal("Agatha Christie", vm.WorkInput.Author);
         Assert.Equal("https://example.invalid/cover.jpg", vm.BookInput.DefaultCoverArtUrl);
-        Assert.Equal(new DateOnly(1939, 1, 1), vm.EditionInput.DatePrinted);
+        Assert.Equal(new DateOnly(1939, 1, 1), vm.WorkInput.FirstPublishedDate);
     }
 
     [Fact]
@@ -95,8 +99,9 @@ public class BookAddViewModelTests
     {
         var vm = CreateVm();
         vm.BookInput.Title = "User typed this";
-        vm.BookInput.Author = "User author";
-        vm.EditionInput.DatePrinted = new DateOnly(1972, 6, 15);
+        vm.WorkInput.Title = "User typed this";
+        vm.WorkInput.Author = "User author";
+        vm.WorkInput.FirstPublishedDate = new DateOnly(1939, 6, 15);
 
         var candidate = new BookSearchCandidate(
             WorkKey: "/works/OL1W",
@@ -110,8 +115,8 @@ public class BookAddViewModelTests
         await vm.ApplyCandidateAsync(candidate, CreateGenrePicker());
 
         Assert.Equal("User typed this", vm.BookInput.Title);
-        Assert.Equal("User author", vm.BookInput.Author);
-        Assert.Equal(new DateOnly(1972, 6, 15), vm.EditionInput.DatePrinted);
+        Assert.Equal("User author", vm.WorkInput.Author);
+        Assert.Equal(new DateOnly(1939, 6, 15), vm.WorkInput.FirstPublishedDate);
     }
 
     [Fact]
@@ -119,7 +124,8 @@ public class BookAddViewModelTests
     {
         var vm = CreateVm();
         vm.BookInput.Title = "And Then There Were None";
-        vm.BookInput.Author = "Agatha Christie";
+        vm.WorkInput.Title = "And Then There Were None";
+        vm.WorkInput.Author = "Agatha Christie";
         vm.EditionInput.Isbn = "";
 
         var ok = await vm.SaveAsync(new List<int>());
@@ -138,15 +144,38 @@ public class BookAddViewModelTests
         // second save.
         var vm1 = CreateVm();
         vm1.BookInput.Title = "Book A";
-        vm1.BookInput.Author = "Author A";
+        vm1.WorkInput.Title = "Book A";
+        vm1.WorkInput.Author = "Author A";
         Assert.True(await vm1.SaveAsync(new List<int>()));
 
         var vm2 = CreateVm();
         vm2.BookInput.Title = "Book B";
-        vm2.BookInput.Author = "Author B";
+        vm2.WorkInput.Title = "Book B";
+        vm2.WorkInput.Author = "Author B";
         Assert.True(await vm2.SaveAsync(new List<int>()));
 
         using var db = _factory.CreateDbContext();
         Assert.Equal(2, db.Editions.Count(e => e.Isbn == null));
+    }
+
+    [Fact]
+    public async Task SaveAsync_CreatesBookAndWorkTogether()
+    {
+        var vm = CreateVm();
+        vm.BookInput.Title = "The Hobbit";
+        vm.WorkInput.Title = "The Hobbit";
+        vm.WorkInput.Author = "J.R.R. Tolkien";
+        vm.WorkInput.FirstPublishedDate = new DateOnly(1937, 9, 21);
+        vm.EditionInput.Isbn = "9780345391803";
+
+        var ok = await vm.SaveAsync(new List<int>());
+
+        Assert.True(ok);
+        using var db = _factory.CreateDbContext();
+        var book = db.Books.Include(b => b.Works).Single();
+        var work = Assert.Single(book.Works);
+        Assert.Equal("The Hobbit", work.Title);
+        Assert.Equal("J.R.R. Tolkien", work.Author);
+        Assert.Equal(new DateOnly(1937, 9, 21), work.FirstPublishedDate);
     }
 }
