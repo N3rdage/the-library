@@ -195,6 +195,7 @@ public class BulkAddViewModel(
         }
 
         db.Books.Add(newBook);
+        WorkSync.EnsureWork(newBook);
         await db.SaveChangesAsync();
 
         if (followUp)

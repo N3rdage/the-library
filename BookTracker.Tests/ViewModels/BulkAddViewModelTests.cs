@@ -1,6 +1,7 @@
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
+using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 
 namespace BookTracker.Tests.ViewModels;
@@ -106,6 +107,30 @@ public class BulkAddViewModelTests
         var book = db.Books.FirstOrDefault(b => b.Title == "The Hobbit");
         Assert.NotNull(book);
         Assert.Equal("J.R.R. Tolkien", book.Author);
+    }
+
+    [Fact]
+    public async Task AcceptRowAsync_DualWritesAMirroringWork()
+    {
+        // PR 1 of the Work refactor: every saved Book must have exactly one
+        // mirroring Work via WorkSync.EnsureWork. This test guards the
+        // dual-write at the BulkAdd save site.
+        var vm = CreateVm();
+        var row = new BulkAddViewModel.DiscoveryRow
+        {
+            Isbn = "9780345391803",
+            Title = "The Hobbit",
+            Author = "J.R.R. Tolkien",
+            Status = BulkAddViewModel.RowStatus.Found
+        };
+
+        await vm.AcceptRowAsync(row);
+
+        using var db = _factory.CreateDbContext();
+        var book = db.Books.Include(b => b.Works).Single(b => b.Title == "The Hobbit");
+        var work = Assert.Single(book.Works);
+        Assert.Equal("The Hobbit", work.Title);
+        Assert.Equal("J.R.R. Tolkien", work.Author);
     }
 
     [Fact]

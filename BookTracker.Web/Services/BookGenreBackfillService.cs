@@ -58,6 +58,7 @@ public class BookGenreBackfillService(
         var books = await db.Books
             .Include(b => b.Genres)
             .Include(b => b.Editions)
+            .Include(b => b.Works).ThenInclude(w => w.Genres)
             .ToListAsync(ct);
         var allGenres = await db.Genres.ToListAsync(ct);
 
@@ -87,6 +88,7 @@ public class BookGenreBackfillService(
 
                 book.Genres.Clear();
                 ApplyMatchedGenres(book, result.GenreCandidates, allGenres);
+                WorkSync.EnsureWork(book);
                 updated++;
             }
             catch (Exception ex)

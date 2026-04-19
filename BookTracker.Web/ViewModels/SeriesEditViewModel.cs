@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using BookTracker.Data;
 using BookTracker.Data.Models;
+using BookTracker.Web.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
@@ -147,13 +148,16 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
     public async Task AddBookToSeriesAsync(int seriesId, int bookId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books.FindAsync(bookId);
+        var book = await db.Books
+            .Include(b => b.Works).ThenInclude(w => w.Genres)
+            .FirstOrDefaultAsync(b => b.Id == bookId);
         if (book is null) return;
 
         var nextOrder = Books.Count > 0 ? Books.Max(b => b.SeriesOrder ?? 0) + 1 : 1;
 
         book.SeriesId = seriesId;
         book.SeriesOrder = nextOrder;
+        WorkSync.EnsureWork(book);
         await db.SaveChangesAsync();
 
         Books.Add(new SeriesBookRow(book.Id, book.Title, book.Author, nextOrder));
@@ -163,11 +167,14 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
     public async Task RemoveBookFromSeriesAsync(int bookId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books.FindAsync(bookId);
+        var book = await db.Books
+            .Include(b => b.Works).ThenInclude(w => w.Genres)
+            .FirstOrDefaultAsync(b => b.Id == bookId);
         if (book is not null)
         {
             book.SeriesId = null;
             book.SeriesOrder = null;
+            WorkSync.EnsureWork(book);
             await db.SaveChangesAsync();
         }
         Books.RemoveAll(b => b.Id == bookId);
@@ -176,10 +183,13 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
     public async Task UpdateBookOrderAsync(int bookId, int? newOrder)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books.FindAsync(bookId);
+        var book = await db.Books
+            .Include(b => b.Works).ThenInclude(w => w.Genres)
+            .FirstOrDefaultAsync(b => b.Id == bookId);
         if (book is not null)
         {
             book.SeriesOrder = newOrder;
+            WorkSync.EnsureWork(book);
             await db.SaveChangesAsync();
         }
 

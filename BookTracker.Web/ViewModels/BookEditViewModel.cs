@@ -1,5 +1,6 @@
 using BookTracker.Data;
 using BookTracker.Data.Models;
+using BookTracker.Web.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
@@ -293,6 +294,7 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             var book = await db.Books
                 .Include(b => b.Genres)
                 .Include(b => b.Tags)
+                .Include(b => b.Works).ThenInclude(w => w.Genres)
                 .FirstOrDefaultAsync(b => b.Id == bookId);
 
             if (book is null) { NotFound = true; return; }
@@ -321,6 +323,7 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             book.SeriesId = SelectedSeriesId;
             book.SeriesOrder = SelectedSeriesId.HasValue ? SeriesOrder : null;
 
+            WorkSync.EnsureWork(book);
             await db.SaveChangesAsync();
             SuccessMessage = "Book saved successfully.";
         }
@@ -332,7 +335,7 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
 
     public record SeriesOption(int Id, string Name, SeriesType Type);
     public record TagItem(int Id, string Name);
-    public record EditionCopyRow(int EditionId, int CopyId, string Isbn, BookFormat Format, BookCondition Condition, string? PublisherName, DateOnly? DatePrinted, string? CoverUrl, string? CopyNotes, DateTime? DateAcquired);
+    public record EditionCopyRow(int EditionId, int CopyId, string? Isbn, BookFormat Format, BookCondition Condition, string? PublisherName, DateOnly? DatePrinted, string? CoverUrl, string? CopyNotes, DateTime? DateAcquired);
 
     public class CopyEditInput
     {
