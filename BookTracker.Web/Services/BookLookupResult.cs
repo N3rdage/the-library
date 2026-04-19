@@ -1,3 +1,5 @@
+using BookTracker.Data.Models;
+
 namespace BookTracker.Web.Services;
 
 public record BookLookupResult(
@@ -9,4 +11,5 @@ public record BookLookupResult(
     IReadOnlyList<string> GenreCandidates,
     DateOnly? DatePrinted,
     string? CoverUrl,
-    string Source);
+    string Source,
+    BookFormat? Format = null);

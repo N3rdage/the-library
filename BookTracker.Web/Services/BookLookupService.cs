@@ -48,7 +48,8 @@ public class BookLookupService(HttpClient http, ILogger<BookLookupService> logge
                 GenreCandidates: genres,
                 DatePrinted: ParseLooseDate(book.PublishDate),
                 CoverUrl: book.Cover?.Large ?? book.Cover?.Medium ?? $"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg",
-                Source: "Open Library");
+                Source: "Open Library",
+                Format: BookFormatNormalizer.Normalize(book.PhysicalFormat, book.PhysicalDimensions));
         }
         catch (Exception ex)
         {
@@ -135,6 +136,8 @@ public class BookLookupService(HttpClient http, ILogger<BookLookupService> logge
         [JsonPropertyName("subjects")] public List<OpenLibrarySubject>? Subjects { get; set; }
         [JsonPropertyName("publish_date")] public string? PublishDate { get; set; }
         [JsonPropertyName("cover")] public OpenLibraryCover? Cover { get; set; }
+        [JsonPropertyName("physical_format")] public string? PhysicalFormat { get; set; }
+        [JsonPropertyName("physical_dimensions")] public string? PhysicalDimensions { get; set; }
     }
     private sealed class OpenLibraryAuthor { [JsonPropertyName("name")] public string? Name { get; set; } }
     private sealed class OpenLibraryPublisher { [JsonPropertyName("name")] public string? Name { get; set; } }

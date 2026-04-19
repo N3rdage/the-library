@@ -62,6 +62,7 @@ public class BulkAddViewModel(
                 row.Subtitle = result.Subtitle;
                 row.DatePrinted = result.DatePrinted;
                 row.GenreCandidates = result.GenreCandidates.ToList();
+                row.Format = result.Format;
                 row.Status = RowStatus.Found;
 
                 row.SeriesSuggestion = await seriesMatch.FindMatchAsync(result.Title, result.Author);
@@ -166,7 +167,7 @@ public class BulkAddViewModel(
                 new Edition
                 {
                     Isbn = row.Isbn,
-                    Format = BookFormat.Softcopy,
+                    Format = row.Format ?? BookFormat.TradePaperback,
                     DatePrinted = row.DatePrinted,
                     Publisher = publisher,
                     Copies = [new Copy { Condition = BookCondition.Good }]
@@ -236,6 +237,10 @@ public class BulkAddViewModel(
         public string? Publisher { get; set; }
         public DateOnly? DatePrinted { get; set; }
         public List<string> GenreCandidates { get; set; } = [];
+        // Null when the lookup couldn't infer a confident format; the save
+        // path falls back to TradePaperback so manual override still wins
+        // pre-save.
+        public BookFormat? Format { get; set; }
         public RowStatus Status { get; set; }
         public RowAction Action { get; set; } = RowAction.Pending;
         public bool IsDuplicate { get; set; }

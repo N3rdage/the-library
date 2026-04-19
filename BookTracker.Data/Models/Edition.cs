@@ -12,7 +12,7 @@ public class Edition
     [Required, MaxLength(20)]
     public string Isbn { get; set; } = string.Empty;
 
-    public BookFormat Format { get; set; } = BookFormat.Softcopy;
+    public BookFormat Format { get; set; } = BookFormat.TradePaperback;
 
     public DateOnly? DatePrinted { get; set; }
 

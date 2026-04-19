@@ -33,6 +33,12 @@ builder.Services.AddHttpClient<IBookLookupService, BookLookupService>(client =>
 
 builder.Services.AddTransient<SeriesMatchService>();
 
+// One-shot startup task that re-classifies existing Editions using the
+// richer BookFormat enum (populated from upstream metadata). Idempotent via
+// a MaintenanceLog marker; safe to leave registered after the backfill has
+// run.
+builder.Services.AddHostedService<EditionFormatBackfillService>();
+
 builder.Services.Configure<AIOptions>(
     builder.Configuration.GetSection(AIOptions.SectionName));
 builder.Services.AddScoped<AIProviderFactory>(sp =>
