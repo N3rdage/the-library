@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using BookTracker.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -57,14 +58,29 @@ public class GenrePickerViewModel(IDbContextFactory<BookTrackerDbContext> dbFact
         }
     }
 
+    // Match a free-form upstream subject string ("Detective and mystery
+    // stories, English") against one of our preset genre names ("Mystery").
+    // The preset must appear inside the candidate as a contiguous, word-
+    // bounded phrase. The previous looser variant matched in either
+    // direction on a letters-only blob, which inflated short subjects like
+    // "Science" into "Science Fiction" matches.
     public static bool FuzzyGenreMatch(string candidate, string preset)
     {
-        var nc = Normalize(candidate);
-        var np = Normalize(preset);
-        if (nc.Length == 0 || np.Length == 0) return false;
-        return nc == np || nc.Contains(np) || np.Contains(nc);
+        if (string.IsNullOrWhiteSpace(candidate) || string.IsNullOrWhiteSpace(preset)) return false;
+
+        var c = candidate.Trim().ToLowerInvariant();
+        var p = preset.Trim().ToLowerInvariant();
+
+        if (c == p) return true;
+
+        // \b matches a transition between word/non-word characters, so
+        // multi-word presets ("Science Fiction") only fire when the whole
+        // phrase appears in the candidate.
+        var pattern = $@"\b{Regex.Escape(p)}\b";
+        return Regex.IsMatch(c, pattern);
     }
 
+    // Retained for any external callers that build their own keys.
     public static string Normalize(string s) =>
         new string(s.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
 

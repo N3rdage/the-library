@@ -30,3 +30,4 @@ Outstanding work items for BookTracker. This is the single source of truth — c
 - [x] AI book recommendations via the Anthropic API — genre cleanup, collection cataloguing, shopping suggestions, book advisor
 - [x] Wishlist UI — integrated into Shopping page (shopping list section)
 - [ ] AI cost tracking — add persistent token/cost logging beyond the session counter
+- [ ] AI-assisted genre matching — use `IAIAssistantService.SuggestGenresAsync` to classify a book against the preset taxonomy, replacing/augmenting the rule-based `FuzzyGenreMatch` in `BulkAddViewModel.SaveBookAsync`. Higher accuracy, ~$0.0003/book on Sonnet, ~1s per book. Useful for genuinely ambiguous subject strings the rule-based matcher can't disambiguate.

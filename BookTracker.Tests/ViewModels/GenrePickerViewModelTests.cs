@@ -69,11 +69,23 @@ public class GenrePickerViewModelTests
     }
 
     [Theory]
+    // Whole-word matches inside a longer candidate.
     [InlineData("Fantasy fiction", "Fantasy", true)]
     [InlineData("Epic fantasy", "Fantasy", true)]
-    [InlineData("Science", "Science Fiction", true)]
+    [InlineData("Detective and mystery stories", "Mystery", true)]
+    [InlineData("Detective and mystery stories, English", "Mystery", true)]
+    // Multi-word presets match only when the whole phrase appears.
+    [InlineData("Science fiction novels", "Science Fiction", true)]
+    [InlineData("Science", "Science Fiction", false)] // previous behaviour was wrong
+    // Word-boundary protection — substring-only matches no longer fire.
+    [InlineData("Romanticism", "Romance", false)]
+    // Candidate-vs-preset mismatch.
     [InlineData("Romance", "Fantasy", false)]
+    // Exact match (case-insensitive).
+    [InlineData("MYSTERY", "Mystery", true)]
+    // Empty inputs fail closed.
     [InlineData("", "Fantasy", false)]
+    [InlineData("Fantasy", "", false)]
     public void FuzzyGenreMatch_MatchesCorrectly(string candidate, string preset, bool expected)
     {
         Assert.Equal(expected, GenrePickerViewModel.FuzzyGenreMatch(candidate, preset));
