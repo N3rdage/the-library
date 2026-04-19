@@ -63,6 +63,9 @@ public class EditionFormatBackfillService(
         {
             ct.ThrowIfCancellationRequested();
 
+            // Skip pre-1974 (no-ISBN) editions — there's nothing to look up.
+            if (string.IsNullOrWhiteSpace(edition.Isbn)) continue;
+
             try
             {
                 var result = await lookup.LookupByIsbnAsync(edition.Isbn, ct);

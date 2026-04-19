@@ -14,6 +14,7 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<WishlistItem> WishlistItems => Set<WishlistItem>();
     public DbSet<MaintenanceLog> MaintenanceLogs => Set<MaintenanceLog>();
+    public DbSet<Work> Works => Set<Work>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -85,5 +86,23 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
         modelBuilder.Entity<MaintenanceLog>()
             .HasIndex(m => m.Name)
             .IsUnique();
+
+        // Work ↔ Book is many-to-many; conventional join table BookWork.
+        modelBuilder.Entity<Work>()
+            .HasMany(w => w.Books)
+            .WithMany(b => b.Works);
+
+        // Work ↔ Genre is many-to-many; conventional join table GenreWork.
+        // Book ↔ Genre stays in place during PR 1 (dual-write); PR 2 drops it.
+        modelBuilder.Entity<Work>()
+            .HasMany(w => w.Genres)
+            .WithMany();
+
+        // Work belongs to at most one Series; matches the existing Book↔Series shape.
+        modelBuilder.Entity<Work>()
+            .HasOne(w => w.Series)
+            .WithMany()
+            .HasForeignKey(w => w.SeriesId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

@@ -75,7 +75,10 @@ public class AIAssistantViewModel(
     {
         await using var db = await dbFactory.CreateDbContextAsync();
 
-        var book = await db.Books.Include(b => b.Genres).FirstOrDefaultAsync(b => b.Id == bookId);
+        var book = await db.Books
+            .Include(b => b.Genres)
+            .Include(b => b.Works).ThenInclude(w => w.Genres)
+            .FirstOrDefaultAsync(b => b.Id == bookId);
         if (book is null) return;
 
         var genresToAdd = await db.Genres
@@ -88,6 +91,7 @@ public class AIAssistantViewModel(
                 book.Genres.Add(genre);
         }
 
+        WorkSync.EnsureWork(book);
         await db.SaveChangesAsync();
 
         // Update the local list
@@ -155,6 +159,7 @@ public class AIAssistantViewModel(
 
         // Try to set the author if all books share the same one
         var matchedBooks = await db.Books
+            .Include(b => b.Works).ThenInclude(w => w.Genres)
             .Where(b => grouping.BookTitles.Contains(b.Title))
             .ToListAsync();
 
@@ -173,6 +178,7 @@ public class AIAssistantViewModel(
             {
                 book.SeriesId = series.Id;
                 book.SeriesOrder = order++;
+                WorkSync.EnsureWork(book);
             }
         }
         await db.SaveChangesAsync();
