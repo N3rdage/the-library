@@ -102,7 +102,7 @@ $pwdCred = Add-MgApplicationPassword -ApplicationId $app.Id -PasswordCredential 
 # encrypts it in transit, and the @secure() decorator on the Bicep param keeps
 # it out of deployment history / logs.
 $clientSecret = $pwdCred.SecretText
-Write-Host "  Secret expires $($pwdCred.EndDateTime). TODO: schedule rotation."
+Write-Host "  Secret expires $($pwdCred.EndDateTime). Rotation is currently manual via re-running deploy.ps1; see TODO.md."
 
 # ---- Deploy the Bicep template at subscription scope -------------------------
 $templateFile = Join-Path $PSScriptRoot 'main.bicep'
