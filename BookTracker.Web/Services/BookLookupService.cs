@@ -18,6 +18,50 @@ public class BookLookupService(HttpClient http, ILogger<BookLookupService> logge
             ?? await TryGoogleBooksAsync(cleanIsbn, ct);
     }
 
+    public async Task<IReadOnlyList<BookSearchCandidate>> SearchByTitleAuthorAsync(
+        string? title, string? author, CancellationToken ct)
+    {
+        var t = title?.Trim() ?? "";
+        var a = author?.Trim() ?? "";
+        if (t.Length == 0 && a.Length == 0)
+        {
+            return [];
+        }
+
+        try
+        {
+            var query = new List<string>();
+            if (t.Length > 0) query.Add($"title={Uri.EscapeDataString(t)}");
+            if (a.Length > 0) query.Add($"author={Uri.EscapeDataString(a)}");
+            // limit=10 keeps the UI manageable; fields= trims the response
+            // payload (Open Library's default includes hundreds of fields
+            // per row).
+            query.Add("limit=10");
+            query.Add("fields=key,title,author_name,first_publish_year,edition_count,cover_i");
+
+            var url = $"https://openlibrary.org/search.json?{string.Join("&", query)}";
+            var doc = await http.GetFromJsonAsync<OpenLibrarySearchResponse>(url, ct);
+            if (doc?.Docs is null) return [];
+
+            return doc.Docs
+                .Where(d => !string.IsNullOrWhiteSpace(d.Title))
+                .Select(d => new BookSearchCandidate(
+                    WorkKey: d.Key ?? "",
+                    Title: d.Title,
+                    Author: d.AuthorName is { Count: > 0 } ? string.Join(", ", d.AuthorName) : null,
+                    FirstPublishYear: d.FirstPublishYear,
+                    EditionCount: d.EditionCount,
+                    CoverUrl: d.CoverId is int id ? $"https://covers.openlibrary.org/b/id/{id}-M.jpg" : null,
+                    OpenLibraryUrl: string.IsNullOrEmpty(d.Key) ? null : $"https://openlibrary.org{d.Key}/editions"))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Open Library title/author search failed for title={Title} author={Author}", t, a);
+            return [];
+        }
+    }
+
     private async Task<BookLookupResult?> TryOpenLibraryAsync(string isbn, CancellationToken ct)
     {
         try
@@ -157,5 +201,19 @@ public class BookLookupService(HttpClient http, ILogger<BookLookupService> logge
     {
         [JsonPropertyName("smallThumbnail")] public string? SmallThumbnail { get; set; }
         [JsonPropertyName("thumbnail")] public string? Thumbnail { get; set; }
+    }
+
+    private sealed class OpenLibrarySearchResponse
+    {
+        [JsonPropertyName("docs")] public List<OpenLibrarySearchDoc>? Docs { get; set; }
+    }
+    private sealed class OpenLibrarySearchDoc
+    {
+        [JsonPropertyName("key")] public string? Key { get; set; }
+        [JsonPropertyName("title")] public string? Title { get; set; }
+        [JsonPropertyName("author_name")] public List<string>? AuthorName { get; set; }
+        [JsonPropertyName("first_publish_year")] public int? FirstPublishYear { get; set; }
+        [JsonPropertyName("edition_count")] public int? EditionCount { get; set; }
+        [JsonPropertyName("cover_i")] public int? CoverId { get; set; }
     }
 }
