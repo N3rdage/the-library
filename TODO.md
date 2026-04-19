@@ -7,6 +7,7 @@ Outstanding work items for BookTracker. This is the single source of truth — c
 - [ ] Replace migrate-on-startup with deploy-time migration step (`Program.cs:39`) — use `dotnet ef migrations bundle` from GitHub Actions once the app goes multi-instance
 - [ ] Proper error handling — structured logging, correlation IDs, user-friendly messages by category, separate 404 handling (`Program.cs:50`, `Error.razor`)
 - [ ] GitHub Environment with required reviewers for staging-to-production slot swap (`infra/README.md`)
+- [ ] Re-add Microsoft Foundry (Claude on Azure) once on an EA / MCA-E subscription — Sponsored subscriptions are not eligible. Brings back `claude-sonnet-4-6` + `claude-opus-4-7` deployments, the Foundry Private Endpoint, and the `cognitiveservices.azure.com` DNS zone. Direct Anthropic API works in the meantime.
 
 ## UI / UX
 

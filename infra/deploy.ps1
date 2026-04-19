@@ -15,7 +15,14 @@ param(
     # Optional public IPv4 to whitelist on the SQL firewall for ad-hoc access
     # (e.g. local EF migrations). Leave blank to keep SQL fully private; the
     # only path in is then the Private Endpoint from inside the VNet.
-    [string] $DevClientIp = ''
+    [string] $DevClientIp = '',
+    # Region for AI services (Foundry + OpenAI). Defaults to eastus2 because
+    # Claude on Foundry and a stable gpt-4o successor are not available in
+    # australiaeast.
+    [string] $SecondaryLocation = 'eastus2',
+    # Optional Anthropic public-API key. When supplied it's stored in Key
+    # Vault and exposed via a KV reference in App Settings.
+    [string] $AnthropicApiKey = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -112,6 +119,8 @@ $templateParams = @{
     sqlAadAdminLogin    = $me.UserPrincipalName
     customDomain        = $CustomDomain
     devClientIp         = $DevClientIp
+    secondaryLocation   = $SecondaryLocation
+    anthropicApiKey     = $AnthropicApiKey
 }
 
 $deployment = New-AzSubscriptionDeployment `

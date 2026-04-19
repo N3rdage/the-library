@@ -30,6 +30,13 @@ param customDomain string = ''
 @description('Optional public IPv4 address allowed through the SQL firewall for ad-hoc access (e.g. local EF migrations). Leave blank to keep SQL fully private.')
 param devClientIp string = ''
 
+@description('Region for Azure-hosted AI services (Azure OpenAI). Defaults to eastus2 because the gpt-4o deployment in australiaeast is being retired in June 2026.')
+param secondaryLocation string = 'eastus2'
+
+@description('Optional Anthropic public-API key. When supplied it is stored in Key Vault and exposed as the AI__Anthropic__ApiKey app setting via a KV reference.')
+@secure()
+param anthropicApiKey string = ''
+
 var tags = {
   Client: 'Drew'
   Environment: 'Production'
@@ -57,6 +64,8 @@ module resources './modules/resources.bicep' = {
     sqlAadAdminLogin: sqlAadAdminLogin
     customDomain: customDomain
     devClientIp: devClientIp
+    secondaryLocation: secondaryLocation
+    anthropicApiKey: anthropicApiKey
   }
 }
 
@@ -70,3 +79,5 @@ output stagingHostName string = resources.outputs.stagingHostName
 output stagingPrincipalId string = resources.outputs.stagingPrincipalId
 output sqlServerFqdn string = resources.outputs.sqlServerFqdn
 output sqlDatabaseName string = resources.outputs.sqlDatabaseName
+output keyVaultName string = resources.outputs.keyVaultName
+output openAIEndpoint string = resources.outputs.openAIEndpoint
