@@ -34,7 +34,7 @@ public class EditionFormatBackfillServiceTests
         await CreateService().RunBackfillAsync(CancellationToken.None);
 
         using var db = _factory.CreateDbContext();
-        var byIsbn = db.Editions.ToDictionary(e => e.Isbn);
+        var byIsbn = db.Editions.ToDictionary(e => e.Isbn!);
         Assert.Equal(BookFormat.MassMarketPaperback, byIsbn["9780000000001"].Format);
         Assert.Equal(BookFormat.Hardcover, byIsbn["9780000000002"].Format);
 
@@ -94,7 +94,7 @@ public class EditionFormatBackfillServiceTests
         await CreateService().RunBackfillAsync(CancellationToken.None);
 
         using var db = _factory.CreateDbContext();
-        var byIsbn = db.Editions.ToDictionary(e => e.Isbn);
+        var byIsbn = db.Editions.ToDictionary(e => e.Isbn!);
         Assert.Equal(BookFormat.TradePaperback, byIsbn["9780000000001"].Format);
         Assert.Equal(BookFormat.Hardcover, byIsbn["9780000000002"].Format);
 

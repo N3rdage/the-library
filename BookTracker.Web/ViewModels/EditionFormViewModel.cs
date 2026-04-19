@@ -22,7 +22,10 @@ public class EditionFormViewModel(IDbContextFactory<BookTrackerDbContext> dbFact
 
     public class EditionFormInput
     {
-        [Required, StringLength(20)]
+        // Optional to allow pre-1974 books with no ISBN. RegularExpression
+        // is skipped for null/empty values by default, so the regex only
+        // fires when something is entered.
+        [StringLength(20)]
         [RegularExpression(@"^(97(8|9))?\d{9}(\d|X|x)$", ErrorMessage = "Enter a valid 10- or 13-digit ISBN.")]
         public string? Isbn { get; set; }
 
