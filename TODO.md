@@ -8,6 +8,7 @@ Outstanding work items for BookTracker. This is the single source of truth — c
 - [ ] Proper error handling — structured logging, correlation IDs, user-friendly messages by category, separate 404 handling (`Program.cs:50`, `Error.razor`)
 - [ ] GitHub Environment with required reviewers for staging-to-production slot swap (`infra/README.md`)
 - [ ] Re-add Microsoft Foundry (Claude on Azure) once on an EA / MCA-E subscription — Sponsored subscriptions are not eligible. Brings back `claude-sonnet-4-6` + `claude-opus-4-7` deployments, the Foundry Private Endpoint, and the `cognitiveservices.azure.com` DNS zone. Direct Anthropic API works in the meantime.
+- [ ] Schedule rotation of the Easy Auth client secret (`infra/deploy.ps1:105`) — currently rotated only when `deploy.ps1` is re-run, with a 2-year expiry. Options: time-triggered Function/Logic App that rotates the secret + writes the new value to KV, or move to a federated credential / certificate-based credential to drop the secret entirely.
 
 ## UI / UX
 

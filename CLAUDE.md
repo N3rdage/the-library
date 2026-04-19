@@ -70,13 +70,13 @@ The app is used on both desktop and mobile (phones for barcode scanning and quic
 
 ## AI integration
 
-Three AI providers supported, selectable at runtime via toggle on the AI Assistant and Bulk Add pages:
+Three AI providers supported in code, selectable at runtime via toggle on the AI Assistant and Bulk Add pages:
 
-- **Anthropic** (direct API) — Claude Sonnet for fast ops, Opus for deep analysis
-- **Microsoft Foundry** — Claude via Azure endpoint (uses Azure credits)
-- **Azure OpenAI** — GPT-4o
+- **Anthropic** (direct public API) — Claude Sonnet for fast ops, Opus for deep analysis. Provisioned in prod when `-AnthropicApiKey` is supplied to `deploy.ps1`.
+- **Microsoft Foundry** (Claude on Azure) — supported in code but **not currently provisioned**: the project's Azure subscription is `Sponsored`, which Microsoft excludes from Claude eligibility on Foundry. See `infra/README.md` and `TODO.md`.
+- **Azure OpenAI** — GPT-4o. Provisioned automatically in `eastus2` (with a Private Endpoint and KV-stored key) by `infra/modules/ai-services.bicep`.
 
-Config under `AI:` section in appsettings. Only providers with API keys configured are available. See `appsettings.Example.json` for structure.
+Config under `AI:` section in appsettings. Only providers with valid config are available; the picker auto-detects. In prod, secret values resolve via Key Vault references — see `infra/README.md` for the wiring.
 
 ## Tests
 
