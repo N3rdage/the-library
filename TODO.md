@@ -24,6 +24,11 @@ Outstanding work items for BookTracker. This is the single source of truth — c
 - [ ] Investigate multi-series membership — a book like a Discworld novel could belong to both "Discworld" and "Discworld: City Watch" sub-series. Currently one series per book (`Series.cs`)
 - [ ] API enrichment for series detection — Open Library has series data that could auto-suggest series membership during ISBN lookup (`Series.cs`)
 - [ ] Context help tips in the UI explaining the difference between a "Series" (numbered, known order like The Ender's Game Saga) and a "Collection" (loose grouping like Discworld or Hercule Poirot)
+- [ ] Shelf-order view — show books in either series order (within each series/collection) or first-publish-date order, so the list mirrors the order you'd want them on the physical shelf. Probably a sort option on the Library page or a dedicated shelf-planner view.
+
+## Data model — open questions
+
+- [ ] Decide whether to track short stories / novellas as first-class entities — some stories appear standalone *and* inside collected-works books (e.g. Christie short stories republished in anthologies). Requires a Story entity (Title, Author, FirstPublished) and many-to-many to Book. Worth the modelling effort only if you actually want to query "which book contains story X" or "all stories by author Y including those bundled in collections". Defer until the use case is concrete.
 
 ## Planned features
 
