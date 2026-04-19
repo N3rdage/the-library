@@ -7,15 +7,13 @@ param tenantId string
 param appServicePrincipalId string
 param stagingSlotPrincipalId string
 
-// Secrets to store
+// Externally-supplied secrets. AI provider keys for Foundry/OpenAI are NOT
+// here — those are written by ai-services.bicep using listKeys() against the
+// resources it provisions, which keeps them out of deployment params/logs.
 @secure()
 param authClientSecret string
 @secure()
-param aiAnthropicApiKey string = ''
-@secure()
-param aiMicrosoftFoundryApiKey string = ''
-@secure()
-param aiAzureOpenAIApiKey string = ''
+param anthropicApiKey string = ''
 
 resource kv 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: keyVaultName
@@ -33,8 +31,12 @@ resource kv 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enabledForDeployment: false
     enabledForDiskEncryption: false
     enabledForTemplateDeployment: false
+    // Public access is denied — App Service reaches KV via Private Endpoint
+    // through VNet integration. AzureServices bypass is left on so platform
+    // services (e.g. ARM during the deployment itself) can still write
+    // secrets while resources are being provisioned.
     networkAcls: {
-      defaultAction: 'Allow'  // Will be restricted to VNet once Private Endpoint is added
+      defaultAction: 'Deny'
       bypass: 'AzureServices'
     }
   }
@@ -62,7 +64,6 @@ resource stagingSecretsRole 'Microsoft.Authorization/roleAssignments@2022-04-01'
   }
 }
 
-// Secrets
 resource secretAuthClient 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: kv
   name: 'AuthClientSecret'
@@ -71,35 +72,14 @@ resource secretAuthClient 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   }
 }
 
-resource secretAnthropicApiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(aiAnthropicApiKey)) {
+resource secretAnthropicApiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(anthropicApiKey)) {
   parent: kv
   name: 'AIAnthropicApiKey'
   properties: {
-    value: aiAnthropicApiKey
+    value: anthropicApiKey
   }
 }
 
-resource secretMicrosoftFoundryApiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(aiMicrosoftFoundryApiKey)) {
-  parent: kv
-  name: 'AIMicrosoftFoundryApiKey'
-  properties: {
-    value: aiMicrosoftFoundryApiKey
-  }
-}
-
-resource secretAzureOpenAIApiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(aiAzureOpenAIApiKey)) {
-  parent: kv
-  name: 'AIAzureOpenAIApiKey'
-  properties: {
-    value: aiAzureOpenAIApiKey
-  }
-}
-
+output keyVaultId string = kv.id
 output keyVaultName string = kv.name
 output keyVaultUri string = kv.properties.vaultUri
-
-// Key Vault references for App Settings (use these instead of raw secrets)
-output authClientSecretRef string = '@Microsoft.KeyVault(SecretUri=${secretAuthClient.properties.secretUri})'
-output aiAnthropicApiKeyRef string = !empty(aiAnthropicApiKey) ? '@Microsoft.KeyVault(SecretUri=${secretAnthropicApiKey.properties.secretUri})' : ''
-output aiMicrosoftFoundryApiKeyRef string = !empty(aiMicrosoftFoundryApiKey) ? '@Microsoft.KeyVault(SecretUri=${secretMicrosoftFoundryApiKey.properties.secretUri})' : ''
-output aiAzureOpenAIApiKeyRef string = !empty(aiAzureOpenAIApiKey) ? '@Microsoft.KeyVault(SecretUri=${secretAzureOpenAIApiKey.properties.secretUri})' : ''
