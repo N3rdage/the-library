@@ -100,15 +100,7 @@ public class BookLookupService(HttpClient http, ILogger<BookLookupService> logge
         }
     }
 
-    private static string? CleanGenre(string raw)
-    {
-        var trimmed = raw.Trim();
-        if (string.IsNullOrEmpty(trimmed) || trimmed.Length > 80)
-        {
-            return null;
-        }
-        return char.ToUpperInvariant(trimmed[0]) + trimmed[1..];
-    }
+    private static string? CleanGenre(string raw) => GenreCandidateCleaner.Clean(raw);
 
     private static DateOnly? ParseLooseDate(string? raw)
     {
