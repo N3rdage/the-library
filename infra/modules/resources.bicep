@@ -12,6 +12,9 @@ param sqlAadAdminLogin string
 @description('Optional custom hostname to bind to the production slot (e.g. books.silly.ninja). Leave blank to skip.')
 param customDomain string = ''
 
+@description('Optional public IPv4 address allowed through the SQL firewall for ad-hoc access. Leave blank to keep SQL fully private.')
+param devClientIp string = ''
+
 // Short suffix to keep globally-unique names (App Service hostname, SQL server
 // name) stable across re-deploys while still being unique per-subscription.
 var uniqueSuffix = substring(uniqueString(resourceGroup().id), 0, 6)
@@ -53,6 +56,19 @@ module sql './sql.bicep' = {
     aadAdminObjectId: sqlAadAdminObjectId
     aadAdminLogin: sqlAadAdminLogin
     tenantId: tenantId
+    devClientIp: devClientIp
+  }
+}
+
+module sqlPe './sql-private-endpoint.bicep' = {
+  name: 'sqlPe'
+  params: {
+    location: location
+    tags: tags
+    vnetId: network.outputs.vnetId
+    privateEndpointSubnetId: network.outputs.privateEndpointSubnetId
+    sqlServerId: sql.outputs.sqlServerId
+    privateEndpointName: '${sqlServerName}-pe'
   }
 }
 

@@ -27,6 +27,9 @@ param sqlAadAdminLogin string
 @description('Optional custom hostname to bind to the production slot (e.g. books.silly.ninja). Leave blank to skip.')
 param customDomain string = ''
 
+@description('Optional public IPv4 address allowed through the SQL firewall for ad-hoc access (e.g. local EF migrations). Leave blank to keep SQL fully private.')
+param devClientIp string = ''
+
 var tags = {
   Client: 'Drew'
   Environment: 'Production'
@@ -53,6 +56,7 @@ module resources './modules/resources.bicep' = {
     sqlAadAdminObjectId: sqlAadAdminObjectId
     sqlAadAdminLogin: sqlAadAdminLogin
     customDomain: customDomain
+    devClientIp: devClientIp
   }
 }
 
