@@ -53,13 +53,11 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             .Select(t => new TagOption(t.Id, t.Name))
             .ToListAsync();
 
-        // Authors live on Works now. A compendium contributes one entry per
-        // author across its Works, deduped here so a single name appears
-        // once in the filter dropdown.
-        AllAuthors = await db.Works
-            .Select(w => w.Author)
-            .Distinct()
-            .OrderBy(a => a)
+        // Author dropdown lists every Author entity (including pen names) by
+        // name so the user can filter by either the canonical or an alias.
+        AllAuthors = await db.Authors
+            .OrderBy(a => a.Name)
+            .Select(a => a.Name)
             .ToListAsync();
     }
 
@@ -71,14 +69,15 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
 
         IQueryable<Book> query = db.Books
             .Include(b => b.Tags)
-            .Include(b => b.Works).ThenInclude(w => w.Genres);
+            .Include(b => b.Works).ThenInclude(w => w.Genres)
+            .Include(b => b.Works).ThenInclude(w => w.Author);
 
         if (!string.IsNullOrWhiteSpace(SearchTerm))
         {
             var term = SearchTerm.Trim();
             query = query.Where(b =>
                 b.Title.Contains(term) ||
-                b.Works.Any(w => w.Title.Contains(term) || w.Author.Contains(term)));
+                b.Works.Any(w => w.Title.Contains(term) || w.Author.Name.Contains(term)));
         }
 
         if (!string.IsNullOrEmpty(SelectedCategory) && Enum.TryParse<BookCategory>(SelectedCategory, out var cat))
@@ -99,7 +98,12 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         if (!string.IsNullOrWhiteSpace(SelectedAuthor))
         {
             var author = SelectedAuthor.Trim();
-            query = query.Where(b => b.Works.Any(w => w.Author == author));
+            // Match either the Work's own author OR the canonical it
+            // resolves to — so picking "Stephen King" surfaces Bachman
+            // titles too without needing to also pick "Richard Bachman".
+            query = query.Where(b => b.Works.Any(w =>
+                w.Author.Name == author ||
+                (w.Author.CanonicalAuthor != null && w.Author.CanonicalAuthor.Name == author)));
         }
 
         TotalCount = await query.CountAsync();
@@ -119,7 +123,7 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             b.Id,
             b.Title,
             b.Works.FirstOrDefault()?.Subtitle,
-            string.Join(", ", b.Works.Select(w => w.Author).Distinct()),
+            string.Join(", ", b.Works.Select(w => w.Author.Name).Distinct()),
             b.DefaultCoverArtUrl,
             b.Status,
             b.Rating,

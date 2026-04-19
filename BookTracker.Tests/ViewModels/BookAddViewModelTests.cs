@@ -172,10 +172,10 @@ public class BookAddViewModelTests
 
         Assert.True(ok);
         using var db = _factory.CreateDbContext();
-        var book = db.Books.Include(b => b.Works).Single();
+        var book = db.Books.Include(b => b.Works).ThenInclude(w => w.Author).Single();
         var work = Assert.Single(book.Works);
         Assert.Equal("The Hobbit", work.Title);
-        Assert.Equal("J.R.R. Tolkien", work.Author);
+        Assert.Equal("J.R.R. Tolkien", work.Author.Name);
         Assert.Equal(new DateOnly(1937, 9, 21), work.FirstPublishedDate);
     }
 }

@@ -7,11 +7,10 @@ namespace BookTracker.Data.Models;
 // reprinted across several compendiums), and a single Book can contain
 // multiple Works (a short-story collection).
 //
-// PR 1 of the Work refactor introduces this entity and dual-writes it
-// alongside the legacy Book.{Subtitle,Author,Genres,SeriesId,...} fields.
-// PR 2 will cut over reads + drop the legacy columns. Until PR 2 ships,
-// every existing Book has exactly one mirroring Work; the m:m schema is
-// here to make the eventual N:N transition free.
+// AuthorId points at the SPECIFIC Author entity used (Stephen King vs.
+// the Richard Bachman alias) so the book is shown the way it was
+// actually published. Aggregations roll aliases up under their canonical
+// via Author.CanonicalAuthorId.
 public class Work
 {
     public int Id { get; set; }
@@ -22,8 +21,8 @@ public class Work
     [MaxLength(300)]
     public string? Subtitle { get; set; }
 
-    [Required, MaxLength(200)]
-    public string Author { get; set; } = string.Empty;
+    public int AuthorId { get; set; }
+    public Author Author { get; set; } = null!;
 
     /// <summary>The year/date the Work was first published — distinct from any specific Edition's print date.</summary>
     public DateOnly? FirstPublishedDate { get; set; }

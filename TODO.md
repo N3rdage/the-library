@@ -28,7 +28,12 @@ Outstanding work items for BookTracker. This is the single source of truth — c
 
 ## Data model — open questions
 
-- [ ] Decide whether to track short stories / novellas as first-class entities — some stories appear standalone *and* inside collected-works books (e.g. Christie short stories republished in anthologies). Requires a Story entity (Title, Author, FirstPublished) and many-to-many to Book. Worth the modelling effort only if you actually want to query "which book contains story X" or "all stories by author Y including those bundled in collections". Defer until the use case is concrete.
+- [ ] Decide whether to track short stories / novellas as first-class entities — some stories appear standalone *and* inside collected-works books (e.g. Christie short stories republished in anthologies). Requires a Story entity (Title, Author, FirstPublished) and many-to-many to Book. Worth the modelling effort only if you actually want to query "which book contains story X" or "all stories by author Y including those bundled in collections". Defer until the use case is concrete. **Note:** the Work refactor partially addresses this — a Work is exactly that abstract creative unit, and a Book can contain many Works. Splitting a compendium into per-story Works via the Edit page covers most of the use case.
+
+## Data model — known follow-ups
+
+- [ ] Merge / dedup duplicate Authors — UI on `/authors` to combine two canonical Author rows into one (e.g. "J. R. R. Tolkien" and "JRR Tolkien" entered separately). Reassign all `Work.AuthorId` from the loser to the winner, reassign any aliases, then delete the loser row.
+- [ ] Merge / dedup duplicate Works — when the same story has been entered as two separate Works (because two compendiums spelt the title slightly differently). UI to pick a winner, reassign all `BookWork` join rows to the winner, reassign `Work.SeriesId` / `Genres` if the loser had values the winner didn't, then delete the loser row. Surface from the Authors page as well — "Tolkien has 2 Works titled 'The Hobbit', merge?".
 
 ## Planned features
 

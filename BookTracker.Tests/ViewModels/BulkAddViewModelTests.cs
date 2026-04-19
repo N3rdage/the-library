@@ -60,7 +60,7 @@ public class BulkAddViewModelTests
             db.Books.Add(new Book
             {
                 Title = "Existing",
-                Works = [new Work { Title = "Existing", Author = "Author" }],
+                Works = [new Work { Title = "Existing", Author = new Author { Name = "Author" } }],
                 Editions = [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }]
             });
             await db.SaveChangesAsync();
@@ -104,9 +104,9 @@ public class BulkAddViewModelTests
         Assert.Equal(BulkAddViewModel.RowAction.Accepted, row.Action);
 
         using var db = _factory.CreateDbContext();
-        var book = db.Books.Include(b => b.Works).FirstOrDefault(b => b.Title == "The Hobbit");
+        var book = db.Books.Include(b => b.Works).ThenInclude(w => w.Author).FirstOrDefault(b => b.Title == "The Hobbit");
         Assert.NotNull(book);
-        Assert.Equal("J.R.R. Tolkien", book.Works.Single().Author);
+        Assert.Equal("J.R.R. Tolkien", book.Works.Single().Author.Name);
     }
 
     [Fact]
@@ -127,10 +127,10 @@ public class BulkAddViewModelTests
         await vm.AcceptRowAsync(row);
 
         using var db = _factory.CreateDbContext();
-        var book = db.Books.Include(b => b.Works).Single(b => b.Title == "The Hobbit");
+        var book = db.Books.Include(b => b.Works).ThenInclude(w => w.Author).Single(b => b.Title == "The Hobbit");
         var work = Assert.Single(book.Works);
         Assert.Equal("The Hobbit", work.Title);
-        Assert.Equal("J.R.R. Tolkien", work.Author);
+        Assert.Equal("J.R.R. Tolkien", work.Author.Name);
     }
 
     [Fact]

@@ -64,6 +64,7 @@ builder.Services.AddTransient<BookEditViewModel>();
 builder.Services.AddTransient<BulkAddViewModel>();
 builder.Services.AddTransient<SeriesListViewModel>();
 builder.Services.AddTransient<SeriesEditViewModel>();
+builder.Services.AddTransient<AuthorListViewModel>();
 builder.Services.AddTransient<ShoppingViewModel>();
 builder.Services.AddScoped<AIAssistantViewModel>();
 

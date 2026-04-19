@@ -1,5 +1,6 @@
 using BookTracker.Data;
 using BookTracker.Data.Models;
+using BookTracker.Web.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
@@ -61,6 +62,8 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
                 .ThenInclude(e => e.Publisher)
             .Include(b => b.Works)
                 .ThenInclude(w => w.Genres)
+            .Include(b => b.Works)
+                .ThenInclude(w => w.Author)
             .FirstOrDefaultAsync(b => b.Id == bookId);
 
         if (book is null)
@@ -87,7 +90,7 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             {
                 Title = primary.Title,
                 Subtitle = primary.Subtitle,
-                Author = primary.Author,
+                Author = primary.Author.Name,
                 FirstPublishedDate = primary.FirstPublishedDate,
             };
             SelectedGenreIds = primary.Genres.Select(g => g.Id).ToList();
@@ -101,7 +104,7 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         }
 
         OtherWorks = book.Works.Skip(1)
-            .Select(w => new WorkSummary(w.Id, w.Title, w.Author, w.Genres.Count))
+            .Select(w => new WorkSummary(w.Id, w.Title, w.Author.Name, w.Genres.Count))
             .ToList();
 
         AssignedTags = book.Tags.Select(t => new TagItem(t.Id, t.Name)).ToList();
@@ -323,15 +326,16 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         var book = await db.Books.Include(b => b.Works).FirstOrDefaultAsync(b => b.Id == bookId);
         if (book is null) return;
 
+        var author = await AuthorResolver.FindOrCreateAsync(NewWorkAuthor, db);
         var work = new Work
         {
             Title = NewWorkTitle.Trim(),
-            Author = NewWorkAuthor.Trim(),
+            Author = author,
         };
         book.Works.Add(work);
         await db.SaveChangesAsync();
 
-        OtherWorks.Add(new WorkSummary(work.Id, work.Title, work.Author, 0));
+        OtherWorks.Add(new WorkSummary(work.Id, work.Title, author.Name, 0));
         NewWorkTitle = null;
         NewWorkAuthor = null;
     }
@@ -373,6 +377,7 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             var book = await db.Books
                 .Include(b => b.Tags)
                 .Include(b => b.Works).ThenInclude(w => w.Genres)
+                .Include(b => b.Works).ThenInclude(w => w.Author)
                 .FirstOrDefaultAsync(b => b.Id == bookId);
 
             if (book is null) { NotFound = true; return; }
@@ -400,7 +405,7 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             {
                 primary.Title = PrimaryWorkInput.Title!.Trim();
                 primary.Subtitle = string.IsNullOrWhiteSpace(PrimaryWorkInput.Subtitle) ? null : PrimaryWorkInput.Subtitle.Trim();
-                primary.Author = PrimaryWorkInput.Author!.Trim();
+                primary.Author = await AuthorResolver.FindOrCreateAsync(PrimaryWorkInput.Author!, db);
                 primary.FirstPublishedDate = PrimaryWorkInput.FirstPublishedDate;
                 primary.SeriesId = SelectedSeriesId;
                 primary.SeriesOrder = SelectedSeriesId.HasValue ? SeriesOrder : null;
