@@ -10,8 +10,14 @@ param aadAdminObjectId string
 @description('Display name shown in the portal for the AAD admin. Cosmetic only.')
 param aadAdminLogin string
 
+@description('Optional public IPv4 address allowed through the SQL firewall for ad-hoc access (e.g. local EF migrations). Leave blank to keep SQL fully private.')
+param devClientIp string = ''
+
 // AAD-only auth: no SQL logins exist. The admin above is the only way in until
 // deploy.ps1 provisions the App Service managed identity as a SQL user.
+// Public network access is disabled — App Service reaches SQL via VNet
+// integration + Private Endpoint. An optional firewall rule still applies to
+// the public endpoint when re-enabled, which is why we expose devClientIp.
 resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = {
   name: sqlServerName
   location: location
@@ -19,7 +25,7 @@ resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = {
   properties: {
     version: '12.0'
     minimalTlsVersion: '1.2'
-    publicNetworkAccess: 'Enabled'
+    publicNetworkAccess: empty(devClientIp) ? 'Disabled' : 'Enabled'
     administrators: {
       administratorType: 'ActiveDirectory'
       principalType: 'User'
@@ -47,16 +53,18 @@ resource sqlDb 'Microsoft.Sql/servers/databases@2023-08-01-preview' = {
   }
 }
 
-// Allow other Azure services (incl. the App Service) to reach the SQL server.
-// Suitable for this small app; swap to Private Endpoint / VNet integration for stricter isolation.
-resource allowAzureServices 'Microsoft.Sql/servers/firewallRules@2023-08-01-preview' = {
+// Optional pinhole for local development (EF migrations from a laptop).
+// Only created when devClientIp is supplied; deploys without it leave SQL
+// reachable solely through the Private Endpoint.
+resource devClientFirewallRule 'Microsoft.Sql/servers/firewallRules@2023-08-01-preview' = if (!empty(devClientIp)) {
   parent: sqlServer
-  name: 'AllowAllWindowsAzureIps'
+  name: 'DevClient'
   properties: {
-    startIpAddress: '0.0.0.0'
-    endIpAddress: '0.0.0.0'
+    startIpAddress: devClientIp
+    endIpAddress: devClientIp
   }
 }
 
 output sqlServerFqdn string = sqlServer.properties.fullyQualifiedDomainName
 output sqlServerName string = sqlServer.name
+output sqlServerId string = sqlServer.id

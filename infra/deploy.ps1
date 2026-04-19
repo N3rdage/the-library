@@ -11,7 +11,11 @@ param(
     [string] $EnterpriseAppName = 'Library-Patrons',
     # Optional custom hostname (e.g. books.silly.ninja). DNS records must be in
     # place first — the script prints them at the end of every run.
-    [string] $CustomDomain = ''
+    [string] $CustomDomain = '',
+    # Optional public IPv4 to whitelist on the SQL firewall for ad-hoc access
+    # (e.g. local EF migrations). Leave blank to keep SQL fully private; the
+    # only path in is then the Private Endpoint from inside the VNet.
+    [string] $DevClientIp = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -107,6 +111,7 @@ $templateParams = @{
     sqlAadAdminObjectId = $me.Id
     sqlAadAdminLogin    = $me.UserPrincipalName
     customDomain        = $CustomDomain
+    devClientIp         = $DevClientIp
 }
 
 $deployment = New-AzSubscriptionDeployment `
@@ -158,10 +163,20 @@ if ($missing) {
 # With AAD-only SQL, this is the only way the app can reach the database.
 Write-Host "Granting App Service managed identity access to SQL..."
 
-# The "Allow Azure services" firewall rule lets the App Service in but not this
-# machine, so punch a temporary hole for the script's public IP.
+# SQL is reachable only via Private Endpoint by default, so we temporarily
+# enable public access + add a firewall rule for this machine's IP, run the
+# AAD grant, then revert. If the user passed -DevClientIp the deployment
+# already left public access on, so we skip the toggle.
 $sqlServerResourceName = ($sqlFqdn -split '\.')[0]
 $rgName = $deployment.Outputs.resourceGroupName.Value
+
+$sqlServer = Get-AzSqlServer -ResourceGroupName $rgName -ServerName $sqlServerResourceName
+$publicAccessWas = $sqlServer.PublicNetworkAccess
+if ($publicAccessWas -ne 'Enabled') {
+    Write-Host "  Temporarily enabling SQL public network access..."
+    Set-AzSqlServer -ResourceGroupName $rgName -ServerName $sqlServerResourceName -PublicNetworkAccess 'Enabled' | Out-Null
+}
+
 $myIp = (Invoke-RestMethod -Uri 'https://api.ipify.org' -TimeoutSec 10).Trim()
 $tempRuleName = "deploy-script-$([guid]::NewGuid().ToString('N').Substring(0,8))"
 Write-Host "  Adding temporary SQL firewall rule for $myIp ($tempRuleName)..."
@@ -205,6 +220,11 @@ finally {
         -ServerName $sqlServerResourceName `
         -FirewallRuleName $tempRuleName `
         -Force -ErrorAction SilentlyContinue | Out-Null
+
+    if ($publicAccessWas -ne 'Enabled') {
+        Write-Host "  Restoring SQL public network access to '$publicAccessWas'..."
+        Set-AzSqlServer -ResourceGroupName $rgName -ServerName $sqlServerResourceName -PublicNetworkAccess $publicAccessWas -ErrorAction SilentlyContinue | Out-Null
+    }
 }
 
 Write-Host ""
