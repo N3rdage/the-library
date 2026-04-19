@@ -39,6 +39,11 @@ builder.Services.AddTransient<SeriesMatchService>();
 // run.
 builder.Services.AddHostedService<EditionFormatBackfillService>();
 
+// One-shot startup task that re-derives Book.Genres using the (now-tighter)
+// FuzzyGenreMatch + denylist. Clears prior genre assignments first; gated
+// by its own MaintenanceLog marker.
+builder.Services.AddHostedService<BookGenreBackfillService>();
+
 builder.Services.Configure<AIOptions>(
     builder.Configuration.GetSection(AIOptions.SectionName));
 builder.Services.AddScoped<AIProviderFactory>(sp =>
