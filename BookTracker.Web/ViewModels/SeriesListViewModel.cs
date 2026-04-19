@@ -23,7 +23,7 @@ public class SeriesListViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
 
         await using var db = await dbFactory.CreateDbContextAsync();
 
-        IQueryable<Series> query = db.Series.Include(s => s.Books);
+        IQueryable<Series> query = db.Series.Include(s => s.Works);
 
         if (!string.IsNullOrWhiteSpace(SearchTerm))
         {
@@ -43,7 +43,7 @@ public class SeriesListViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
                 s.Name,
                 s.Author,
                 s.Type,
-                s.Books.Count,
+                s.Works.Count,
                 s.ExpectedCount
             ))
             .ToListAsync();
@@ -66,18 +66,18 @@ public class SeriesListViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
     public static string CompletionText(SeriesListItem item)
     {
         if (item.Type == SeriesType.Series && item.ExpectedCount.HasValue)
-            return $"{item.BookCount} / {item.ExpectedCount}";
-        return $"{item.BookCount} books";
+            return $"{item.WorkCount} / {item.ExpectedCount}";
+        return $"{item.WorkCount} works";
     }
 
     public static string CompletionBadgeClass(SeriesListItem item)
     {
         if (item.Type == SeriesType.Series && item.ExpectedCount.HasValue)
-            return item.BookCount >= item.ExpectedCount.Value ? "bg-success" : "bg-warning text-dark";
+            return item.WorkCount >= item.ExpectedCount.Value ? "bg-success" : "bg-warning text-dark";
         return "bg-light text-dark border";
     }
 
     public record SeriesListItem(
         int Id, string Name, string? Author, SeriesType Type,
-        int BookCount, int? ExpectedCount);
+        int WorkCount, int? ExpectedCount);
 }

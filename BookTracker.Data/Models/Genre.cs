@@ -13,5 +13,5 @@ public class Genre
     public Genre? ParentGenre { get; set; }
     public List<Genre> Children { get; set; } = [];
 
-    public List<Book> Books { get; set; } = [];
+    public List<Work> Works { get; set; } = [];
 }

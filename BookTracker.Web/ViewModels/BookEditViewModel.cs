@@ -1,6 +1,5 @@
 using BookTracker.Data;
 using BookTracker.Data.Models;
-using BookTracker.Web.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
@@ -8,7 +7,22 @@ namespace BookTracker.Web.ViewModels;
 public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
 {
     public BookFormViewModel.BookFormInput? BookInput { get; private set; }
+
+    // The "primary" Work — first in the Book's Works list. Editing happens
+    // here. For single-Work books (the common case) this is the only Work.
+    public WorkFormViewModel.WorkFormInput? PrimaryWorkInput { get; private set; }
+    public int? PrimaryWorkId { get; private set; }
     public List<int> SelectedGenreIds { get; set; } = [];
+    public int? SelectedSeriesId { get; set; }
+    public int? SeriesOrder { get; set; }
+
+    // Compendium extras — Works beyond the first. Read-only display + add/
+    // remove only in PR 2; full inline editing of extras is tracked in
+    // TODO.md.
+    public List<WorkSummary> OtherWorks { get; private set; } = [];
+    public string? NewWorkTitle { get; set; }
+    public string? NewWorkAuthor { get; set; }
+
     public bool NotFound { get; private set; }
     public bool Saving { get; private set; }
     public string? SuccessMessage { get; set; }
@@ -29,9 +43,6 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     public CopyEditInput EditCopyInput { get; set; } = new();
     public int? ConfirmingDeleteCopyId { get; set; }
 
-    // Series
-    public int? SelectedSeriesId { get; set; }
-    public int? SeriesOrder { get; set; }
     public List<SeriesOption> AvailableSeries { get; private set; } = [];
 
     // Book deletion
@@ -43,12 +54,13 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         await using var db = await dbFactory.CreateDbContextAsync();
 
         var book = await db.Books
-            .Include(b => b.Genres)
             .Include(b => b.Tags)
             .Include(b => b.Editions)
                 .ThenInclude(e => e.Copies)
             .Include(b => b.Editions)
                 .ThenInclude(e => e.Publisher)
+            .Include(b => b.Works)
+                .ThenInclude(w => w.Genres)
             .FirstOrDefaultAsync(b => b.Id == bookId);
 
         if (book is null)
@@ -60,8 +72,6 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         BookInput = new BookFormViewModel.BookFormInput
         {
             Title = book.Title,
-            Subtitle = book.Subtitle,
-            Author = book.Author,
             Category = book.Category,
             Status = book.Status,
             Rating = book.Rating,
@@ -69,7 +79,31 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             DefaultCoverArtUrl = book.DefaultCoverArtUrl
         };
 
-        SelectedGenreIds = book.Genres.Select(g => g.Id).ToList();
+        var primary = book.Works.FirstOrDefault();
+        if (primary is not null)
+        {
+            PrimaryWorkId = primary.Id;
+            PrimaryWorkInput = new WorkFormViewModel.WorkFormInput
+            {
+                Title = primary.Title,
+                Subtitle = primary.Subtitle,
+                Author = primary.Author,
+                FirstPublishedDate = primary.FirstPublishedDate,
+            };
+            SelectedGenreIds = primary.Genres.Select(g => g.Id).ToList();
+            SelectedSeriesId = primary.SeriesId;
+            SeriesOrder = primary.SeriesOrder;
+        }
+        else
+        {
+            // Defensive: shouldn't happen post-cutover (every Book has a Work).
+            PrimaryWorkInput = new WorkFormViewModel.WorkFormInput { Title = book.Title };
+        }
+
+        OtherWorks = book.Works.Skip(1)
+            .Select(w => new WorkSummary(w.Id, w.Title, w.Author, w.Genres.Count))
+            .ToList();
+
         AssignedTags = book.Tags.Select(t => new TagItem(t.Id, t.Name)).ToList();
         EditionCopies = book.Editions
             .SelectMany(e => e.Copies.Select(c => new EditionCopyRow(
@@ -77,9 +111,6 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
                 e.Publisher?.Name, e.DatePrinted, e.CoverUrl,
                 c.Notes, c.DateAcquired)))
             .ToList();
-
-        SelectedSeriesId = book.SeriesId;
-        SeriesOrder = book.SeriesOrder;
 
         await LoadAvailableTagsAsync();
         await LoadAvailableSeriesAsync();
@@ -284,35 +315,74 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         }
     }
 
+    public async Task AddOtherWorkAsync(int bookId)
+    {
+        if (string.IsNullOrWhiteSpace(NewWorkTitle) || string.IsNullOrWhiteSpace(NewWorkAuthor)) return;
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var book = await db.Books.Include(b => b.Works).FirstOrDefaultAsync(b => b.Id == bookId);
+        if (book is null) return;
+
+        var work = new Work
+        {
+            Title = NewWorkTitle.Trim(),
+            Author = NewWorkAuthor.Trim(),
+        };
+        book.Works.Add(work);
+        await db.SaveChangesAsync();
+
+        OtherWorks.Add(new WorkSummary(work.Id, work.Title, work.Author, 0));
+        NewWorkTitle = null;
+        NewWorkAuthor = null;
+    }
+
+    public async Task RemoveOtherWorkAsync(int workId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var work = await db.Works.Include(w => w.Books).FirstOrDefaultAsync(w => w.Id == workId);
+        if (work is null) return;
+
+        // If this Work is only attached to this Book, delete it; otherwise
+        // just unlink from this Book (it lives on in another compendium).
+        if (work.Books.Count <= 1)
+        {
+            db.Works.Remove(work);
+        }
+        else
+        {
+            // Find which Book to detach from — the one we're editing (the
+            // sole Book in OtherWorks scope is whichever the page is for).
+            // OtherWorks is loaded for one Book, so this is safe.
+            var attachedBook = work.Books.First();
+            attachedBook.Works.Remove(work);
+        }
+        await db.SaveChangesAsync();
+
+        OtherWorks.RemoveAll(w => w.Id == workId);
+    }
+
     public async Task SaveAsync(int bookId)
     {
+        if (BookInput is null || PrimaryWorkInput is null) return;
+
         Saving = true;
         try
         {
             await using var db = await dbFactory.CreateDbContextAsync();
 
             var book = await db.Books
-                .Include(b => b.Genres)
                 .Include(b => b.Tags)
                 .Include(b => b.Works).ThenInclude(w => w.Genres)
                 .FirstOrDefaultAsync(b => b.Id == bookId);
 
             if (book is null) { NotFound = true; return; }
 
-            book.Title = BookInput!.Title!.Trim();
-            book.Subtitle = string.IsNullOrWhiteSpace(BookInput.Subtitle) ? null : BookInput.Subtitle.Trim();
-            book.Author = BookInput.Author!.Trim();
+            book.Title = BookInput.Title!.Trim();
             book.Category = BookInput.Category;
             book.Status = BookInput.Status;
             book.Rating = BookInput.Rating;
             book.Notes = string.IsNullOrWhiteSpace(BookInput.Notes) ? null : BookInput.Notes.Trim();
             book.DefaultCoverArtUrl = string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl) ? null : BookInput.DefaultCoverArtUrl.Trim();
-
-            var selectedGenres = await db.Genres
-                .Where(g => SelectedGenreIds.Contains(g.Id))
-                .ToListAsync();
-            book.Genres.Clear();
-            book.Genres.AddRange(selectedGenres);
 
             var selectedTags = await db.Tags
                 .Where(t => AssignedTags.Select(at => at.Id).Contains(t.Id))
@@ -320,10 +390,28 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             book.Tags.Clear();
             book.Tags.AddRange(selectedTags);
 
-            book.SeriesId = SelectedSeriesId;
-            book.SeriesOrder = SelectedSeriesId.HasValue ? SeriesOrder : null;
+            // Update the primary Work in place. PrimaryWorkId is set in
+            // InitializeAsync; falling back to the first Work in the book
+            // covers the defensive case where it wasn't set.
+            var primary = (PrimaryWorkId is int id ? book.Works.FirstOrDefault(w => w.Id == id) : null)
+                          ?? book.Works.FirstOrDefault();
 
-            WorkSync.EnsureWork(book);
+            if (primary is not null)
+            {
+                primary.Title = PrimaryWorkInput.Title!.Trim();
+                primary.Subtitle = string.IsNullOrWhiteSpace(PrimaryWorkInput.Subtitle) ? null : PrimaryWorkInput.Subtitle.Trim();
+                primary.Author = PrimaryWorkInput.Author!.Trim();
+                primary.FirstPublishedDate = PrimaryWorkInput.FirstPublishedDate;
+                primary.SeriesId = SelectedSeriesId;
+                primary.SeriesOrder = SelectedSeriesId.HasValue ? SeriesOrder : null;
+
+                var selectedGenres = await db.Genres
+                    .Where(g => SelectedGenreIds.Contains(g.Id))
+                    .ToListAsync();
+                primary.Genres.Clear();
+                foreach (var g in selectedGenres) primary.Genres.Add(g);
+            }
+
             await db.SaveChangesAsync();
             SuccessMessage = "Book saved successfully.";
         }
@@ -336,6 +424,7 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     public record SeriesOption(int Id, string Name, SeriesType Type);
     public record TagItem(int Id, string Name);
     public record EditionCopyRow(int EditionId, int CopyId, string? Isbn, BookFormat Format, BookCondition Condition, string? PublisherName, DateOnly? DatePrinted, string? CoverUrl, string? CopyNotes, DateTime? DateAcquired);
+    public record WorkSummary(int Id, string Title, string Author, int GenreCount);
 
     public class CopyEditInput
     {

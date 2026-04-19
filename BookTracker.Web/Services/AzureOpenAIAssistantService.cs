@@ -96,19 +96,28 @@ Rules:
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
-        var uncategorised = await db.Books.Where(b => b.SeriesId == null)
-            .OrderBy(b => b.Author).ThenBy(b => b.Title)
-            .Select(b => new { b.Title, b.Author }).ToListAsync(ct);
+        // Books whose primary work isn't in any series. Project the work's
+        // author since Book no longer carries Author directly.
+        var uncategorised = await db.Books
+            .Include(b => b.Works)
+            .Where(b => b.Works.All(w => w.SeriesId == null))
+            .OrderBy(b => b.Title)
+            .Select(b => new
+            {
+                b.Title,
+                Author = string.Join(", ", b.Works.Select(w => w.Author).Distinct())
+            })
+            .ToListAsync(ct);
 
         if (uncategorised.Count == 0)
             return new CollectionSuggestionResult([], "All books are already in a series or collection.");
 
         var existingSeries = await db.Series.OrderBy(s => s.Name)
-            .Select(s => new { s.Name, s.Type, BookCount = s.Books.Count }).ToListAsync(ct);
+            .Select(s => new { s.Name, s.Type, WorkCount = s.Works.Count }).ToListAsync(ct);
 
         var booksText = string.Join("\n", uncategorised.Select(b => $"- \"{b.Title}\" by {b.Author}"));
         var seriesText = existingSeries.Count > 0
-            ? "Existing series/collections:\n" + string.Join("\n", existingSeries.Select(s => $"- {s.Name} ({s.Type}, {s.BookCount} books)"))
+            ? "Existing series/collections:\n" + string.Join("\n", existingSeries.Select(s => $"- {s.Name} ({s.Type}, {s.WorkCount} works)"))
             : "No existing series or collections.";
 
         var responseText = await CallWithSystemAsync(SharedParsers.BuildCollectionSystemPrompt(seriesText),
@@ -130,9 +139,16 @@ Rules:
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
-        var allBooks = await db.Books.Include(b => b.Genres)
-            .OrderBy(b => b.Author).ThenBy(b => b.Title)
-            .Select(b => new { b.Title, b.Author, b.Rating, Genres = b.Genres.Select(g => g.Name).ToList() })
+        var allBooks = await db.Books
+            .Include(b => b.Works).ThenInclude(w => w.Genres)
+            .OrderBy(b => b.Title)
+            .Select(b => new
+            {
+                b.Title,
+                Author = string.Join(", ", b.Works.Select(w => w.Author).Distinct()),
+                b.Rating,
+                Genres = b.Works.SelectMany(w => w.Genres).Select(g => g.Name).Distinct().ToList()
+            })
             .ToListAsync(ct);
 
         var booksText = allBooks.Count > 0
