@@ -15,20 +15,18 @@ public enum BookCategory
     NonFiction
 }
 
+// A Book is a physical-object grouping — what you hold and own. It carries
+// the per-physical-book reading state (Status, Rating, Notes, Tags), the
+// cover art, and one or more Editions / Copies. Authorship, subtitle,
+// genres, and series membership belong to the contained Works (PR 2 of
+// the Work refactor moved these). For single-Work books (the common
+// case) Book.Title mirrors the sole Work's title.
 public class Book
 {
     public int Id { get; set; }
 
     [Required, MaxLength(300)]
     public string Title { get; set; } = string.Empty;
-
-    [MaxLength(300)]
-    public string? Subtitle { get; set; }
-
-    [Required, MaxLength(200)]
-    public string Author { get; set; } = string.Empty;
-
-    public List<Genre> Genres { get; set; } = [];
 
     public BookCategory Category { get; set; } = BookCategory.Fiction;
 
@@ -48,14 +46,5 @@ public class Book
 
     public List<Tag> Tags { get; set; } = [];
 
-    public int? SeriesId { get; set; }
-    public Series? Series { get; set; }
-
-    /// <summary>Position in a Series (1-based). Defaults to publication order for Collections.</summary>
-    public int? SeriesOrder { get; set; }
-
-    // Added in PR 1 of the Work refactor. Currently dual-written from
-    // Book's own Subtitle/Author/Genres/Series fields via WorkSync.
-    // Reads still come from Book.* until PR 2 cuts over.
     public List<Work> Works { get; set; } = [];
 }

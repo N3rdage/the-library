@@ -11,16 +11,13 @@ public class BookFormViewModel
         _ => c.ToString()
     };
 
+    // Subtitle and Author moved to WorkFormViewModel as part of the
+    // Work refactor. For single-Work books the page mirrors Book.Title
+    // from the sole Work's title.
     public class BookFormInput
     {
         [Required, StringLength(300)]
         public string? Title { get; set; }
-
-        [StringLength(300)]
-        public string? Subtitle { get; set; }
-
-        [Required, StringLength(200)]
-        public string? Author { get; set; }
 
         public BookCategory Category { get; set; } = BookCategory.Fiction;
 

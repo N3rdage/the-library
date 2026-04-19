@@ -11,6 +11,7 @@ public class BookAddViewModel(
     SeriesMatchService seriesMatch)
 {
     public BookFormViewModel.BookFormInput BookInput { get; set; } = new();
+    public WorkFormViewModel.WorkFormInput WorkInput { get; set; } = new();
     public EditionFormViewModel.EditionFormInput EditionInput { get; set; } = new();
     public CopyFormViewModel.CopyFormInput CopyInput { get; set; } = new();
     public List<string> LookupCandidates { get; private set; } = [];
@@ -53,10 +54,14 @@ public class BookAddViewModel(
                 return;
             }
 
+            // The Add page creates a Book with one Work. Lookup result
+            // populates both: Book.Title mirrors the Work title, plus
+            // cover; Work gets title/subtitle/author/genres.
             if (string.IsNullOrWhiteSpace(BookInput.Title)) BookInput.Title = result.Title ?? "";
-            if (string.IsNullOrWhiteSpace(BookInput.Subtitle)) BookInput.Subtitle = result.Subtitle;
-            if (string.IsNullOrWhiteSpace(BookInput.Author)) BookInput.Author = result.Author ?? "";
             if (string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl)) BookInput.DefaultCoverArtUrl = result.CoverUrl;
+            if (string.IsNullOrWhiteSpace(WorkInput.Title)) WorkInput.Title = result.Title ?? "";
+            if (string.IsNullOrWhiteSpace(WorkInput.Subtitle)) WorkInput.Subtitle = result.Subtitle;
+            if (string.IsNullOrWhiteSpace(WorkInput.Author)) WorkInput.Author = result.Author ?? "";
             if (string.IsNullOrWhiteSpace(EditionInput.Isbn)) EditionInput.Isbn = result.Isbn;
             if (string.IsNullOrWhiteSpace(EditionInput.Publisher)) EditionInput.Publisher = result.Publisher;
             EditionInput.DatePrinted ??= result.DatePrinted;
@@ -107,14 +112,14 @@ public class BookAddViewModel(
     public async Task ApplyCandidateAsync(BookSearchCandidate candidate, GenrePickerViewModel genrePicker)
     {
         if (string.IsNullOrWhiteSpace(BookInput.Title)) BookInput.Title = candidate.Title ?? "";
-        if (string.IsNullOrWhiteSpace(BookInput.Author)) BookInput.Author = candidate.Author ?? "";
         if (string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl)) BookInput.DefaultCoverArtUrl = candidate.CoverUrl;
-        // first_publish_year is the WORK's first year, not necessarily this
-        // edition's print date — but it's a useful hint and the user will
-        // overwrite it from the copyright page.
-        if (EditionInput.DatePrinted is null && candidate.FirstPublishYear is int year)
+        if (string.IsNullOrWhiteSpace(WorkInput.Title)) WorkInput.Title = candidate.Title ?? "";
+        if (string.IsNullOrWhiteSpace(WorkInput.Author)) WorkInput.Author = candidate.Author ?? "";
+        // first_publish_year is the WORK's first year — perfect fit for
+        // Work.FirstPublishedDate; not the edition's print date.
+        if (WorkInput.FirstPublishedDate is null && candidate.FirstPublishYear is int year)
         {
-            EditionInput.DatePrinted = new DateOnly(year, 1, 1);
+            WorkInput.FirstPublishedDate = new DateOnly(year, 1, 1);
         }
 
         SearchMessage = $"Prefilled from Open Library. Fill in format, exact print date, and publisher from the book in hand.";
@@ -150,17 +155,24 @@ public class BookAddViewModel(
                 }
             }
 
+            var work = new Work
+            {
+                Title = (WorkInput.Title ?? BookInput.Title)!.Trim(),
+                Subtitle = string.IsNullOrWhiteSpace(WorkInput.Subtitle) ? null : WorkInput.Subtitle!.Trim(),
+                Author = WorkInput.Author!.Trim(),
+                FirstPublishedDate = WorkInput.FirstPublishedDate,
+                Genres = selectedGenres,
+            };
+
             var book = new Book
             {
                 Title = BookInput.Title!.Trim(),
-                Subtitle = string.IsNullOrWhiteSpace(BookInput.Subtitle) ? null : BookInput.Subtitle.Trim(),
-                Author = BookInput.Author!.Trim(),
                 Notes = string.IsNullOrWhiteSpace(BookInput.Notes) ? null : BookInput.Notes.Trim(),
                 Category = BookInput.Category,
                 Status = BookInput.Status,
                 Rating = BookInput.Rating,
                 DefaultCoverArtUrl = string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl) ? null : BookInput.DefaultCoverArtUrl.Trim(),
-                Genres = selectedGenres,
+                Works = [work],
                 Editions =
                 [
                     new Edition
@@ -176,7 +188,6 @@ public class BookAddViewModel(
             };
 
             db.Books.Add(book);
-            WorkSync.EnsureWork(book);
             await db.SaveChangesAsync();
             return true;
         }

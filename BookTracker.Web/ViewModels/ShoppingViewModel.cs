@@ -1,6 +1,5 @@
 using BookTracker.Data;
 using BookTracker.Data.Models;
-using BookTracker.Web.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
@@ -21,20 +20,21 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     {
         await using var db = await dbFactory.CreateDbContextAsync();
 
-        // Structured series with a known expected count where we're missing books
+        // Structured series with a known expected count where we're missing works.
+        // Series → Works → Books gives us the parent book(s) to link to.
         var incompleteSeries = await db.Series
-            .Include(s => s.Books)
+            .Include(s => s.Works).ThenInclude(w => w.Books)
             .Where(s => s.Type == SeriesType.Series && s.ExpectedCount != null)
             .ToListAsync();
 
         SeriesGaps = incompleteSeries
-            .Where(s => s.Books.Count < s.ExpectedCount!.Value)
+            .Where(s => s.Works.Count < s.ExpectedCount!.Value)
             .OrderBy(s => s.Name)
             .Select(s =>
             {
-                var ownedPositions = s.Books
-                    .Where(b => b.SeriesOrder.HasValue)
-                    .Select(b => b.SeriesOrder!.Value)
+                var ownedPositions = s.Works
+                    .Where(w => w.SeriesOrder.HasValue)
+                    .Select(w => w.SeriesOrder!.Value)
                     .OrderBy(n => n)
                     .ToList();
 
@@ -49,11 +49,16 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
                     s.Id,
                     s.Name,
                     s.Author,
-                    s.Books.Count,
+                    s.Works.Count,
                     s.ExpectedCount.Value,
                     missing,
-                    s.Books.OrderBy(b => b.SeriesOrder ?? int.MaxValue)
-                        .Select(b => new OwnedSeriesBook(b.Id, b.Title, b.SeriesOrder))
+                    s.Works.OrderBy(w => w.SeriesOrder ?? int.MaxValue)
+                        // Display the work title; link to the first containing
+                        // book (if any) so the user can navigate to it.
+                        .Select(w => new OwnedSeriesBook(
+                            w.Books.FirstOrDefault()?.Id ?? 0,
+                            w.Title,
+                            w.SeriesOrder))
                         .ToList());
             })
             .ToList();
@@ -78,7 +83,7 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
 
             var editions = await db.Editions
                 .Include(e => e.Book)
-                    .ThenInclude(b => b.Series)
+                    .ThenInclude(b => b.Works).ThenInclude(w => w.Series)
                 .Include(e => e.Copies)
                 .Where(e => e.Isbn == isbn)
                 .ToListAsync();
@@ -92,7 +97,7 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
                     Found: true,
                     BookId: book.Id,
                     Title: book.Title,
-                    Author: book.Author,
+                    Author: PrimaryAuthor(book),
                     CopyCount: copyCount,
                     CoverUrl: book.DefaultCoverArtUrl,
                     SeriesInfo: seriesInfo);
@@ -129,8 +134,8 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             var books = await db.Books
                 .Include(b => b.Editions)
                     .ThenInclude(e => e.Copies)
-                .Include(b => b.Series)
-                .Where(b => b.Title.Contains(term) || b.Author.Contains(term))
+                .Include(b => b.Works).ThenInclude(w => w.Series)
+                .Where(b => b.Title.Contains(term) || b.Works.Any(w => w.Title.Contains(term) || w.Author.Contains(term)))
                 .OrderBy(b => b.Title)
                 .Take(10)
                 .ToListAsync();
@@ -143,7 +148,7 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
                     Found: true,
                     BookId: book.Id,
                     Title: book.Title,
-                    Author: book.Author,
+                    Author: PrimaryAuthor(book),
                     CopyCount: book.Editions.SelectMany(e => e.Copies).Count(),
                     CoverUrl: book.DefaultCoverArtUrl,
                     SeriesInfo: seriesInfo);
@@ -159,7 +164,7 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
                     CoverUrl: null,
                     SeriesInfo: null,
                     MultipleResults: books.Select(b => new SearchResultItem(
-                        b.Id, b.Title, b.Author, b.Editions.SelectMany(e => e.Copies).Count(), b.DefaultCoverArtUrl
+                        b.Id, b.Title, PrimaryAuthor(b), b.Editions.SelectMany(e => e.Copies).Count(), b.DefaultCoverArtUrl
                     )).ToList());
             }
             else
@@ -186,7 +191,7 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         var book = await db.Books
             .Include(b => b.Editions)
                 .ThenInclude(e => e.Copies)
-            .Include(b => b.Series)
+            .Include(b => b.Works).ThenInclude(w => w.Series)
             .FirstOrDefaultAsync(b => b.Id == bookId);
 
         if (book is null) return;
@@ -196,27 +201,35 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             Found: true,
             BookId: book.Id,
             Title: book.Title,
-            Author: book.Author,
+            Author: PrimaryAuthor(book),
             CopyCount: book.Editions.SelectMany(e => e.Copies).Count(),
             CoverUrl: book.DefaultCoverArtUrl,
             SeriesInfo: seriesInfo);
     }
 
+    // For display in shopping search results — most books have a single Work
+    // and therefore a single author, but compendiums may span several. Comma-
+    // join to keep things readable.
+    private static string PrimaryAuthor(Book book)
+        => string.Join(", ", book.Works.Select(w => w.Author).Distinct());
+
     private static async Task<SeriesInfo?> GetSeriesInfoAsync(BookTrackerDbContext db, Book book)
     {
-        if (book.SeriesId is null || book.Series is null)
-            return null;
+        // Series membership is per-Work; the primary work's series (if any)
+        // stands in for the whole book in the shopping UI.
+        var primary = book.Works.FirstOrDefault(w => w.SeriesId.HasValue);
+        if (primary is null || primary.Series is null) return null;
 
-        var series = book.Series;
-        var booksInSeries = await db.Books
-            .Where(b => b.SeriesId == series.Id)
+        var series = primary.Series;
+        var worksInSeries = await db.Works
+            .Where(w => w.SeriesId == series.Id)
             .CountAsync();
 
         return new SeriesInfo(
             series.Id,
             series.Name,
             series.Type,
-            booksInSeries,
+            worksInSeries,
             series.ExpectedCount);
     }
 
@@ -314,9 +327,9 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         var book = new Book
         {
             Title = item.Title,
-            Author = item.Author,
             Tags = [followUpTag],
-            Editions = []
+            Editions = [],
+            Works = [new Work { Title = item.Title, Author = item.Author }]
         };
 
         if (!string.IsNullOrWhiteSpace(item.Isbn))
@@ -330,7 +343,6 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         }
 
         db.Books.Add(book);
-        WorkSync.EnsureWork(book);
 
         var wishlistItem = await db.WishlistItems.FindAsync(item.Id);
         if (wishlistItem is not null)

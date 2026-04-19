@@ -77,24 +77,24 @@ else
                 <div class="col-12">
                     <div class="card">
                         <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                            <h2 class="h5 mb-0">Books in this series (@VM.Books.Count)</h2>
-                            <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => VM.ShowingAddBook = !VM.ShowingAddBook">
-                                @(VM.ShowingAddBook ? "Cancel" : "Add book")
+                            <h2 class="h5 mb-0">Works in this series (@VM.Works.Count)</h2>
+                            <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => VM.ShowingAddWork = !VM.ShowingAddWork">
+                                @(VM.ShowingAddWork ? "Cancel" : "Add work")
                             </button>
                         </div>
                         <div class="card-body">
-                            @if (VM.ShowingAddBook)
+                            @if (VM.ShowingAddWork)
                             {
                                 <div class="mb-3 p-3 bg-light rounded">
                                     <div class="input-group" style="max-width: 500px;">
-                                        <input type="text" class="form-control" placeholder="Search by title or author..."
-                                               @bind="VM.BookSearchTerm" @onkeyup="HandleBookSearchKeyUp" />
-                                        <button type="button" class="btn btn-outline-primary" @onclick="VM.SearchBooksAsync">Search</button>
+                                        <input type="text" class="form-control" placeholder="Search works by title or author..."
+                                               @bind="VM.WorkSearchTerm" @onkeyup="HandleWorkSearchKeyUp" />
+                                        <button type="button" class="btn btn-outline-primary" @onclick="VM.SearchWorksAsync">Search</button>
                                     </div>
-                                    @if (VM.BookSearchResults.Count > 0)
+                                    @if (VM.WorkSearchResults.Count > 0)
                                     {
                                         <div class="list-group mt-2">
-                                            @foreach (var result in VM.BookSearchResults)
+                                            @foreach (var result in VM.WorkSearchResults)
                                             {
                                                 <div class="list-group-item d-flex justify-content-between align-items-center">
                                                     <div>
@@ -105,7 +105,7 @@ else
                                                             <span class="badge bg-warning text-dark ms-1">Already in a series</span>
                                                         }
                                                     </div>
-                                                    <button type="button" class="btn btn-outline-success btn-sm" @onclick="() => AddBookAsync(result.Id)">
+                                                    <button type="button" class="btn btn-outline-success btn-sm" @onclick="() => AddWorkAsync(result.Id)">
                                                         Add
                                                     </button>
                                                 </div>
@@ -115,9 +115,9 @@ else
                                 </div>
                             }
 
-                            @if (VM.Books.Count == 0)
+                            @if (VM.Works.Count == 0)
                             {
-                                <p class="text-muted mb-0">No books in this series yet.</p>
+                                <p class="text-muted mb-0">No works in this series yet.</p>
                             }
                             else
                             {
@@ -128,24 +128,36 @@ else
                                                 <th style="width: 80px;">#</th>
                                                 <th>Title</th>
                                                 <th>Author</th>
+                                                <th>Found in</th>
                                                 <th style="width: 120px;"></th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            @foreach (var book in VM.Books)
+                                            @foreach (var work in VM.Works)
                                             {
                                                 <tr>
                                                     <td>
                                                         <input type="number" class="form-control form-control-sm" style="width: 70px;"
-                                                               value="@book.SeriesOrder"
-                                                               @onchange="e => UpdateOrderAsync(book.Id, e)" />
+                                                               value="@work.SeriesOrder"
+                                                               @onchange="e => UpdateOrderAsync(work.Id, e)" />
+                                                    </td>
+                                                    <td>@work.Title</td>
+                                                    <td>@work.Author</td>
+                                                    <td>
+                                                        @if (work.Books.Count == 0)
+                                                        {
+                                                            <span class="text-muted small">—</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            @foreach (var b in work.Books)
+                                                            {
+                                                                <a href="@($"/books/{b.Id}/edit")" class="badge bg-light text-dark text-decoration-none me-1">@b.Title</a>
+                                                            }
+                                                        }
                                                     </td>
                                                     <td>
-                                                        <a href="@($"/books/{book.Id}/edit")" class="text-decoration-none">@book.Title</a>
-                                                    </td>
-                                                    <td>@book.Author</td>
-                                                    <td>
-                                                        <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => VM.RemoveBookFromSeriesAsync(book.Id)">
+                                                        <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => VM.RemoveWorkFromSeriesAsync(work.Id)">
                                                             Remove
                                                         </button>
                                                     </td>
@@ -224,21 +236,21 @@ else
         }
     }
 
-    private async Task HandleBookSearchKeyUp(KeyboardEventArgs e)
+    private async Task HandleWorkSearchKeyUp(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
-            await VM.SearchBooksAsync();
+            await VM.SearchWorksAsync();
     }
 
-    private async Task AddBookAsync(int bookId)
+    private async Task AddWorkAsync(int workId)
     {
         if (SeriesId.HasValue)
-            await VM.AddBookToSeriesAsync(SeriesId.Value, bookId);
+            await VM.AddWorkToSeriesAsync(SeriesId.Value, workId);
     }
 
-    private async Task UpdateOrderAsync(int bookId, ChangeEventArgs e)
+    private async Task UpdateOrderAsync(int workId, ChangeEventArgs e)
     {
         int? newOrder = int.TryParse(e.Value?.ToString(), out var val) ? val : null;
-        await VM.UpdateBookOrderAsync(bookId, newOrder);
+        await VM.UpdateWorkOrderAsync(workId, newOrder);
     }
 }

@@ -1,0 +1,34 @@
+<div class="card">
+    <div class="card-header bg-white"><h2 class="h5 mb-0">@Title</h2></div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-8">
+                <label class="form-label">Title</label>
+                <InputText @bind-Value="Input.Title" class="form-control" />
+                <ValidationMessage For="() => Input.Title" class="text-danger small" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Author</label>
+                <InputText @bind-Value="Input.Author" class="form-control" />
+                <ValidationMessage For="() => Input.Author" class="text-danger small" />
+            </div>
+            <div class="col-md-8">
+                <label class="form-label">Subtitle</label>
+                <InputText @bind-Value="Input.Subtitle" class="form-control" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">First published</label>
+                <InputDate @bind-Value="Input.FirstPublishedDate" class="form-control" />
+                <div class="form-text">When the work itself was first published, not this edition's print date.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public WorkFormViewModel.WorkFormInput Input { get; set; } = default!;
+
+    [Parameter]
+    public string Title { get; set; } = "Work";
+}

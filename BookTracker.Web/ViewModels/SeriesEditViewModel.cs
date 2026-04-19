@@ -1,28 +1,30 @@
 using System.ComponentModel.DataAnnotations;
 using BookTracker.Data;
 using BookTracker.Data.Models;
-using BookTracker.Web.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
 
+// Series membership lives on Works after the cutover. The page lists each
+// Work in the series (in order) along with the Book(s) that contain it,
+// so a short story republished in three compendiums shows once with three
+// book references.
 public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
 {
     public SeriesFormInput? Input { get; private set; }
-    public List<SeriesBookRow> Books { get; private set; } = [];
+    public List<SeriesWorkRow> Works { get; private set; } = [];
     public bool NotFound { get; private set; }
     public bool Saving { get; private set; }
     public string? SuccessMessage { get; set; }
     public bool IsNew { get; private set; }
 
-    // Book deletion
     public bool ConfirmingDeleteSeries { get; set; }
     public bool Deleting { get; private set; }
 
-    // Add book
-    public bool ShowingAddBook { get; set; }
-    public string BookSearchTerm { get; set; } = "";
-    public List<BookSearchResult> BookSearchResults { get; private set; } = [];
+    // Add work
+    public bool ShowingAddWork { get; set; }
+    public string WorkSearchTerm { get; set; } = "";
+    public List<WorkSearchResult> WorkSearchResults { get; private set; } = [];
 
     public void InitializeNew()
     {
@@ -35,7 +37,7 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
         await using var db = await dbFactory.CreateDbContextAsync();
 
         var series = await db.Series
-            .Include(s => s.Books)
+            .Include(s => s.Works).ThenInclude(w => w.Books)
             .FirstOrDefaultAsync(s => s.Id == seriesId);
 
         if (series is null)
@@ -53,10 +55,15 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
             Description = series.Description
         };
 
-        Books = series.Books
-            .OrderBy(b => b.SeriesOrder ?? int.MaxValue)
-            .ThenBy(b => b.Title)
-            .Select(b => new SeriesBookRow(b.Id, b.Title, b.Author, b.SeriesOrder))
+        Works = series.Works
+            .OrderBy(w => w.SeriesOrder ?? int.MaxValue)
+            .ThenBy(w => w.Title)
+            .Select(w => new SeriesWorkRow(
+                w.Id,
+                w.Title,
+                w.Author,
+                w.SeriesOrder,
+                w.Books.Select(b => new ContainingBook(b.Id, b.Title)).ToList()))
             .ToList();
     }
 
@@ -124,85 +131,82 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
         }
     }
 
-    public async Task SearchBooksAsync()
+    public async Task SearchWorksAsync()
     {
-        if (string.IsNullOrWhiteSpace(BookSearchTerm))
+        if (string.IsNullOrWhiteSpace(WorkSearchTerm))
         {
-            BookSearchResults = [];
+            WorkSearchResults = [];
             return;
         }
 
-        var term = BookSearchTerm.Trim();
-        var currentBookIds = Books.Select(b => b.Id).ToHashSet();
+        var term = WorkSearchTerm.Trim();
+        var currentWorkIds = Works.Select(w => w.Id).ToHashSet();
 
         await using var db = await dbFactory.CreateDbContextAsync();
-        BookSearchResults = await db.Books
-            .Where(b => !currentBookIds.Contains(b.Id))
-            .Where(b => b.Title.Contains(term) || b.Author.Contains(term))
-            .OrderBy(b => b.Title)
+        WorkSearchResults = await db.Works
+            .Where(w => !currentWorkIds.Contains(w.Id))
+            .Where(w => w.Title.Contains(term) || w.Author.Contains(term))
+            .OrderBy(w => w.Title)
             .Take(10)
-            .Select(b => new BookSearchResult(b.Id, b.Title, b.Author, b.SeriesId))
+            .Select(w => new WorkSearchResult(w.Id, w.Title, w.Author, w.SeriesId))
             .ToListAsync();
     }
 
-    public async Task AddBookToSeriesAsync(int seriesId, int bookId)
+    public async Task AddWorkToSeriesAsync(int seriesId, int workId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books
-            .Include(b => b.Works).ThenInclude(w => w.Genres)
-            .FirstOrDefaultAsync(b => b.Id == bookId);
-        if (book is null) return;
+        var work = await db.Works.Include(w => w.Books).FirstOrDefaultAsync(w => w.Id == workId);
+        if (work is null) return;
 
-        var nextOrder = Books.Count > 0 ? Books.Max(b => b.SeriesOrder ?? 0) + 1 : 1;
+        var nextOrder = Works.Count > 0 ? Works.Max(w => w.SeriesOrder ?? 0) + 1 : 1;
 
-        book.SeriesId = seriesId;
-        book.SeriesOrder = nextOrder;
-        WorkSync.EnsureWork(book);
+        work.SeriesId = seriesId;
+        work.SeriesOrder = nextOrder;
         await db.SaveChangesAsync();
 
-        Books.Add(new SeriesBookRow(book.Id, book.Title, book.Author, nextOrder));
-        BookSearchResults.RemoveAll(r => r.Id == bookId);
+        Works.Add(new SeriesWorkRow(
+            work.Id,
+            work.Title,
+            work.Author,
+            nextOrder,
+            work.Books.Select(b => new ContainingBook(b.Id, b.Title)).ToList()));
+        WorkSearchResults.RemoveAll(r => r.Id == workId);
     }
 
-    public async Task RemoveBookFromSeriesAsync(int bookId)
+    public async Task RemoveWorkFromSeriesAsync(int workId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books
-            .Include(b => b.Works).ThenInclude(w => w.Genres)
-            .FirstOrDefaultAsync(b => b.Id == bookId);
-        if (book is not null)
+        var work = await db.Works.FindAsync(workId);
+        if (work is not null)
         {
-            book.SeriesId = null;
-            book.SeriesOrder = null;
-            WorkSync.EnsureWork(book);
+            work.SeriesId = null;
+            work.SeriesOrder = null;
             await db.SaveChangesAsync();
         }
-        Books.RemoveAll(b => b.Id == bookId);
+        Works.RemoveAll(w => w.Id == workId);
     }
 
-    public async Task UpdateBookOrderAsync(int bookId, int? newOrder)
+    public async Task UpdateWorkOrderAsync(int workId, int? newOrder)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books
-            .Include(b => b.Works).ThenInclude(w => w.Genres)
-            .FirstOrDefaultAsync(b => b.Id == bookId);
-        if (book is not null)
+        var work = await db.Works.FindAsync(workId);
+        if (work is not null)
         {
-            book.SeriesOrder = newOrder;
-            WorkSync.EnsureWork(book);
+            work.SeriesOrder = newOrder;
             await db.SaveChangesAsync();
         }
 
-        var row = Books.FirstOrDefault(b => b.Id == bookId);
+        var row = Works.FirstOrDefault(w => w.Id == workId);
         if (row is not null)
         {
-            var idx = Books.IndexOf(row);
-            Books[idx] = row with { SeriesOrder = newOrder };
+            var idx = Works.IndexOf(row);
+            Works[idx] = row with { SeriesOrder = newOrder };
         }
     }
 
-    public record SeriesBookRow(int Id, string Title, string Author, int? SeriesOrder);
-    public record BookSearchResult(int Id, string Title, string Author, int? CurrentSeriesId);
+    public record SeriesWorkRow(int Id, string Title, string Author, int? SeriesOrder, List<ContainingBook> Books);
+    public record ContainingBook(int Id, string Title);
+    public record WorkSearchResult(int Id, string Title, string Author, int? CurrentSeriesId);
 
     public class SeriesFormInput
     {
