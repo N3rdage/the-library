@@ -23,9 +23,12 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .HasForeignKey(e => e.BookId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // Filtered unique index — no-ISBN editions (pre-1974 books) skip
+        // the constraint, so multiple null-ISBN editions can coexist.
         modelBuilder.Entity<Edition>()
             .HasIndex(e => e.Isbn)
-            .IsUnique();
+            .IsUnique()
+            .HasFilter("[Isbn] IS NOT NULL");
 
         modelBuilder.Entity<Edition>()
             .HasOne(e => e.Publisher)

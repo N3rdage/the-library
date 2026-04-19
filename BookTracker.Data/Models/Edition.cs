@@ -9,8 +9,11 @@ public class Edition
     public int BookId { get; set; }
     public Book Book { get; set; } = null!;
 
-    [Required, MaxLength(20)]
-    public string Isbn { get; set; } = string.Empty;
+    // Nullable to support pre-1974 books that predate ISBN. The unique index
+    // in BookTrackerDbContext is filtered (WHERE Isbn IS NOT NULL) so any
+    // number of no-ISBN editions can coexist without colliding.
+    [MaxLength(20)]
+    public string? Isbn { get; set; }
 
     public BookFormat Format { get; set; } = BookFormat.TradePaperback;
 
