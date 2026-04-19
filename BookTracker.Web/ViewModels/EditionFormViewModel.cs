@@ -26,7 +26,7 @@ public class EditionFormViewModel(IDbContextFactory<BookTrackerDbContext> dbFact
         [RegularExpression(@"^(97(8|9))?\d{9}(\d|X|x)$", ErrorMessage = "Enter a valid 10- or 13-digit ISBN.")]
         public string? Isbn { get; set; }
 
-        public BookFormat Format { get; set; } = BookFormat.Softcopy;
+        public BookFormat Format { get; set; } = BookFormat.TradePaperback;
 
         public DateOnly? DatePrinted { get; set; }
 

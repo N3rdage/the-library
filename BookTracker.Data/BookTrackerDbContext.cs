@@ -13,6 +13,7 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
     public DbSet<Series> Series => Set<Series>();
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<WishlistItem> WishlistItems => Set<WishlistItem>();
+    public DbSet<MaintenanceLog> MaintenanceLogs => Set<MaintenanceLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -77,5 +78,9 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
 
         modelBuilder.Entity<Tag>()
             .HasData(new Tag { Id = 1, Name = "follow-up" });
+
+        modelBuilder.Entity<MaintenanceLog>()
+            .HasIndex(m => m.Name)
+            .IsUnique();
     }
 }

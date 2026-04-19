@@ -323,7 +323,7 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             book.Editions.Add(new Edition
             {
                 Isbn = item.Isbn,
-                Format = BookFormat.Softcopy,
+                Format = BookFormat.TradePaperback,
                 Copies = [new Copy { Condition = BookCondition.Good }]
             });
         }

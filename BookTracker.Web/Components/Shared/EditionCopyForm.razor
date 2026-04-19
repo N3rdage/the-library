@@ -4,17 +4,17 @@
     <div class="card-header bg-white"><h2 class="h5 mb-0">@Title</h2></div>
     <div class="card-body">
         <div class="row g-3">
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label">ISBN</label>
                 <InputText @bind-Value="EditionInput.Isbn" class="form-control" />
                 <ValidationMessage For="() => EditionInput.Isbn" class="text-danger small" />
             </div>
-            <div class="col-md-2">
+            <div class="col-md-3">
                 <label class="form-label">Format</label>
                 <InputSelect @bind-Value="EditionInput.Format" class="form-select">
                     @foreach (var f in Enum.GetValues<BookFormat>())
                     {
-                        <option value="@f">@f</option>
+                        <option value="@f">@f.DisplayName()</option>
                     }
                 </InputSelect>
             </div>
