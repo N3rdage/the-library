@@ -1,5 +1,6 @@
 using BookTracker.Data;
 using BookTracker.Data.Models;
+using BookTracker.Web.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
@@ -329,6 +330,7 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         }
 
         db.Books.Add(book);
+        WorkSync.EnsureWork(book);
 
         var wishlistItem = await db.WishlistItems.FindAsync(item.Id);
         if (wishlistItem is not null)

@@ -176,6 +176,7 @@ public class BookAddViewModel(
             };
 
             db.Books.Add(book);
+            WorkSync.EnsureWork(book);
             await db.SaveChangesAsync();
             return true;
         }

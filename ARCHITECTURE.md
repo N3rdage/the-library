@@ -61,10 +61,11 @@ GenreSeed
 ```
 
 Key design decisions:
-- **Book vs Edition vs Copy**: A Book is the abstract work. An Edition is a specific printing with a unique ISBN (hardcover vs softcover are different Editions). A Copy is a physical item you own.
-- **Edition.ISBN is unique**: scanning an ISBN always resolves to one Edition.
+- **Book vs Edition vs Copy**: A Book is a physical-object grouping. An Edition is a specific printing with a unique ISBN (hardcover vs softcover are different Editions). A Copy is a physical item you own.
+- **Edition.ISBN is unique** (filtered — pre-1974 books with no ISBN coexist as nullable rows).
 - **Series.Type**: `Series` = numbered with known order; `Collection` = loose grouping.
 - **Genre hierarchy**: top-level genres with sub-genres. Selecting a sub-genre auto-selects its parent.
+- **Work refactor (in progress)**: a `Work` is the abstract creative unit (a story/novel/play). PR 1 introduced the entity with an additive schema (`Works`, `BookWork`, `GenreWork` join tables) and a transitional `WorkSync.EnsureWork(book)` helper that's called at every Book save site to keep a 1:1 mirroring Work in step with `Book.{Subtitle, Author, Genres, SeriesId, SeriesOrder}`. Reads still come from the Book columns. PR 2 will cut over reads, allow N Works per Book (compendiums), and drop the legacy Book columns + `BookGenre` join table.
 
 ## Architecture pattern — MVVM
 

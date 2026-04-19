@@ -53,4 +53,9 @@ public class Book
 
     /// <summary>Position in a Series (1-based). Defaults to publication order for Collections.</summary>
     public int? SeriesOrder { get; set; }
+
+    // Added in PR 1 of the Work refactor. Currently dual-written from
+    // Book's own Subtitle/Author/Genres/Series fields via WorkSync.
+    // Reads still come from Book.* until PR 2 cuts over.
+    public List<Work> Works { get; set; } = [];
 }
