@@ -35,6 +35,7 @@ public class AIAssistantViewModel(
         // is tracked in TODO.md.
         BooksNeedingGenres = await db.Books
             .Include(b => b.Works).ThenInclude(w => w.Genres)
+            .Include(b => b.Works).ThenInclude(w => w.Author)
             .OrderBy(b => b.Works.SelectMany(w => w.Genres).Count())
             .ThenBy(b => b.Title)
             .Take(50)
@@ -42,7 +43,7 @@ public class AIAssistantViewModel(
                 b.Id,
                 b.Title,
                 b.Works.FirstOrDefault()!.Subtitle,
-                b.Works.FirstOrDefault()!.Author,
+                b.Works.FirstOrDefault()!.Author.Name,
                 b.Works.SelectMany(w => w.Genres).Select(g => g.Name).Distinct().ToList()))
             .ToListAsync();
 
@@ -164,15 +165,16 @@ public class AIAssistantViewModel(
         // Try to set the author if all matched books' primary works share one
         var matchedBooks = await db.Books
             .Include(b => b.Works).ThenInclude(w => w.Series)
+            .Include(b => b.Works).ThenInclude(w => w.Author)
             .Where(b => grouping.BookTitles.Contains(b.Title))
             .ToListAsync();
 
-        var authors = matchedBooks
-            .SelectMany(b => b.Works.Select(w => w.Author))
+        var authorNames = matchedBooks
+            .SelectMany(b => b.Works.Select(w => w.Author.Name))
             .Distinct()
             .ToList();
-        if (authors.Count == 1)
-            series.Author = authors[0];
+        if (authorNames.Count == 1)
+            series.Author = authorNames[0];
 
         db.Series.Add(series);
         await db.SaveChangesAsync();

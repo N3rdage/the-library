@@ -15,6 +15,7 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
     public DbSet<WishlistItem> WishlistItems => Set<WishlistItem>();
     public DbSet<MaintenanceLog> MaintenanceLogs => Set<MaintenanceLog>();
     public DbSet<Work> Works => Set<Work>();
+    public DbSet<Author> Authors => Set<Author>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -98,5 +99,27 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .WithMany(s => s.Works)
             .HasForeignKey(w => w.SeriesId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // Each Work belongs to exactly one Author entity (which itself may
+        // be a pen-name alias of another canonical Author).
+        modelBuilder.Entity<Work>()
+            .HasOne(w => w.Author)
+            .WithMany(a => a.Works)
+            .HasForeignKey(w => w.AuthorId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Author>()
+            .HasIndex(a => a.Name)
+            .IsUnique();
+
+        // Self-referential alias relationship — pen names point at their
+        // canonical Author. NoAction on delete because a CASCADE could
+        // wipe the canonical's whole alias graph if the canonical is
+        // deleted; manual cleanup via the /authors UI is safer.
+        modelBuilder.Entity<Author>()
+            .HasOne(a => a.CanonicalAuthor)
+            .WithMany(a => a.Aliases)
+            .HasForeignKey(a => a.CanonicalAuthorId)
+            .OnDelete(DeleteBehavior.NoAction);
     }
 }

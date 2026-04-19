@@ -155,11 +155,12 @@ public class BookAddViewModel(
                 }
             }
 
+            var author = await AuthorResolver.FindOrCreateAsync(WorkInput.Author!, db);
             var work = new Work
             {
                 Title = (WorkInput.Title ?? BookInput.Title)!.Trim(),
                 Subtitle = string.IsNullOrWhiteSpace(WorkInput.Subtitle) ? null : WorkInput.Subtitle!.Trim(),
-                Author = WorkInput.Author!.Trim(),
+                Author = author,
                 FirstPublishedDate = WorkInput.FirstPublishedDate,
                 Genres = selectedGenres,
             };

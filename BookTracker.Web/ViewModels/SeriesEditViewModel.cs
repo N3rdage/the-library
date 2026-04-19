@@ -38,6 +38,7 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
 
         var series = await db.Series
             .Include(s => s.Works).ThenInclude(w => w.Books)
+            .Include(s => s.Works).ThenInclude(w => w.Author)
             .FirstOrDefaultAsync(s => s.Id == seriesId);
 
         if (series is null)
@@ -61,7 +62,7 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
             .Select(w => new SeriesWorkRow(
                 w.Id,
                 w.Title,
-                w.Author,
+                w.Author.Name,
                 w.SeriesOrder,
                 w.Books.Select(b => new ContainingBook(b.Id, b.Title)).ToList()))
             .ToList();
@@ -145,17 +146,20 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
         await using var db = await dbFactory.CreateDbContextAsync();
         WorkSearchResults = await db.Works
             .Where(w => !currentWorkIds.Contains(w.Id))
-            .Where(w => w.Title.Contains(term) || w.Author.Contains(term))
+            .Where(w => w.Title.Contains(term) || w.Author.Name.Contains(term))
             .OrderBy(w => w.Title)
             .Take(10)
-            .Select(w => new WorkSearchResult(w.Id, w.Title, w.Author, w.SeriesId))
+            .Select(w => new WorkSearchResult(w.Id, w.Title, w.Author.Name, w.SeriesId))
             .ToListAsync();
     }
 
     public async Task AddWorkToSeriesAsync(int seriesId, int workId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var work = await db.Works.Include(w => w.Books).FirstOrDefaultAsync(w => w.Id == workId);
+        var work = await db.Works
+            .Include(w => w.Books)
+            .Include(w => w.Author)
+            .FirstOrDefaultAsync(w => w.Id == workId);
         if (work is null) return;
 
         var nextOrder = Works.Count > 0 ? Works.Max(w => w.SeriesOrder ?? 0) + 1 : 1;
@@ -167,7 +171,7 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
         Works.Add(new SeriesWorkRow(
             work.Id,
             work.Title,
-            work.Author,
+            work.Author.Name,
             nextOrder,
             work.Books.Select(b => new ContainingBook(b.Id, b.Title)).ToList()));
         WorkSearchResults.RemoveAll(r => r.Id == workId);

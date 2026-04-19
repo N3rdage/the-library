@@ -1,5 +1,6 @@
 using BookTracker.Data;
 using BookTracker.Data.Models;
+using BookTracker.Web.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
@@ -135,7 +136,8 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
                 .Include(b => b.Editions)
                     .ThenInclude(e => e.Copies)
                 .Include(b => b.Works).ThenInclude(w => w.Series)
-                .Where(b => b.Title.Contains(term) || b.Works.Any(w => w.Title.Contains(term) || w.Author.Contains(term)))
+                .Include(b => b.Works).ThenInclude(w => w.Author)
+                .Where(b => b.Title.Contains(term) || b.Works.Any(w => w.Title.Contains(term) || w.Author.Name.Contains(term)))
                 .OrderBy(b => b.Title)
                 .Take(10)
                 .ToListAsync();
@@ -211,7 +213,7 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     // and therefore a single author, but compendiums may span several. Comma-
     // join to keep things readable.
     private static string PrimaryAuthor(Book book)
-        => string.Join(", ", book.Works.Select(w => w.Author).Distinct());
+        => string.Join(", ", book.Works.Select(w => w.Author.Name).Distinct());
 
     private static async Task<SeriesInfo?> GetSeriesInfoAsync(BookTrackerDbContext db, Book book)
     {
@@ -324,12 +326,13 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             db.Tags.Add(followUpTag);
         }
 
+        var author = await AuthorResolver.FindOrCreateAsync(item.Author, db);
         var book = new Book
         {
             Title = item.Title,
             Tags = [followUpTag],
             Editions = [],
-            Works = [new Work { Title = item.Title, Author = item.Author }]
+            Works = [new Work { Title = item.Title, Author = author }]
         };
 
         if (!string.IsNullOrWhiteSpace(item.Isbn))

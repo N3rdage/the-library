@@ -27,7 +27,8 @@ Book                                                ← physical-object grouping
   Status (Unread/Reading/Read), Rating (0-5),
   Notes, DateAdded, DefaultCoverArtUrl
   ├── Works (many-to-many)                          ← what's actually inside the book
-  │     Title, Subtitle, Author, FirstPublishedDate
+  │     Title, Subtitle, FirstPublishedDate
+  │     ├── Author (many-to-1 → Author)
   │     ├── Genres (many-to-many → Genre)
   │     └── Series (many-to-1, optional) + SeriesOrder
   ├── Editions (1-to-many)
@@ -39,8 +40,15 @@ Book                                                ← physical-object grouping
   └── Tags (many-to-many, e.g. "follow-up")
 
 Series
-  Name (unique), Author (optional), Type (Series/Collection),
+  Name (unique), Author (string, optional, display-only),
+  Type (Series/Collection),
   ExpectedCount (for numbered series), Description
+  └── Works (1-to-many)
+
+Author
+  Name (unique)
+  CanonicalAuthorId (nullable self-FK — pen name aliases)
+  └── Aliases (1-to-many — inverse of CanonicalAuthorId)
   └── Works (1-to-many)
 
 Genre
@@ -66,6 +74,7 @@ GenreSeed
 
 Key design decisions:
 - **Work vs Book vs Edition vs Copy**: A `Work` is the abstract creative unit (a story / novel / play / poem). A `Book` is the physical-object grouping containing one or more Works (a compendium contains many; a novel contains one). An `Edition` is a specific printing of the Book with a unique ISBN. A `Copy` is the physical item you own. Authorship, subtitle, genres, and series membership belong to the Work, not the Book — a Christie short-story collection is "horror" because each contained story is, not because the volume itself is tagged.
+- **Author entity with self-referential pen names**: each `Work` points at a specific `Author` row. Pen names (Richard Bachman) get their own Author row with `CanonicalAuthorId` pointing at the canonical (Stephen King). A Bachman novel is *displayed* as "by Richard Bachman" (the Work's `AuthorId` points at Bachman) but aggregations group by `CanonicalAuthorId ?? Id` so King's tally includes the Bachman titles. Find-or-create on save is auto (typing a fresh name silently creates a canonical Author); merging duplicates and managing aliases happens on `/authors`.
 - **Single-Work books are the common case** — the Add page auto-creates one Work alongside the Book and mirrors the title between them. Compendium support (multiple Works per Book) lives on the Edit page's "Other works" section.
 - **Edition.ISBN is unique** (filtered — pre-1974 books with no ISBN coexist as nullable rows).
 - **Series.Type**: `Series` = numbered with known order; `Collection` = loose grouping. Series membership is per-Work — a short story republished in three compendiums shows once in the series with three book references.
