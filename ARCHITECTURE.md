@@ -112,7 +112,7 @@ A short-lived context is created per operation. Never inject `DbContext` directl
 | Route | Page | Purpose |
 |-------|------|---------|
 | `/` | Home | Dashboard — book count, author/genre stats |
-| `/books` | Library | Filterable book list (search, category, genre, tag, author). Desktop table + mobile cards. |
+| `/books` | Library | Filterable book list (search, category, genre, tag, author). Group-by picker (Author / Genre / Series / None) renders the books as a collapsible accordion of groups, each with its own paginated book list (lazy-loaded on first expand). Filters reduce within groups. Desktop table + mobile cards. |
 | `/books/add` | Add Book | ISBN lookup + manual entry. Creates Book + Edition + Copy. Series suggestion after lookup. |
 | `/books/{id}/edit` | Edit Book | Edit metadata, genres, tags, series assignment. Manage editions and copies. Delete book. |
 | `/books/bulk-add` | Bulk Add | Rapid ISBN entry (text or barcode scanner). Discovery grid with async lookup, accept/follow-up, duplicate detection. |

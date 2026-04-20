@@ -4,15 +4,27 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
 
+public enum LibraryGroupBy { None, Author, Genre, Collection }
+
 public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
 {
     public const int PageSize = 20;
 
     public bool Loading { get; private set; } = true;
+
+    // Flat list (used only when GroupBy == None).
     public List<BookListItem> Books { get; private set; } = [];
     public int TotalCount { get; private set; }
     public int CurrentPage { get; private set; } = 1;
     public int TotalPages { get; private set; }
+
+    // Grouped view state. The group list is loaded up front (with counts)
+    // and rendered as a collapsible accordion. Each group's books are
+    // fetched lazily on first expand and paged independently.
+    public LibraryGroupBy SelectedGroupBy { get; set; } = LibraryGroupBy.Author;
+    public List<GroupRow> Groups { get; private set; } = [];
+    public Dictionary<string, GroupBooks> LoadedGroups { get; } = [];
+    public HashSet<string> ExpandedGroupKeys { get; } = [];
 
     public string SearchTerm { get; set; } = "";
     public string SelectedCategory { get; set; } = "";
@@ -27,7 +39,19 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     public async Task InitializeAsync()
     {
         await LoadFilterOptionsAsync();
-        await LoadBooksAsync();
+        await ReloadAsync();
+    }
+
+    public async Task ReloadAsync()
+    {
+        if (SelectedGroupBy == LibraryGroupBy.None)
+        {
+            await LoadBooksAsync();
+        }
+        else
+        {
+            await LoadGroupsAsync();
+        }
     }
 
     private async Task LoadFilterOptionsAsync()
@@ -64,14 +88,207 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     public async Task LoadBooksAsync()
     {
         Loading = true;
-
         await using var db = await dbFactory.CreateDbContextAsync();
 
-        IQueryable<Book> query = db.Books
-            .Include(b => b.Tags)
-            .Include(b => b.Works).ThenInclude(w => w.Genres)
-            .Include(b => b.Works).ThenInclude(w => w.Author);
+        var query = ApplyFilters(BookQueryWithIncludes(db));
 
+        TotalCount = await query.CountAsync();
+        TotalPages = Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
+        if (CurrentPage > TotalPages) CurrentPage = TotalPages;
+
+        var raw = await query
+            .OrderByDescending(b => b.DateAdded)
+            .Skip((CurrentPage - 1) * PageSize)
+            .Take(PageSize)
+            .ToListAsync();
+
+        Books = raw.Select(ToBookListItem).ToList();
+        Loading = false;
+    }
+
+    public async Task LoadGroupsAsync()
+    {
+        Loading = true;
+        Groups = [];
+        LoadedGroups.Clear();
+        ExpandedGroupKeys.Clear();
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var filtered = ApplyFilters(BookQueryWithIncludes(db));
+
+        // Each grouping reduces the filtered set into (Key, Label, Count)
+        // rows. Books with no grouping value (no genre, no series) bucket
+        // into an explicit "(none)" row at the end.
+        Groups = SelectedGroupBy switch
+        {
+            LibraryGroupBy.Author => await GroupByAuthorAsync(db, filtered),
+            LibraryGroupBy.Genre => await GroupByGenreAsync(db, filtered),
+            LibraryGroupBy.Collection => await GroupBySeriesAsync(db, filtered),
+            _ => [],
+        };
+
+        Loading = false;
+    }
+
+    public async Task ToggleGroupAsync(string key)
+    {
+        if (ExpandedGroupKeys.Contains(key))
+        {
+            ExpandedGroupKeys.Remove(key);
+            return;
+        }
+
+        ExpandedGroupKeys.Add(key);
+        if (!LoadedGroups.ContainsKey(key))
+        {
+            await LoadGroupBooksAsync(key, page: 1);
+        }
+    }
+
+    public async Task LoadGroupBooksAsync(string key, int page)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var filtered = ApplyFilters(BookQueryWithIncludes(db));
+        filtered = ApplyGroupFilter(filtered, key);
+
+        var total = await filtered.CountAsync();
+        var raw = await filtered
+            .OrderBy(b => b.Title)
+            .Skip((page - 1) * PageSize)
+            .Take(PageSize)
+            .ToListAsync();
+
+        var items = raw.Select(ToBookListItem).ToList();
+        LoadedGroups[key] = new GroupBooks(items, page, total);
+    }
+
+    private IQueryable<Book> ApplyGroupFilter(IQueryable<Book> q, string key)
+    {
+        if (key == NoneKey)
+        {
+            return SelectedGroupBy switch
+            {
+                LibraryGroupBy.Genre => q.Where(b => !b.Works.Any(w => w.Genres.Any())),
+                LibraryGroupBy.Collection => q.Where(b => !b.Works.Any(w => w.SeriesId.HasValue)),
+                _ => q, // Author always has a value since Work.AuthorId is non-null
+            };
+        }
+
+        if (!int.TryParse(key, out var id)) return q;
+
+        return SelectedGroupBy switch
+        {
+            // Author key is the CANONICAL author id — match any Work whose
+            // Author is the canonical OR an alias of it.
+            LibraryGroupBy.Author => q.Where(b => b.Works.Any(w =>
+                w.Author.Id == id || w.Author.CanonicalAuthorId == id)),
+            LibraryGroupBy.Genre => q.Where(b => b.Works.Any(w => w.Genres.Any(g => g.Id == id))),
+            LibraryGroupBy.Collection => q.Where(b => b.Works.Any(w => w.SeriesId == id)),
+            _ => q,
+        };
+    }
+
+    private async Task<List<GroupRow>> GroupByAuthorAsync(BookTrackerDbContext db, IQueryable<Book> filtered)
+    {
+        // Roll up by canonical author id (CanonicalAuthorId ?? Id) so a
+        // Bachman title appears under King.
+        var raw = await filtered
+            .SelectMany(b => b.Works.Select(w => new
+            {
+                BookId = b.Id,
+                CanonicalId = w.Author.CanonicalAuthorId ?? w.Author.Id,
+            }))
+            .Distinct() // Avoid double-counting a book whose two Works share a canonical author.
+            .GroupBy(x => x.CanonicalId)
+            .Select(g => new { CanonicalId = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var canonicalIds = raw.Select(r => r.CanonicalId).ToList();
+        var names = await db.Authors
+            .Where(a => canonicalIds.Contains(a.Id))
+            .Select(a => new { a.Id, a.Name })
+            .ToDictionaryAsync(x => x.Id, x => x.Name);
+
+        return raw
+            .Select(r => new GroupRow(
+                Key: r.CanonicalId.ToString(),
+                Label: names.GetValueOrDefault(r.CanonicalId) ?? "(unknown)",
+                Count: r.Count))
+            .OrderBy(g => g.Label)
+            .ToList();
+    }
+
+    private async Task<List<GroupRow>> GroupByGenreAsync(BookTrackerDbContext db, IQueryable<Book> filtered)
+    {
+        var raw = await filtered
+            .SelectMany(b => b.Works.SelectMany(w => w.Genres.Select(g => new { BookId = b.Id, GenreId = g.Id })))
+            .Distinct()
+            .GroupBy(x => x.GenreId)
+            .Select(g => new { GenreId = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var genreIds = raw.Select(r => r.GenreId).ToList();
+        var names = await db.Genres
+            .Where(g => genreIds.Contains(g.Id))
+            .Select(g => new { g.Id, g.Name })
+            .ToDictionaryAsync(x => x.Id, x => x.Name);
+
+        var groups = raw
+            .Select(r => new GroupRow(
+                Key: r.GenreId.ToString(),
+                Label: names.GetValueOrDefault(r.GenreId) ?? "(unknown)",
+                Count: r.Count))
+            .OrderBy(g => g.Label)
+            .ToList();
+
+        var ungenredCount = await filtered.CountAsync(b => !b.Works.Any(w => w.Genres.Any()));
+        if (ungenredCount > 0)
+        {
+            groups.Add(new GroupRow(NoneKey, "(no genre)", ungenredCount));
+        }
+        return groups;
+    }
+
+    private async Task<List<GroupRow>> GroupBySeriesAsync(BookTrackerDbContext db, IQueryable<Book> filtered)
+    {
+        var raw = await filtered
+            .SelectMany(b => b.Works
+                .Where(w => w.SeriesId.HasValue)
+                .Select(w => new { BookId = b.Id, SeriesId = w.SeriesId!.Value }))
+            .Distinct()
+            .GroupBy(x => x.SeriesId)
+            .Select(g => new { SeriesId = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        var seriesIds = raw.Select(r => r.SeriesId).ToList();
+        var names = await db.Series
+            .Where(s => seriesIds.Contains(s.Id))
+            .Select(s => new { s.Id, s.Name })
+            .ToDictionaryAsync(x => x.Id, x => x.Name);
+
+        var groups = raw
+            .Select(r => new GroupRow(
+                Key: r.SeriesId.ToString(),
+                Label: names.GetValueOrDefault(r.SeriesId) ?? "(unknown)",
+                Count: r.Count))
+            .OrderBy(g => g.Label)
+            .ToList();
+
+        var unseriesedCount = await filtered.CountAsync(b => !b.Works.Any(w => w.SeriesId.HasValue));
+        if (unseriesedCount > 0)
+        {
+            groups.Add(new GroupRow(NoneKey, "(no series)", unseriesedCount));
+        }
+        return groups;
+    }
+
+    private IQueryable<Book> BookQueryWithIncludes(BookTrackerDbContext db) => db.Books
+        .Include(b => b.Tags)
+        .Include(b => b.Works).ThenInclude(w => w.Genres)
+        .Include(b => b.Works).ThenInclude(w => w.Author);
+
+    private IQueryable<Book> ApplyFilters(IQueryable<Book> query)
+    {
         if (!string.IsNullOrWhiteSpace(SearchTerm))
         {
             var term = SearchTerm.Trim();
@@ -98,46 +315,29 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         if (!string.IsNullOrWhiteSpace(SelectedAuthor))
         {
             var author = SelectedAuthor.Trim();
-            // Match either the Work's own author OR the canonical it
-            // resolves to — so picking "Stephen King" surfaces Bachman
-            // titles too without needing to also pick "Richard Bachman".
             query = query.Where(b => b.Works.Any(w =>
                 w.Author.Name == author ||
                 (w.Author.CanonicalAuthor != null && w.Author.CanonicalAuthor.Name == author)));
         }
 
-        TotalCount = await query.CountAsync();
-        TotalPages = Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
-        if (CurrentPage > TotalPages) CurrentPage = TotalPages;
-
-        var raw = await query
-            .OrderByDescending(b => b.DateAdded)
-            .Skip((CurrentPage - 1) * PageSize)
-            .Take(PageSize)
-            .ToListAsync();
-
-        // Aggregate Work-level fields into the row shape — one row per Book,
-        // joining the contained Works' authors and genres for display. Most
-        // books have a single Work so this is a no-op join in practice.
-        Books = raw.Select(b => new BookListItem(
-            b.Id,
-            b.Title,
-            b.Works.FirstOrDefault()?.Subtitle,
-            string.Join(", ", b.Works.Select(w => w.Author.Name).Distinct()),
-            b.DefaultCoverArtUrl,
-            b.Status,
-            b.Rating,
-            b.Works.SelectMany(w => w.Genres).Select(g => g.Name).Distinct().ToList(),
-            b.Tags.Select(t => t.Name).ToList()
-        )).ToList();
-
-        Loading = false;
+        return query;
     }
+
+    private static BookListItem ToBookListItem(Book b) => new(
+        b.Id,
+        b.Title,
+        b.Works.FirstOrDefault()?.Subtitle,
+        string.Join(", ", b.Works.Select(w => w.Author.Name).Distinct()),
+        b.DefaultCoverArtUrl,
+        b.Status,
+        b.Rating,
+        b.Works.SelectMany(w => w.Genres).Select(g => g.Name).Distinct().ToList(),
+        b.Tags.Select(t => t.Name).ToList());
 
     public async Task ApplyFiltersAsync()
     {
         CurrentPage = 1;
-        await LoadBooksAsync();
+        await ReloadAsync();
     }
 
     public async Task ClearFiltersAsync()
@@ -148,7 +348,7 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         SelectedTagId = 0;
         SelectedAuthor = "";
         CurrentPage = 1;
-        await LoadBooksAsync();
+        await ReloadAsync();
     }
 
     public async Task GoToPageAsync(int page)
@@ -158,6 +358,13 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         await LoadBooksAsync();
     }
 
+    public async Task ChangeGroupingAsync(LibraryGroupBy newGroupBy)
+    {
+        SelectedGroupBy = newGroupBy;
+        CurrentPage = 1;
+        await ReloadAsync();
+    }
+
     public static string StatusBadgeClass(BookStatus status) => status switch
     {
         BookStatus.Reading => "bg-primary",
@@ -165,6 +372,14 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         BookStatus.Unread => "bg-secondary",
         _ => "bg-secondary"
     };
+
+    public const string NoneKey = "_none";
+
+    public record GroupRow(string Key, string Label, int Count);
+    public record GroupBooks(List<BookListItem> Books, int Page, int TotalCount)
+    {
+        public int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
+    }
 
     public record BookListItem(
         int Id, string Title, string? Subtitle, string Author, string? CoverUrl,
