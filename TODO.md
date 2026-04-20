@@ -41,3 +41,7 @@ Outstanding work items for BookTracker. This is the single source of truth — c
 - [x] Wishlist UI — integrated into Shopping page (shopping list section)
 - [ ] AI cost tracking — add persistent token/cost logging beyond the session counter
 - [ ] AI-assisted genre matching — use `IAIAssistantService.SuggestGenresAsync` to classify a book against the preset taxonomy, replacing/augmenting the rule-based `FuzzyGenreMatch` in `BulkAddViewModel.SaveBookAsync`. Higher accuracy, ~$0.0003/book on Sonnet, ~1s per book. Useful for genuinely ambiguous subject strings the rule-based matcher can't disambiguate.
+
+## Blog
+
+- [ ] Initial blog post extract — pick a first post from the corpus in `.claude-memory/retros/` + `.claude-memory/patterns.md` and draft it. Likely candidates: (a) the small-PR rhythm with concrete examples, (b) the additive-then-cutover migration pattern using the Work refactor as anchor, or (c) "memory as durable context" walking through the actual memory directory. See `.claude-memory/project_blog.md` for the brief and recommended workflow.
