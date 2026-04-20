@@ -61,6 +61,7 @@ public class BulkAddViewModel(
                 row.Publisher = result.Publisher;
                 row.Subtitle = result.Subtitle;
                 row.DatePrinted = result.DatePrinted;
+                row.DatePrintedPrecision = result.DatePrintedPrecision;
                 row.GenreCandidates = result.GenreCandidates.ToList();
                 row.Format = result.Format;
                 row.Status = RowStatus.Found;
@@ -201,6 +202,7 @@ public class BulkAddViewModel(
                     Isbn = row.Isbn,
                     Format = row.Format ?? BookFormat.TradePaperback,
                     DatePrinted = row.DatePrinted,
+                    DatePrintedPrecision = row.DatePrintedPrecision,
                     Publisher = publisher,
                     Copies = [new Copy { Condition = BookCondition.Good }]
                 }
@@ -249,6 +251,7 @@ public class BulkAddViewModel(
         public string? Source { get; set; }
         public string? Publisher { get; set; }
         public DateOnly? DatePrinted { get; set; }
+        public DatePrecision DatePrintedPrecision { get; set; } = DatePrecision.Day;
         public List<string> GenreCandidates { get; set; } = [];
         // Null when the lookup couldn't infer a confident format; the save
         // path falls back to TradePaperback so manual override still wins

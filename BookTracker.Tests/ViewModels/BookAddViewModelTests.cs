@@ -91,7 +91,8 @@ public class BookAddViewModelTests
         Assert.Equal("And Then There Were None", vm.WorkInput.Title);
         Assert.Equal("Agatha Christie", vm.WorkInput.Author);
         Assert.Equal("https://example.invalid/cover.jpg", vm.BookInput.DefaultCoverArtUrl);
-        Assert.Equal(new DateOnly(1939, 1, 1), vm.WorkInput.FirstPublishedDate);
+        // Year-only candidate → year-precision text in the input.
+        Assert.Equal("1939", vm.WorkInput.FirstPublishedDate);
     }
 
     [Fact]
@@ -101,7 +102,7 @@ public class BookAddViewModelTests
         vm.BookInput.Title = "User typed this";
         vm.WorkInput.Title = "User typed this";
         vm.WorkInput.Author = "User author";
-        vm.WorkInput.FirstPublishedDate = new DateOnly(1939, 6, 15);
+        vm.WorkInput.FirstPublishedDate = "15 Jun 1939";
 
         var candidate = new BookSearchCandidate(
             WorkKey: "/works/OL1W",
@@ -116,7 +117,7 @@ public class BookAddViewModelTests
 
         Assert.Equal("User typed this", vm.BookInput.Title);
         Assert.Equal("User author", vm.WorkInput.Author);
-        Assert.Equal(new DateOnly(1939, 6, 15), vm.WorkInput.FirstPublishedDate);
+        Assert.Equal("15 Jun 1939", vm.WorkInput.FirstPublishedDate);
     }
 
     [Fact]
@@ -224,7 +225,7 @@ public class BookAddViewModelTests
         vm.BookInput.Title = "The Hobbit";
         vm.WorkInput.Title = "The Hobbit";
         vm.WorkInput.Author = "J.R.R. Tolkien";
-        vm.WorkInput.FirstPublishedDate = new DateOnly(1937, 9, 21);
+        vm.WorkInput.FirstPublishedDate = "21 Sep 1937";
         vm.EditionInput.Isbn = "9780345391803";
 
         var ok = await vm.SaveAsync(new List<int>());
@@ -236,5 +237,6 @@ public class BookAddViewModelTests
         Assert.Equal("The Hobbit", work.Title);
         Assert.Equal("J.R.R. Tolkien", work.Author.Name);
         Assert.Equal(new DateOnly(1937, 9, 21), work.FirstPublishedDate);
+        Assert.Equal(DatePrecision.Day, work.FirstPublishedDatePrecision);
     }
 }

@@ -27,6 +27,9 @@ public class Work
     /// <summary>The year/date the Work was first published — distinct from any specific Edition's print date.</summary>
     public DateOnly? FirstPublishedDate { get; set; }
 
+    /// <summary>How precise <see cref="FirstPublishedDate"/> is — drives display formatting.</summary>
+    public DatePrecision FirstPublishedDatePrecision { get; set; } = DatePrecision.Day;
+
     public List<Genre> Genres { get; set; } = [];
 
     public int? SeriesId { get; set; }

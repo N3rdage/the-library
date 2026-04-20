@@ -18,6 +18,9 @@ public class WorkFormViewModel
         [Required, StringLength(200)]
         public string? Author { get; set; }
 
-        public DateOnly? FirstPublishedDate { get; set; }
+        // Free-form text — accepts "1973", "Oct 1973", "12 Oct 1973",
+        // "1973-10", "1973-10-12". Parsed into Work.FirstPublishedDate +
+        // Work.FirstPublishedDatePrecision at save time.
+        public string? FirstPublishedDate { get; set; }
     }
 }

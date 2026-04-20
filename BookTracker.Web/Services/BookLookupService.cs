@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BookTracker.Data.Models;
 
 namespace BookTracker.Web.Services;
 
@@ -83,6 +84,7 @@ public class BookLookupService(HttpClient http, ILogger<BookLookupService> logge
                 .Take(10)
                 .ToList();
 
+            var (olDate, olPrecision) = ParseLooseDate(book.PublishDate);
             return new BookLookupResult(
                 Isbn: isbn,
                 Title: book.Title,
@@ -90,10 +92,11 @@ public class BookLookupService(HttpClient http, ILogger<BookLookupService> logge
                 Author: book.Authors?.FirstOrDefault()?.Name,
                 Publisher: book.Publishers?.FirstOrDefault()?.Name,
                 GenreCandidates: genres,
-                DatePrinted: ParseLooseDate(book.PublishDate),
+                DatePrinted: olDate,
                 CoverUrl: book.Cover?.Large ?? book.Cover?.Medium ?? $"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg",
                 Source: "Open Library",
-                Format: BookFormatNormalizer.Normalize(book.PhysicalFormat, book.PhysicalDimensions));
+                Format: BookFormatNormalizer.Normalize(book.PhysicalFormat, book.PhysicalDimensions),
+                DatePrintedPrecision: olPrecision);
         }
         catch (Exception ex)
         {
@@ -126,6 +129,7 @@ public class BookLookupService(HttpClient http, ILogger<BookLookupService> logge
             var cover = item.ImageLinks?.Thumbnail?.Replace("http://", "https://")
                 ?? item.ImageLinks?.SmallThumbnail?.Replace("http://", "https://");
 
+            var (gbDate, gbPrecision) = ParseLooseDate(item.PublishedDate);
             return new BookLookupResult(
                 Isbn: isbn,
                 Title: item.Title,
@@ -133,9 +137,10 @@ public class BookLookupService(HttpClient http, ILogger<BookLookupService> logge
                 Author: item.Authors?.FirstOrDefault(),
                 Publisher: item.Publisher,
                 GenreCandidates: genres,
-                DatePrinted: ParseLooseDate(item.PublishedDate),
+                DatePrinted: gbDate,
                 CoverUrl: cover,
-                Source: "Google Books");
+                Source: "Google Books",
+                DatePrintedPrecision: gbPrecision);
         }
         catch (Exception ex)
         {
@@ -146,21 +151,25 @@ public class BookLookupService(HttpClient http, ILogger<BookLookupService> logge
 
     private static string? CleanGenre(string raw) => GenreCandidateCleaner.Clean(raw);
 
-    private static DateOnly? ParseLooseDate(string? raw)
+    // Open Library / Google Books often only give a year ("1934") so we
+    // route through the same partial-date parser used by the form inputs
+    // — the precision is then carried alongside the DateOnly so the UI
+    // doesn't render "1 Jan 1934" for a year-only source.
+    private static (DateOnly?, DatePrecision) ParseLooseDate(string? raw)
     {
-        if (string.IsNullOrWhiteSpace(raw))
+        var pd = PartialDateParser.TryParse(raw);
+        if (pd is { Date: DateOnly d }) return (d, pd.Precision);
+
+        // Last-resort year fallback: many records have noise like "1934, c1932"
+        // — try the leading 4 digits.
+        if (!string.IsNullOrWhiteSpace(raw)
+            && int.TryParse(raw[..Math.Min(4, raw.Length)], out var year)
+            && year is >= 1400 and <= 2999)
         {
-            return null;
+            return (new DateOnly(year, 1, 1), DatePrecision.Year);
         }
-        if (DateOnly.TryParse(raw, out var d))
-        {
-            return d;
-        }
-        if (int.TryParse(raw[..Math.Min(4, raw.Length)], out var year) && year is >= 1400 and <= 2999)
-        {
-            return new DateOnly(year, 1, 1);
-        }
-        return null;
+
+        return (null, DatePrecision.Day);
     }
 
     private sealed class OpenLibraryBook
