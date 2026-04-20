@@ -20,7 +20,8 @@
             </div>
             <div class="col-md-3">
                 <label class="form-label">Date printed</label>
-                <InputDate @bind-Value="EditionInput.DatePrinted" class="form-control" />
+                <InputText @bind-Value="EditionInput.DatePrinted" class="form-control" placeholder="e.g. 1973, Oct 1973, or 12 Oct 1973" />
+                <div class="form-text">Year alone is fine if that's all you've got.</div>
             </div>
             <div class="col-md-3">
                 <label class="form-label">Condition</label>

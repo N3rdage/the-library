@@ -31,7 +31,10 @@ public class EditionFormViewModel(IDbContextFactory<BookTrackerDbContext> dbFact
 
         public BookFormat Format { get; set; } = BookFormat.TradePaperback;
 
-        public DateOnly? DatePrinted { get; set; }
+        // Free-form text — accepts "1973", "Oct 1973", "12 Oct 1973",
+        // "1973-10", "1973-10-12". Parsed into Edition.DatePrinted +
+        // Edition.DatePrintedPrecision at save time.
+        public string? DatePrinted { get; set; }
 
         [StringLength(200)]
         public string? Publisher { get; set; }

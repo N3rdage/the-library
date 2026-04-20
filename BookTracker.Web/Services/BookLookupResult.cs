@@ -12,4 +12,5 @@ public record BookLookupResult(
     DateOnly? DatePrinted,
     string? CoverUrl,
     string Source,
-    BookFormat? Format = null);
+    BookFormat? Format = null,
+    DatePrecision DatePrintedPrecision = DatePrecision.Day);

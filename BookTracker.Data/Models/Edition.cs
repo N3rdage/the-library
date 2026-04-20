@@ -19,6 +19,9 @@ public class Edition
 
     public DateOnly? DatePrinted { get; set; }
 
+    /// <summary>How precise <see cref="DatePrinted"/> is — drives display formatting.</summary>
+    public DatePrecision DatePrintedPrecision { get; set; } = DatePrecision.Day;
+
     [MaxLength(500)]
     public string? CoverUrl { get; set; }
 
