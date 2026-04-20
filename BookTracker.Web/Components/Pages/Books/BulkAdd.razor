@@ -339,9 +339,9 @@
             VM.IsbnInput = isbn;
             await VM.AddIsbnAsync();
 
-            // Stop camera after successful capture
-            await JS.InvokeVoidAsync("PhotoCapture.stop");
-            photoActive = false;
+            // Camera stays live so the user can capture the next book in
+            // the batch without re-opening it. The "Cancel photo" button
+            // explicitly stops the stream when they're done.
         }
         catch (Exception ex)
         {
