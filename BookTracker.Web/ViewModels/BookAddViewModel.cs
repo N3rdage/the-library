@@ -35,9 +35,18 @@ public class BookAddViewModel(
     public SeriesMatch? SeriesSuggestion { get; private set; }
     public bool SeriesSuggestionDismissed { get; set; }
 
+    // Existing-book detection — set during LookupAsync when the ISBN
+    // already maps to an Edition in the library. The Add page surfaces a
+    // banner offering "add another copy" / "edit existing" instead of
+    // letting the user accidentally hit the unique-ISBN constraint by
+    // saving a duplicate.
+    public ExistingBookMatch? ExistingBook { get; private set; }
+    public bool AddingCopy { get; private set; }
+
     public async Task LookupAsync(GenrePickerViewModel genrePicker)
     {
         LookupMessage = null;
+        ExistingBook = null;
         if (string.IsNullOrWhiteSpace(LookupIsbn))
         {
             LookupMessage = "Enter an ISBN to look up.";
@@ -47,6 +56,32 @@ public class BookAddViewModel(
         LookingUp = true;
         try
         {
+            // Existing-edition check first — if the ISBN already maps to a
+            // Book in the library, surface "add another copy" instead of
+            // letting the user save a duplicate that would hit the unique
+            // ISBN constraint.
+            var cleanIsbn = new string(LookupIsbn.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+            await using (var db = await dbFactory.CreateDbContextAsync())
+            {
+                var existing = await db.Editions
+                    .Include(e => e.Book)
+                        .ThenInclude(b => b.Works).ThenInclude(w => w.Author)
+                    .Include(e => e.Copies)
+                    .FirstOrDefaultAsync(e => e.Isbn == cleanIsbn);
+
+                if (existing is not null)
+                {
+                    ExistingBook = new ExistingBookMatch(
+                        existing.Book.Id,
+                        existing.Id,
+                        existing.Book.Title,
+                        string.Join(", ", existing.Book.Works.Select(w => w.Author.Name).Distinct()),
+                        existing.Copies.Count);
+                    LookupMessage = null;
+                    return;
+                }
+            }
+
             var result = await lookup.LookupByIsbnAsync(LookupIsbn, CancellationToken.None);
             if (result is null)
             {
@@ -80,6 +115,59 @@ public class BookAddViewModel(
             LookingUp = false;
         }
     }
+
+    /// <summary>
+    /// Adds a new Copy to the Edition flagged in <see cref="ExistingBook"/>.
+    /// Used by the "you already own this book" banner so re-scanning a
+    /// barcode for a second physical copy is a one-click action.
+    /// </summary>
+    /// <returns>The book id of the existing book the copy was attached to.</returns>
+    public async Task<int?> AddCopyToExistingAsync()
+    {
+        if (ExistingBook is null) return null;
+
+        AddingCopy = true;
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            var newCopy = new Copy
+            {
+                EditionId = ExistingBook.EditionId,
+                Condition = CopyInput.Condition,
+            };
+            db.Copies.Add(newCopy);
+            await db.SaveChangesAsync();
+            return ExistingBook.BookId;
+        }
+        finally
+        {
+            AddingCopy = false;
+        }
+    }
+
+    /// <summary>Resets all input state so the page is ready for the next book.</summary>
+    public void Reset(GenrePickerViewModel genrePicker)
+    {
+        BookInput = new();
+        WorkInput = new();
+        EditionInput = new();
+        CopyInput = new();
+        LookupIsbn = null;
+        LookupMessage = null;
+        LookupCandidates = [];
+        ExistingBook = null;
+        SeriesSuggestion = null;
+        SeriesSuggestionDismissed = false;
+        SearchTitle = null;
+        SearchAuthor = null;
+        SearchCandidates = [];
+        SearchMessage = null;
+        NoIsbnMode = false;
+        genrePicker.SelectedGenreIds = [];
+        genrePicker.LookupCandidates = [];
+    }
+
+    public record ExistingBookMatch(int BookId, int EditionId, string Title, string Author, int CopyCount);
 
     public async Task SearchAsync()
     {
@@ -132,7 +220,7 @@ public class BookAddViewModel(
         _ = genrePicker;
     }
 
-    public async Task<bool> SaveAsync(List<int> selectedGenreIds)
+    public async Task<int?> SaveAsync(List<int> selectedGenreIds)
     {
         Saving = true;
         try
@@ -190,7 +278,7 @@ public class BookAddViewModel(
 
             db.Books.Add(book);
             await db.SaveChangesAsync();
-            return true;
+            return book.Id;
         }
         finally
         {
