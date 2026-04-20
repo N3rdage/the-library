@@ -100,6 +100,26 @@
                         }
                     }
 
+                    @if (VM.ExistingBook is not null)
+                    {
+                        <div class="alert alert-warning mt-3 mb-0 py-2">
+                            <div class="fw-semibold mb-1">You already own this book.</div>
+                            <div class="small mb-2">
+                                <strong>@VM.ExistingBook.Title</strong> by @VM.ExistingBook.Author —
+                                @VM.ExistingBook.CopyCount cop@(VM.ExistingBook.CopyCount == 1 ? "y" : "ies") on file.
+                            </div>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button type="button" class="btn btn-success btn-sm" @onclick="AddCopyAsync" disabled="@VM.AddingCopy">
+                                    @if (VM.AddingCopy)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                    }
+                                    Add another copy
+                                </button>
+                                <a class="btn btn-outline-primary btn-sm" href="@($"/books/{VM.ExistingBook.BookId}/edit")">Edit existing book</a>
+                            </div>
+                        </div>
+                    }
                     @{
                         var lookupMsg = VM.NoIsbnMode ? VM.SearchMessage : VM.LookupMessage;
                     }
@@ -143,7 +163,7 @@
             <EditionCopyForm EditionInput="VM.EditionInput" CopyInput="VM.CopyInput" Title="First edition & copy" />
         </div>
 
-        <div class="col-12 d-flex gap-2">
+        <div class="col-12 d-flex gap-2 align-items-center flex-wrap">
             <button type="submit" class="btn btn-primary" disabled="@VM.Saving">
                 @if (VM.Saving)
                 {
@@ -152,6 +172,10 @@
                 Save book
             </button>
             <a class="btn btn-outline-secondary" href="/">Cancel</a>
+            <div class="form-check ms-2">
+                <input type="checkbox" id="addAnother" class="form-check-input" @bind="addAnother" />
+                <label for="addAnother" class="form-check-label small">Add another?</label>
+            </div>
         </div>
     </div>
 </EditForm>
@@ -159,6 +183,7 @@
 @code {
     private List<int> selectedGenreIds = [];
     private GenrePicker? genrePicker;
+    private bool addAnother;
 
     private async Task LookupAsync()
     {
@@ -183,9 +208,39 @@
 
     private async Task SaveAsync()
     {
-        if (await VM.SaveAsync(selectedGenreIds))
+        var savedId = await VM.SaveAsync(selectedGenreIds);
+        if (savedId is null) return;
+
+        if (addAnother)
+        {
+            ResetForNextBook();
+        }
+        else
         {
             Nav.NavigateTo("/");
         }
+    }
+
+    private async Task AddCopyAsync()
+    {
+        var bookId = await VM.AddCopyToExistingAsync();
+        if (bookId is null) return;
+
+        if (addAnother)
+        {
+            ResetForNextBook();
+        }
+        else
+        {
+            Nav.NavigateTo($"/books/{bookId}/edit");
+        }
+    }
+
+    private void ResetForNextBook()
+    {
+        if (genrePicker is null) return;
+        VM.Reset(genrePicker.ViewModel);
+        selectedGenreIds = [];
+        StateHasChanged();
     }
 }

@@ -26,12 +26,12 @@ public class BulkAddViewModel(
         var isbn = IsbnInput.Trim();
         if (string.IsNullOrWhiteSpace(isbn)) return;
 
-        if (Rows.Any(r => string.Equals(r.Isbn, isbn, StringComparison.OrdinalIgnoreCase)))
-        {
-            IsbnInput = "";
-            return;
-        }
-
+        // Re-scanning the same ISBN is allowed and meaningful: each row
+        // represents one physical book to add, so a second scan adds a
+        // second copy. CheckDuplicateAsync flags the row as a duplicate
+        // (either against the DB or a previous in-session row) and the
+        // save path appends a new Copy to the existing Edition rather
+        // than trying to create a colliding Book.
         var row = new DiscoveryRow { Isbn = isbn, Status = RowStatus.Searching };
         Rows.Insert(0, row);
         IsbnInput = "";
@@ -118,30 +118,35 @@ public class BulkAddViewModel(
     {
         await using var db = await dbFactory.CreateDbContextAsync();
 
-        if (row.IsDuplicate)
-        {
-            var existingEdition = await db.Editions
+        // Re-check at save time rather than relying on row.IsDuplicate (which
+        // was set when the row was scanned). Two scans of the same ISBN in
+        // one session both start as not-duplicate, but by the time the
+        // second one's saved the first row may have already been accepted
+        // and inserted the Edition — in which case we want to add a Copy,
+        // not crash on the unique-ISBN constraint.
+        var existingEdition = string.IsNullOrWhiteSpace(row.Isbn)
+            ? null
+            : await db.Editions
                 .Include(e => e.Book)
                 .FirstOrDefaultAsync(e => e.Isbn == row.Isbn);
 
-            if (existingEdition is not null)
+        if (existingEdition is not null)
+        {
+            var newCopy = new Copy
             {
-                var newCopy = new Copy
-                {
-                    EditionId = existingEdition.Id,
-                    Condition = BookCondition.Good
-                };
-                db.Copies.Add(newCopy);
+                EditionId = existingEdition.Id,
+                Condition = BookCondition.Good
+            };
+            db.Copies.Add(newCopy);
 
-                if (followUp)
-                {
-                    var book = await db.Books.Include(b => b.Tags).FirstAsync(b => b.Id == existingEdition.BookId);
-                    await EnsureFollowUpTagAsync(db, book);
-                }
-
-                await db.SaveChangesAsync();
-                return;
+            if (followUp)
+            {
+                var book = await db.Books.Include(b => b.Tags).FirstAsync(b => b.Id == existingEdition.BookId);
+                await EnsureFollowUpTagAsync(db, book);
             }
+
+            await db.SaveChangesAsync();
+            return;
         }
 
         Publisher? publisher = null;

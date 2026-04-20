@@ -5,7 +5,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
 
-public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
+public class BookEditViewModel(
+    IDbContextFactory<BookTrackerDbContext> dbFactory,
+    IBookLookupService lookup)
 {
     public BookFormViewModel.BookFormInput? BookInput { get; private set; }
 
@@ -38,6 +40,9 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     public bool ShowingNewEdition { get; set; }
     public EditionFormViewModel.EditionFormInput NewEditionInput { get; set; } = new();
     public CopyFormViewModel.CopyFormInput NewCopyInput { get; set; } = new();
+    public string? NewEditionLookupIsbn { get; set; }
+    public string? NewEditionLookupMessage { get; private set; }
+    public bool LookingUpNewEdition { get; private set; }
 
     // Inline edition/copy editing
     public int? EditingCopyId { get; set; }
@@ -176,7 +181,48 @@ public class BookEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     {
         NewEditionInput = new EditionFormViewModel.EditionFormInput();
         NewCopyInput = new CopyFormViewModel.CopyFormInput();
+        NewEditionLookupIsbn = null;
+        NewEditionLookupMessage = null;
         ShowingNewEdition = true;
+    }
+
+    /// <summary>
+    /// Pre-fills the new-edition form fields by hitting the same Open
+    /// Library / Google Books pipeline used by the Add Book page. Only
+    /// touches Edition/publisher-shaped fields — the Book and Work it
+    /// will attach to are already known on the Edit page.
+    /// </summary>
+    public async Task LookupNewEditionAsync()
+    {
+        NewEditionLookupMessage = null;
+        if (string.IsNullOrWhiteSpace(NewEditionLookupIsbn))
+        {
+            NewEditionLookupMessage = "Enter an ISBN to look up.";
+            return;
+        }
+
+        LookingUpNewEdition = true;
+        try
+        {
+            var result = await lookup.LookupByIsbnAsync(NewEditionLookupIsbn, CancellationToken.None);
+            if (result is null)
+            {
+                NewEditionLookupMessage = $"No match found for ISBN {NewEditionLookupIsbn}.";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(NewEditionInput.Isbn)) NewEditionInput.Isbn = result.Isbn;
+            if (string.IsNullOrWhiteSpace(NewEditionInput.Publisher)) NewEditionInput.Publisher = result.Publisher;
+            if (string.IsNullOrWhiteSpace(NewEditionInput.CoverUrl)) NewEditionInput.CoverUrl = result.CoverUrl;
+            NewEditionInput.DatePrinted ??= result.DatePrinted;
+            if (result.Format is BookFormat fmt) NewEditionInput.Format = fmt;
+
+            NewEditionLookupMessage = $"Prefilled from {result.Source}. Edit anything before saving.";
+        }
+        finally
+        {
+            LookingUpNewEdition = false;
+        }
     }
 
     public async Task SaveNewEditionAsync(int bookId)
