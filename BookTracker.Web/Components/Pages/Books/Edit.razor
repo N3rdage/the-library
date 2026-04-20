@@ -208,7 +208,7 @@ else
                                                         </select>
                                                     </td>
                                                     <td><input type="text" class="form-control form-control-sm" @bind="VM.EditCopyInput.Publisher" /></td>
-                                                    <td><input type="date" class="form-control form-control-sm" @bind="VM.EditCopyInput.DatePrinted" /></td>
+                                                    <td><input type="text" class="form-control form-control-sm" @bind="VM.EditCopyInput.DatePrinted" placeholder="1973 / Oct 1973 / 12 Oct 1973" /></td>
                                                     <td>
                                                         <div class="btn-group btn-group-sm">
                                                             <button type="button" class="btn btn-outline-success" @onclick="VM.SaveCopyEditAsync">Save</button>
@@ -224,7 +224,7 @@ else
                                                     <td>@copy.Format</td>
                                                     <td>@CopyFormViewModel.FormatCondition(copy.Condition)</td>
                                                     <td>@(copy.PublisherName ?? "—")</td>
-                                                    <td>@(copy.DatePrinted?.ToString("yyyy-MM-dd") ?? "—")</td>
+                                                    <td>@(string.IsNullOrEmpty(copy.DatePrintedDisplay) ? "—" : copy.DatePrintedDisplay)</td>
                                                     <td>
                                                         @if (VM.ConfirmingDeleteCopyId == copy.CopyId)
                                                         {

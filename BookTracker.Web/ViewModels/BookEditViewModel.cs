@@ -96,7 +96,7 @@ public class BookEditViewModel(
                 Title = primary.Title,
                 Subtitle = primary.Subtitle,
                 Author = primary.Author.Name,
-                FirstPublishedDate = primary.FirstPublishedDate,
+                FirstPublishedDate = PartialDateParser.Format(primary.FirstPublishedDate, primary.FirstPublishedDatePrecision),
             };
             SelectedGenreIds = primary.Genres.Select(g => g.Id).ToList();
             SelectedSeriesId = primary.SeriesId;
@@ -116,8 +116,9 @@ public class BookEditViewModel(
         EditionCopies = book.Editions
             .SelectMany(e => e.Copies.Select(c => new EditionCopyRow(
                 e.Id, c.Id, e.Isbn, e.Format, c.Condition,
-                e.Publisher?.Name, e.DatePrinted, e.CoverUrl,
-                c.Notes, c.DateAcquired)))
+                e.Publisher?.Name,
+                PartialDateParser.Format(e.DatePrinted, e.DatePrintedPrecision),
+                e.CoverUrl, c.Notes, c.DateAcquired)))
             .ToList();
 
         await LoadAvailableTagsAsync();
@@ -214,7 +215,10 @@ public class BookEditViewModel(
             if (string.IsNullOrWhiteSpace(NewEditionInput.Isbn)) NewEditionInput.Isbn = result.Isbn;
             if (string.IsNullOrWhiteSpace(NewEditionInput.Publisher)) NewEditionInput.Publisher = result.Publisher;
             if (string.IsNullOrWhiteSpace(NewEditionInput.CoverUrl)) NewEditionInput.CoverUrl = result.CoverUrl;
-            NewEditionInput.DatePrinted ??= result.DatePrinted;
+            if (string.IsNullOrWhiteSpace(NewEditionInput.DatePrinted) && result.DatePrinted is DateOnly d)
+            {
+                NewEditionInput.DatePrinted = PartialDateParser.Format(d, result.DatePrintedPrecision);
+            }
             if (result.Format is BookFormat fmt) NewEditionInput.Format = fmt;
 
             NewEditionLookupMessage = $"Prefilled from {result.Source}. Edit anything before saving.";
@@ -243,12 +247,14 @@ public class BookEditViewModel(
             }
         }
 
+        var datePrinted = PartialDateParser.TryParse(NewEditionInput.DatePrinted) ?? PartialDate.Empty;
         var edition = new Edition
         {
             BookId = bookId,
             Isbn = NewEditionInput.Isbn.Trim(),
             Format = NewEditionInput.Format,
-            DatePrinted = NewEditionInput.DatePrinted,
+            DatePrinted = datePrinted.Date,
+            DatePrintedPrecision = datePrinted.Precision,
             Publisher = publisher,
             CoverUrl = string.IsNullOrWhiteSpace(NewEditionInput.CoverUrl) ? null : NewEditionInput.CoverUrl.Trim(),
             Copies = [new Copy { Condition = NewCopyInput.Condition }]
@@ -260,7 +266,9 @@ public class BookEditViewModel(
         var copy = edition.Copies[0];
         EditionCopies.Add(new EditionCopyRow(
             edition.Id, copy.Id, edition.Isbn, edition.Format, copy.Condition,
-            publisher?.Name, edition.DatePrinted, edition.CoverUrl, copy.Notes, copy.DateAcquired));
+            publisher?.Name,
+            PartialDateParser.Format(edition.DatePrinted, edition.DatePrintedPrecision),
+            edition.CoverUrl, copy.Notes, copy.DateAcquired));
         ShowingNewEdition = false;
     }
 
@@ -273,7 +281,7 @@ public class BookEditViewModel(
             Format = row.Format,
             Condition = row.Condition,
             Publisher = row.PublisherName,
-            DatePrinted = row.DatePrinted
+            DatePrinted = row.DatePrintedDisplay
         };
     }
 
@@ -290,7 +298,9 @@ public class BookEditViewModel(
         var edition = copy.Edition;
         edition.Isbn = EditCopyInput.Isbn?.Trim() ?? edition.Isbn;
         edition.Format = EditCopyInput.Format;
-        edition.DatePrinted = EditCopyInput.DatePrinted;
+        var datePrinted = PartialDateParser.TryParse(EditCopyInput.DatePrinted) ?? PartialDate.Empty;
+        edition.DatePrinted = datePrinted.Date;
+        edition.DatePrintedPrecision = datePrinted.Precision;
         copy.Condition = EditCopyInput.Condition;
 
         var pubName = EditCopyInput.Publisher?.Trim();
@@ -317,7 +327,9 @@ public class BookEditViewModel(
         {
             EditionCopies[idx] = new EditionCopyRow(
                 edition.Id, copy.Id, edition.Isbn, edition.Format, copy.Condition,
-                pubName, edition.DatePrinted, edition.CoverUrl, copy.Notes, copy.DateAcquired);
+                pubName,
+                PartialDateParser.Format(edition.DatePrinted, edition.DatePrintedPrecision),
+                edition.CoverUrl, copy.Notes, copy.DateAcquired);
         }
         EditingCopyId = null;
     }
@@ -452,7 +464,9 @@ public class BookEditViewModel(
                 primary.Title = PrimaryWorkInput.Title!.Trim();
                 primary.Subtitle = string.IsNullOrWhiteSpace(PrimaryWorkInput.Subtitle) ? null : PrimaryWorkInput.Subtitle.Trim();
                 primary.Author = await AuthorResolver.FindOrCreateAsync(PrimaryWorkInput.Author!, db);
-                primary.FirstPublishedDate = PrimaryWorkInput.FirstPublishedDate;
+                var firstPub = PartialDateParser.TryParse(PrimaryWorkInput.FirstPublishedDate) ?? PartialDate.Empty;
+                primary.FirstPublishedDate = firstPub.Date;
+                primary.FirstPublishedDatePrecision = firstPub.Precision;
                 primary.SeriesId = SelectedSeriesId;
                 primary.SeriesOrder = SelectedSeriesId.HasValue ? SeriesOrder : null;
 
@@ -474,7 +488,7 @@ public class BookEditViewModel(
 
     public record SeriesOption(int Id, string Name, SeriesType Type);
     public record TagItem(int Id, string Name);
-    public record EditionCopyRow(int EditionId, int CopyId, string? Isbn, BookFormat Format, BookCondition Condition, string? PublisherName, DateOnly? DatePrinted, string? CoverUrl, string? CopyNotes, DateTime? DateAcquired);
+    public record EditionCopyRow(int EditionId, int CopyId, string? Isbn, BookFormat Format, BookCondition Condition, string? PublisherName, string DatePrintedDisplay, string? CoverUrl, string? CopyNotes, DateTime? DateAcquired);
     public record WorkSummary(int Id, string Title, string Author, int GenreCount);
 
     public class CopyEditInput
@@ -483,6 +497,7 @@ public class BookEditViewModel(
         public BookFormat Format { get; set; }
         public BookCondition Condition { get; set; }
         public string? Publisher { get; set; }
-        public DateOnly? DatePrinted { get; set; }
+        // Free-form date text — parsed via PartialDateParser at save time.
+        public string? DatePrinted { get; set; }
     }
 }

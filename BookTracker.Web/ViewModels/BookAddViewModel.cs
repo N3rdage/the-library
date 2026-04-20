@@ -99,7 +99,10 @@ public class BookAddViewModel(
             if (string.IsNullOrWhiteSpace(WorkInput.Author)) WorkInput.Author = result.Author ?? "";
             if (string.IsNullOrWhiteSpace(EditionInput.Isbn)) EditionInput.Isbn = result.Isbn;
             if (string.IsNullOrWhiteSpace(EditionInput.Publisher)) EditionInput.Publisher = result.Publisher;
-            EditionInput.DatePrinted ??= result.DatePrinted;
+            if (string.IsNullOrWhiteSpace(EditionInput.DatePrinted) && result.DatePrinted is DateOnly d)
+            {
+                EditionInput.DatePrinted = PartialDateParser.Format(d, result.DatePrintedPrecision);
+            }
 
             LookupCandidates = result.GenreCandidates.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             genrePicker.LookupCandidates = LookupCandidates;
@@ -204,10 +207,11 @@ public class BookAddViewModel(
         if (string.IsNullOrWhiteSpace(WorkInput.Title)) WorkInput.Title = candidate.Title ?? "";
         if (string.IsNullOrWhiteSpace(WorkInput.Author)) WorkInput.Author = candidate.Author ?? "";
         // first_publish_year is the WORK's first year — perfect fit for
-        // Work.FirstPublishedDate; not the edition's print date.
-        if (WorkInput.FirstPublishedDate is null && candidate.FirstPublishYear is int year)
+        // Work.FirstPublishedDate; not the edition's print date. We only
+        // know the year so format it as such.
+        if (string.IsNullOrWhiteSpace(WorkInput.FirstPublishedDate) && candidate.FirstPublishYear is int year)
         {
-            WorkInput.FirstPublishedDate = new DateOnly(year, 1, 1);
+            WorkInput.FirstPublishedDate = year.ToString();
         }
 
         SearchMessage = $"Prefilled from Open Library. Fill in format, exact print date, and publisher from the book in hand.";
@@ -244,15 +248,18 @@ public class BookAddViewModel(
             }
 
             var author = await AuthorResolver.FindOrCreateAsync(WorkInput.Author!, db);
+            var firstPub = PartialDateParser.TryParse(WorkInput.FirstPublishedDate) ?? PartialDate.Empty;
             var work = new Work
             {
                 Title = (WorkInput.Title ?? BookInput.Title)!.Trim(),
                 Subtitle = string.IsNullOrWhiteSpace(WorkInput.Subtitle) ? null : WorkInput.Subtitle!.Trim(),
                 Author = author,
-                FirstPublishedDate = WorkInput.FirstPublishedDate,
+                FirstPublishedDate = firstPub.Date,
+                FirstPublishedDatePrecision = firstPub.Precision,
                 Genres = selectedGenres,
             };
 
+            var datePrinted = PartialDateParser.TryParse(EditionInput.DatePrinted) ?? PartialDate.Empty;
             var book = new Book
             {
                 Title = BookInput.Title!.Trim(),
@@ -268,7 +275,8 @@ public class BookAddViewModel(
                     {
                         Isbn = string.IsNullOrWhiteSpace(EditionInput.Isbn) ? null : EditionInput.Isbn.Trim(),
                         Format = EditionInput.Format,
-                        DatePrinted = EditionInput.DatePrinted,
+                        DatePrinted = datePrinted.Date,
+                        DatePrintedPrecision = datePrinted.Precision,
                         Publisher = publisher,
                         CoverUrl = string.IsNullOrWhiteSpace(EditionInput.CoverUrl) ? null : EditionInput.CoverUrl.Trim(),
                         Copies = [new Copy { Condition = CopyInput.Condition }]

@@ -18,8 +18,8 @@
             </div>
             <div class="col-md-4">
                 <label class="form-label">First published</label>
-                <InputDate @bind-Value="Input.FirstPublishedDate" class="form-control" />
-                <div class="form-text">When the work itself was first published, not this edition's print date.</div>
+                <InputText @bind-Value="Input.FirstPublishedDate" class="form-control" placeholder="e.g. 1934, Jan 1934, 6 Jan 1934" />
+                <div class="form-text">When the work itself was first published. Year alone is fine.</div>
             </div>
         </div>
     </div>
