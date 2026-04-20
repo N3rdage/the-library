@@ -130,7 +130,7 @@ public class BookAddViewModelTests
 
         var ok = await vm.SaveAsync(new List<int>());
 
-        Assert.True(ok);
+        Assert.NotNull(ok);
         using var db = _factory.CreateDbContext();
         var edition = db.Editions.Single();
         Assert.Null(edition.Isbn);
@@ -146,16 +146,75 @@ public class BookAddViewModelTests
         vm1.BookInput.Title = "Book A";
         vm1.WorkInput.Title = "Book A";
         vm1.WorkInput.Author = "Author A";
-        Assert.True(await vm1.SaveAsync(new List<int>()));
+        Assert.NotNull(await vm1.SaveAsync(new List<int>()));
 
         var vm2 = CreateVm();
         vm2.BookInput.Title = "Book B";
         vm2.WorkInput.Title = "Book B";
         vm2.WorkInput.Author = "Author B";
-        Assert.True(await vm2.SaveAsync(new List<int>()));
+        Assert.NotNull(await vm2.SaveAsync(new List<int>()));
 
         using var db = _factory.CreateDbContext();
         Assert.Equal(2, db.Editions.Count(e => e.Isbn == null));
+    }
+
+    [Fact]
+    public async Task LookupAsync_ExistingIsbn_FlagsExistingBookInsteadOfPrefilling()
+    {
+        // Seed an existing book with the ISBN we're about to look up.
+        using (var db = _factory.CreateDbContext())
+        {
+            db.Books.Add(new Book
+            {
+                Title = "The Hobbit",
+                Works = [new Work { Title = "The Hobbit", Author = new Author { Name = "Tolkien" } }],
+                Editions = [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }]
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var vm = CreateVm();
+        vm.LookupIsbn = "9780345391803";
+
+        await vm.LookupAsync(CreateGenrePicker());
+
+        Assert.NotNull(vm.ExistingBook);
+        Assert.Equal("The Hobbit", vm.ExistingBook!.Title);
+        Assert.Equal(1, vm.ExistingBook.CopyCount);
+        // Form fields stay empty — the prefill path is skipped because the
+        // user is being told "you already own this book" instead.
+        Assert.Null(vm.BookInput.Title);
+        Assert.Null(vm.WorkInput.Author);
+        // Open Library shouldn't have been hit.
+        await _lookup.DidNotReceiveWithAnyArgs().LookupByIsbnAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task AddCopyToExistingAsync_AppendsCopyToFlaggedEdition()
+    {
+        int editionId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var book = new Book
+            {
+                Title = "The Hobbit",
+                Works = [new Work { Title = "The Hobbit", Author = new Author { Name = "Tolkien" } }],
+                Editions = [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }]
+            };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            editionId = book.Editions[0].Id;
+        }
+
+        var vm = CreateVm();
+        vm.LookupIsbn = "9780345391803";
+        await vm.LookupAsync(CreateGenrePicker());
+
+        var bookId = await vm.AddCopyToExistingAsync();
+
+        Assert.NotNull(bookId);
+        using var db2 = _factory.CreateDbContext();
+        Assert.Equal(2, db2.Copies.Count(c => c.EditionId == editionId));
     }
 
     [Fact]
@@ -170,7 +229,7 @@ public class BookAddViewModelTests
 
         var ok = await vm.SaveAsync(new List<int>());
 
-        Assert.True(ok);
+        Assert.NotNull(ok);
         using var db = _factory.CreateDbContext();
         var book = db.Books.Include(b => b.Works).ThenInclude(w => w.Author).Single();
         var work = Assert.Single(book.Works);

@@ -28,8 +28,13 @@ public class BulkAddViewModelTests
     }
 
     [Fact]
-    public async Task AddIsbnAsync_IgnoresDuplicateIsbnInGrid()
+    public async Task AddIsbnAsync_AllowsSameIsbnAgain_ToCaptureSecondCopy()
     {
+        // Re-scanning the same barcode in one session is meaningful — it's
+        // a second physical copy of the book. Each scan creates its own
+        // row; SaveBookAsync re-checks the DB at save time and turns the
+        // second save into a Copy add rather than colliding on the unique
+        // ISBN constraint.
         var vm = CreateVm();
         vm.OnStateChanged = () => Task.CompletedTask;
 
@@ -38,7 +43,35 @@ public class BulkAddViewModelTests
         vm.IsbnInput = "9780345391803";
         await vm.AddIsbnAsync();
 
-        Assert.Single(vm.Rows);
+        Assert.Equal(2, vm.Rows.Count);
+    }
+
+    [Fact]
+    public async Task AcceptRowAsync_SecondScanOfSameIsbn_AddsCopyInsteadOfDuplicateBook()
+    {
+        var vm = CreateVm();
+        var first = new BulkAddViewModel.DiscoveryRow
+        {
+            Isbn = "9780345391803",
+            Title = "The Hobbit",
+            Author = "J.R.R. Tolkien",
+            Status = BulkAddViewModel.RowStatus.Found
+        };
+        var second = new BulkAddViewModel.DiscoveryRow
+        {
+            Isbn = "9780345391803",
+            Title = "The Hobbit",
+            Author = "J.R.R. Tolkien",
+            Status = BulkAddViewModel.RowStatus.Found
+        };
+
+        await vm.AcceptRowAsync(first);
+        await vm.AcceptRowAsync(second);
+
+        using var db = _factory.CreateDbContext();
+        Assert.Single(db.Books); // Only one Book row…
+        Assert.Single(db.Editions); // …and one Edition…
+        Assert.Equal(2, db.Copies.Count()); // …with two Copies.
     }
 
     [Fact]
