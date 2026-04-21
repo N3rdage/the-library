@@ -126,7 +126,17 @@ What it does:
 5. Prompts before clobbering the local DB (skip with `-Force` on re-runs).
 6. Drops the local `BookTracker` DB and `SqlPackage /a:Import`s the BACPAC into the `booktracker-db` container on `localhost:1433`.
 
-Prereqs: `SqlPackage.exe` on PATH (install via Azure Data Studio extension or `https://aka.ms/sqlpackage-windows`), Docker running with `docker compose up -d` already applied. `Az.Accounts`, `Az.Resources`, `Az.Sql`, and `SqlServer` modules auto-install on first run.
+Prereqs:
+
+- **SqlPackage on PATH.** Preferred install is the .NET global tool:
+
+  ```powershell
+  dotnet tool install -g microsoft.sqlpackage
+  ```
+
+  (Alternatives: Azure Data Studio's "SQL Database Projects" extension, or the standalone installer at `https://aka.ms/sqlpackage-windows`.) Open a fresh shell afterwards so the updated PATH is picked up.
+- Docker running with `docker compose up -d` already applied.
+- `Az.Accounts`, `Az.Resources`, `Az.Sql`, and `SqlServer` modules — auto-install on first run.
 
 Direction: **prod → local only**. There is no reverse path — data flows into prod through normal app usage, never this script. If this branch has migrations not yet applied to prod, run `dotnet ef database update --project .\BookTracker.Data --startup-project .\BookTracker.Web` after the import.
 

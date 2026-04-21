@@ -5,8 +5,10 @@
 # flows into prod through normal app usage, never via this script.
 #
 # Prereqs:
-#   - SqlPackage.exe on PATH (ships with Azure Data Studio or the SqlPackage
-#     standalone installer: https://aka.ms/sqlpackage-windows).
+#   - SqlPackage on PATH. Install via the .NET global tool:
+#         dotnet tool install -g microsoft.sqlpackage
+#     (Fallback alternatives: Azure Data Studio, or the standalone installer
+#     at https://aka.ms/sqlpackage-windows.)
 #   - Docker Desktop running, with `docker compose up -d` already applied so
 #     the `booktracker-db` container is healthy.
 #   - Signed-in Az account with permission to temporarily open the SQL
@@ -61,11 +63,13 @@ if (-not $LocalSaPassword) {
 $sqlPackage = Get-Command SqlPackage -ErrorAction SilentlyContinue
 if (-not $sqlPackage) {
     throw @"
-SqlPackage.exe is not on PATH. Install it via one of:
-  - Azure Data Studio (extension: 'SQL Database Projects' ships SqlPackage)
-  - Standalone: https://aka.ms/sqlpackage-windows
+SqlPackage is not on PATH. Install it via:
+    dotnet tool install -g microsoft.sqlpackage
 
-After install, ensure the folder containing SqlPackage.exe is on PATH and
+(Alternatives: Azure Data Studio's 'SQL Database Projects' extension, or
+the standalone installer at https://aka.ms/sqlpackage-windows.)
+
+After install, open a fresh shell so the updated PATH is picked up, then
 re-run this script.
 "@
 }
