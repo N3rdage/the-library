@@ -18,9 +18,13 @@
             <div class="col-md-6">@Right</div>
         </div>
     </div>
-    <div class="card-footer text-end">
+    <div class="card-footer d-flex gap-2 justify-content-end">
         @if (Dismissed is null)
         {
+            @if (!string.IsNullOrEmpty(MergeHref))
+            {
+                <a href="@MergeHref" class="btn btn-sm btn-primary">Merge →</a>
+            }
             <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="OnDismiss">Dismiss</button>
         }
         else
@@ -37,4 +41,5 @@
     [Parameter, EditorRequired] public RenderFragment Right { get; set; } = null!;
     [Parameter] public EventCallback OnDismiss { get; set; }
     [Parameter] public EventCallback OnUnignore { get; set; }
+    [Parameter] public string? MergeHref { get; set; }
 }
