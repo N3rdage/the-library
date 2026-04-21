@@ -14,6 +14,8 @@ param stagingSlotPrincipalId string
 param authClientSecret string
 @secure()
 param anthropicApiKey string = ''
+@secure()
+param troveApiKey string = ''
 
 resource kv 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: keyVaultName
@@ -77,6 +79,14 @@ resource secretAnthropicApiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = 
   name: 'AIAnthropicApiKey'
   properties: {
     value: anthropicApiKey
+  }
+}
+
+resource secretTroveApiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(troveApiKey)) {
+  parent: kv
+  name: 'TroveApiKey'
+  properties: {
+    value: troveApiKey
   }
 }
 

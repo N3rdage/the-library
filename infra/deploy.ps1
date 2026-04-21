@@ -22,7 +22,11 @@ param(
     [string] $SecondaryLocation = 'eastus2',
     # Optional Anthropic public-API key. When supplied it's stored in Key
     # Vault and exposed via a KV reference in App Settings.
-    [string] $AnthropicApiKey = ''
+    [string] $AnthropicApiKey = '',
+    # Optional Trove (National Library of Australia) API key. Used as a
+    # third-line ISBN lookup provider for titles Open Library and Google
+    # Books don't index. Same storage pattern as AnthropicApiKey.
+    [string] $TroveApiKey = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -121,6 +125,7 @@ $templateParams = @{
     devClientIp         = $DevClientIp
     secondaryLocation   = $SecondaryLocation
     anthropicApiKey     = $AnthropicApiKey
+    troveApiKey         = $TroveApiKey
 }
 
 $deployment = New-AzSubscriptionDeployment `

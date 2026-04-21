@@ -37,6 +37,10 @@ param secondaryLocation string = 'eastus2'
 @secure()
 param anthropicApiKey string = ''
 
+@description('Optional Trove (NLA) API key. When supplied it is stored in Key Vault and exposed as the Trove__ApiKey app setting via a KV reference.')
+@secure()
+param troveApiKey string = ''
+
 var tags = {
   Client: 'Drew'
   Environment: 'Production'
@@ -66,6 +70,7 @@ module resources './modules/resources.bicep' = {
     devClientIp: devClientIp
     secondaryLocation: secondaryLocation
     anthropicApiKey: anthropicApiKey
+    troveApiKey: troveApiKey
   }
 }
 
