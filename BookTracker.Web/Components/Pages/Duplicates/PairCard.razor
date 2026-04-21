@@ -1,0 +1,40 @@
+@* Side-by-side card used on the /duplicates page. Left + Right slots hold
+   the per-entity info panels; footer shows either [Dismiss] for active pairs
+   or [Un-ignore] for dismissed pairs (discriminated by the Dismissed param). *@
+
+@using BookTracker.Web.Services
+
+<div class="card mb-3 @(Dismissed is not null ? "border-secondary" : "")">
+    <div class="card-header py-2 small text-muted">
+        @MatchReason
+        @if (Dismissed is not null)
+        {
+            <span> — dismissed @Dismissed.DismissedAt.ToLocalTime().ToString("d MMM yyyy")</span>
+        }
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-6">@Left</div>
+            <div class="col-md-6">@Right</div>
+        </div>
+    </div>
+    <div class="card-footer text-end">
+        @if (Dismissed is null)
+        {
+            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="OnDismiss">Dismiss</button>
+        }
+        else
+        {
+            <button type="button" class="btn btn-sm btn-outline-primary" @onclick="OnUnignore">Un-ignore</button>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string MatchReason { get; set; } = "";
+    [Parameter] public DismissalInfo? Dismissed { get; set; }
+    [Parameter, EditorRequired] public RenderFragment Left { get; set; } = null!;
+    [Parameter, EditorRequired] public RenderFragment Right { get; set; } = null!;
+    [Parameter] public EventCallback OnDismiss { get; set; }
+    [Parameter] public EventCallback OnUnignore { get; set; }
+}

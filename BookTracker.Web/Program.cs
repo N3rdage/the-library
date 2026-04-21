@@ -36,6 +36,8 @@ builder.Services.AddHttpClient<IBookLookupService, BookLookupService>(client =>
 
 builder.Services.AddTransient<SeriesMatchService>();
 
+builder.Services.AddScoped<IDuplicateDetectionService, DuplicateDetectionService>();
+
 // One-shot startup task that re-classifies existing Editions using the
 // richer BookFormat enum (populated from upstream metadata). Idempotent via
 // a MaintenanceLog marker; safe to leave registered after the backfill has
@@ -69,6 +71,7 @@ builder.Services.AddTransient<SeriesListViewModel>();
 builder.Services.AddTransient<SeriesEditViewModel>();
 builder.Services.AddTransient<AuthorListViewModel>();
 builder.Services.AddTransient<ShoppingViewModel>();
+builder.Services.AddTransient<DuplicatesViewModel>();
 builder.Services.AddScoped<AIAssistantViewModel>();
 
 var app = builder.Build();
