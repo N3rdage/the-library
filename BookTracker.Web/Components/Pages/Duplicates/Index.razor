@@ -1,0 +1,209 @@
+@page "/duplicates"
+@using BookTracker.Data.Models
+@using BookTracker.Web.Services
+@inject DuplicatesViewModel VM
+
+<PageTitle>Duplicates - BookTracker</PageTitle>
+
+<h1 class="mb-3">Duplicates</h1>
+<p class="text-muted">
+    Candidate duplicate pairs detected across Authors, Works, Books, and Editions.
+    Authors match either on normalised full name or on shared surname + first-name
+    initial (so "Doug Preston" / "Douglas Preston" / "D Preston" surface together).
+    Works, Books, and Editions need an exact match after normalisation — edit a
+    name or title to line them up if one you expect is missing. Merge actions
+    arrive in the next release; for now you can dismiss false positives (and
+    un-ignore them later).
+</p>
+
+@if (!string.IsNullOrEmpty(VM.SuccessMessage))
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @VM.SuccessMessage
+        <button type="button" class="btn-close" @onclick="() => VM.SuccessMessage = null" aria-label="Close"></button>
+    </div>
+}
+
+@if (VM.Loading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
+    </div>
+}
+else
+{
+    <ul class="nav nav-tabs mb-3">
+        @foreach (var tab in Tabs)
+        {
+            <li class="nav-item">
+                <button type="button"
+                        class="nav-link @(VM.ActiveTab == tab.Type ? "active" : "")"
+                        @onclick="() => VM.ActiveTab = tab.Type">
+                    @tab.Label
+                    <span class="badge bg-secondary ms-1">@VM.ActiveCount(tab.Type)</span>
+                </button>
+            </li>
+        }
+    </ul>
+
+    @switch (VM.ActiveTab)
+    {
+        case DuplicateEntityType.Author:
+            @if (VM.ActiveAuthorPairs.Count == 0)
+            {
+                <p class="text-muted">No duplicate authors detected.</p>
+            }
+            @foreach (var pair in VM.ActiveAuthorPairs)
+            {
+                <PairCard MatchReason="@pair.MatchReason"
+                          OnDismiss="() => VM.DismissAsync(DuplicateEntityType.Author, pair.Lower.Id, pair.Higher.Id)">
+                    <Left><AuthorSide Snap="pair.Lower" /></Left>
+                    <Right><AuthorSide Snap="pair.Higher" /></Right>
+                </PairCard>
+            }
+            <div class="mt-4 border-top pt-3">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        @onclick="() => _showDismissedAuthors = !_showDismissedAuthors">
+                    @(_showDismissedAuthors ? "Hide" : "Show") dismissed authors (@VM.DismissedAuthorPairs.Count)
+                </button>
+                @if (_showDismissedAuthors)
+                {
+                    <div class="mt-3">
+                        @foreach (var pair in VM.DismissedAuthorPairs)
+                        {
+                            <PairCard MatchReason="@pair.MatchReason"
+                                      Dismissed="pair.Dismissed"
+                                      OnUnignore="() => VM.UnignoreAsync(pair.Dismissed!.IgnoredDuplicateId)">
+                                <Left><AuthorSide Snap="pair.Lower" /></Left>
+                                <Right><AuthorSide Snap="pair.Higher" /></Right>
+                            </PairCard>
+                        }
+                    </div>
+                }
+            </div>
+            break;
+
+        case DuplicateEntityType.Work:
+            @if (VM.ActiveWorkPairs.Count == 0)
+            {
+                <p class="text-muted">No duplicate works detected.</p>
+            }
+            @foreach (var pair in VM.ActiveWorkPairs)
+            {
+                <PairCard MatchReason="@pair.MatchReason"
+                          OnDismiss="() => VM.DismissAsync(DuplicateEntityType.Work, pair.Lower.Id, pair.Higher.Id)">
+                    <Left><WorkSide Snap="pair.Lower" /></Left>
+                    <Right><WorkSide Snap="pair.Higher" /></Right>
+                </PairCard>
+            }
+            <div class="mt-4 border-top pt-3">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        @onclick="() => _showDismissedWorks = !_showDismissedWorks">
+                    @(_showDismissedWorks ? "Hide" : "Show") dismissed works (@VM.DismissedWorkPairs.Count)
+                </button>
+                @if (_showDismissedWorks)
+                {
+                    <div class="mt-3">
+                        @foreach (var pair in VM.DismissedWorkPairs)
+                        {
+                            <PairCard MatchReason="@pair.MatchReason"
+                                      Dismissed="pair.Dismissed"
+                                      OnUnignore="() => VM.UnignoreAsync(pair.Dismissed!.IgnoredDuplicateId)">
+                                <Left><WorkSide Snap="pair.Lower" /></Left>
+                                <Right><WorkSide Snap="pair.Higher" /></Right>
+                            </PairCard>
+                        }
+                    </div>
+                }
+            </div>
+            break;
+
+        case DuplicateEntityType.Book:
+            @if (VM.ActiveBookPairs.Count == 0)
+            {
+                <p class="text-muted">No duplicate books detected.</p>
+            }
+            @foreach (var pair in VM.ActiveBookPairs)
+            {
+                <PairCard MatchReason="@pair.MatchReason"
+                          OnDismiss="() => VM.DismissAsync(DuplicateEntityType.Book, pair.Lower.Id, pair.Higher.Id)">
+                    <Left><BookSide Snap="pair.Lower" /></Left>
+                    <Right><BookSide Snap="pair.Higher" /></Right>
+                </PairCard>
+            }
+            <div class="mt-4 border-top pt-3">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        @onclick="() => _showDismissedBooks = !_showDismissedBooks">
+                    @(_showDismissedBooks ? "Hide" : "Show") dismissed books (@VM.DismissedBookPairs.Count)
+                </button>
+                @if (_showDismissedBooks)
+                {
+                    <div class="mt-3">
+                        @foreach (var pair in VM.DismissedBookPairs)
+                        {
+                            <PairCard MatchReason="@pair.MatchReason"
+                                      Dismissed="pair.Dismissed"
+                                      OnUnignore="() => VM.UnignoreAsync(pair.Dismissed!.IgnoredDuplicateId)">
+                                <Left><BookSide Snap="pair.Lower" /></Left>
+                                <Right><BookSide Snap="pair.Higher" /></Right>
+                            </PairCard>
+                        }
+                    </div>
+                }
+            </div>
+            break;
+
+        case DuplicateEntityType.Edition:
+            @if (VM.ActiveEditionPairs.Count == 0)
+            {
+                <p class="text-muted">No duplicate editions detected.</p>
+            }
+            @foreach (var pair in VM.ActiveEditionPairs)
+            {
+                <PairCard MatchReason="@pair.MatchReason"
+                          OnDismiss="() => VM.DismissAsync(DuplicateEntityType.Edition, pair.Lower.Id, pair.Higher.Id)">
+                    <Left><EditionSide Snap="pair.Lower" /></Left>
+                    <Right><EditionSide Snap="pair.Higher" /></Right>
+                </PairCard>
+            }
+            <div class="mt-4 border-top pt-3">
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        @onclick="() => _showDismissedEditions = !_showDismissedEditions">
+                    @(_showDismissedEditions ? "Hide" : "Show") dismissed editions (@VM.DismissedEditionPairs.Count)
+                </button>
+                @if (_showDismissedEditions)
+                {
+                    <div class="mt-3">
+                        @foreach (var pair in VM.DismissedEditionPairs)
+                        {
+                            <PairCard MatchReason="@pair.MatchReason"
+                                      Dismissed="pair.Dismissed"
+                                      OnUnignore="() => VM.UnignoreAsync(pair.Dismissed!.IgnoredDuplicateId)">
+                                <Left><EditionSide Snap="pair.Lower" /></Left>
+                                <Right><EditionSide Snap="pair.Higher" /></Right>
+                            </PairCard>
+                        }
+                    </div>
+                }
+            </div>
+            break;
+    }
+}
+
+@code {
+    private record TabSpec(DuplicateEntityType Type, string Label);
+    private static readonly TabSpec[] Tabs =
+    [
+        new(DuplicateEntityType.Author, "Authors"),
+        new(DuplicateEntityType.Work, "Works"),
+        new(DuplicateEntityType.Book, "Books"),
+        new(DuplicateEntityType.Edition, "Editions")
+    ];
+
+    private bool _showDismissedAuthors;
+    private bool _showDismissedWorks;
+    private bool _showDismissedBooks;
+    private bool _showDismissedEditions;
+
+    protected override async Task OnInitializedAsync() => await VM.LoadAsync();
+}

@@ -68,6 +68,11 @@ WishlistItem
   Title, Author, Priority (Low/Medium/High), Price,
   ISBN (optional), Series (optional FK), SeriesOrder
 
+IgnoredDuplicate
+  EntityType (Author/Work/Book/Edition), LowerId, HigherId,
+  DismissedAt, Note — records user-dismissed duplicate pairs for /duplicates.
+  Polymorphic across four entity types (no FK); orphaned rows swept on detect.
+
 GenreSeed
   Static seed data — 48+ curated genres in a hierarchical taxonomy
 ```
@@ -121,6 +126,7 @@ A short-lived context is created per operation. Never inject `DbContext` directl
 | `/series/{id}` | Edit Series | Edit series, manage books in series, reorder |
 | `/shopping` | Shopping Mode | Mobile-optimised. "Do I have this?" (scan/search), series gaps, shopping list with "bought" action. |
 | `/assistant` | AI Assistant | Book advisor (Opus), genre cleanup, collection cataloguing, shopping suggestions (Sonnet). |
+| `/duplicates` | Duplicates | Tabs for Authors / Works / Books / Editions. Lists candidate duplicate pairs detected on-demand. Dismiss false positives (reversible via the "Dismissed" section). Merge actions ship in later PRs. Web-primary, desktop-first layout. |
 
 ## Shared components
 
@@ -135,6 +141,9 @@ A short-lived context is created per operation. Never inject `DbContext` directl
 
 ### BookLookupService
 Looks up book metadata by ISBN. Tries Open Library first, falls back to Google Books, then Trove (NLA) as a coverage-of-last-resort for self-published / Australian titles the other two tend to miss. Trove is skipped silently when no API key is configured. Returns `BookLookupResult` with title, author, publisher, genres, cover URL, etc.
+
+### DuplicateDetectionService
+Scans the library for candidate duplicate pairs across Authors, Works, Books, and Editions. Authors match on either normalised full name *or* shared surname + first-name initial (so "Doug Preston" / "Douglas Preston" / "D Preston" all surface together). Works, Books, and Editions use exact-after-normalisation. Dismissed pairs are persisted in `IgnoredDuplicate` (polymorphic table, unique on `(EntityType, LowerId, HigherId)`) and orphaned rows are swept on each run. Returns a `DuplicateReport`. Merge actions ship in later PRs.
 
 ### SeriesMatchService
 Local series detection after ISBN lookup. Strategies:

@@ -1,0 +1,21 @@
+@using BookTracker.Web.Services
+
+<div>
+    <div class="fw-semibold mb-1">
+        <a href="@($"/books/{Snap.Id}/edit")" target="_blank" rel="noopener">@Snap.Title</a>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(Snap.AuthorName))
+    {
+        <div class="small mb-1">by @Snap.AuthorName</div>
+    }
+    <div class="small text-muted">
+        @Snap.EditionCount edition@(Snap.EditionCount == 1 ? "" : "s") ·
+        @Snap.CopyCount cop@(Snap.CopyCount == 1 ? "y" : "ies") ·
+        added @Snap.DateAdded.ToLocalTime().ToString("d MMM yyyy") ·
+        id @Snap.Id
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public BookSnapshot Snap { get; set; } = null!;
+}

@@ -33,8 +33,17 @@ Outstanding work items for BookTracker. This is the single source of truth — c
 
 ## Data model — known follow-ups
 
-- [ ] Merge / dedup duplicate Authors — UI on `/authors` to combine two canonical Author rows into one (e.g. "J. R. R. Tolkien" and "JRR Tolkien" entered separately). Reassign all `Work.AuthorId` from the loser to the winner, reassign any aliases, then delete the loser row.
-- [ ] Merge / dedup duplicate Works — when the same story has been entered as two separate Works (because two compendiums spelt the title slightly differently). UI to pick a winner, reassign all `BookWork` join rows to the winner, reassign `Work.SeriesId` / `Genres` if the loser had values the winner didn't, then delete the loser row. Surface from the Authors page as well — "Tolkien has 2 Works titled 'The Hobbit', merge?".
+### Duplicate management (multi-PR series)
+
+Detection + `/duplicates` listing shipped in PR 1 (this branch). Remaining PRs in the series:
+
+- [ ] **PR 2 — Author merge**: side-by-side review → pick winner, reassign `Work.AuthorId` + aliases from loser → delete loser. Transactional. User copy/pastes any fields from loser they want to keep before confirming.
+- [ ] **PR 3 — Work merge + Add-Work-to-Book via search** (bundled; shares the Work-search UI): reassign `BookWork` join rows, enrich winner from loser's populated fields (subtitle, genres, series, `FirstPublishedDate`), delete loser. Add "search existing Works" affordance on the Edit Book page to attach a story to an anthology.
+- [ ] **PR 4 — Edition merge**: reassign `Copy.EditionId`, enrich fields, delete loser. Same-Book only (cross-Book edition dupes imply the Books are dupes → handle those first).
+- [ ] **PR 5 — Book merge**: union Works/Tags, move all Editions, merge any duplicate Editions that result, delete loser.
+- [ ] **PR 6 (audit first, possibly drop)** — gap-fill on Edit Book's "add Edition by ISBN". Partial implementation already exists via `BookEditViewModel.NewEditionLookupIsbn`; only open a PR if the audit shows a real gap.
+
+Detection is conservative (exact-after-normalisation). If the noise/signal ratio is wrong in practice, add fuzzy matching (Levenshtein / token similarity) as a follow-up — keep the confidence score plumbing absent until there's a reason for it.
 
 ## Planned features
 

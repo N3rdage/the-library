@@ -1,0 +1,16 @@
+@using BookTracker.Web.Services
+
+<div>
+    <div class="fw-semibold mb-1">
+        <a href="/authors" target="_blank" rel="noopener">@Snap.Name</a>
+    </div>
+    @if (Snap.CanonicalAuthorId.HasValue)
+    {
+        <div class="small text-muted mb-1">alias of @Snap.CanonicalName</div>
+    }
+    <div class="small text-muted">@Snap.WorkCount work@(Snap.WorkCount == 1 ? "" : "s") · id @Snap.Id</div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public AuthorSnapshot Snap { get; set; } = null!;
+}

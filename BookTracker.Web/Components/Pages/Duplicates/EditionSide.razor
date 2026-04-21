@@ -1,0 +1,31 @@
+@using BookTracker.Web.Services
+
+<div>
+    <div class="fw-semibold mb-1">
+        <a href="@($"/books/{Snap.BookId}/edit")" target="_blank" rel="noopener">@Snap.BookTitle</a>
+    </div>
+    <div class="small mb-1">
+        @Snap.Format.ToString()
+        @if (!string.IsNullOrWhiteSpace(Snap.Isbn))
+        {
+            <text> · ISBN @Snap.Isbn</text>
+        }
+        else
+        {
+            <text> · no ISBN</text>
+        }
+    </div>
+    <div class="small text-muted">
+        @(Snap.PublisherName ?? "unknown publisher")
+        @if (Snap.DatePrinted.HasValue)
+        {
+            <text> · printed @Snap.DatePrinted.Value.ToString("d MMM yyyy")</text>
+        }
+        · @Snap.CopyCount cop@(Snap.CopyCount == 1 ? "y" : "ies")
+        · id @Snap.Id
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public EditionSnapshot Snap { get; set; } = null!;
+}
