@@ -128,6 +128,16 @@ if ($SkipExport) {
     Write-Host "Reusing existing BACPAC: $bacpacPath"
 }
 else {
+    # Acquire a SQL-scoped token from the already-signed-in Az session. Passing
+    # this to SqlPackage via /AccessToken bypasses the browser-based /ua flow,
+    # which doesn't always resolve custom Entra domains (e.g. silly.ninja) to
+    # the correct tenant. deploy.ps1 uses the same pattern for Invoke-Sqlcmd.
+    $tokenResp = Get-AzAccessToken -ResourceUrl 'https://database.windows.net' -AsSecureString
+    $dbToken = ConvertFrom-SecureString -SecureString $tokenResp.Token -AsPlainText
+    if (-not $dbToken) {
+        throw "Could not acquire an Azure SQL access token from the current Az session."
+    }
+
     # Temporarily enable public access + open firewall for the caller's IP.
     # Same pattern used by deploy.ps1's SQL AAD grant step.
     $publicAccessWas = (Get-AzSqlServer -ResourceGroupName $ResourceGroupName -ServerName $sqlServerName).PublicNetworkAccess
@@ -155,7 +165,7 @@ else {
             /SourceServerName:$sqlServerFqdn `
             /SourceDatabaseName:$ProdDatabaseName `
             /TargetFile:$bacpacPath `
-            /ua:true `
+            /AccessToken:$dbToken `
             /p:VerifyFullTextDocumentTypesSupported=false
         if ($LASTEXITCODE -ne 0) {
             throw "SqlPackage export failed (exit $LASTEXITCODE)."
