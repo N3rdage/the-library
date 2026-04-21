@@ -25,6 +25,9 @@ builder.Services.AddSignalR(options =>
 builder.Services.AddDbContextFactory<BookTrackerDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+builder.Services.Configure<TroveOptions>(
+    builder.Configuration.GetSection(TroveOptions.SectionName));
+
 builder.Services.AddHttpClient<IBookLookupService, BookLookupService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(10);

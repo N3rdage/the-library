@@ -61,6 +61,7 @@ All secret App Settings resolve via `@Microsoft.KeyVault(SecretUri=…)` referen
 | `MICROSOFT_PROVIDER_AUTHENTICATION_SECRET` | `AuthClientSecret` | rotated by `deploy.ps1` (2-year expiry) |
 | `AI__AzureOpenAI__ApiKey` | `AIAzureOpenAIApiKey` | written by `ai-services.bicep` via `listKeys()` — never seen by the deploy script |
 | `AI__Anthropic__ApiKey` | `AIAnthropicApiKey` | optional; supplied via `-AnthropicApiKey` |
+| `Trove__ApiKey` | `TroveApiKey` | optional; supplied via `-TroveApiKey` |
 
 App Service caches resolved KV values; rotating a secret takes effect on the next reference refresh (~24h, or immediate via portal "Refresh Key Vault references").
 
@@ -91,6 +92,7 @@ Optional parameters:
 | `-SecondaryLocation` | `eastus2` | region for the AI VNet + OpenAI account |
 | `-DevClientIp` | _empty_ | optional IPv4 to whitelist on the SQL firewall for ad-hoc local EF migrations; leave blank to keep SQL fully private |
 | `-AnthropicApiKey` | _empty_ | optional `sk-ant-…`; when supplied it's stored in Key Vault and exposed via a KV ref |
+| `-TroveApiKey` | _empty_ | optional NLA Trove API key; when supplied it's stored in Key Vault and exposed via a KV ref |
 
 What the script does:
 1. Signs you in to Azure + Microsoft Graph.
@@ -159,6 +161,20 @@ The Anthropic provider hits `api.anthropic.com` directly (no Azure resource need
 ```
 
 The script passes the key to Bicep, which writes it to Key Vault as `AIAnthropicApiKey`. The `AI__Anthropic__ApiKey` App Setting becomes a KV reference. Rotate later by re-running the deploy with a new key.
+
+## ISBN lookup providers
+
+`BookLookupService` tries Open Library first, then Google Books. Both are keyless and zero-config. A third provider, **Trove** (National Library of Australia), sits at the end of the chain and specifically catches self-published / Australian titles the other two tend to miss. Trove requires a free API key.
+
+### Trove (optional)
+
+Register at `https://trove.nla.gov.au/about/create-something/using-api` — approvals can take a few days. Once you have the key, provision it the same way as the Anthropic key:
+
+```powershell
+./deploy.ps1 -TenantId … -SubscriptionId … -TroveApiKey '<your-key>'
+```
+
+The script writes it to Key Vault as `TroveApiKey`; the `Trove__ApiKey` App Setting becomes a KV reference. Without a key, the Trove branch of the lookup chain is skipped silently — Open Library and Google Books continue to work as before.
 
 ### Azure OpenAI (gpt-4o, eastus2)
 

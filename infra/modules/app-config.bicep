@@ -16,6 +16,9 @@ param keyVaultName string
 @description('True if the optional Anthropic API key was supplied (and therefore stored in KV). When false the AI__Anthropic__ApiKey setting is omitted.')
 param hasAnthropicKey bool = false
 
+@description('True if the optional Trove API key was supplied (and therefore stored in KV). When false the Trove__ApiKey setting is omitted.')
+param hasTroveKey bool = false
+
 // AI provider config (non-secret values only — secrets resolve via KV refs).
 // MicrosoftFoundry settings are intentionally omitted: this subscription is
 // Sponsored, so Claude on Foundry isn't deployable; the MicrosoftFoundry
@@ -34,6 +37,7 @@ var kvBase = 'https://${keyVaultName}.vault.azure.net/secrets'
 var authClientSecretRef = '@Microsoft.KeyVault(SecretUri=${kvBase}/AuthClientSecret/)'
 var openAIKeyRef = '@Microsoft.KeyVault(SecretUri=${kvBase}/AIAzureOpenAIApiKey/)'
 var anthropicKeyRef = '@Microsoft.KeyVault(SecretUri=${kvBase}/AIAnthropicApiKey/)'
+var troveKeyRef = '@Microsoft.KeyVault(SecretUri=${kvBase}/TroveApiKey/)'
 
 // Build app settings as a single object so prod and staging stay in sync.
 // Conditional members let us omit Anthropic when no key was provided.
@@ -46,7 +50,8 @@ var baseAppSettings = {
   AI__AzureOpenAI__ApiKey: openAIKeyRef
   AI__AzureOpenAI__Deployment: aiAzureOpenAIDeployment
 }
-var appSettingsValues = hasAnthropicKey ? union(baseAppSettings, { AI__Anthropic__ApiKey: anthropicKeyRef }) : baseAppSettings
+var withAnthropic = hasAnthropicKey ? union(baseAppSettings, { AI__Anthropic__ApiKey: anthropicKeyRef }) : baseAppSettings
+var appSettingsValues = hasTroveKey ? union(withAnthropic, { Trove__ApiKey: troveKeyRef }) : withAnthropic
 
 resource app 'Microsoft.Web/sites@2023-12-01' existing = {
   name: appServiceName

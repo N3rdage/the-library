@@ -2,10 +2,14 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using BookTracker.Data.Models;
+using Microsoft.Extensions.Options;
 
 namespace BookTracker.Web.Services;
 
-public class BookLookupService(HttpClient http, ILogger<BookLookupService> logger) : IBookLookupService
+public class BookLookupService(
+    HttpClient http,
+    ILogger<BookLookupService> logger,
+    IOptions<TroveOptions> troveOptions) : IBookLookupService
 {
     public async Task<BookLookupResult?> LookupByIsbnAsync(string isbn, CancellationToken ct)
     {
@@ -15,8 +19,13 @@ public class BookLookupService(HttpClient http, ILogger<BookLookupService> logge
             return null;
         }
 
+        // Trove (National Library of Australia) sits last in the chain as a
+        // coverage-of-last-resort for self-published / Australian titles that
+        // Open Library and Google Books tend to miss. Skipped silently when
+        // no API key is configured.
         return await TryOpenLibraryAsync(cleanIsbn, ct)
-            ?? await TryGoogleBooksAsync(cleanIsbn, ct);
+            ?? await TryGoogleBooksAsync(cleanIsbn, ct)
+            ?? await TryTroveAsync(cleanIsbn, ct);
     }
 
     public async Task<IReadOnlyList<BookSearchCandidate>> SearchByTitleAuthorAsync(
@@ -149,6 +158,82 @@ public class BookLookupService(HttpClient http, ILogger<BookLookupService> logge
         }
     }
 
+    private async Task<BookLookupResult?> TryTroveAsync(string isbn, CancellationToken ct)
+    {
+        var key = troveOptions.Value.ApiKey;
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return null;
+        }
+
+        try
+        {
+            // include=all pulls in subject + contributor so we can map genres
+            // and author. n=1 because we only care about the top match.
+            var query = Uri.EscapeDataString($"isbn:{isbn}");
+            var url = $"https://api.trove.nla.gov.au/v3/result?q={query}&category=book&encoding=json&n=1&include=all&key={Uri.EscapeDataString(key)}";
+            var doc = await http.GetFromJsonAsync<TroveResponse>(url, ct);
+            var work = doc?.Category?
+                .FirstOrDefault(c => string.Equals(c.Code, "book", StringComparison.OrdinalIgnoreCase))?
+                .Records?.Work?.FirstOrDefault();
+            if (work is null || string.IsNullOrWhiteSpace(work.Title))
+            {
+                return null;
+            }
+
+            // Trove v3 returns multi-valued fields as arrays but occasionally
+            // falls back to a single string when there's only one value — the
+            // helper flattens both shapes.
+            var author = TroveStringValues(work.Contributor).FirstOrDefault();
+            var genres = TroveStringValues(work.Subject)
+                .Select(CleanGenre)
+                .Where(n => n is not null)
+                .Cast<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(10)
+                .ToList();
+            var (date, precision) = ParseLooseDate(work.Issued);
+
+            return new BookLookupResult(
+                Isbn: isbn,
+                Title: work.Title,
+                Subtitle: null,
+                Author: author,
+                Publisher: null,
+                GenreCandidates: genres,
+                DatePrinted: date,
+                CoverUrl: null,
+                Source: "Trove",
+                DatePrintedPrecision: precision);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Trove lookup failed for ISBN {Isbn}", isbn);
+            return null;
+        }
+    }
+
+    private static IEnumerable<string> TroveStringValues(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.String:
+                var s = element.GetString();
+                if (!string.IsNullOrWhiteSpace(s)) yield return s;
+                break;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.String)
+                    {
+                        var str = item.GetString();
+                        if (!string.IsNullOrWhiteSpace(str)) yield return str;
+                    }
+                }
+                break;
+        }
+    }
+
     private static string? CleanGenre(string raw) => GenreCandidateCleaner.Clean(raw);
 
     // Open Library / Google Books often only give a year ("1934") so we
@@ -224,5 +309,29 @@ public class BookLookupService(HttpClient http, ILogger<BookLookupService> logge
         [JsonPropertyName("first_publish_year")] public int? FirstPublishYear { get; set; }
         [JsonPropertyName("edition_count")] public int? EditionCount { get; set; }
         [JsonPropertyName("cover_i")] public int? CoverId { get; set; }
+    }
+
+    private sealed class TroveResponse
+    {
+        [JsonPropertyName("category")] public List<TroveCategory>? Category { get; set; }
+    }
+    private sealed class TroveCategory
+    {
+        [JsonPropertyName("code")] public string? Code { get; set; }
+        [JsonPropertyName("records")] public TroveRecords? Records { get; set; }
+    }
+    private sealed class TroveRecords
+    {
+        [JsonPropertyName("total")] public int Total { get; set; }
+        [JsonPropertyName("work")] public List<TroveWork>? Work { get; set; }
+    }
+    private sealed class TroveWork
+    {
+        [JsonPropertyName("title")] public string? Title { get; set; }
+        [JsonPropertyName("issued")] public string? Issued { get; set; }
+        // contributor / subject arrive as either a single string or an array;
+        // JsonElement lets TroveStringValues normalise both shapes.
+        [JsonPropertyName("contributor")] public JsonElement Contributor { get; set; }
+        [JsonPropertyName("subject")] public JsonElement Subject { get; set; }
     }
 }
