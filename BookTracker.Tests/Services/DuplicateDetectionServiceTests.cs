@@ -54,6 +54,57 @@ public class DuplicateDetectionServiceTests
         Assert.Equal(3, report.Authors.Count);
     }
 
+    [Fact]
+    public async Task Authors_detects_surname_plus_first_initial_variants()
+    {
+        // The Preston case that prompted loosening the matcher: full first,
+        // diminutive, and initial-only should all be flagged together.
+        await SeedAuthorsAsync("Douglas Preston", "Doug Preston", "D Preston");
+
+        var report = await CreateService().DetectAllAsync();
+
+        // Three authors in one matching group → 3 pairs.
+        Assert.Equal(3, report.Authors.Count);
+        Assert.All(report.Authors, p =>
+            Assert.Contains("surname", p.MatchReason, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Authors_surname_matcher_is_case_insensitive_for_typos()
+    {
+        // Shift-key typos like "PReston" should still normalise to "preston".
+        await SeedAuthorsAsync("Douglas Preston", "Douglas PReston");
+
+        var report = await CreateService().DetectAllAsync();
+
+        // Exact-after-normalise should catch this — tighter reason wins.
+        var pair = Assert.Single(report.Authors);
+        Assert.Equal("Names normalise to the same value", pair.MatchReason);
+    }
+
+    [Fact]
+    public async Task Authors_surname_matcher_does_not_flag_different_surnames()
+    {
+        await SeedAuthorsAsync("Stephen King", "Stephen Hawking");
+
+        var report = await CreateService().DetectAllAsync();
+
+        Assert.Empty(report.Authors);
+    }
+
+    [Fact]
+    public async Task Authors_surname_matcher_reports_only_once_when_both_strategies_match()
+    {
+        // Two exact-matching variants also trivially match surname+initial.
+        // The tighter strategy should claim the pair; no duplicate row.
+        await SeedAuthorsAsync("J.R.R. Tolkien", "JRR Tolkien");
+
+        var report = await CreateService().DetectAllAsync();
+
+        var pair = Assert.Single(report.Authors);
+        Assert.Equal("Names normalise to the same value", pair.MatchReason);
+    }
+
     // ─── Works ────────────────────────────────────────────────────────
 
     [Fact]

@@ -138,40 +138,71 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
     {
         var authors = await db.Authors
             .Include(a => a.CanonicalAuthor)
-            .Select(a => new
-            {
+            .Select(a => new AuthorProjection(
                 a.Id,
                 a.Name,
                 a.CanonicalAuthorId,
-                CanonicalName = a.CanonicalAuthor != null ? a.CanonicalAuthor.Name : null,
-                WorkCount = a.Works.Count
-            })
+                a.CanonicalAuthor != null ? a.CanonicalAuthor.Name : null,
+                a.Works.Count))
             .ToListAsync(ct);
 
         var pairs = new List<AuthorDuplicatePair>();
+        var seen = new HashSet<(int, int)>();
+
+        void Emit(AuthorProjection a, AuthorProjection b, string reason)
+        {
+            var key = a.Id < b.Id ? (a.Id, b.Id) : (b.Id, a.Id);
+            if (!seen.Add(key)) return;
+            var lower = key.Item1 == a.Id ? a : b;
+            var higher = key.Item1 == a.Id ? b : a;
+            pairs.Add(new AuthorDuplicatePair(
+                Lower: new AuthorSnapshot(lower.Id, lower.Name, lower.WorkCount, lower.CanonicalAuthorId, lower.CanonicalName),
+                Higher: new AuthorSnapshot(higher.Id, higher.Name, higher.WorkCount, higher.CanonicalAuthorId, higher.CanonicalName),
+                Dismissed: LookupDismissal(ignored, key.Item1, key.Item2),
+                MatchReason: reason));
+        }
+
+        // Strategy 1 (tighter): full normalised name match. "J.R.R. Tolkien"
+        // vs "JRR Tolkien" vs "J R R Tolkien" — all collapse to "jrr tolkien".
         foreach (var group in authors.GroupBy(a => DuplicateNormalization.Author(a.Name)))
         {
             if (string.IsNullOrEmpty(group.Key) || group.Count() < 2) continue;
-
             var members = group.OrderBy(a => a.Id).ToList();
             for (var i = 0; i < members.Count; i++)
             {
                 for (var j = i + 1; j < members.Count; j++)
                 {
-                    var a = members[i];
-                    var b = members[j];
-                    var snapA = new AuthorSnapshot(a.Id, a.Name, a.WorkCount, a.CanonicalAuthorId, a.CanonicalName);
-                    var snapB = new AuthorSnapshot(b.Id, b.Name, b.WorkCount, b.CanonicalAuthorId, b.CanonicalName);
-                    pairs.Add(new AuthorDuplicatePair(
-                        Lower: snapA,
-                        Higher: snapB,
-                        Dismissed: LookupDismissal(ignored, a.Id, b.Id),
-                        MatchReason: "Names normalise to the same value"));
+                    Emit(members[i], members[j], "Names normalise to the same value");
                 }
             }
         }
+
+        // Strategy 2 (looser): same normalised surname + same first-name
+        // initial. Catches "Doug Preston" / "Douglas Preston" / "D Preston"
+        // together. False positives (same surname, same initial, different
+        // people) are handled by Dismiss.
+        foreach (var group in authors.GroupBy(a => DuplicateNormalization.AuthorSurnameInitialKey(a.Name)))
+        {
+            if (string.IsNullOrEmpty(group.Key) || group.Count() < 2) continue;
+            var members = group.OrderBy(a => a.Id).ToList();
+            for (var i = 0; i < members.Count; i++)
+            {
+                for (var j = i + 1; j < members.Count; j++)
+                {
+                    Emit(members[i], members[j], "Same surname and same first-name initial");
+                }
+            }
+        }
+
         return pairs;
     }
+
+    private sealed record AuthorProjection(
+        int Id,
+        string Name,
+        int? CanonicalAuthorId,
+        string? CanonicalName,
+        int WorkCount);
 
     private static async Task<List<WorkDuplicatePair>> DetectWorksAsync(
         BookTrackerDbContext db,
@@ -419,6 +450,21 @@ internal static class DuplicateNormalization
         if (run.Length > 0) output.Add(run.ToString());
 
         return string.Join(' ', output);
+    }
+
+    // Secondary author key: "<surname>|<first-name-initial>". Returns empty
+    // if the normalised name has fewer than two tokens (can't identify a
+    // first-name initial). Used by the looser author-dup detection pass so
+    // "Doug Preston" / "Douglas Preston" / "D Preston" surface as candidates.
+    public static string AuthorSurnameInitialKey(string? name)
+    {
+        var normalized = Author(name);
+        if (string.IsNullOrWhiteSpace(normalized)) return "";
+        var tokens = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length < 2) return "";
+        var surname = tokens[^1];
+        var firstInitial = tokens[0][0];
+        return $"{surname}|{firstInitial}";
     }
 
     // Normalise a title for comparison. Lowercase, strip punctuation, collapse

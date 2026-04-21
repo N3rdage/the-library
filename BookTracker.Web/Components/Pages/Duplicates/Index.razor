@@ -8,10 +8,12 @@
 <h1 class="mb-3">Duplicates</h1>
 <p class="text-muted">
     Candidate duplicate pairs detected across Authors, Works, Books, and Editions.
-    Detection is deliberately conservative — only exact matches after normalisation
-    are surfaced. If a pair you expect is missing, edit one of the names/titles to
-    line them up and it will appear here. Merge actions arrive in the next release;
-    for now you can dismiss false positives (and un-ignore them later).
+    Authors match either on normalised full name or on shared surname + first-name
+    initial (so "Doug Preston" / "Douglas Preston" / "D Preston" surface together).
+    Works, Books, and Editions need an exact match after normalisation — edit a
+    name or title to line them up if one you expect is missing. Merge actions
+    arrive in the next release; for now you can dismiss false positives (and
+    un-ignore them later).
 </p>
 
 @if (!string.IsNullOrEmpty(VM.SuccessMessage))
