@@ -16,6 +16,7 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
     public DbSet<MaintenanceLog> MaintenanceLogs => Set<MaintenanceLog>();
     public DbSet<Work> Works => Set<Work>();
     public DbSet<Author> Authors => Set<Author>();
+    public DbSet<IgnoredDuplicate> IgnoredDuplicates => Set<IgnoredDuplicate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -121,5 +122,12 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .WithMany(a => a.Aliases)
             .HasForeignKey(a => a.CanonicalAuthorId)
             .OnDelete(DeleteBehavior.NoAction);
+
+        // IgnoredDuplicate pairs: unique on (EntityType, LowerId, HigherId)
+        // so the same pair can't be dismissed twice. Pair IDs are normalised
+        // with the smaller ID first in DuplicateDetectionService.
+        modelBuilder.Entity<IgnoredDuplicate>()
+            .HasIndex(d => new { d.EntityType, d.LowerId, d.HigherId })
+            .IsUnique();
     }
 }

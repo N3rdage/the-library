@@ -1,0 +1,22 @@
+@using BookTracker.Web.Services
+
+<div>
+    <div class="fw-semibold mb-1">@Snap.Title</div>
+    @if (!string.IsNullOrWhiteSpace(Snap.Subtitle))
+    {
+        <div class="small text-muted fst-italic mb-1">@Snap.Subtitle</div>
+    }
+    <div class="small mb-1">by @Snap.AuthorName</div>
+    <div class="small text-muted">
+        @Snap.BookCount book@(Snap.BookCount == 1 ? "" : "s")
+        @if (Snap.FirstPublishedYear.HasValue)
+        {
+            <text> · first pub. @Snap.FirstPublishedYear</text>
+        }
+        · id @Snap.Id
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public WorkSnapshot Snap { get; set; } = null!;
+}
