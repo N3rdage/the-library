@@ -22,6 +22,10 @@ param secondaryLocation string = 'eastus2'
 @secure()
 param anthropicApiKey string = ''
 
+@description('Optional Trove (NLA) API key. When supplied it is stored in Key Vault and exposed as the Trove__ApiKey app setting via a KV reference.')
+@secure()
+param troveApiKey string = ''
+
 // Short suffix to keep globally-unique names (App Service hostname, SQL server
 // name) stable across re-deploys while still being unique per-subscription.
 var uniqueSuffix = substring(uniqueString(resourceGroup().id), 0, 6)
@@ -128,6 +132,7 @@ module kv './keyvault.bicep' = {
     stagingSlotPrincipalId: app.outputs.stagingPrincipalId
     authClientSecret: authClientSecret
     anthropicApiKey: anthropicApiKey
+    troveApiKey: troveApiKey
   }
 }
 
@@ -199,6 +204,7 @@ module appConfig './app-config.bicep' = {
     appInsightsConnectionString: obs.outputs.appInsightsConnectionString
     keyVaultName: keyVaultName
     hasAnthropicKey: !empty(anthropicApiKey)
+    hasTroveKey: !empty(troveApiKey)
     aiAzureOpenAIEndpoint: ai.outputs.openAIEndpoint
     aiAzureOpenAIDeployment: ai.outputs.openAIDeploymentName
   }

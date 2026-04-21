@@ -91,7 +91,7 @@ The app follows an MVVM (Model-View-ViewModel) pattern:
 
 - **ViewModels** are plain C# classes under `BookTracker.Web/ViewModels/`. They hold all state and business logic.
 - **Razor components** are thin views that inject a VM and bind to its properties. They handle only UI concerns: JS interop, navigation, Blazor lifecycle.
-- **Services** handle external concerns: ISBN lookup (Open Library / Google Books), AI features (Anthropic API), series matching.
+- **Services** handle external concerns: ISBN lookup (Open Library / Google Books / Trove), AI features (Anthropic API), series matching.
 
 VM lifetime:
 - **Transient**: most VMs — each component instance gets its own.
@@ -134,7 +134,7 @@ A short-lived context is created per operation. Never inject `DbContext` directl
 ## Services
 
 ### BookLookupService
-Looks up book metadata by ISBN. Tries Open Library first, falls back to Google Books. Returns `BookLookupResult` with title, author, publisher, genres, cover URL, etc.
+Looks up book metadata by ISBN. Tries Open Library first, falls back to Google Books, then Trove (NLA) as a coverage-of-last-resort for self-published / Australian titles the other two tend to miss. Trove is skipped silently when no API key is configured. Returns `BookLookupResult` with title, author, publisher, genres, cover URL, etc.
 
 ### SeriesMatchService
 Local series detection after ISBN lookup. Strategies:
@@ -203,8 +203,9 @@ CI runs `dotnet test` on all PRs to main.
 | `AI:AzureOpenAI:Endpoint` | Bicep output | Azure OpenAI endpoint URL |
 | `AI:AzureOpenAI:ApiKey` | Key Vault ref (written by Bicep via `listKeys()`) | Azure OpenAI key |
 | `AI:AzureOpenAI:Deployment` | Bicep output | GPT-4o deployment name |
+| `Trove:ApiKey` | Key Vault ref (prod) / appsettings (dev) | National Library of Australia API key — optional third-line ISBN lookup provider |
 
-In prod, secret App Settings resolve via `@Microsoft.KeyVault(SecretUri=…)` references — the App Service's managed identity has `Key Vault Secrets User` on the vault. `deploy.ps1` writes `AuthClientSecret` + optionally `AIAnthropicApiKey` to the vault; `ai-services.bicep` writes `AIAzureOpenAIApiKey` via `listKeys()` against the newly-created OpenAI account.
+In prod, secret App Settings resolve via `@Microsoft.KeyVault(SecretUri=…)` references — the App Service's managed identity has `Key Vault Secrets User` on the vault. `deploy.ps1` writes `AuthClientSecret` + optionally `AIAnthropicApiKey` and `TroveApiKey` to the vault; `ai-services.bicep` writes `AIAzureOpenAIApiKey` via `listKeys()` against the newly-created OpenAI account.
 
 Dev config templates: `appsettings.Example.json`, `appsettings.Development.Example.json`. Copy and fill in secrets. Only configure providers you want to use — the toggle auto-detects available providers.
 
