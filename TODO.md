@@ -37,7 +37,7 @@ Outstanding work items for BookTracker. This is the single source of truth — c
 
 Detection + `/duplicates` listing shipped in PR 1 (this branch). Remaining PRs in the series:
 
-- [ ] **PR 2 — Author merge**: side-by-side review → pick winner, reassign `Work.AuthorId` + aliases from loser → delete loser. Transactional. User copy/pastes any fields from loser they want to keep before confirming.
+- [x] **PR 2 — Author merge** (shipped): side-by-side review at `/duplicates/merge/author/{a}/{b}`, reassigns works + aliases, auto-promotes winner to canonical when winner was an alias of loser, refuses when the two resolve to different canonicals.
 - [ ] **PR 3 — Work merge + Add-Work-to-Book via search** (bundled; shares the Work-search UI): reassign `BookWork` join rows, enrich winner from loser's populated fields (subtitle, genres, series, `FirstPublishedDate`), delete loser. Add "search existing Works" affordance on the Edit Book page to attach a story to an anthology.
 - [ ] **PR 4 — Edition merge**: reassign `Copy.EditionId`, enrich fields, delete loser. Same-Book only (cross-Book edition dupes imply the Books are dupes → handle those first).
 - [ ] **PR 5 — Book merge**: union Works/Tags, move all Editions, merge any duplicate Editions that result, delete loser.

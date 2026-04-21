@@ -56,7 +56,8 @@ else
             @foreach (var pair in VM.ActiveAuthorPairs)
             {
                 <PairCard MatchReason="@pair.MatchReason"
-                          OnDismiss="() => VM.DismissAsync(DuplicateEntityType.Author, pair.Lower.Id, pair.Higher.Id)">
+                          OnDismiss="() => VM.DismissAsync(DuplicateEntityType.Author, pair.Lower.Id, pair.Higher.Id)"
+                          MergeHref="@($"/duplicates/merge/author/{pair.Lower.Id}/{pair.Higher.Id}")">
                     <Left><AuthorSide Snap="pair.Lower" /></Left>
                     <Right><AuthorSide Snap="pair.Higher" /></Right>
                 </PairCard>
@@ -205,5 +206,26 @@ else
     private bool _showDismissedBooks;
     private bool _showDismissedEditions;
 
-    protected override async Task OnInitializedAsync() => await VM.LoadAsync();
+    // Surfaced from a successful merge redirect (e.g. from /duplicates/merge/author/*).
+    [SupplyParameterFromQuery(Name = "mergedAuthorWinner")] public string? MergedAuthorWinner { get; set; }
+    [SupplyParameterFromQuery(Name = "mergedAuthorLoser")] public string? MergedAuthorLoser { get; set; }
+    [SupplyParameterFromQuery(Name = "worksReassigned")] public int? WorksReassigned { get; set; }
+    [SupplyParameterFromQuery(Name = "aliasesReassigned")] public int? AliasesReassigned { get; set; }
+    [SupplyParameterFromQuery(Name = "promoted")] public string? Promoted { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await VM.LoadAsync();
+
+        if (!string.IsNullOrEmpty(MergedAuthorWinner) && !string.IsNullOrEmpty(MergedAuthorLoser))
+        {
+            VM.ActiveTab = DuplicateEntityType.Author;
+            var works = WorksReassigned ?? 0;
+            var aliases = AliasesReassigned ?? 0;
+            var promoted = Promoted == "1";
+            VM.SuccessMessage = $"Merged \"{MergedAuthorLoser}\" into \"{MergedAuthorWinner}\" — "
+                + $"{works} work{(works == 1 ? "" : "s")}, {aliases} alias{(aliases == 1 ? "" : "es")} reassigned."
+                + (promoted ? $" \"{MergedAuthorWinner}\" was promoted to canonical." : "");
+        }
+    }
 }
