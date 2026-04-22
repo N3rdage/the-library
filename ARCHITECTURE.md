@@ -204,8 +204,8 @@ For older books without barcodes, `photo-capture.js` opens the camera for a stil
 
 Mid-migration from Bootstrap to **MudBlazor 9** (`BookTracker.Web.csproj`). Current state:
 
-- **Pilot pages using MudBlazor:** Home, Duplicates/MergeBook. These use `MudCard`, `MudButton`, `MudText`, `MudContainer`, etc.
-- **All other pages use Bootstrap** (hand-rolled cards, `.container`, `.btn`, etc.). The navbar in `MainLayout.razor` is still Bootstrap.
+- **Pages using MudBlazor:** Home, Duplicates/MergeBook, Book Detail (`/books/{id}`) and its dialogs (BookEditDialog, WorkEditDialog, EditionFormDialog, CopyFormDialog), the `MudGenrePicker` shared component, Authors. These use `MudCard`, `MudButton`, `MudText`, `MudContainer`, `MudDialog`, `MudAutocomplete`, etc.
+- **Pages still on Bootstrap:** Library list, Book Add, Book Bulk Add, Book Edit (the "full edit page" escape hatch), Series, Shopping, AI Assistant, Duplicates list. The navbar in `MainLayout.razor` is still Bootstrap.
 - **Rollout strategy:** no migration deadline — pages convert as they're touched for other reasons. Low-traffic pages may stay Bootstrap indefinitely; that's fine.
 - **Coexistence:** both stylesheets are loaded in `App.razor`. MudBlazor's four root providers (`MudThemeProvider`, `MudPopoverProvider`, `MudDialogProvider`, `MudSnackbarProvider`) sit in `MainLayout.razor` — harmless on Bootstrap-only pages. Each page picks one lane.
 - **Theme:** custom "warm library" palette in `BookTracker.Web/Theme/BookTrackerTheme.cs` (oxblood / antique brass / forest / parchment / espresso). Applied globally via `<MudThemeProvider Theme="BookTrackerTheme.Default" />`. Dark mode not wired yet.
