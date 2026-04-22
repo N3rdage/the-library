@@ -68,5 +68,31 @@ public static class GenreSeed
         new("Western", null),
         new("Graphic Novels", null),
         new("Short Story Collections", null),
+
+        // Non-fiction starter set — reference, art, and religious books.
+        // Further non-fiction branches (History, Biography, Science,
+        // Poetry, etc.) are left for a follow-up expansion.
+        new("Reference", null),
+        new("Dictionaries", "Reference"),
+        new("Encyclopedias", "Reference"),
+        new("Atlases", "Reference"),
+        new("Field Guides", "Reference"),
+        new("Style Guides", "Reference"),
+        new("Language Learning", "Reference"),
+
+        new("Art", null),
+        new("Art History", "Art"),
+        new("Artist Monographs", "Art"),
+        new("Art Theory", "Art"),
+        new("Photography", "Art"),
+        new("Architecture", "Art"),
+        new("Design", "Art"),
+
+        new("Religion & Spirituality", null),
+        new("Sacred Texts", "Religion & Spirituality"),
+        new("Biblical Studies", "Religion & Spirituality"),
+        new("Theology", "Religion & Spirituality"),
+        new("Comparative Religion", "Religion & Spirituality"),
+        new("Mythology", "Religion & Spirituality"),
     };
 }
