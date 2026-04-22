@@ -245,6 +245,14 @@ Dev config templates: `appsettings.Example.json`, `appsettings.Development.Examp
 - Azure Bicep templates under `infra/`. SQL, Key Vault, and Azure OpenAI are reachable only via Private Endpoints; the App Service uses VNet integration + a peered eastus2 VNet to reach OpenAI. See `infra/README.md` for the full topology.
 - Auto-migration on startup (`TODO.md`: switch to deploy-time migration bundle when going multi-instance)
 
+## Progressive Web App (PWA)
+
+The app is installable on mobile (iOS Safari, Android Chrome) and desktop (Edge, Chrome) as a PWA — home-screen icon, standalone display (no browser chrome), theme-colour integration. Wired up in `App.razor` with a standard `manifest.webmanifest` + icons + apple-touch meta tags.
+
+Interactive Server mode means the app needs a live SignalR connection to function — the service worker is there for asset caching (faster repeat loads), not offline use. Strategy is network-first with cache fallback for same-origin GETs; `/_blazor/*` passes through untouched. Cache version bumps on `service-worker.js` invalidate old caches cleanly.
+
+Icons live under `wwwroot/icons/`; regenerate them from the script in `scripts/generate-pwa-icons.ps1` (System.Drawing-based so no external tools required). The SVG master is at `wwwroot/icons/icon.svg`.
+
 ## Key conventions
 
 - **Branching**: never commit to main. Feature branches with `feat/`, `fix/`, `chore/`, `docs/`, `refactor/` prefixes. Squash-merge.
