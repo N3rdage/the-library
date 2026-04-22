@@ -78,6 +78,7 @@ builder.Services.AddTransient<GenrePickerViewModel>();
 builder.Services.AddTransient<BookListViewModel>();
 builder.Services.AddTransient<BookAddViewModel>();
 builder.Services.AddTransient<BookEditViewModel>();
+builder.Services.AddTransient<BookDetailViewModel>();
 builder.Services.AddTransient<BulkAddViewModel>();
 builder.Services.AddTransient<SeriesListViewModel>();
 builder.Services.AddTransient<SeriesEditViewModel>();
