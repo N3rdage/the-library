@@ -1,5 +1,6 @@
 @page "/"
 @inject HomeViewModel VM
+@inject NavigationManager Nav
 
 <PageTitle>Home - BookTracker</PageTitle>
 
@@ -86,7 +87,7 @@
 
     <MudGrid Spacing="3" Class="mb-4">
         <MudItem xs="12" sm="6">
-            <MudCard Elevation="2" Class="h-100">
+            <MudCard Elevation="2" Class="h-100 clickable-tile" @onclick='@(() => Nav.NavigateTo("/books"))' role="link" tabindex="0">
                 <MudCardContent>
                     <MudStack Row AlignItems="AlignItems.Center" Spacing="3">
                         <MudText Typo="Typo.h3" Class="mud-text-secondary">📚</MudText>
@@ -99,7 +100,7 @@
             </MudCard>
         </MudItem>
         <MudItem xs="12" sm="6">
-            <MudCard Elevation="2" Class="h-100">
+            <MudCard Elevation="2" Class="h-100 clickable-tile" @onclick='@(() => Nav.NavigateTo("/authors"))' role="link" tabindex="0">
                 <MudCardContent>
                     <MudStack Row AlignItems="AlignItems.Center" Spacing="3">
                         <MudText Typo="Typo.h3" Class="mud-text-secondary">✍️</MudText>
