@@ -128,7 +128,8 @@ else
             @foreach (var pair in VM.ActiveBookPairs)
             {
                 <PairCard MatchReason="@pair.MatchReason"
-                          OnDismiss="() => VM.DismissAsync(DuplicateEntityType.Book, pair.Lower.Id, pair.Higher.Id)">
+                          OnDismiss="() => VM.DismissAsync(DuplicateEntityType.Book, pair.Lower.Id, pair.Higher.Id)"
+                          MergeHref="@($"/duplicates/merge/book/{pair.Lower.Id}/{pair.Higher.Id}")">
                     <Left><BookSide Snap="pair.Lower" /></Left>
                     <Right><BookSide Snap="pair.Higher" /></Right>
                 </PairCard>
@@ -228,6 +229,14 @@ else
     [SupplyParameterFromQuery(Name = "copiesReassigned")] public int? CopiesReassigned { get; set; }
     [SupplyParameterFromQuery(Name = "editionFieldsAutoFilled")] public int? EditionFieldsAutoFilled { get; set; }
 
+    // Book merge redirect.
+    [SupplyParameterFromQuery(Name = "mergedBookWinner")] public string? MergedBookWinner { get; set; }
+    [SupplyParameterFromQuery(Name = "mergedBookLoser")] public string? MergedBookLoser { get; set; }
+    [SupplyParameterFromQuery(Name = "editionsReassigned")] public int? EditionsReassigned { get; set; }
+    [SupplyParameterFromQuery(Name = "worksUnioned")] public int? WorksUnioned { get; set; }
+    [SupplyParameterFromQuery(Name = "tagsUnioned")] public int? TagsUnioned { get; set; }
+    [SupplyParameterFromQuery(Name = "bookFieldsAutoFilled")] public int? BookFieldsAutoFilled { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         await VM.LoadAsync();
@@ -261,6 +270,20 @@ else
             var autoFilled = EditionFieldsAutoFilled ?? 0;
             var msg = $"Merged \"{MergedEditionLoser}\" into \"{MergedEditionWinner}\" — "
                 + $"{copies} cop{(copies == 1 ? "y" : "ies")} reassigned";
+            if (autoFilled > 0) msg += $", {autoFilled} field{(autoFilled == 1 ? "" : "s")} auto-filled from loser";
+            VM.SuccessMessage = msg + ".";
+        }
+        else if (!string.IsNullOrEmpty(MergedBookWinner) && !string.IsNullOrEmpty(MergedBookLoser))
+        {
+            VM.ActiveTab = DuplicateEntityType.Book;
+            var editions = EditionsReassigned ?? 0;
+            var works = WorksUnioned ?? 0;
+            var tags = TagsUnioned ?? 0;
+            var autoFilled = BookFieldsAutoFilled ?? 0;
+            var msg = $"Merged \"{MergedBookLoser}\" into \"{MergedBookWinner}\" — "
+                + $"{editions} edition{(editions == 1 ? "" : "s")} reassigned";
+            if (works > 0) msg += $", {works} work{(works == 1 ? "" : "s")} added";
+            if (tags > 0) msg += $", {tags} tag{(tags == 1 ? "" : "s")} added";
             if (autoFilled > 0) msg += $", {autoFilled} field{(autoFilled == 1 ? "" : "s")} auto-filled from loser";
             VM.SuccessMessage = msg + ".";
         }

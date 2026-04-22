@@ -130,6 +130,7 @@ A short-lived context is created per operation. Never inject `DbContext` directl
 | `/duplicates/merge/author/{idA}/{idB}` | Merge authors | Side-by-side review of the pair, radio to pick a winner, preview of impact (N works + M aliases to reassign), transactional merge. Refuses when the two authors resolve to different canonicals — user resolves aliases on `/authors` first. |
 | `/duplicates/merge/work/{idA}/{idB}` | Merge works | Side-by-side review, radio to pick a winner, preview of impact (books to reassign + any books that already contain both → loser dropped). Transactional with auto-fill-empties semantics. Refuses if the two resolve to different authors (merge authors first). |
 | `/duplicates/merge/edition/{idA}/{idB}` | Merge editions | Side-by-side review with cover thumbnails, winner radio, preview of copies to reassign + which empty winner fields will be auto-filled from loser (ISBN, date printed, publisher, cover). Refuses cross-book edition merges (merge the Books first). |
+| `/duplicates/merge/book/{idA}/{idB}` | Merge books | Side-by-side review with cover thumbnail, winner radio, preview of editions to reassign + works / tags to union + auto-fill hints (notes, cover, rating-if-unrated). No structural incompatibility path — Book merge is the aggregator and everything beneath it is moved or unioned. |
 
 ## Shared components
 
@@ -156,6 +157,9 @@ Merges two Work rows after user review. **Auto-fill-empties** semantics: any win
 
 ### EditionMergeService
 Merges two Edition rows belonging to the same Book after user review. Same shape as WorkMergeService: transactional, auto-fill-empties (ISBN, DatePrinted+Precision pair, CoverUrl, PublisherId), reassigns `Copy.EditionId`, clears stale `IgnoredDuplicate` rows, deletes the loser Edition. Refuses cross-Book merges (if the Editions are really the same, the Books themselves are duplicates and the Book-level merge should happen first).
+
+### BookMergeService
+Merges two Book rows. Reassigns Editions (which carry their Copies) via `Edition.BookId`, unions Works and Tags (dedup by ID), auto-fills empty winner fields (Notes, DefaultCoverArtUrl, Rating — where `Rating == 0` is treated as "unrated" since the stars-1-to-5 UI can't produce an active 0). Transactional; clears stale `IgnoredDuplicate` rows; deletes the loser Book. No structural incompatibility path — the Edition unique-ISBN index is global so two Books can never hold editions with overlapping non-null ISBNs. Any resulting no-ISBN Edition duplicates (same format/publisher/date) surface on `/duplicates` for separate cleanup.
 
 ### WorkSearchService
 Typeahead-style substring search across Works. Min 2 chars; case-insensitive via `ToLower()` on both sides (keeps InMemory tests honest). Ranks starts-with matches above contains-anywhere, alphabetical within. `excludeBookId` filter lets the Edit Book "Attach existing Work" UI exclude Works already attached. Returns up to `maxResults` results (default 20).
