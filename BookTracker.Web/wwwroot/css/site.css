@@ -119,4 +119,16 @@ body {
   .scanner-container video {
     max-height: 170px;
   }
+
+/* Home page stat tiles — rendered with MudCard + @onclick for nav. The
+   cursor + hover lift give the user a visual affordance that the tile
+   acts as a link. role="link" on the card itself carries the semantics
+   for assistive tech. */
+.clickable-tile {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.clickable-tile:hover {
+  transform: translateY(-2px);
+}
 }
