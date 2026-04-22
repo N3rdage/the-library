@@ -3,6 +3,7 @@
 @inject BookDetailViewModel VM
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 @* Book detail / View page — browse-first, MudBlazor pilot continuation.
    PR 1 shipped read-only. PR 2 adds inline auto-save for rating, status,
@@ -84,12 +85,29 @@
                 </MudStack>
 
                 <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" Class="mt-3">
-                    <MudButton Href="@($"/books/{book.Id}/edit")"
+                    <MudButton OnClick="OpenBookEditDialog"
                                Variant="Variant.Outlined"
                                Color="Color.Primary"
                                StartIcon="@Icons.Material.Filled.Edit"
                                Size="Size.Small">
-                        Edit all details
+                        Edit book details
+                    </MudButton>
+                    @if (VM.IsSingleWork && primary is not null)
+                    {
+                        <MudButton OnClick="@(() => OpenWorkEditDialog(primary.Id))"
+                                   Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Edit"
+                                   Size="Size.Small">
+                            Edit work
+                        </MudButton>
+                    }
+                    <MudButton Href="@($"/books/{book.Id}/edit")"
+                               Variant="Variant.Text"
+                               Color="Color.Default"
+                               StartIcon="@Icons.Material.Filled.OpenInNew"
+                               Size="Size.Small">
+                        Full edit page
                     </MudButton>
                     @if (primary?.Series is not null)
                     {
@@ -197,32 +215,45 @@
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">@w.AuthorName</MudText>
                                         </MudStack>
                                     </MudStack>
+                                    @* stopPropagation so clicks inside the expanded
+                                       region don't re-toggle the parent MudListItem. *@
                                     @if (expanded)
                                     {
-                                        <MudStack Spacing="1" Class="mt-2 ps-7">
-                                            @if (!string.IsNullOrEmpty(w.Subtitle))
-                                            {
-                                                <FieldRow Label="Subtitle" Value="@w.Subtitle" />
-                                            }
-                                            @if (!string.IsNullOrEmpty(w.FirstPublishedDisplay))
-                                            {
-                                                <FieldRow Label="First published" Value="@w.FirstPublishedDisplay" />
-                                            }
-                                            @if (w.Series is not null)
-                                            {
-                                                var seriesValue = w.Series.Order.HasValue ? $"{w.Series.Name} (#{w.Series.Order})" : w.Series.Name;
-                                                <FieldRow Label="@(w.Series.Type == SeriesType.Collection ? "Collection" : "Series")" Value="@seriesValue" />
-                                            }
-                                            @if (w.Genres.Count > 0)
-                                            {
-                                                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
-                                                    @foreach (var g in w.Genres)
-                                                    {
-                                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@g</MudChip>
-                                                    }
-                                                </MudStack>
-                                            }
-                                        </MudStack>
+                                        <div @onclick:stopPropagation="true">
+                                            <MudStack Spacing="1" Class="mt-2 ps-7">
+                                                @if (!string.IsNullOrEmpty(w.Subtitle))
+                                                {
+                                                    <FieldRow Label="Subtitle" Value="@w.Subtitle" />
+                                                }
+                                                @if (!string.IsNullOrEmpty(w.FirstPublishedDisplay))
+                                                {
+                                                    <FieldRow Label="First published" Value="@w.FirstPublishedDisplay" />
+                                                }
+                                                @if (w.Series is not null)
+                                                {
+                                                    var seriesValue = w.Series.Order.HasValue ? $"{w.Series.Name} (#{w.Series.Order})" : w.Series.Name;
+                                                    <FieldRow Label="@(w.Series.Type == SeriesType.Collection ? "Collection" : "Series")" Value="@seriesValue" />
+                                                }
+                                                @if (w.Genres.Count > 0)
+                                                {
+                                                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                                                        @foreach (var g in w.Genres)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@g</MudChip>
+                                                        }
+                                                    </MudStack>
+                                                }
+                                                <div class="mt-1">
+                                                    <MudButton OnClick="@(() => OpenWorkEditDialog(w.Id))"
+                                                               Variant="Variant.Outlined"
+                                                               Color="Color.Primary"
+                                                               StartIcon="@Icons.Material.Filled.Edit"
+                                                               Size="Size.Small">
+                                                        Edit work
+                                                    </MudButton>
+                                                </div>
+                                            </MudStack>
+                                        </div>
                                     }
                                 </MudListItem>
                             }
@@ -490,6 +521,40 @@
     {
         try { await VM.RemoveTagAsync(tagId); }
         catch (Exception ex) { Snackbar.Add($"Couldn't remove tag: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task OpenBookEditDialog()
+    {
+        if (VM.Book is null) return;
+        var parameters = new DialogParameters<BookEditDialog> { { x => x.BookId, VM.Book.Id } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<BookEditDialog>("Edit book details", parameters, options);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            Snackbar.Add("Book saved", Severity.Success);
+            await VM.InitializeAsync(BookId);
+            StateHasChanged();
+        }
+    }
+
+    private async Task OpenWorkEditDialog(int workId)
+    {
+        if (VM.Book is null) return;
+        var parameters = new DialogParameters<WorkEditDialog>
+        {
+            { x => x.WorkId, workId },
+            { x => x.BookId, VM.Book.Id },
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<WorkEditDialog>("Edit work", parameters, options);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            Snackbar.Add("Work saved", Severity.Success);
+            await VM.InitializeAsync(BookId);
+            StateHasChanged();
+        }
     }
 
     private static Color StatusColor(BookStatus status) => status switch

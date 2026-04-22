@@ -1,0 +1,111 @@
+@* Modal dialog for editing a single Work's fields (title, subtitle,
+   author with typeahead, first-published date, series + order) from
+   the View page. Genres are deliberately not in this dialog — the
+   hierarchical MudBlazor genre picker is its own future PR, so this
+   dialog links users to /edit for that one field. *@
+
+@inject WorkEditDialogViewModel VM
+
+<MudDialog>
+    <DialogContent>
+        @if (VM.NotFound)
+        {
+            <MudAlert Severity="Severity.Warning">Work not found.</MudAlert>
+        }
+        else
+        {
+            <MudStack Spacing="3" Style="min-width: 280px;">
+                <MudTextField T="string"
+                              @bind-Value="VM.Title"
+                              Label="Title"
+                              Required="true"
+                              RequiredError="Title is required."
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense" />
+                <MudTextField T="string"
+                              @bind-Value="VM.Subtitle"
+                              Label="Subtitle"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense" />
+                <MudAutocomplete T="string"
+                                 @bind-Value="VM.AuthorName"
+                                 SearchFunc="VM.SearchAuthorsAsync"
+                                 Label="Author"
+                                 Required="true"
+                                 RequiredError="Author is required."
+                                 Variant="Variant.Outlined"
+                                 Margin="Margin.Dense"
+                                 CoerceValue="true"
+                                 CoerceText="true"
+                                 ResetValueOnEmptyText="false"
+                                 MinCharacters="0"
+                                 HelperText="Type to find existing or create new." />
+                <MudTextField T="string"
+                              @bind-Value="VM.FirstPublishedDate"
+                              Label="First published"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              HelperText="Year, 'Month Year', or full date (e.g. 1973, Oct 1973, 1973-10-12)." />
+                <MudSelect T="int?"
+                           @bind-Value="VM.SelectedSeriesId"
+                           Label="Series / Collection"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Clearable="true">
+                    <MudSelectItem T="int?" Value="@((int?)null)">None</MudSelectItem>
+                    @foreach (var s in VM.AvailableSeries)
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)s.Id)">@s.Name (@s.Type)</MudSelectItem>
+                    }
+                </MudSelect>
+                @if (VM.SelectedSeriesId.HasValue)
+                {
+                    <MudNumericField T="int?"
+                                     @bind-Value="VM.SeriesOrder"
+                                     Label="Order / position"
+                                     Variant="Variant.Outlined"
+                                     Margin="Margin.Dense"
+                                     Min="1" />
+                }
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Genres are edited on the <MudLink Href="@($"/books/{BookId}/edit")">full edit page</MudLink>.
+                </MudText>
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Disabled="@(VM.NotFound || string.IsNullOrWhiteSpace(VM.Title) || string.IsNullOrWhiteSpace(VM.AuthorName) || saving)"
+                   OnClick="SaveAsync">
+            @(saving ? "Saving..." : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public int WorkId { get; set; }
+    [Parameter] public int BookId { get; set; }
+
+    private bool saving;
+
+    protected override async Task OnInitializedAsync() => await VM.InitializeAsync(WorkId);
+
+    private async Task SaveAsync()
+    {
+        saving = true;
+        try
+        {
+            await VM.SaveAsync();
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}
