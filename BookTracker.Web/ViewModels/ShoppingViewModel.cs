@@ -85,6 +85,8 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             var editions = await db.Editions
                 .Include(e => e.Book)
                     .ThenInclude(b => b.Works).ThenInclude(w => w.Series)
+                .Include(e => e.Book)
+                    .ThenInclude(b => b.Works).ThenInclude(w => w.Author)
                 .Include(e => e.Copies)
                 .Where(e => e.Isbn == isbn)
                 .ToListAsync();
@@ -194,6 +196,7 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             .Include(b => b.Editions)
                 .ThenInclude(e => e.Copies)
             .Include(b => b.Works).ThenInclude(w => w.Series)
+            .Include(b => b.Works).ThenInclude(w => w.Author)
             .FirstOrDefaultAsync(b => b.Id == bookId);
 
         if (book is null) return;
@@ -211,9 +214,19 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
 
     // For display in shopping search results — most books have a single Work
     // and therefore a single author, but compendiums may span several. Comma-
-    // join to keep things readable.
+    // join to keep things readable. Null-tolerant on Author because every
+    // caller is expected to Include(w => w.Author) but forgetting has
+    // shipped a user-visible NullReferenceException in the past — here we
+    // degrade to "(unknown)" rather than crashing the lookup.
     private static string PrimaryAuthor(Book book)
-        => string.Join(", ", book.Works.Select(w => w.Author.Name).Distinct());
+    {
+        var names = book.Works
+            .Select(w => string.IsNullOrWhiteSpace(w.Author?.Name) ? null : w.Author!.Name)
+            .Where(n => n is not null)
+            .Distinct()
+            .ToList();
+        return names.Count > 0 ? string.Join(", ", names) : "(unknown)";
+    }
 
     private static async Task<SeriesInfo?> GetSeriesInfoAsync(BookTrackerDbContext db, Book book)
     {
