@@ -11,7 +11,7 @@ public class AuthorMergeViewModelTests
     private AuthorMergeViewModel CreateVm() => new(_merger);
 
     private static AuthorMergeDetail Detail(int id, string name) =>
-        new(id, name, null, null, 0, 0, []);
+        new(id, name, null, null, 0, 0, [], null);
 
     [Fact]
     public async Task LoadAsync_populates_both_details_and_clears_loading()

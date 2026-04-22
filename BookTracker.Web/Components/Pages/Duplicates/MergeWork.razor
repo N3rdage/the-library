@@ -8,11 +8,10 @@
 <h1 class="mb-3">Merge works</h1>
 <p class="text-muted">
     Pick a winner. The other Work will be deleted, and any Books containing
-    the loser will be reassigned to the winner. This cannot be undone — if
-    you want to keep any fields from the loser (subtitle, series, genres),
-    copy them across to the winner on the relevant
-    <a href="/books" target="_blank" rel="noopener">Book edit page</a>
-    before confirming.
+    the loser will be reassigned to the winner. Empty fields on the winner
+    (subtitle, first-published year, series) will be auto-filled from the
+    loser; genres will be unioned. Anything the winner already has stays.
+    The preview below lists exactly what will be copied across.
 </p>
 
 @if (!string.IsNullOrEmpty(VM.ErrorMessage))
@@ -79,6 +78,18 @@ else
                     </span>
                 }
             </div>
+            @if (VM.EnrichmentHints.Count > 0)
+            {
+                <div class="small mt-2">
+                    <strong>Will auto-fill from loser:</strong>
+                    <ul class="mb-0 mt-1 ps-3">
+                        @foreach (var hint in VM.EnrichmentHints)
+                        {
+                            <li>@hint</li>
+                        }
+                    </ul>
+                </div>
+            }
         </div>
     }
 
@@ -105,7 +116,7 @@ else
         {
             var winner = Uri.EscapeDataString(result.WinnerTitle ?? "winner");
             var loser = Uri.EscapeDataString(result.LoserTitle ?? "loser");
-            Nav.NavigateTo($"/duplicates?mergedWorkWinner={winner}&mergedWorkLoser={loser}&booksReassigned={result.BooksReassigned}&booksAlreadyShared={result.BooksAlreadyShared}");
+            Nav.NavigateTo($"/duplicates?mergedWorkWinner={winner}&mergedWorkLoser={loser}&booksReassigned={result.BooksReassigned}&booksAlreadyShared={result.BooksAlreadyShared}&fieldsAutoFilled={result.FieldsAutoFilled}");
         }
     }
 
@@ -121,6 +132,14 @@ else
                         Make "@detail.Title" the winner
                     </label>
                 </div>
+                @if (!string.IsNullOrEmpty(detail.CoverArtUrl))
+                {
+                    <div class="mb-2">
+                        <img src="@detail.CoverArtUrl" alt="@detail.Title" loading="lazy"
+                             style="max-height: 140px; max-width: 100px; object-fit: contain;"
+                             class="border rounded" />
+                    </div>
+                }
                 @if (!string.IsNullOrWhiteSpace(detail.Subtitle))
                 {
                     <div class="small text-muted fst-italic mb-1">@detail.Subtitle</div>

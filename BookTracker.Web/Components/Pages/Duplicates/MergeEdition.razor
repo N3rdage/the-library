@@ -1,0 +1,154 @@
+@page "/duplicates/merge/edition/{idA:int}/{idB:int}"
+@using BookTracker.Web.Services
+@inject EditionMergeViewModel VM
+@inject NavigationManager Nav
+
+<PageTitle>Merge editions - BookTracker</PageTitle>
+
+<h1 class="mb-3">Merge editions</h1>
+<p class="text-muted">
+    Pick a winner. All copies on the loser will be reassigned to the winner,
+    and the loser will be deleted. Empty fields on the winner (ISBN, date
+    printed, publisher, cover) will be auto-filled from the loser; fields
+    the winner already has stay. Both editions must belong to the same Book
+    — if the Books themselves are duplicates, merge the Books first.
+</p>
+
+@if (!string.IsNullOrEmpty(VM.ErrorMessage))
+{
+    <div class="alert alert-danger">@VM.ErrorMessage</div>
+}
+
+@if (VM.Loading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
+    </div>
+}
+else if (VM.Lower is null || VM.Higher is null)
+{
+    <a href="/duplicates" class="btn btn-outline-secondary">Back to duplicates</a>
+}
+else if (!string.IsNullOrEmpty(VM.IncompatibilityReason))
+{
+    <div class="alert alert-warning">
+        <strong>Can't merge these two directly.</strong>
+        <p class="mb-0">@VM.IncompatibilityReason</p>
+    </div>
+    <a href="/duplicates" class="btn btn-outline-secondary">Back to duplicates</a>
+}
+else
+{
+    <div class="row g-3 mb-3">
+        <div class="col-md-6">@EditionCard(VM.Lower)</div>
+        <div class="col-md-6">@EditionCard(VM.Higher)</div>
+    </div>
+
+    @if (VM.SelectedWinnerId is not null && VM.Loser is not null)
+    {
+        var loser = VM.Loser;
+        <div class="alert alert-info">
+            <div class="mb-2">
+                <strong>Winner:</strong>
+                @{
+                    var winnerDetail = VM.SelectedWinnerId == VM.Lower.Id ? VM.Lower : VM.Higher;
+                }
+                @winnerDetail.Format
+                @if (!string.IsNullOrWhiteSpace(winnerDetail.Isbn))
+                {
+                    <text> · ISBN @winnerDetail.Isbn</text>
+                }
+            </div>
+            <div class="small">
+                Will delete the loser and reassign
+                <strong>@loser.CopyCount cop@(loser.CopyCount == 1 ? "y" : "ies")</strong>
+                from it to the winner.
+            </div>
+            @if (VM.EnrichmentHints.Count > 0)
+            {
+                <div class="small mt-2">
+                    <strong>Will auto-fill from loser:</strong>
+                    <ul class="mb-0 mt-1 ps-3">
+                        @foreach (var hint in VM.EnrichmentHints)
+                        {
+                            <li>@hint</li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+    }
+
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-primary"
+                disabled="@(!VM.CanMerge || VM.Merging)"
+                @onclick="OnMergeClickAsync">
+            @(VM.Merging ? "Merging..." : "Merge")
+        </button>
+        <a href="/duplicates" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+}
+
+@code {
+    [Parameter] public int IdA { get; set; }
+    [Parameter] public int IdB { get; set; }
+
+    protected override async Task OnInitializedAsync() => await VM.LoadAsync(IdA, IdB);
+
+    private async Task OnMergeClickAsync()
+    {
+        var result = await VM.MergeAsync();
+        if (result is { Success: true })
+        {
+            var winner = Uri.EscapeDataString(result.WinnerLabel ?? "winner");
+            var loser = Uri.EscapeDataString(result.LoserLabel ?? "loser");
+            Nav.NavigateTo($"/duplicates?mergedEditionWinner={winner}&mergedEditionLoser={loser}&copiesReassigned={result.CopiesReassigned}&editionFieldsAutoFilled={result.FieldsAutoFilled}");
+        }
+    }
+
+    private RenderFragment EditionCard(EditionMergeDetail detail) =>
+        @<div class="card @(VM.SelectedWinnerId == detail.Id ? "border-primary" : "")">
+            <div class="card-body">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="radio"
+                           name="winner" id="@($"winner-{detail.Id}")"
+                           checked="@(VM.SelectedWinnerId == detail.Id)"
+                           @onchange="() => VM.SelectedWinnerId = detail.Id" />
+                    <label class="form-check-label fw-semibold" for="@($"winner-{detail.Id}")">
+                        Make this the winner
+                    </label>
+                </div>
+                @if (!string.IsNullOrEmpty(detail.CoverArtUrl))
+                {
+                    <div class="mb-2">
+                        <img src="@detail.CoverArtUrl" alt="Edition cover" loading="lazy"
+                             style="max-height: 140px; max-width: 100px; object-fit: contain;"
+                             class="border rounded" />
+                    </div>
+                }
+                <div class="small mb-1">
+                    On book: <a href="@($"/books/{detail.BookId}/edit")" target="_blank" rel="noopener">@detail.BookTitle</a>
+                </div>
+                <div class="small mb-1">
+                    @detail.Format
+                    @if (!string.IsNullOrWhiteSpace(detail.Isbn))
+                    {
+                        <text> · ISBN @detail.Isbn</text>
+                    }
+                    else
+                    {
+                        <text> · no ISBN</text>
+                    }
+                </div>
+                <div class="small text-muted mb-2">
+                    @(detail.PublisherName ?? "unknown publisher")
+                    @if (detail.DatePrinted.HasValue)
+                    {
+                        <text> · printed @detail.DatePrinted.Value.ToString("d MMM yyyy")</text>
+                    }
+                    · @detail.CopyCount cop@(detail.CopyCount == 1 ? "y" : "ies")
+                    · id @detail.Id
+                </div>
+            </div>
+        </div>;
+}

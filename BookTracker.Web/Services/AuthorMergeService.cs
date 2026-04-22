@@ -22,7 +22,11 @@ public record AuthorMergeDetail(
     string? CanonicalName,
     int WorkCount,
     int AliasCount,
-    IReadOnlyList<string> SampleWorkTitles);
+    IReadOnlyList<string> SampleWorkTitles,
+    // Best-effort cover URL — picks the DefaultCoverArtUrl of a Book
+    // attached to any of this Author's Works, preferring a single-Work
+    // Book over a compendium.
+    string? CoverArtUrl);
 
 public record AuthorMergeResult(
     bool Success,
@@ -150,15 +154,30 @@ public class AuthorMergeService(IDbContextFactory<BookTrackerDbContext> dbFactor
             .Select(w => w.Title)
             .ToListAsync(ct);
 
+        // Cover pick: prefer a Book that contains a single Work by this
+        // author (its cover faithfully represents one of the author's
+        // Works); fall back to any Book by the author.
+        var singleWorkBookCover = await db.Books
+            .Where(b => b.Works.Any(w => w.AuthorId == id) && b.Works.Count == 1)
+            .Select(b => b.DefaultCoverArtUrl)
+            .FirstOrDefaultAsync(ct);
+        var cover = singleWorkBookCover is null
+            ? await db.Books
+                .Where(b => b.Works.Any(w => w.AuthorId == id))
+                .Select(b => b.DefaultCoverArtUrl)
+                .FirstOrDefaultAsync(ct)
+            : singleWorkBookCover;
+
         return new AuthorMergeDetail(
             author.Id, author.Name,
             author.CanonicalAuthorId,
             author.CanonicalAuthor?.Name,
-            workCount, aliasCount, sampleTitles);
+            workCount, aliasCount, sampleTitles,
+            cover);
     }
 
     private static AuthorMergeDetail MinimalDetail(Author a) =>
-        new(a.Id, a.Name, a.CanonicalAuthorId, null, 0, 0, []);
+        new(a.Id, a.Name, a.CanonicalAuthorId, null, 0, 0, [], null);
 
     // Compatibility matrix. Both authors must resolve to the same canonical
     // (either directly or by one being an alias of the other). Anything else
