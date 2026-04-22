@@ -58,10 +58,17 @@ var appSettingsValues = hasTroveKey ? union(withAnthropic, { Trove__ApiKey: trov
 // handshake. Manifest + icons + service worker script are all non-sensitive
 // (public app name, theme colour, static images, client-side caching logic).
 // Expand deliberately — every entry here bypasses AAD sign-in.
+//
+// NOTE: Easy Auth v2 excludedPaths does EXACT path matching, not prefix.
+// "/icons" does not match "/icons/icon-192.png" — each file must be listed.
+// If you add another icon, add it here too.
 var pwaPublicPaths = [
   '/manifest.webmanifest'
   '/service-worker.js'
-  '/icons'
+  '/icons/icon.svg'
+  '/icons/icon-192.png'
+  '/icons/icon-512.png'
+  '/icons/apple-touch-icon.png'
 ]
 
 resource app 'Microsoft.Web/sites@2023-12-01' existing = {
