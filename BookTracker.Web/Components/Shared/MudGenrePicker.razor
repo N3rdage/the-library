@@ -1,0 +1,132 @@
+@* MudBlazor genre picker. Three surfaces over a single SelectedGenreIds
+   source of truth:
+     1. Chips band — closeable chips per selected genre.
+     2. MudAutocomplete input — type to search (substring, case-insensitive).
+     3. Collapsible MudTreeView — browse-all tree with parent/child checkboxes.
+   All three read from / write to the same parameter list. Picking a sub-
+   genre auto-includes its parent, matching the existing Bootstrap picker. *@
+
+@inject MudGenrePickerViewModel VM
+
+<MudStack Spacing="2">
+
+    @* Selected chips. *@
+    @if (SelectedGenreIds.Count > 0)
+    {
+        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+            @foreach (var id in SelectedGenreIds)
+            {
+                var label = VM.ChipLabel(id);
+                <MudChip T="string"
+                         Size="Size.Small"
+                         Variant="Variant.Outlined"
+                         OnClose="@(() => OnRemoveAsync(id))">@label</MudChip>
+            }
+        </MudStack>
+    }
+
+    @* Typeahead input. *@
+    <MudAutocomplete T="MudGenrePickerViewModel.GenreRow"
+                     Value="null"
+                     ValueChanged="OnAutocompletePick"
+                     SearchFunc="SearchAsync"
+                     ToStringFunc="@(g => g is null ? string.Empty : VM.DropdownLabel(g))"
+                     Placeholder="Add a genre..."
+                     Variant="Variant.Outlined"
+                     Margin="Margin.Dense"
+                     Clearable="true"
+                     ResetValueOnEmptyText="true"
+                     MinCharacters="0"
+                     CoerceValue="false"
+                     Adornment="Adornment.Start"
+                     AdornmentIcon="@Icons.Material.Filled.Add" />
+
+    @* Browse-all tree, collapsed by default. *@
+    <div>
+        <MudButton OnClick="@(() => browseOpen = !browseOpen)"
+                   Variant="Variant.Text"
+                   Size="Size.Small"
+                   StartIcon="@(browseOpen ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)">
+            @(browseOpen ? "Hide browse" : "Browse all genres")
+        </MudButton>
+        @if (browseOpen)
+        {
+            <MudPaper Elevation="0" Class="mt-1 pa-2" Style="max-height: 320px; overflow-y: auto; border: 1px solid var(--mud-palette-divider);">
+                <MudTreeView T="int"
+                             Items="@treeItems"
+                             SelectionMode="SelectionMode.MultiSelection"
+                             SelectedValues="@selectedSet"
+                             SelectedValuesChanged="OnTreeSelectionChanged"
+                             AutoExpand="true"
+                             Hover="true"
+                             Dense="true" />
+            </MudPaper>
+        }
+    </div>
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public List<int> SelectedGenreIds { get; set; } = [];
+    [Parameter] public EventCallback<List<int>> SelectedGenreIdsChanged { get; set; }
+
+    private bool browseOpen;
+    private List<TreeItemData<int>> treeItems = [];
+    private IReadOnlyCollection<int> selectedSet = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await VM.InitializeAsync();
+        RebuildTree();
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Keep the tree binding in sync when the parent updates SelectedGenreIds.
+        selectedSet = SelectedGenreIds.ToList();
+        RebuildTree();
+    }
+
+    private void RebuildTree()
+    {
+        treeItems = VM.BuildTreeItems(SelectedGenreIds);
+    }
+
+    private Task<IEnumerable<MudGenrePickerViewModel.GenreRow>> SearchAsync(string query, CancellationToken ct)
+        => Task.FromResult(VM.Search(query, SelectedGenreIds));
+
+    private async Task OnAutocompletePick(MudGenrePickerViewModel.GenreRow? picked)
+    {
+        if (picked is null) return;
+        var next = VM.AddGenre(picked.Id, SelectedGenreIds);
+        await CommitAsync(next);
+    }
+
+    private async Task OnRemoveAsync(int id)
+    {
+        var next = VM.RemoveGenre(id, SelectedGenreIds);
+        await CommitAsync(next);
+    }
+
+    private async Task OnTreeSelectionChanged(IReadOnlyCollection<int> values)
+    {
+        // Tree fires on every tick/untick. Reconcile against current selection,
+        // then run additions through AddGenre so parent auto-selection applies.
+        var current = SelectedGenreIds.ToHashSet();
+        var incoming = values.ToHashSet();
+
+        var next = current.Intersect(incoming).ToList(); // keep still-selected
+        foreach (var newId in incoming.Except(current))
+        {
+            next = VM.AddGenre(newId, next);
+        }
+        await CommitAsync(next);
+    }
+
+    private async Task CommitAsync(List<int> next)
+    {
+        SelectedGenreIds = next;
+        selectedSet = next.ToList();
+        RebuildTree();
+        await SelectedGenreIdsChanged.InvokeAsync(next);
+    }
+}

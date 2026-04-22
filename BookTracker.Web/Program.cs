@@ -75,6 +75,7 @@ builder.Services.AddTransient<BookFormViewModel>();
 builder.Services.AddTransient<EditionFormViewModel>();
 builder.Services.AddTransient<CopyFormViewModel>();
 builder.Services.AddTransient<GenrePickerViewModel>();
+builder.Services.AddTransient<MudGenrePickerViewModel>();
 builder.Services.AddTransient<BookListViewModel>();
 builder.Services.AddTransient<BookAddViewModel>();
 builder.Services.AddTransient<BookEditViewModel>();
