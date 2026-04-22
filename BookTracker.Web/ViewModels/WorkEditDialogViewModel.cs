@@ -7,9 +7,8 @@ namespace BookTracker.Web.ViewModels;
 
 // Dialog-scoped VM for "Edit work" on the View page. Edits a single
 // Work's title, subtitle, author (find-or-create with typeahead), first
-// published date (PartialDateParser), and series membership + order.
-// Genres stay on the full /edit page in this PR — the hierarchical
-// MudBlazor rebuild is tracked separately.
+// published date (PartialDateParser), series membership + order, and
+// genres (via MudGenrePicker — PR B).
 public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
 {
     public bool NotFound { get; private set; }
@@ -21,6 +20,7 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
     public string FirstPublishedDate { get; set; } = "";
     public int? SelectedSeriesId { get; set; }
     public int? SeriesOrder { get; set; }
+    public List<int> SelectedGenreIds { get; set; } = [];
 
     public List<SeriesOption> AvailableSeries { get; private set; } = [];
 
@@ -29,7 +29,10 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
         WorkId = workId;
 
         await using var db = await dbFactory.CreateDbContextAsync();
-        var work = await db.Works.Include(w => w.Author).FirstOrDefaultAsync(w => w.Id == workId);
+        var work = await db.Works
+            .Include(w => w.Author)
+            .Include(w => w.Genres)
+            .FirstOrDefaultAsync(w => w.Id == workId);
         if (work is null) { NotFound = true; return; }
 
         Title = work.Title;
@@ -38,6 +41,7 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
         FirstPublishedDate = PartialDateParser.Format(work.FirstPublishedDate, work.FirstPublishedDatePrecision);
         SelectedSeriesId = work.SeriesId;
         SeriesOrder = work.SeriesOrder;
+        SelectedGenreIds = work.Genres.Select(g => g.Id).ToList();
 
         AvailableSeries = await db.Series
             .OrderBy(s => s.Name)
@@ -70,7 +74,10 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
         if (NotFound || string.IsNullOrWhiteSpace(Title) || string.IsNullOrWhiteSpace(AuthorName)) return;
 
         await using var db = await dbFactory.CreateDbContextAsync();
-        var work = await db.Works.Include(w => w.Author).FirstOrDefaultAsync(w => w.Id == WorkId);
+        var work = await db.Works
+            .Include(w => w.Author)
+            .Include(w => w.Genres)
+            .FirstOrDefaultAsync(w => w.Id == WorkId);
         if (work is null) return;
 
         work.Title = Title.Trim();
@@ -83,6 +90,12 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
 
         work.SeriesId = SelectedSeriesId;
         work.SeriesOrder = SelectedSeriesId.HasValue ? SeriesOrder : null;
+
+        // Reconcile Genres to match the selection. Load requested genres
+        // by id and replace the work's collection.
+        var desired = await db.Genres.Where(g => SelectedGenreIds.Contains(g.Id)).ToListAsync();
+        work.Genres.Clear();
+        foreach (var g in desired) work.Genres.Add(g);
 
         await db.SaveChangesAsync();
     }
