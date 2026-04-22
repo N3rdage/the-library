@@ -10,6 +10,17 @@ Outstanding work items for BookTracker. This is the single source of truth — c
 - [ ] Re-add Microsoft Foundry (Claude on Azure) once on an EA / MCA-E subscription — Sponsored subscriptions are not eligible. Brings back `claude-sonnet-4-6` + `claude-opus-4-7` deployments, the Foundry Private Endpoint, and the `cognitiveservices.azure.com` DNS zone. Direct Anthropic API works in the meantime.
 - [ ] Schedule rotation of the Easy Auth client secret (`infra/deploy.ps1:105`) — currently rotated only when `deploy.ps1` is re-run, with a 2-year expiry. Options: time-triggered Function/Logic App that rotates the secret + writes the new value to KV, or move to a federated credential / certificate-based credential to drop the secret entirely.
 - [ ] Validate Trove ISBN lookup end-to-end once the NLA API key arrives — drop key into `appsettings.Development.json`, retry a self-published ISBN the other providers miss (e.g. `9780645840407`), and confirm the DTO parse matches Trove's live v3 response. Follow-up PR if the shape differs from the one coded against.
+- [ ] **Security audit** — walk the app's security posture now that the PWA exclusions opened up specific paths publicly. Areas to cover:
+  - Easy Auth `excludedPaths` — confirm only non-sensitive static assets are listed; ensure no Blazor routes or API endpoints accidentally start with `/icons` / `/manifest.webmanifest` / `/service-worker.js`.
+  - Content-Security-Policy headers — currently none; consider `default-src 'self'` baseline + exceptions for html5-qrcode (camera), Anthropic/Google Books (images), Open Library (covers). Tighten XSS surface.
+  - SignalR hub authentication — confirm `/_blazor/*` is gated by Easy Auth and not accidentally covered by any excluded path.
+  - Key Vault access paths — managed identity scoping; verify no app setting leaks raw secrets in App Service config UI.
+  - Dependency vulnerabilities — Dependabot catches new CVEs on PR, but sweep for existing once.
+  - PII in logs — search `logger.Log*` calls; confirm no book titles / user identifiers in warn/error messages beyond what's needed for diagnostics.
+  - SQL injection surface — EF LINQ is safe by construction; sweep for any `FromSqlRaw` / `ExecuteSqlRaw` (there shouldn't be any yet).
+  - JS interop XSS — sweep `IJSRuntime.InvokeAsync` calls for user-controlled strings passed to `eval`-equivalent patterns.
+  - Azure resource RBAC — confirm App Service identity has only the roles it needs (KV Secrets User, SQL db_datareader/writer/ddladmin, Cognitive Services User on OpenAI); nothing broader.
+  - Custom-domain HSTS + HTTPS redirect — already on via `app.UseHsts()` + `app.UseHttpsRedirection()`, sanity-check the headers in prod.
 
 ## UI / UX
 
