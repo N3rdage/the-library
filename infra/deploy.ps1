@@ -96,6 +96,9 @@ if (-not $sp.AppRoleAssignmentRequired) {
 }
 
 # ---- Rotate / create a client secret for Easy Auth ---------------------------
+# Scheduled rotation is handled by .github/workflows/rotate-easy-auth-secret.yml
+# (every 6 months, via the booktracker-ci OIDC SP). Re-running deploy.ps1 also
+# rotates — kept for first-provision and as a manual fallback.
 Write-Host "Creating client secret for Easy Auth..."
 $pwdCred = Add-MgApplicationPassword -ApplicationId $app.Id -PasswordCredential @{
     DisplayName = "easyauth-$(Get-Date -Format yyyyMMdd)"
@@ -106,7 +109,7 @@ $pwdCred = Add-MgApplicationPassword -ApplicationId $app.Id -PasswordCredential 
 # encrypts it in transit, and the @secure() decorator on the Bicep param keeps
 # it out of deployment history / logs.
 $clientSecret = $pwdCred.SecretText
-Write-Host "  Secret expires $($pwdCred.EndDateTime). Rotation is currently manual via re-running deploy.ps1; see TODO.md."
+Write-Host "  Secret expires $($pwdCred.EndDateTime)."
 
 # ---- Deploy the Bicep template at subscription scope -------------------------
 $templateFile = Join-Path $PSScriptRoot 'main.bicep'
