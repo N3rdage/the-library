@@ -81,6 +81,8 @@ builder.Services.AddTransient<BookEditViewModel>();
 builder.Services.AddTransient<BookDetailViewModel>();
 builder.Services.AddTransient<BookEditDialogViewModel>();
 builder.Services.AddTransient<WorkEditDialogViewModel>();
+builder.Services.AddTransient<EditionFormDialogViewModel>();
+builder.Services.AddTransient<CopyFormDialogViewModel>();
 builder.Services.AddTransient<BulkAddViewModel>();
 builder.Services.AddTransient<SeriesListViewModel>();
 builder.Services.AddTransient<SeriesEditViewModel>();

@@ -329,6 +329,77 @@ public class BookDetailViewModelTests
     }
 
     [Fact]
+    public async Task DeleteCopyAsync_KeepsEditionWhenOtherCopiesRemain()
+    {
+        var factory = new TestDbContextFactory();
+        int bookId;
+        int copyToDelete;
+        int editionId;
+        using (var db = factory.CreateDbContext())
+        {
+            var edition = new Edition
+            {
+                Isbn = "x",
+                Copies = [
+                    new Copy { Condition = BookCondition.Good },
+                    new Copy { Condition = BookCondition.Fair },
+                ],
+            };
+            var book = new Book
+            {
+                Title = "B",
+                Works = [new Work { Title = "B", Author = new Author { Name = "A" } }],
+                Editions = [edition],
+            };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            bookId = book.Id;
+            editionId = edition.Id;
+            copyToDelete = edition.Copies[0].Id;
+        }
+
+        var vm = new BookDetailViewModel(factory);
+        await vm.InitializeAsync(bookId);
+        await vm.DeleteCopyAsync(copyToDelete);
+
+        using var db2 = factory.CreateDbContext();
+        Assert.Equal(1, db2.Editions.Count(e => e.Id == editionId));
+        Assert.Equal(1, db2.Copies.Count(c => c.EditionId == editionId));
+    }
+
+    [Fact]
+    public async Task DeleteCopyAsync_CascadesEditionRemovalWhenLastCopy()
+    {
+        var factory = new TestDbContextFactory();
+        int bookId;
+        int copyToDelete;
+        int editionId;
+        using (var db = factory.CreateDbContext())
+        {
+            var edition = new Edition { Isbn = "x", Copies = [new Copy { Condition = BookCondition.Good }] };
+            var book = new Book
+            {
+                Title = "B",
+                Works = [new Work { Title = "B", Author = new Author { Name = "A" } }],
+                Editions = [edition],
+            };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            bookId = book.Id;
+            editionId = edition.Id;
+            copyToDelete = edition.Copies[0].Id;
+        }
+
+        var vm = new BookDetailViewModel(factory);
+        await vm.InitializeAsync(bookId);
+        await vm.DeleteCopyAsync(copyToDelete);
+
+        using var db2 = factory.CreateDbContext();
+        Assert.Equal(0, db2.Editions.Count(e => e.Id == editionId));
+        Assert.Equal(0, db2.Copies.Count(c => c.Id == copyToDelete));
+    }
+
+    [Fact]
     public async Task SearchTagsAsync_ExcludesAlreadyAssigned()
     {
         var factory = new TestDbContextFactory();
