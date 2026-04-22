@@ -2,24 +2,19 @@ using BookTracker.Web.Services;
 
 namespace BookTracker.Web.ViewModels;
 
-// Backs /duplicates/merge/work/{idA}/{idB}. Mirrors AuthorMergeViewModel
-// shape — load preview, user picks winner, commit via service. Merge is
-// auto-fill-empties: any winner field that's empty gets taken from the
-// loser; winner fields that are already set are preserved. Genres union.
-// The preview surfaces which fields will be auto-filled so the user can
-// override (by editing the winner) before confirming.
-public class WorkMergeViewModel(IWorkMergeService merger)
+// Backs /duplicates/merge/edition/{idA}/{idB}. Same shape as
+// WorkMergeViewModel. Auto-fill-empties semantics on merge; enrichment
+// preview recomputes on winner selection.
+public class EditionMergeViewModel(IEditionMergeService merger)
 {
     public bool Loading { get; private set; } = true;
     public bool Merging { get; private set; }
 
-    public WorkMergeDetail? Lower { get; private set; }
-    public WorkMergeDetail? Higher { get; private set; }
+    public EditionMergeDetail? Lower { get; private set; }
+    public EditionMergeDetail? Higher { get; private set; }
 
     public string? IncompatibilityReason { get; private set; }
     public string? ErrorMessage { get; private set; }
-
-    public int SharedBookCount { get; private set; }
 
     public int? SelectedWinnerId { get; set; }
 
@@ -29,7 +24,7 @@ public class WorkMergeViewModel(IWorkMergeService merger)
         : SelectedWinnerId == Higher?.Id ? Lower?.Id
         : null;
 
-    public WorkMergeDetail? Loser =>
+    public EditionMergeDetail? Loser =>
         LoserId is null ? null
         : LoserId == Lower?.Id ? Lower
         : LoserId == Higher?.Id ? Higher
@@ -41,9 +36,6 @@ public class WorkMergeViewModel(IWorkMergeService merger)
         && Lower is not null && Higher is not null
         && SelectedWinnerId is not null;
 
-    // Human-readable list of what auto-fill will pull from loser → winner
-    // based on the current winner selection. Recomputed live so the UI can
-    // re-render on radio change without a server round-trip.
     public IReadOnlyList<string> EnrichmentHints
     {
         get
@@ -55,26 +47,24 @@ public class WorkMergeViewModel(IWorkMergeService merger)
         }
     }
 
-    private static IReadOnlyList<string> ComputeEnrichmentHints(WorkMergeDetail winner, WorkMergeDetail loser)
+    private static IReadOnlyList<string> ComputeEnrichmentHints(EditionMergeDetail winner, EditionMergeDetail loser)
     {
         var hints = new List<string>();
-        if (string.IsNullOrWhiteSpace(winner.Subtitle) && !string.IsNullOrWhiteSpace(loser.Subtitle))
+        if (winner.DatePrinted is null && loser.DatePrinted is not null)
         {
-            hints.Add($"Subtitle \"{loser.Subtitle}\"");
+            hints.Add($"Date printed {loser.DatePrinted:d MMM yyyy}");
         }
-        if (!winner.FirstPublishedYear.HasValue && loser.FirstPublishedYear.HasValue)
+        if (string.IsNullOrWhiteSpace(winner.CoverArtUrl) && !string.IsNullOrWhiteSpace(loser.CoverArtUrl))
         {
-            hints.Add($"First-published year {loser.FirstPublishedYear}");
+            hints.Add("Cover image");
         }
-        if (string.IsNullOrEmpty(winner.SeriesName) && !string.IsNullOrEmpty(loser.SeriesName))
+        if (string.IsNullOrEmpty(winner.PublisherName) && !string.IsNullOrEmpty(loser.PublisherName))
         {
-            hints.Add($"Series \"{loser.SeriesName}\"" + (loser.SeriesOrder.HasValue ? $" (#{loser.SeriesOrder})" : ""));
+            hints.Add($"Publisher \"{loser.PublisherName}\"");
         }
-        var winnerGenres = winner.GenreNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var addedGenres = loser.GenreNames.Where(g => !winnerGenres.Contains(g)).ToList();
-        if (addedGenres.Count > 0)
+        if (string.IsNullOrWhiteSpace(winner.Isbn) && !string.IsNullOrWhiteSpace(loser.Isbn))
         {
-            hints.Add($"{addedGenres.Count} genre{(addedGenres.Count == 1 ? "" : "s")}: {string.Join(", ", addedGenres)}");
+            hints.Add($"ISBN {loser.Isbn}");
         }
         return hints;
     }
@@ -87,15 +77,14 @@ public class WorkMergeViewModel(IWorkMergeService merger)
         Lower = result.Lower;
         Higher = result.Higher;
         IncompatibilityReason = result.IncompatibilityReason;
-        SharedBookCount = result.SharedBookCount;
         if (Lower is null || Higher is null)
         {
-            ErrorMessage = "One or both Works could not be loaded — they may have been merged or deleted already.";
+            ErrorMessage = "One or both Editions could not be loaded — they may have been merged or deleted already.";
         }
         Loading = false;
     }
 
-    public async Task<WorkMergeResult?> MergeAsync()
+    public async Task<EditionMergeResult?> MergeAsync()
     {
         if (!CanMerge || SelectedWinnerId is null || LoserId is null) return null;
 

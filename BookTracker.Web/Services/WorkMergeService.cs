@@ -30,13 +30,21 @@ public record WorkMergeDetail(
     int? SeriesOrder,
     IReadOnlyList<string> GenreNames,
     int BookCount,
-    IReadOnlyList<string> SampleBookTitles);
+    IReadOnlyList<string> SampleBookTitles,
+    // Best-effort cover URL — picks the DefaultCoverArtUrl of a Book that
+    // contains ONLY this Work (a standalone edition whose cover faithfully
+    // represents the Work), falling back to any Book containing it.
+    string? CoverArtUrl);
 
 public record WorkMergeResult(
     bool Success,
     string? ErrorMessage,
     int BooksReassigned,
     int BooksAlreadyShared,
+    // Count of winner fields that were auto-filled from the loser because
+    // the winner had the field empty/null. Includes genre-union as one
+    // "field" contribution if any genres were added.
+    int FieldsAutoFilled,
     string? WinnerTitle,
     string? LoserTitle);
 
@@ -84,8 +92,14 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
-        var winner = await db.Works.Include(w => w.Books).FirstOrDefaultAsync(w => w.Id == winnerId, ct);
-        var loser = await db.Works.Include(w => w.Books).FirstOrDefaultAsync(w => w.Id == loserId, ct);
+        var winner = await db.Works
+            .Include(w => w.Books)
+            .Include(w => w.Genres)
+            .FirstOrDefaultAsync(w => w.Id == winnerId, ct);
+        var loser = await db.Works
+            .Include(w => w.Books)
+            .Include(w => w.Genres)
+            .FirstOrDefaultAsync(w => w.Id == loserId, ct);
         if (winner is null || loser is null)
         {
             return Failure("One or both Works could not be found — they may already have been merged or deleted.");
@@ -98,12 +112,45 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
+        // ─── Auto-fill empty winner fields from loser ──────────────────
+        // Only fills gaps — never overwrites a value winner already has.
+        // Paired fields move together (date+precision, series+order) so the
+        // two halves stay consistent.
+        var fieldsAutoFilled = 0;
+
+        if (string.IsNullOrWhiteSpace(winner.Subtitle) && !string.IsNullOrWhiteSpace(loser.Subtitle))
+        {
+            winner.Subtitle = loser.Subtitle;
+            fieldsAutoFilled++;
+        }
+
+        if (winner.FirstPublishedDate is null && loser.FirstPublishedDate is not null)
+        {
+            winner.FirstPublishedDate = loser.FirstPublishedDate;
+            winner.FirstPublishedDatePrecision = loser.FirstPublishedDatePrecision;
+            fieldsAutoFilled++;
+        }
+
+        if (winner.SeriesId is null && loser.SeriesId is not null)
+        {
+            winner.SeriesId = loser.SeriesId;
+            winner.SeriesOrder = loser.SeriesOrder;
+            fieldsAutoFilled++;
+        }
+
+        var winnerGenreIds = winner.Genres.Select(g => g.Id).ToHashSet();
+        var genresAdded = 0;
+        foreach (var g in loser.Genres.Where(g => !winnerGenreIds.Contains(g.Id)).ToList())
+        {
+            winner.Genres.Add(g);
+            genresAdded++;
+        }
+        if (genresAdded > 0) fieldsAutoFilled++;
+
+        // ─── Reassign BookWork rows ────────────────────────────────────
         // Book-contains-both case: for each Book in loser.Books where winner
         // is NOT already attached, add winner; otherwise skip (winner stays,
-        // loser just gets removed when we clear loser.Books). EF's many-to-
-        // many PK is (BookId, WorkId) so a duplicate add would throw — the
-        // explicit guard is safer and gives us the overlap count for the
-        // result record.
+        // loser just gets removed when we clear loser.Books).
         var winnerBookIds = winner.Books.Select(b => b.Id).ToHashSet();
 
         var booksReassigned = 0;
@@ -122,9 +169,6 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
             }
         }
 
-        // Clearing loser.Books deletes the BookWork rows; Books themselves
-        // stay (their other Works — including winner, which we just added —
-        // hold them in place).
         loser.Books.Clear();
 
         var staleIgnores = await db.IgnoredDuplicates
@@ -143,6 +187,7 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
             ErrorMessage: null,
             BooksReassigned: booksReassigned,
             BooksAlreadyShared: booksAlreadyShared,
+            FieldsAutoFilled: fieldsAutoFilled,
             WinnerTitle: winner.Title,
             LoserTitle: loser.Title);
     }
@@ -164,6 +209,19 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
             .Select(b => b.Title)
             .ToListAsync(ct);
 
+        // Cover pick: prefer a single-Work Book (its cover represents this
+        // Work faithfully); fall back to any Book.
+        var singleWorkBookCover = await db.Books
+            .Where(b => b.Works.Any(w => w.Id == id) && b.Works.Count == 1)
+            .Select(b => b.DefaultCoverArtUrl)
+            .FirstOrDefaultAsync(ct);
+        var fallbackCover = singleWorkBookCover is null
+            ? await db.Books
+                .Where(b => b.Works.Any(w => w.Id == id))
+                .Select(b => b.DefaultCoverArtUrl)
+                .FirstOrDefaultAsync(ct)
+            : singleWorkBookCover;
+
         return new WorkMergeDetail(
             work.Id, work.Title, work.Subtitle,
             work.Author.Name,
@@ -171,7 +229,8 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
             work.Series?.Name,
             work.SeriesOrder,
             work.Genres.Select(g => g.Name).OrderBy(n => n).ToList(),
-            bookCount, sampleBookTitles);
+            bookCount, sampleBookTitles,
+            fallbackCover);
     }
 
     private static async Task<int> CountSharedBooksAsync(BookTrackerDbContext db, int lowerId, int higherId, CancellationToken ct)
@@ -182,5 +241,5 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
     }
 
     private static WorkMergeResult Failure(string message) =>
-        new(false, message, 0, 0, null, null);
+        new(false, message, 0, 0, 0, null, null);
 }

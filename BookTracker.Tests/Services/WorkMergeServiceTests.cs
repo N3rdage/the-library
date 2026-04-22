@@ -1,5 +1,6 @@
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
+using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Tests.Services;
 
@@ -180,6 +181,120 @@ public class WorkMergeServiceTests
         var result = await CreateService().MergeAsync(w1.Id, w2.Id);
 
         Assert.False(result.Success);
+    }
+
+    // ─── Auto-fill empties ────────────────────────────────────────────
+
+    [Fact]
+    public async Task MergeAsync_auto_fills_empty_winner_fields_from_loser()
+    {
+        using var db = _factory.CreateDbContext();
+        var author = new Author { Name = "Shared" };
+        var series = new Series { Name = "The Dark Tower", Type = SeriesType.Series };
+        db.Series.Add(series);
+        var horror = new Genre { Name = "Horror" };
+        var fantasy = new Genre { Name = "Fantasy" };
+        db.Genres.AddRange(horror, fantasy);
+        await db.SaveChangesAsync();
+
+        // Winner: bare title and author only.
+        var winner = new Work { Title = "Gunslinger", Author = author };
+        // Loser: subtitle, first-pub date, series, genres.
+        var loser = new Work
+        {
+            Title = "Gunslinger", Author = author,
+            Subtitle = "Dark Tower I",
+            FirstPublishedDate = new DateOnly(1982, 6, 10),
+            FirstPublishedDatePrecision = DatePrecision.Day,
+            Series = series, SeriesOrder = 1,
+            Genres = [horror, fantasy]
+        };
+        db.Books.Add(new Book { Title = "Winner Book", Works = [winner] });
+        db.Books.Add(new Book { Title = "Loser Book", Works = [loser] });
+        await db.SaveChangesAsync();
+
+        var result = await CreateService().MergeAsync(winner.Id, loser.Id);
+
+        Assert.True(result.Success);
+        // 4 "fields": subtitle, firstPub date, series, genres-union (counted once)
+        Assert.Equal(4, result.FieldsAutoFilled);
+
+        using var verify = _factory.CreateDbContext();
+        var reloaded = verify.Works
+            .Include(w => w.Series)
+            .Include(w => w.Genres)
+            .First(w => w.Id == winner.Id);
+        Assert.Equal("Dark Tower I", reloaded.Subtitle);
+        Assert.Equal(new DateOnly(1982, 6, 10), reloaded.FirstPublishedDate);
+        Assert.Equal("The Dark Tower", reloaded.Series?.Name);
+        Assert.Equal(1, reloaded.SeriesOrder);
+        Assert.Equal(2, reloaded.Genres.Count);
+    }
+
+    [Fact]
+    public async Task MergeAsync_preserves_populated_winner_fields_during_auto_fill()
+    {
+        using var db = _factory.CreateDbContext();
+        var author = new Author { Name = "Shared" };
+        var keepSeries = new Series { Name = "Kept", Type = SeriesType.Series };
+        var ignoreSeries = new Series { Name = "Ignored", Type = SeriesType.Series };
+        db.Series.AddRange(keepSeries, ignoreSeries);
+        await db.SaveChangesAsync();
+
+        var winner = new Work
+        {
+            Title = "T", Author = author,
+            Subtitle = "Keep Me",
+            FirstPublishedDate = new DateOnly(2000, 1, 1),
+            FirstPublishedDatePrecision = DatePrecision.Day,
+            Series = keepSeries, SeriesOrder = 3
+        };
+        var loser = new Work
+        {
+            Title = "T", Author = author,
+            Subtitle = "Ignored",
+            FirstPublishedDate = new DateOnly(1900, 1, 1),
+            Series = ignoreSeries, SeriesOrder = 7
+        };
+        db.Books.Add(new Book { Title = "BW", Works = [winner] });
+        db.Books.Add(new Book { Title = "BL", Works = [loser] });
+        await db.SaveChangesAsync();
+
+        var result = await CreateService().MergeAsync(winner.Id, loser.Id);
+
+        Assert.True(result.Success);
+        Assert.Equal(0, result.FieldsAutoFilled);
+
+        using var verify = _factory.CreateDbContext();
+        var reloaded = verify.Works.Include(w => w.Series).First(w => w.Id == winner.Id);
+        Assert.Equal("Keep Me", reloaded.Subtitle);
+        Assert.Equal(new DateOnly(2000, 1, 1), reloaded.FirstPublishedDate);
+        Assert.Equal("Kept", reloaded.Series?.Name);
+        Assert.Equal(3, reloaded.SeriesOrder);
+    }
+
+    [Fact]
+    public async Task MergeAsync_unions_genres_without_duplicates()
+    {
+        using var db = _factory.CreateDbContext();
+        var author = new Author { Name = "Shared" };
+        var horror = new Genre { Name = "Horror" };
+        var fantasy = new Genre { Name = "Fantasy" };
+        var mystery = new Genre { Name = "Mystery" };
+        db.Genres.AddRange(horror, fantasy, mystery);
+        await db.SaveChangesAsync();
+
+        var winner = new Work { Title = "T", Author = author, Genres = [horror, fantasy] };
+        var loser = new Work { Title = "T", Author = author, Genres = [fantasy, mystery] };
+        db.Books.Add(new Book { Title = "BW", Works = [winner] });
+        db.Books.Add(new Book { Title = "BL", Works = [loser] });
+        await db.SaveChangesAsync();
+
+        await CreateService().MergeAsync(winner.Id, loser.Id);
+
+        using var verify = _factory.CreateDbContext();
+        var reloaded = verify.Works.Include(w => w.Genres).First(w => w.Id == winner.Id);
+        Assert.Equal(3, reloaded.Genres.Count);
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────
