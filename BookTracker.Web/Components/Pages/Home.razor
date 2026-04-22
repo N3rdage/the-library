@@ -3,165 +3,182 @@
 
 <PageTitle>Home - BookTracker</PageTitle>
 
-<section class="hero rounded-4 p-4 p-md-5 mb-4">
-    <div class="row align-items-center g-4">
-        <div class="col-md-7">
-            <h1 class="display-5 fw-bold mb-2">Welcome to your library</h1>
-            <p class="lead text-muted mb-0">
-                A cozy corner for every book you own, every story you've loved, and every one still waiting on the shelf.
-            </p>
-        </div>
-        <div class="col-md-5 text-center">
-            @* Friendly home library illustration — inline SVG so there's no extra asset to manage. *@
-            <svg viewBox="0 0 320 220" xmlns="http://www.w3.org/2000/svg" class="img-fluid hero-art" role="img" aria-label="A cozy home library with a reading chair and lamp">
-                <defs>
-                    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="#fbf5ec" />
-                        <stop offset="100%" stop-color="#f1e5d0" />
-                    </linearGradient>
-                    <radialGradient id="lamp" cx="50%" cy="20%" r="70%">
-                        <stop offset="0%" stop-color="#fff3b0" stop-opacity="0.9" />
-                        <stop offset="100%" stop-color="#fff3b0" stop-opacity="0" />
-                    </radialGradient>
-                </defs>
-                <rect x="0" y="0" width="320" height="220" rx="12" fill="url(#wall)" />
-                <rect x="0" y="180" width="320" height="40" fill="#9c6b3f" />
-                <rect x="0" y="178" width="320" height="4" fill="#7a5130" />
-                <rect x="20" y="40" width="150" height="140" fill="#8b5a2b" />
-                <rect x="26" y="46" width="138" height="128" fill="#efe3cf" />
-                <line x1="26" y1="88" x2="164" y2="88" stroke="#8b5a2b" stroke-width="4" />
-                <line x1="26" y1="130" x2="164" y2="130" stroke="#8b5a2b" stroke-width="4" />
-                <rect x="32" y="52" width="10" height="34" fill="#c0392b" />
-                <rect x="44" y="54" width="8" height="32" fill="#2e86ab" />
-                <rect x="54" y="50" width="12" height="36" fill="#e1a95f" />
-                <rect x="68" y="56" width="10" height="30" fill="#4a7c59" />
-                <rect x="80" y="52" width="9" height="34" fill="#7d4f8b" />
-                <rect x="91" y="54" width="11" height="32" fill="#d08c5a" />
-                <rect x="104" y="50" width="8" height="36" fill="#355c7d" />
-                <rect x="114" y="56" width="12" height="30" fill="#b23a48" />
-                <rect x="128" y="52" width="9" height="34" fill="#6a994e" />
-                <rect x="139" y="54" width="10" height="32" fill="#3d5a80" />
-                <rect x="151" y="50" width="11" height="36" fill="#a5668b" />
-                <rect x="32" y="94" width="10" height="34" fill="#3d5a80" />
-                <rect x="44" y="96" width="9" height="32" fill="#e07a5f" />
-                <rect x="55" y="92" width="12" height="36" fill="#81b29a" />
-                <g transform="rotate(-8 74 110)">
-                    <rect x="69" y="96" width="9" height="32" fill="#f2cc8f" />
-                </g>
-                <rect x="84" y="96" width="10" height="32" fill="#6d6875" />
-                <rect x="96" y="94" width="11" height="34" fill="#b56576" />
-                <rect x="112" y="116" width="40" height="6" fill="#c9a66b" />
-                <rect x="116" y="110" width="36" height="6" fill="#6a994e" />
-                <rect x="114" y="104" width="38" height="6" fill="#355c7d" />
-                <rect x="32" y="140" width="22" height="28" fill="#4a7c59" />
-                <ellipse cx="43" cy="140" rx="16" ry="8" fill="#6a994e" />
-                <rect x="70" y="148" width="12" height="20" fill="#e1a95f" />
-                <circle cx="110" cy="156" r="10" fill="#d9b382" />
-                <rect x="130" y="140" width="24" height="28" fill="#b23a48" />
-                <circle cx="260" cy="80" r="60" fill="url(#lamp)" />
-                <rect x="210" y="130" width="80" height="50" rx="8" fill="#6d6875" />
-                <rect x="200" y="120" width="20" height="60" rx="6" fill="#6d6875" />
-                <rect x="280" y="120" width="20" height="60" rx="6" fill="#6d6875" />
-                <rect x="215" y="175" width="10" height="15" fill="#3d3a40" />
-                <rect x="275" y="175" width="10" height="15" fill="#3d3a40" />
-                <rect x="220" y="135" width="60" height="15" rx="4" fill="#f2cc8f" />
-                <line x1="265" y1="40" x2="265" y2="130" stroke="#3d3a40" stroke-width="3" />
-                <path d="M248 40 Q265 20 282 40 Z" fill="#f2cc8f" stroke="#a67c3f" stroke-width="2" />
-                <ellipse cx="265" cy="178" rx="14" ry="4" fill="#3d3a40" />
-                <g transform="translate(176 140) rotate(-6)">
-                    <path d="M0 0 L30 -4 L30 14 L0 18 Z" fill="#fffaf0" stroke="#8b5a2b" stroke-width="1" />
-                    <path d="M30 -4 L60 0 L60 18 L30 14 Z" fill="#fffaf0" stroke="#8b5a2b" stroke-width="1" />
-                </g>
-            </svg>
-        </div>
-    </div>
-</section>
+@* MudBlazor pilot page. Keep the hand-drawn hero SVG (it's content, not
+   chrome) and swap the Bootstrap cards for MudCards + MudProgressLinear
+   for the bar charts. Typography uses MudText so we pick up the Roboto
+   stack loaded in App.razor. *@
 
-<div class="row g-3 mb-4">
-    <div class="col-sm-6">
-        <div class="card stat-card h-100">
-            <div class="card-body d-flex align-items-center">
-                <div class="stat-icon me-3">📚</div>
-                <div>
-                    <div class="text-muted small text-uppercase">Books in collection</div>
-                    <div class="display-6 fw-bold">@VM.TotalBooks</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-6">
-        <div class="card stat-card h-100">
-            <div class="card-body d-flex align-items-center">
-                <div class="stat-icon me-3">✍️</div>
-                <div>
-                    <div class="text-muted small text-uppercase">Unique authors</div>
-                    <div class="display-6 fw-bold">@VM.TotalAuthors</div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-3">
 
-<div class="row g-4">
-    <div class="col-md-6">
-        <div class="card h-100">
-            <div class="card-header bg-white border-0 pt-3"><h2 class="h5 mb-0">Top 10 authors</h2></div>
-            <div class="card-body">
-                @if (VM.TopAuthors.Count == 0)
-                {
-                    <p class="text-muted mb-0">No books yet — add one to see your top authors.</p>
-                }
-                else
-                {
-                    <ul class="list-unstyled mb-0">
-                        @foreach (var a in VM.TopAuthors)
-                        {
-                            var pct = VM.MaxAuthor == 0 ? 0 : (int)Math.Round(a.Count * 100.0 / VM.MaxAuthor);
-                            <li class="mb-2">
-                                <div class="d-flex justify-content-between small">
-                                    <span class="text-truncate pe-2">@a.Author</span>
-                                    <span class="text-muted">@a.Count</span>
+    <MudPaper Elevation="0" Class="pa-4 pa-md-5 mb-4 mud-theme-primary-light hero">
+        <MudGrid Spacing="4" Class="align-items-center">
+            <MudItem xs="12" md="7">
+                <MudText Typo="Typo.h3" Class="mb-2">Welcome to your library</MudText>
+                <MudText Typo="Typo.subtitle1" Color="Color.Dark">
+                    A cozy corner for every book you own, every story you've loved, and every one still waiting on the shelf.
+                </MudText>
+            </MudItem>
+            <MudItem xs="12" md="5" Class="text-center">
+                @* Hand-drawn home-library illustration — content, not chrome. *@
+                <svg viewBox="0 0 320 220" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;" role="img" aria-label="A cozy home library with a reading chair and lamp">
+                    <defs>
+                        <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="#fbf5ec" />
+                            <stop offset="100%" stop-color="#f1e5d0" />
+                        </linearGradient>
+                        <radialGradient id="lamp" cx="50%" cy="20%" r="70%">
+                            <stop offset="0%" stop-color="#fff3b0" stop-opacity="0.9" />
+                            <stop offset="100%" stop-color="#fff3b0" stop-opacity="0" />
+                        </radialGradient>
+                    </defs>
+                    <rect x="0" y="0" width="320" height="220" rx="12" fill="url(#wall)" />
+                    <rect x="0" y="180" width="320" height="40" fill="#9c6b3f" />
+                    <rect x="0" y="178" width="320" height="4" fill="#7a5130" />
+                    <rect x="20" y="40" width="150" height="140" fill="#8b5a2b" />
+                    <rect x="26" y="46" width="138" height="128" fill="#efe3cf" />
+                    <line x1="26" y1="88" x2="164" y2="88" stroke="#8b5a2b" stroke-width="4" />
+                    <line x1="26" y1="130" x2="164" y2="130" stroke="#8b5a2b" stroke-width="4" />
+                    <rect x="32" y="52" width="10" height="34" fill="#c0392b" />
+                    <rect x="44" y="54" width="8" height="32" fill="#2e86ab" />
+                    <rect x="54" y="50" width="12" height="36" fill="#e1a95f" />
+                    <rect x="68" y="56" width="10" height="30" fill="#4a7c59" />
+                    <rect x="80" y="52" width="9" height="34" fill="#7d4f8b" />
+                    <rect x="91" y="54" width="11" height="32" fill="#d08c5a" />
+                    <rect x="104" y="50" width="8" height="36" fill="#355c7d" />
+                    <rect x="114" y="56" width="12" height="30" fill="#b23a48" />
+                    <rect x="128" y="52" width="9" height="34" fill="#6a994e" />
+                    <rect x="139" y="54" width="10" height="32" fill="#3d5a80" />
+                    <rect x="151" y="50" width="11" height="36" fill="#a5668b" />
+                    <rect x="32" y="94" width="10" height="34" fill="#3d5a80" />
+                    <rect x="44" y="96" width="9" height="32" fill="#e07a5f" />
+                    <rect x="55" y="92" width="12" height="36" fill="#81b29a" />
+                    <g transform="rotate(-8 74 110)">
+                        <rect x="69" y="96" width="9" height="32" fill="#f2cc8f" />
+                    </g>
+                    <rect x="84" y="96" width="10" height="32" fill="#6d6875" />
+                    <rect x="96" y="94" width="11" height="34" fill="#b56576" />
+                    <rect x="112" y="116" width="40" height="6" fill="#c9a66b" />
+                    <rect x="116" y="110" width="36" height="6" fill="#6a994e" />
+                    <rect x="114" y="104" width="38" height="6" fill="#355c7d" />
+                    <rect x="32" y="140" width="22" height="28" fill="#4a7c59" />
+                    <ellipse cx="43" cy="140" rx="16" ry="8" fill="#6a994e" />
+                    <rect x="70" y="148" width="12" height="20" fill="#e1a95f" />
+                    <circle cx="110" cy="156" r="10" fill="#d9b382" />
+                    <rect x="130" y="140" width="24" height="28" fill="#b23a48" />
+                    <circle cx="260" cy="80" r="60" fill="url(#lamp)" />
+                    <rect x="210" y="130" width="80" height="50" rx="8" fill="#6d6875" />
+                    <rect x="200" y="120" width="20" height="60" rx="6" fill="#6d6875" />
+                    <rect x="280" y="120" width="20" height="60" rx="6" fill="#6d6875" />
+                    <rect x="215" y="175" width="10" height="15" fill="#3d3a40" />
+                    <rect x="275" y="175" width="10" height="15" fill="#3d3a40" />
+                    <rect x="220" y="135" width="60" height="15" rx="4" fill="#f2cc8f" />
+                    <line x1="265" y1="40" x2="265" y2="130" stroke="#3d3a40" stroke-width="3" />
+                    <path d="M248 40 Q265 20 282 40 Z" fill="#f2cc8f" stroke="#a67c3f" stroke-width="2" />
+                    <ellipse cx="265" cy="178" rx="14" ry="4" fill="#3d3a40" />
+                    <g transform="translate(176 140) rotate(-6)">
+                        <path d="M0 0 L30 -4 L30 14 L0 18 Z" fill="#fffaf0" stroke="#8b5a2b" stroke-width="1" />
+                        <path d="M30 -4 L60 0 L60 18 L30 14 Z" fill="#fffaf0" stroke="#8b5a2b" stroke-width="1" />
+                    </g>
+                </svg>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudGrid Spacing="3" Class="mb-4">
+        <MudItem xs="12" sm="6">
+            <MudCard Elevation="2" Class="h-100">
+                <MudCardContent>
+                    <MudStack Row AlignItems="AlignItems.Center" Spacing="3">
+                        <MudText Typo="Typo.h3" Class="mud-text-secondary">📚</MudText>
+                        <div>
+                            <MudText Typo="Typo.overline" Color="Color.Secondary">Books in collection</MudText>
+                            <MudText Typo="Typo.h3">@VM.TotalBooks</MudText>
+                        </div>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudCard Elevation="2" Class="h-100">
+                <MudCardContent>
+                    <MudStack Row AlignItems="AlignItems.Center" Spacing="3">
+                        <MudText Typo="Typo.h3" Class="mud-text-secondary">✍️</MudText>
+                        <div>
+                            <MudText Typo="Typo.overline" Color="Color.Secondary">Unique authors</MudText>
+                            <MudText Typo="Typo.h3">@VM.TotalAuthors</MudText>
+                        </div>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid Spacing="4">
+        <MudItem xs="12" md="6">
+            <MudCard Elevation="2" Class="h-100">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Top 10 authors</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    @if (VM.TopAuthors.Count == 0)
+                    {
+                        <MudText Color="Color.Secondary">No books yet — add one to see your top authors.</MudText>
+                    }
+                    else
+                    {
+                        <MudStack Spacing="3">
+                            @foreach (var a in VM.TopAuthors)
+                            {
+                                var pct = VM.MaxAuthor == 0 ? 0 : (double)a.Count * 100.0 / VM.MaxAuthor;
+                                <div>
+                                    <MudStack Row Justify="Justify.SpaceBetween" Class="mb-1">
+                                        <MudText Typo="Typo.body2" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">@a.Author</MudText>
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">@a.Count</MudText>
+                                    </MudStack>
+                                    <MudProgressLinear Value="@pct" Color="Color.Primary" Size="Size.Small" />
                                 </div>
-                                <div class="progress" role="progressbar" style="height: 6px;">
-                                    <div class="progress-bar bg-primary" style="width: @(pct)%"></div>
+                            }
+                        </MudStack>
+                    }
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudCard Elevation="2" Class="h-100">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Top 10 genres</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    @if (VM.TopGenres.Count == 0)
+                    {
+                        <MudText Color="Color.Secondary">No genres recorded yet.</MudText>
+                    }
+                    else
+                    {
+                        <MudStack Spacing="3">
+                            @foreach (var g in VM.TopGenres)
+                            {
+                                var pct = VM.MaxGenre == 0 ? 0 : (double)g.Count * 100.0 / VM.MaxGenre;
+                                <div>
+                                    <MudStack Row Justify="Justify.SpaceBetween" Class="mb-1">
+                                        <MudText Typo="Typo.body2" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">@g.Genre</MudText>
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">@g.Count</MudText>
+                                    </MudStack>
+                                    <MudProgressLinear Value="@pct" Color="Color.Success" Size="Size.Small" />
                                 </div>
-                            </li>
-                        }
-                    </ul>
-                }
-            </div>
-        </div>
-    </div>
-    <div class="col-md-6">
-        <div class="card h-100">
-            <div class="card-header bg-white border-0 pt-3"><h2 class="h5 mb-0">Top 10 genres</h2></div>
-            <div class="card-body">
-                @if (VM.TopGenres.Count == 0)
-                {
-                    <p class="text-muted mb-0">No genres recorded yet.</p>
-                }
-                else
-                {
-                    <ul class="list-unstyled mb-0">
-                        @foreach (var g in VM.TopGenres)
-                        {
-                            var pct = VM.MaxGenre == 0 ? 0 : (int)Math.Round(g.Count * 100.0 / VM.MaxGenre);
-                            <li class="mb-2">
-                                <div class="d-flex justify-content-between small">
-                                    <span class="text-truncate pe-2">@g.Genre</span>
-                                    <span class="text-muted">@g.Count</span>
-                                </div>
-                                <div class="progress" role="progressbar" style="height: 6px;">
-                                    <div class="progress-bar bg-success" style="width: @(pct)%"></div>
-                                </div>
-                            </li>
-                        }
-                    </ul>
-                }
-            </div>
-        </div>
-    </div>
-</div>
+                            }
+                        </MudStack>
+                    }
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+</MudContainer>
 
 @code {
     protected override async Task OnInitializedAsync() => await VM.InitializeAsync();

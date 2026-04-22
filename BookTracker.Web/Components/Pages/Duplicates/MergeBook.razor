@@ -5,81 +5,88 @@
 
 <PageTitle>Merge books - BookTracker</PageTitle>
 
-<h1 class="mb-3">Merge books</h1>
-<p class="text-muted">
-    Pick a winner. All editions (and their copies), works, and tags attached
-    to the loser will move to the winner. Empty winner fields (notes, cover,
-    rating-if-unrated) will be auto-filled from the loser; fields the winner
-    already has stay. The loser Book row is then deleted.
-</p>
+@* MudBlazor pilot page. Logic unchanged — just the chrome. *@
 
-@if (!string.IsNullOrEmpty(VM.ErrorMessage))
-{
-    <div class="alert alert-danger">@VM.ErrorMessage</div>
-}
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-3">
 
-@if (VM.Loading)
-{
-    <div class="text-center py-5">
-        <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
-    </div>
-}
-else if (VM.Lower is null || VM.Higher is null)
-{
-    <a href="/duplicates" class="btn btn-outline-secondary">Back to duplicates</a>
-}
-else
-{
-    <div class="row g-3 mb-3">
-        <div class="col-md-6">@BookCard(VM.Lower)</div>
-        <div class="col-md-6">@BookCard(VM.Higher)</div>
-    </div>
+    <MudText Typo="Typo.h4" Class="mb-3">Merge books</MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+        Pick a winner. All editions (and their copies), works, and tags attached
+        to the loser will move to the winner. Empty winner fields (notes, cover,
+        rating-if-unrated) will be auto-filled from the loser; fields the winner
+        already has stay. The loser Book row is then deleted.
+    </MudText>
 
-    @if (VM.SelectedWinnerId is not null && VM.Loser is not null)
+    @if (!string.IsNullOrEmpty(VM.ErrorMessage))
     {
-        var loser = VM.Loser;
-        var winnerDetail = VM.SelectedWinnerId == VM.Lower.Id ? VM.Lower : VM.Higher;
-        <div class="alert alert-info">
-            <div class="mb-2">
-                <strong>Winner:</strong> @winnerDetail.Title
-            </div>
-            <div class="small">
-                Will move <strong>@loser.EditionCount edition@(loser.EditionCount == 1 ? "" : "s")</strong>
-                (with <strong>@loser.CopyCount cop@(loser.CopyCount == 1 ? "y" : "ies")</strong>)
-                from "@loser.Title" to the winner.
-                @if (VM.WorksToUnion > 0)
-                {
-                    <span>Will add <strong>@VM.WorksToUnion</strong> work@(VM.WorksToUnion == 1 ? "" : "s") the winner didn't already have.</span>
-                }
-                @if (VM.TagsToUnion > 0)
-                {
-                    <span>Will add <strong>@VM.TagsToUnion</strong> tag@(VM.TagsToUnion == 1 ? "" : "s") the winner didn't already have.</span>
-                }
-            </div>
-            @if (VM.EnrichmentHints.Count > 0)
-            {
-                <div class="small mt-2">
-                    <strong>Will auto-fill from loser:</strong>
-                    <ul class="mb-0 mt-1 ps-3">
-                        @foreach (var hint in VM.EnrichmentHints)
-                        {
-                            <li>@hint</li>
-                        }
-                    </ul>
-                </div>
-            }
-        </div>
+        <MudAlert Severity="Severity.Error" Class="mb-3">@VM.ErrorMessage</MudAlert>
     }
 
-    <div class="d-flex gap-2">
-        <button type="button" class="btn btn-primary"
-                disabled="@(!VM.CanMerge || VM.Merging)"
-                @onclick="OnMergeClickAsync">
-            @(VM.Merging ? "Merging..." : "Merge")
-        </button>
-        <a href="/duplicates" class="btn btn-outline-secondary">Cancel</a>
-    </div>
-}
+    @if (VM.Loading)
+    {
+        <MudStack AlignItems="AlignItems.Center" Class="py-10">
+            <MudProgressCircular Indeterminate="true" />
+        </MudStack>
+    }
+    else if (VM.Lower is null || VM.Higher is null)
+    {
+        <MudButton Variant="Variant.Outlined" Href="/duplicates">Back to duplicates</MudButton>
+    }
+    else
+    {
+        <MudRadioGroup T="int?" Value="@VM.SelectedWinnerId"
+                       ValueChanged="@((int? v) => VM.SelectedWinnerId = v)">
+            <MudGrid Spacing="3" Class="mb-3">
+                <MudItem xs="12" md="6">@BookCard(VM.Lower)</MudItem>
+                <MudItem xs="12" md="6">@BookCard(VM.Higher)</MudItem>
+            </MudGrid>
+        </MudRadioGroup>
+
+        @if (VM.SelectedWinnerId is not null && VM.Loser is not null)
+        {
+            var loser = VM.Loser;
+            var winnerDetail = VM.SelectedWinnerId == VM.Lower.Id ? VM.Lower : VM.Higher;
+            <MudAlert Severity="Severity.Info" Class="mb-3" NoIcon="true">
+                <MudText Typo="Typo.body1" Class="mb-2">
+                    <b>Winner:</b> @winnerDetail.Title
+                </MudText>
+                <MudText Typo="Typo.body2">
+                    Will move <b>@loser.EditionCount edition@(loser.EditionCount == 1 ? "" : "s")</b>
+                    (with <b>@loser.CopyCount cop@(loser.CopyCount == 1 ? "y" : "ies")</b>)
+                    from "@loser.Title" to the winner.
+                    @if (VM.WorksToUnion > 0)
+                    {
+                        <span> Will add <b>@VM.WorksToUnion</b> work@(VM.WorksToUnion == 1 ? "" : "s") the winner didn't already have.</span>
+                    }
+                    @if (VM.TagsToUnion > 0)
+                    {
+                        <span> Will add <b>@VM.TagsToUnion</b> tag@(VM.TagsToUnion == 1 ? "" : "s") the winner didn't already have.</span>
+                    }
+                </MudText>
+                @if (VM.EnrichmentHints.Count > 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mt-2"><b>Will auto-fill from loser:</b></MudText>
+                    <MudList T="string" Dense="true" Class="py-0">
+                        @foreach (var hint in VM.EnrichmentHints)
+                        {
+                            <MudListItem T="string" Icon="@Icons.Material.Filled.ChevronRight">@hint</MudListItem>
+                        }
+                    </MudList>
+                }
+            </MudAlert>
+        }
+
+        <MudStack Row Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       Disabled="@(!VM.CanMerge || VM.Merging)"
+                       OnClick="OnMergeClickAsync">
+                @(VM.Merging ? "Merging..." : "Merge")
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Href="/duplicates">Cancel</MudButton>
+        </MudStack>
+    }
+
+</MudContainer>
 
 @code {
     [Parameter] public int IdA { get; set; }
@@ -99,76 +106,77 @@ else
     }
 
     private RenderFragment BookCard(BookMergeDetail detail) =>
-        @<div class="card @(VM.SelectedWinnerId == detail.Id ? "border-primary" : "")">
-            <div class="card-body">
-                <div class="form-check mb-2">
-                    <input class="form-check-input" type="radio"
-                           name="winner" id="@($"winner-{detail.Id}")"
-                           checked="@(VM.SelectedWinnerId == detail.Id)"
-                           @onchange="() => VM.SelectedWinnerId = detail.Id" />
-                    <label class="form-check-label fw-semibold" for="@($"winner-{detail.Id}")">
-                        Make "@detail.Title" the winner
-                    </label>
-                </div>
+        @<MudCard Elevation="2" Outlined="true" Class="@(VM.SelectedWinnerId == detail.Id ? "mud-border-primary" : "")">
+            <MudCardContent>
+                <MudRadio T="int?" Value="@((int?)detail.Id)" Color="Color.Primary" Class="mb-2">
+                    <MudText Typo="Typo.body1"><b>Make "@detail.Title" the winner</b></MudText>
+                </MudRadio>
+
                 @if (!string.IsNullOrEmpty(detail.CoverArtUrl))
                 {
                     <div class="mb-2">
                         <img src="@detail.CoverArtUrl" alt="@detail.Title" loading="lazy"
-                             style="max-height: 140px; max-width: 100px; object-fit: contain;"
-                             class="border rounded" />
+                             style="max-height: 140px; max-width: 100px; object-fit: contain; border: 1px solid #ddd; border-radius: 4px;" />
                     </div>
                 }
+
                 @if (!string.IsNullOrWhiteSpace(detail.AuthorName))
                 {
-                    <div class="small mb-1">by @detail.AuthorName</div>
+                    <MudText Typo="Typo.body2" Class="mb-1">by @detail.AuthorName</MudText>
                 }
-                <div class="small mb-1">
-                    <a href="@($"/books/{detail.Id}/edit")" target="_blank" rel="noopener">Open edit page ↗</a>
-                    <span class="text-muted ms-2">id @detail.Id</span>
-                </div>
-                <div class="small text-muted mb-2">
+
+                <MudText Typo="Typo.body2" Class="mb-1">
+                    <MudLink Href="@($"/books/{detail.Id}/edit")" Target="_blank">Open edit page ↗</MudLink>
+                    <span class="ms-2 mud-text-secondary">id @detail.Id</span>
+                </MudText>
+
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
                     @detail.Category · @detail.Status
                     @if (detail.Rating > 0)
                     {
                         <text> · @detail.Rating/5</text>
                     }
                     · added @detail.DateAdded.ToLocalTime().ToString("d MMM yyyy")
-                </div>
-                <div class="small text-muted mb-2">
+                </MudText>
+
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
                     @detail.EditionCount edition@(detail.EditionCount == 1 ? "" : "s") ·
                     @detail.CopyCount cop@(detail.CopyCount == 1 ? "y" : "ies")
-                </div>
+                </MudText>
+
                 @if (detail.WorkTitles.Count > 0)
                 {
-                    <div class="small mb-2">
-                        <div class="text-muted mb-1">Works (@detail.WorkTitles.Count):</div>
-                        <ul class="mb-0 ps-3">
-                            @foreach (var title in detail.WorkTitles.Take(5))
-                            {
-                                <li>@title</li>
-                            }
-                            @if (detail.WorkTitles.Count > 5)
-                            {
-                                <li class="text-muted">…and @(detail.WorkTitles.Count - 5) more</li>
-                            }
-                        </ul>
-                    </div>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-1">Works (@detail.WorkTitles.Count):</MudText>
+                    <MudList T="string" Dense="true" Class="py-0 mb-2">
+                        @foreach (var title in detail.WorkTitles.Take(5))
+                        {
+                            <MudListItem T="string">@title</MudListItem>
+                        }
+                        @if (detail.WorkTitles.Count > 5)
+                        {
+                            <MudListItem T="string">
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">…and @(detail.WorkTitles.Count - 5) more</MudText>
+                            </MudListItem>
+                        }
+                    </MudList>
                 }
+
                 @if (detail.TagNames.Count > 0)
                 {
-                    <div class="small">
+                    <MudStack Row Spacing="1" Wrap="Wrap.Wrap" Class="mb-2">
                         @foreach (var t in detail.TagNames)
                         {
-                            <span class="badge bg-light text-dark border me-1">@t</span>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@t</MudChip>
                         }
-                    </div>
+                    </MudStack>
                 }
+
                 @if (!string.IsNullOrWhiteSpace(detail.Notes))
                 {
-                    <div class="small text-muted mt-2 fst-italic">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Style="font-style: italic;" Class="mt-2">
                         @(detail.Notes.Length > 100 ? detail.Notes[..100] + "…" : detail.Notes)
-                    </div>
+                    </MudText>
                 }
-            </div>
-        </div>;
+            </MudCardContent>
+        </MudCard>;
 }
