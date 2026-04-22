@@ -217,7 +217,7 @@ else
         await VM.ChangeGroupingAsync(GroupBySelected);
     }
 
-    private void NavigateToEdit(int bookId) => Nav.NavigateTo($"/books/{bookId}/edit");
+    private void NavigateToBook(int bookId) => Nav.NavigateTo($"/books/{bookId}");
 
     private RenderFragment RenderBooks(IReadOnlyList<BookListViewModel.BookListItem> books) =>
     @<text>
@@ -238,7 +238,7 @@ else
                 <tbody>
                     @foreach (var book in books)
                     {
-                        <tr role="button" @onclick="() => NavigateToEdit(book.Id)" style="cursor: pointer;">
+                        <tr role="button" @onclick="() => NavigateToBook(book.Id)" style="cursor: pointer;">
                             <td>
                                 @if (!string.IsNullOrWhiteSpace(book.CoverUrl))
                                 {
@@ -291,7 +291,7 @@ else
         <div class="d-md-none">
             @foreach (var book in books)
             {
-                <div class="book-card-mobile d-flex gap-3 align-items-start" @onclick="() => NavigateToEdit(book.Id)">
+                <div class="book-card-mobile d-flex gap-3 align-items-start" @onclick="() => NavigateToBook(book.Id)">
                     @if (!string.IsNullOrWhiteSpace(book.CoverUrl))
                     {
                         <img src="@book.CoverUrl" alt="" class="rounded flex-shrink-0" style="width: 48px; height: 68px; object-fit: cover;" />
