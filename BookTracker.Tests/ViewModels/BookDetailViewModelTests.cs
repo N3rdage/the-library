@@ -1,5 +1,6 @@
 using BookTracker.Data.Models;
 using BookTracker.Web.ViewModels;
+using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Tests.ViewModels;
 
@@ -144,6 +145,237 @@ public class BookDetailViewModelTests
         Assert.Equal(2, vm.Book!.Editions.Count);
         Assert.Contains(vm.Book.Editions, e => e.Copies.Count == 2);
         Assert.Contains(vm.Book.Editions, e => e.Copies.Count == 1);
+    }
+
+    [Fact]
+    public async Task SetRatingAsync_PersistsAndUpdatesCurrent()
+    {
+        var factory = new TestDbContextFactory();
+        var bookId = await SeedSimpleBookAsync(factory, rating: 2);
+
+        var vm = new BookDetailViewModel(factory);
+        await vm.InitializeAsync(bookId);
+        await vm.SetRatingAsync(5);
+
+        Assert.Equal(5, vm.CurrentRating);
+        using var db = factory.CreateDbContext();
+        Assert.Equal(5, db.Books.Single(b => b.Id == bookId).Rating);
+    }
+
+    [Fact]
+    public async Task SetStatusAsync_PersistsAndUpdatesCurrent()
+    {
+        var factory = new TestDbContextFactory();
+        var bookId = await SeedSimpleBookAsync(factory, status: BookStatus.Unread);
+
+        var vm = new BookDetailViewModel(factory);
+        await vm.InitializeAsync(bookId);
+        await vm.SetStatusAsync(BookStatus.Reading);
+
+        Assert.Equal(BookStatus.Reading, vm.CurrentStatus);
+        using var db = factory.CreateDbContext();
+        Assert.Equal(BookStatus.Reading, db.Books.Single(b => b.Id == bookId).Status);
+    }
+
+    [Fact]
+    public async Task SaveNotesAsync_OnlyPersistsWhenDirty()
+    {
+        var factory = new TestDbContextFactory();
+        var bookId = await SeedSimpleBookAsync(factory, notes: "original");
+
+        var vm = new BookDetailViewModel(factory);
+        await vm.InitializeAsync(bookId);
+
+        // Not dirty yet — save should be a no-op even if CurrentNotes changed.
+        vm.CurrentNotes = "changed without marking dirty";
+        await vm.SaveNotesAsync();
+        using (var db = factory.CreateDbContext())
+        {
+            Assert.Equal("original", db.Books.Single(b => b.Id == bookId).Notes);
+        }
+
+        // Now mark dirty and save.
+        vm.CurrentNotes = "updated properly";
+        vm.MarkNotesDirty();
+        Assert.True(vm.NotesDirty);
+        await vm.SaveNotesAsync();
+        Assert.False(vm.NotesDirty);
+        using (var db = factory.CreateDbContext())
+        {
+            Assert.Equal("updated properly", db.Books.Single(b => b.Id == bookId).Notes);
+        }
+    }
+
+    [Fact]
+    public async Task SaveNotesAsync_BlankInputPersistsAsNull()
+    {
+        var factory = new TestDbContextFactory();
+        var bookId = await SeedSimpleBookAsync(factory, notes: "will be cleared");
+
+        var vm = new BookDetailViewModel(factory);
+        await vm.InitializeAsync(bookId);
+        vm.CurrentNotes = "   ";
+        vm.MarkNotesDirty();
+        await vm.SaveNotesAsync();
+
+        using var db = factory.CreateDbContext();
+        Assert.Null(db.Books.Single(b => b.Id == bookId).Notes);
+    }
+
+    [Fact]
+    public async Task AddTagAsync_CreatesNewTagAndAssigns()
+    {
+        var factory = new TestDbContextFactory();
+        var bookId = await SeedSimpleBookAsync(factory);
+
+        var vm = new BookDetailViewModel(factory);
+        await vm.InitializeAsync(bookId);
+        var added = await vm.AddTagAsync("Signed");
+
+        Assert.NotNull(added);
+        Assert.Equal("signed", added!.Name); // normalised to lowercase
+        Assert.Contains(vm.CurrentTags, t => t.Name == "signed");
+
+        using var db = factory.CreateDbContext();
+        var book = db.Books.Include(b => b.Tags).Single(b => b.Id == bookId);
+        Assert.Contains(book.Tags, t => t.Name == "signed");
+    }
+
+    [Fact]
+    public async Task AddTagAsync_ReusesExistingTagCaseInsensitively()
+    {
+        var factory = new TestDbContextFactory();
+        int bookId;
+        using (var db = factory.CreateDbContext())
+        {
+            db.Tags.Add(new Tag { Name = "follow-up" }); // pre-existing tag
+            var book = new Book
+            {
+                Title = "T",
+                Works = [new Work { Title = "T", Author = new Author { Name = "A" } }],
+            };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            bookId = book.Id;
+        }
+
+        var vm = new BookDetailViewModel(factory);
+        await vm.InitializeAsync(bookId);
+        await vm.AddTagAsync("FOLLOW-UP");
+
+        using var db2 = factory.CreateDbContext();
+        var tagCount = db2.Tags.Count(t => t.Name == "follow-up");
+        Assert.Equal(1, tagCount); // not duplicated
+    }
+
+    [Fact]
+    public async Task AddTagAsync_IgnoresAlreadyAssignedTag()
+    {
+        var factory = new TestDbContextFactory();
+        int bookId;
+        using (var db = factory.CreateDbContext())
+        {
+            var tag = new Tag { Name = "gift" };
+            var book = new Book
+            {
+                Title = "T",
+                Works = [new Work { Title = "T", Author = new Author { Name = "A" } }],
+                Tags = [tag],
+            };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            bookId = book.Id;
+        }
+
+        var vm = new BookDetailViewModel(factory);
+        await vm.InitializeAsync(bookId);
+        var second = await vm.AddTagAsync("gift");
+
+        Assert.Null(second);
+        Assert.Single(vm.CurrentTags);
+    }
+
+    [Fact]
+    public async Task RemoveTagAsync_DetachesFromBookKeepsTagRow()
+    {
+        var factory = new TestDbContextFactory();
+        int bookId;
+        int tagId;
+        using (var db = factory.CreateDbContext())
+        {
+            var tag = new Tag { Name = "gift" };
+            var book = new Book
+            {
+                Title = "T",
+                Works = [new Work { Title = "T", Author = new Author { Name = "A" } }],
+                Tags = [tag],
+            };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            bookId = book.Id;
+            tagId = tag.Id;
+        }
+
+        var vm = new BookDetailViewModel(factory);
+        await vm.InitializeAsync(bookId);
+        await vm.RemoveTagAsync(tagId);
+
+        Assert.Empty(vm.CurrentTags);
+        using var db2 = factory.CreateDbContext();
+        var book2 = db2.Books.Include(b => b.Tags).Single(b => b.Id == bookId);
+        Assert.Empty(book2.Tags);
+        // Tag row itself survives — other books may still reference it.
+        Assert.Equal(1, db2.Tags.Count(t => t.Id == tagId));
+    }
+
+    [Fact]
+    public async Task SearchTagsAsync_ExcludesAlreadyAssigned()
+    {
+        var factory = new TestDbContextFactory();
+        int bookId;
+        using (var db = factory.CreateDbContext())
+        {
+            var assigned = new Tag { Name = "signed" };
+            db.Tags.Add(new Tag { Name = "follow-up" });
+            db.Tags.Add(new Tag { Name = "gift" });
+            var book = new Book
+            {
+                Title = "T",
+                Works = [new Work { Title = "T", Author = new Author { Name = "A" } }],
+                Tags = [assigned],
+            };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            bookId = book.Id;
+        }
+
+        var vm = new BookDetailViewModel(factory);
+        await vm.InitializeAsync(bookId);
+        var results = (await vm.SearchTagsAsync("", CancellationToken.None)).ToList();
+
+        Assert.Contains("follow-up", results);
+        Assert.Contains("gift", results);
+        Assert.DoesNotContain("signed", results);
+    }
+
+    private static async Task<int> SeedSimpleBookAsync(
+        TestDbContextFactory factory,
+        int rating = 0,
+        BookStatus status = BookStatus.Unread,
+        string? notes = null)
+    {
+        using var db = factory.CreateDbContext();
+        var book = new Book
+        {
+            Title = "Seed",
+            Status = status,
+            Rating = rating,
+            Notes = notes,
+            Works = [new Work { Title = "Seed", Author = new Author { Name = "Seed Author" } }],
+        };
+        db.Books.Add(book);
+        await db.SaveChangesAsync();
+        return book.Id;
     }
 
     [Fact]
