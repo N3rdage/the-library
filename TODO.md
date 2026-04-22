@@ -38,7 +38,7 @@ Outstanding work items for BookTracker. This is the single source of truth — c
 Detection + `/duplicates` listing shipped in PR 1 (this branch). Remaining PRs in the series:
 
 - [x] **PR 2 — Author merge** (shipped): side-by-side review at `/duplicates/merge/author/{a}/{b}`, reassigns works + aliases, auto-promotes winner to canonical when winner was an alias of loser, refuses when the two resolve to different canonicals.
-- [ ] **PR 3 — Work merge + Add-Work-to-Book via search** (bundled; shares the Work-search UI): reassign `BookWork` join rows, enrich winner from loser's populated fields (subtitle, genres, series, `FirstPublishedDate`), delete loser. Add "search existing Works" affordance on the Edit Book page to attach a story to an anthology.
+- [x] **PR 3 — Work merge + Add-Work-to-Book via search** (shipped): `/duplicates/merge/work/{a}/{b}` transactional merge with "Book contains both" handling and surfacing in preview + success banner. Edit Book page gains an "Attach existing Work" typeahead row above the create-new row. No field auto-enrichment — user copies anything they want to keep (subtitle, series, genres) manually before confirming.
 - [ ] **PR 4 — Edition merge**: reassign `Copy.EditionId`, enrich fields, delete loser. Same-Book only (cross-Book edition dupes imply the Books are dupes → handle those first).
 - [ ] **PR 5 — Book merge**: union Works/Tags, move all Editions, merge any duplicate Editions that result, delete loser.
 - [ ] **PR 6 (audit first, possibly drop)** — gap-fill on Edit Book's "add Edition by ISBN". Partial implementation already exists via `BookEditViewModel.NewEditionLookupIsbn`; only open a PR if the audit shows a real gap.

@@ -128,6 +128,7 @@ A short-lived context is created per operation. Never inject `DbContext` directl
 | `/assistant` | AI Assistant | Book advisor (Opus), genre cleanup, collection cataloguing, shopping suggestions (Sonnet). |
 | `/duplicates` | Duplicates | Tabs for Authors / Works / Books / Editions. Lists candidate duplicate pairs detected on-demand. Dismiss false positives (reversible via the "Dismissed" section). Author pairs have a Merge → button. Web-primary, desktop-first layout. |
 | `/duplicates/merge/author/{idA}/{idB}` | Merge authors | Side-by-side review of the pair, radio to pick a winner, preview of impact (N works + M aliases to reassign), transactional merge. Refuses when the two authors resolve to different canonicals — user resolves aliases on `/authors` first. |
+| `/duplicates/merge/work/{idA}/{idB}` | Merge works | Side-by-side review, radio to pick a winner, preview of impact (books to reassign + any books that already contain both → loser dropped). Transactional. Refuses if the two resolve to different authors (merge authors first). |
 
 ## Shared components
 
@@ -148,6 +149,12 @@ Scans the library for candidate duplicate pairs across Authors, Works, Books, an
 
 ### AuthorMergeService
 Merges two Author rows after user review. Refuses when the two authors resolve to different canonicals (user must resolve aliases on `/authors` first). Otherwise runs in one transaction: reassigns `Work.AuthorId`, reassigns external aliases' `CanonicalAuthorId`, clears any `IgnoredDuplicate` rows mentioning the loser, deletes the loser. One edge case: when the winner is itself an alias of the loser, winner is promoted to canonical before the delete so its `CanonicalAuthorId` doesn't dangle. Returns a result with reassignment counts + a flag for the promotion case.
+
+### WorkMergeService
+Merges two Work rows after user review. No auto-enrichment — strict replace, user copies any fields they want to keep (subtitle, series, genres) from loser manually before confirming. Refuses if the two Works have different `AuthorId` (detection already blocks by author, but the service guards direct-URL hits). Transactional: for each Book attached to the loser, adds the winner if not already present then clears `loser.Books`, which deletes the `BookWork` rows; clears any `IgnoredDuplicate` referencing the loser; deletes the loser Work. The "Book contains both" count is surfaced in `LoadAsync` preview + `MergeAsync` result so the UI can flag that those Books will just lose the loser attachment (winner stays).
+
+### WorkSearchService
+Typeahead-style substring search across Works. Min 2 chars; case-insensitive via `ToLower()` on both sides (keeps InMemory tests honest). Ranks starts-with matches above contains-anywhere, alphabetical within. `excludeBookId` filter lets the Edit Book "Attach existing Work" UI exclude Works already attached. Returns up to `maxResults` results (default 20).
 
 ### SeriesMatchService
 Local series detection after ISBN lookup. Strategies:

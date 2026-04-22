@@ -1,0 +1,172 @@
+@page "/duplicates/merge/work/{idA:int}/{idB:int}"
+@using BookTracker.Web.Services
+@inject WorkMergeViewModel VM
+@inject NavigationManager Nav
+
+<PageTitle>Merge works - BookTracker</PageTitle>
+
+<h1 class="mb-3">Merge works</h1>
+<p class="text-muted">
+    Pick a winner. The other Work will be deleted, and any Books containing
+    the loser will be reassigned to the winner. This cannot be undone — if
+    you want to keep any fields from the loser (subtitle, series, genres),
+    copy them across to the winner on the relevant
+    <a href="/books" target="_blank" rel="noopener">Book edit page</a>
+    before confirming.
+</p>
+
+@if (!string.IsNullOrEmpty(VM.ErrorMessage))
+{
+    <div class="alert alert-danger">@VM.ErrorMessage</div>
+}
+
+@if (VM.Loading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
+    </div>
+}
+else if (VM.Lower is null || VM.Higher is null)
+{
+    <a href="/duplicates" class="btn btn-outline-secondary">Back to duplicates</a>
+}
+else if (!string.IsNullOrEmpty(VM.IncompatibilityReason))
+{
+    <div class="alert alert-warning">
+        <strong>Can't merge these two directly.</strong>
+        <p class="mb-0">@VM.IncompatibilityReason</p>
+    </div>
+    <a href="/duplicates" class="btn btn-outline-secondary">Back to duplicates</a>
+}
+else
+{
+    <div class="row g-3 mb-3">
+        <div class="col-md-6">@WorkCard(VM.Lower)</div>
+        <div class="col-md-6">@WorkCard(VM.Higher)</div>
+    </div>
+
+    @if (VM.SharedBookCount > 0)
+    {
+        <div class="alert alert-secondary">
+            <strong>Heads up:</strong> @VM.SharedBookCount
+            book@(VM.SharedBookCount == 1 ? "" : "s") currently contain@(VM.SharedBookCount == 1 ? "s" : "")
+            <em>both</em> of these Works. Post-merge each of those Books will contain only the winner — the loser-side attachment is dropped. That's usually what you want (the compendium thought it had two separate stories, but they were the same Work), but it does reduce the Works-count on those Books by one.
+        </div>
+    }
+
+    @if (VM.SelectedWinnerId is not null && VM.Loser is not null)
+    {
+        var loser = VM.Loser;
+        <div class="alert alert-info">
+            <div class="mb-2">
+                <strong>Winner:</strong> @(VM.SelectedWinnerId == VM.Lower.Id ? VM.Lower.Title : VM.Higher.Title)
+            </div>
+            <div class="small">
+                Will delete "@loser.Title" (@loser.BookCount book@(loser.BookCount == 1 ? "" : "s")).
+                @{
+                    var newlyAttached = Math.Max(0, loser.BookCount - VM.SharedBookCount);
+                }
+                @if (newlyAttached > 0)
+                {
+                    <span>
+                        @newlyAttached book@(newlyAttached == 1 ? "" : "s") that only contained the loser will be attached to the winner.
+                    </span>
+                }
+                @if (VM.SharedBookCount > 0)
+                {
+                    <span>
+                        @VM.SharedBookCount book@(VM.SharedBookCount == 1 ? "" : "s") that already contain the winner will simply lose the loser attachment.
+                    </span>
+                }
+            </div>
+        </div>
+    }
+
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-primary"
+                disabled="@(!VM.CanMerge || VM.Merging)"
+                @onclick="OnMergeClickAsync">
+            @(VM.Merging ? "Merging..." : "Merge")
+        </button>
+        <a href="/duplicates" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+}
+
+@code {
+    [Parameter] public int IdA { get; set; }
+    [Parameter] public int IdB { get; set; }
+
+    protected override async Task OnInitializedAsync() => await VM.LoadAsync(IdA, IdB);
+
+    private async Task OnMergeClickAsync()
+    {
+        var result = await VM.MergeAsync();
+        if (result is { Success: true })
+        {
+            var winner = Uri.EscapeDataString(result.WinnerTitle ?? "winner");
+            var loser = Uri.EscapeDataString(result.LoserTitle ?? "loser");
+            Nav.NavigateTo($"/duplicates?mergedWorkWinner={winner}&mergedWorkLoser={loser}&booksReassigned={result.BooksReassigned}&booksAlreadyShared={result.BooksAlreadyShared}");
+        }
+    }
+
+    private RenderFragment WorkCard(WorkMergeDetail detail) =>
+        @<div class="card @(VM.SelectedWinnerId == detail.Id ? "border-primary" : "")">
+            <div class="card-body">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="radio"
+                           name="winner" id="@($"winner-{detail.Id}")"
+                           checked="@(VM.SelectedWinnerId == detail.Id)"
+                           @onchange="() => VM.SelectedWinnerId = detail.Id" />
+                    <label class="form-check-label fw-semibold" for="@($"winner-{detail.Id}")">
+                        Make "@detail.Title" the winner
+                    </label>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(detail.Subtitle))
+                {
+                    <div class="small text-muted fst-italic mb-1">@detail.Subtitle</div>
+                }
+                <div class="small mb-1">by @detail.AuthorName</div>
+                <div class="small text-muted mb-2">
+                    @if (detail.FirstPublishedYear.HasValue)
+                    {
+                        <span>first pub. @detail.FirstPublishedYear</span>
+                        <span class="mx-1">·</span>
+                    }
+                    @detail.BookCount book@(detail.BookCount == 1 ? "" : "s")
+                    <span class="mx-1">·</span>
+                    id @detail.Id
+                </div>
+                @if (!string.IsNullOrEmpty(detail.SeriesName))
+                {
+                    <div class="small mb-2">
+                        <span class="badge bg-light text-dark border">
+                            Series: @detail.SeriesName@(detail.SeriesOrder.HasValue ? $" #{detail.SeriesOrder}" : "")
+                        </span>
+                    </div>
+                }
+                @if (detail.GenreNames.Count > 0)
+                {
+                    <div class="small mb-2">
+                        Genres:
+                        @string.Join(", ", detail.GenreNames)
+                    </div>
+                }
+                @if (detail.SampleBookTitles.Count > 0)
+                {
+                    <div class="small">
+                        <div class="text-muted mb-1">Sample books:</div>
+                        <ul class="mb-0 ps-3">
+                            @foreach (var title in detail.SampleBookTitles)
+                            {
+                                <li>@title</li>
+                            }
+                            @if (detail.BookCount > detail.SampleBookTitles.Count)
+                            {
+                                <li class="text-muted">…and @(detail.BookCount - detail.SampleBookTitles.Count) more</li>
+                            }
+                        </ul>
+                    </div>
+                }
+            </div>
+        </div>;
+}

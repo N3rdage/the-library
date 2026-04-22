@@ -109,7 +109,53 @@ else
                                 }
                             </ul>
                         }
+                        <div class="mb-3">
+                            <label class="form-label small text-muted mb-1">Attach an existing Work (for stories already entered in another compendium)</label>
+                            <div class="row g-2">
+                                <div class="col-md-10">
+                                    <input type="search" class="form-control form-control-sm"
+                                           placeholder="Search Works by title (min 2 characters)"
+                                           @bind="VM.AttachWorkQuery"
+                                           @bind:event="oninput"
+                                           @onkeyup="() => VM.SearchWorksToAttachAsync(BookId)" />
+                                </div>
+                                <div class="col-md-2 d-grid">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                                            @onclick="() => VM.SearchWorksToAttachAsync(BookId)">
+                                        @(VM.Searching ? "Searching..." : "Search")
+                                    </button>
+                                </div>
+                            </div>
+                            @if (VM.AttachWorkResults.Count > 0)
+                            {
+                                <ul class="list-group list-group-flush border mt-2" style="max-height: 220px; overflow-y: auto;">
+                                    @foreach (var r in VM.AttachWorkResults)
+                                    {
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <div class="fw-semibold">@r.Title</div>
+                                                @if (!string.IsNullOrWhiteSpace(r.Subtitle))
+                                                {
+                                                    <div class="small text-muted fst-italic">@r.Subtitle</div>
+                                                }
+                                                <div class="small text-muted">by @r.AuthorName · in @r.BookCount book@(r.BookCount == 1 ? "" : "s")</div>
+                                            </div>
+                                            <button type="button" class="btn btn-outline-success btn-sm"
+                                                    @onclick="() => VM.AttachWorkAsync(BookId, r.Id)">
+                                                Attach
+                                            </button>
+                                        </li>
+                                    }
+                                </ul>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(VM.AttachWorkQuery) && VM.AttachWorkQuery.Trim().Length >= 2 && !VM.Searching)
+                            {
+                                <div class="small text-muted mt-2">No matching Works. (Not attached here already? Create a new one below.)</div>
+                            }
+                        </div>
+
                         <div class="row g-2">
+                            <div class="col-12"><small class="text-muted">Or create a new Work:</small></div>
                             <div class="col-md-5">
                                 <input type="text" class="form-control form-control-sm" placeholder="Work title" @bind="VM.NewWorkTitle" />
                             </div>
