@@ -53,6 +53,17 @@ var baseAppSettings = {
 var withAnthropic = hasAnthropicKey ? union(baseAppSettings, { AI__Anthropic__ApiKey: anthropicKeyRef }) : baseAppSettings
 var appSettingsValues = hasTroveKey ? union(withAnthropic, { Trove__ApiKey: troveKeyRef }) : withAnthropic
 
+// Paths served publicly (without Easy Auth). Limited to the PWA assets
+// Chrome/Safari fetch without credentials during the install-validation
+// handshake. Manifest + icons + service worker script are all non-sensitive
+// (public app name, theme colour, static images, client-side caching logic).
+// Expand deliberately — every entry here bypasses AAD sign-in.
+var pwaPublicPaths = [
+  '/manifest.webmanifest'
+  '/service-worker.js'
+  '/icons'
+]
+
 resource app 'Microsoft.Web/sites@2023-12-01' existing = {
   name: appServiceName
 }
@@ -94,6 +105,7 @@ resource authConfig 'Microsoft.Web/sites/config@2023-12-01' = {
       requireAuthentication: true
       unauthenticatedClientAction: 'RedirectToLoginPage'
       redirectToProvider: 'azureactivedirectory'
+      excludedPaths: pwaPublicPaths
     }
     identityProviders: {
       azureActiveDirectory: {
@@ -151,6 +163,7 @@ resource stagingAuthConfig 'Microsoft.Web/sites/slots/config@2023-12-01' = {
       requireAuthentication: true
       unauthenticatedClientAction: 'RedirectToLoginPage'
       redirectToProvider: 'azureactivedirectory'
+      excludedPaths: pwaPublicPaths
     }
     identityProviders: {
       azureActiveDirectory: {
