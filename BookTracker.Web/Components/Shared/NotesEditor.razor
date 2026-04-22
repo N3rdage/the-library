@@ -1,0 +1,49 @@
+@* Inline notes editor for the Book Detail page. Binds to VM.CurrentNotes;
+   fires OnDirty on every change (parent schedules the debounced save) and
+   OnSaveRequested on blur for immediate flush. Save-state indicator sits
+   next to the label so the user can see "Saving..." / "Saved". *@
+
+<div>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+        <MudText Typo="Typo.caption" Color="Color.Secondary">Notes</MudText>
+        @if (VM.NotesSaving)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary">— saving…</MudText>
+        }
+        else if (VM.NotesDirty)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Warning">— unsaved</MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.caption" Color="Color.Success">— saved</MudText>
+        }
+    </MudStack>
+    <MudTextField T="string"
+                  Value="VM.CurrentNotes"
+                  ValueChanged="HandleChanged"
+                  Immediate="true"
+                  DebounceInterval="200"
+                  Lines="3"
+                  Variant="Variant.Outlined"
+                  Margin="Margin.Dense"
+                  Placeholder="Notes about this book..."
+                  OnBlur="HandleBlur" />
+</div>
+
+@code {
+    [Parameter, EditorRequired] public BookDetailViewModel VM { get; set; } = default!;
+    [Parameter] public EventCallback OnDirty { get; set; }
+    [Parameter] public EventCallback OnSaveRequested { get; set; }
+
+    private async Task HandleChanged(string? value)
+    {
+        VM.CurrentNotes = value ?? "";
+        await OnDirty.InvokeAsync();
+    }
+
+    private async Task HandleBlur(FocusEventArgs _)
+    {
+        if (VM.NotesDirty) await OnSaveRequested.InvokeAsync();
+    }
+}

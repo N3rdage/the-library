@@ -1,12 +1,14 @@
 @page "/books/{BookId:int}"
+@implements IAsyncDisposable
 @inject BookDetailViewModel VM
 @inject NavigationManager Nav
+@inject ISnackbar Snackbar
 
 @* Book detail / View page — browse-first, MudBlazor pilot continuation.
-   PR 1 ships read-only; edit surfaces (inline auto-save + modals) land
-   in subsequent PRs. Single-Work books collapse into one "Details" panel;
-   multi-Work compendiums render a searchable list. Mobile-first single
-   column, capped at MaxWidth.Medium on desktop. *@
+   PR 1 shipped read-only. PR 2 adds inline auto-save for rating, status,
+   notes (debounced), and tags (autocomplete + closeable chips). Structural
+   edits (Work, Edition, Copy) land in modal dialogs in PR 3+.
+   Mobile-first single column, capped at MaxWidth.Medium on desktop. *@
 
 <PageTitle>@(VM.Book?.Title ?? "Book") - BookTracker</PageTitle>
 
@@ -62,9 +64,21 @@
                             <MudText Typo="Typo.subtitle1">@primary.AuthorName@(VM.IsSingleWork ? "" : $" (+ {book.Works.Count - 1} more)")</MudText>
                         }
                         <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mt-1">
-                            <MudChip T="string" Size="Size.Small" Color="@StatusColor(book.Status)" Variant="Variant.Filled">@StatusLabel(book.Status)</MudChip>
+                            @* Status: three filter-chip buttons, single-selection, auto-save on change. *@
+                            <MudChipSet T="BookStatus"
+                                        SelectionMode="SelectionMode.SingleSelection"
+                                        CheckMark="false"
+                                        SelectedValue="VM.CurrentStatus"
+                                        SelectedValueChanged="OnStatusChanged">
+                                @foreach (var s in new[] { BookStatus.Unread, BookStatus.Reading, BookStatus.Read })
+                                {
+                                    <MudChip T="BookStatus" Value="s" Size="Size.Small" Color="@StatusColor(s)">@StatusLabel(s)</MudChip>
+                                }
+                            </MudChipSet>
                             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@(book.Category == BookCategory.Fiction ? "Fiction" : "Non-Fiction")</MudChip>
-                            <MudRating ReadOnly="true" SelectedValue="@book.Rating" Size="Size.Small" />
+                            <MudRating SelectedValue="VM.CurrentRating"
+                                       SelectedValueChanged="OnRatingChanged"
+                                       Size="Size.Small" />
                         </MudStack>
                     </MudStack>
                 </MudStack>
@@ -126,13 +140,7 @@
                                 </MudStack>
                             </div>
                         }
-                        @if (!string.IsNullOrEmpty(book.Notes))
-                        {
-                            <div>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">Notes</MudText>
-                                <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@book.Notes</MudText>
-                            </div>
-                        }
+                        <NotesEditor VM="VM" OnSaveRequested="SaveNotesImmediateAsync" OnDirty="OnNotesDirty" />
                     </MudStack>
                 </MudCardContent>
             </MudCard>
@@ -161,12 +169,10 @@
                                       Class="mb-2" />
                     }
 
-                    @if (!string.IsNullOrEmpty(book.Notes))
-                    {
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Book notes</MudText>
-                        <MudText Typo="Typo.body2" Class="mb-3" Style="white-space: pre-wrap;">@book.Notes</MudText>
-                        <MudDivider Class="mb-2" />
-                    }
+                    <div class="mb-3">
+                        <NotesEditor VM="VM" OnSaveRequested="SaveNotesImmediateAsync" OnDirty="OnNotesDirty" />
+                    </div>
+                    <MudDivider Class="mb-2" />
 
                     @{
                         var filtered = FilteredWorks(book.Works);
@@ -304,25 +310,45 @@
             </MudCardContent>
         </MudCard>
 
-        @* Tags. *@
-        @if (book.Tags.Count > 0)
-        {
-            <MudCard Elevation="1" Class="mb-3">
-                <MudCardHeader>
-                    <CardHeaderContent>
-                        <MudText Typo="Typo.h6">Tags</MudText>
-                    </CardHeaderContent>
-                </MudCardHeader>
-                <MudCardContent>
-                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
-                        @foreach (var t in book.Tags)
+        @* Tags — inline add via autocomplete, closeable chips. *@
+        <MudCard Elevation="1" Class="mb-3">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Tags</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                @if (VM.CurrentTags.Count > 0)
+                {
+                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" Class="mb-2">
+                        @foreach (var t in VM.CurrentTags)
                         {
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@t.Name</MudChip>
+                            <MudChip T="string"
+                                     Size="Size.Small"
+                                     Variant="Variant.Outlined"
+                                     OnClose="@(() => OnRemoveTagAsync(t.Id))">@t.Name</MudChip>
                         }
                     </MudStack>
-                </MudCardContent>
-            </MudCard>
-        }
+                }
+                <MudAutocomplete T="string"
+                                 @bind-Value="newTagText"
+                                 SearchFunc="SearchTagsAsync"
+                                 Placeholder="Add a tag..."
+                                 Variant="Variant.Outlined"
+                                 Margin="Margin.Dense"
+                                 Clearable="true"
+                                 CoerceText="true"
+                                 CoerceValue="true"
+                                 OnKeyDown="OnTagKeyDown"
+                                 OnBlur="OnTagBlur"
+                                 ResetValueOnEmptyText="true"
+                                 Adornment="Adornment.Start"
+                                 AdornmentIcon="@Icons.Material.Filled.Add" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                    Press Enter or pick a suggestion. New tags are created automatically.
+                </MudText>
+            </MudCardContent>
+        </MudCard>
 
         <MudStack Row="true" Spacing="2" Class="mt-3">
             <MudButton Href="/books" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack">
@@ -338,8 +364,25 @@
 
     private string workFilter = "";
     private readonly HashSet<int> expandedWorkIds = [];
+    private string? newTagText;
+
+    // Notes debounce: 800ms after the last keystroke OR immediate on blur.
+    // CTS is re-created per keystroke so the previous pending save is
+    // cancelled. Disposed on component teardown so we don't trigger a
+    // save against a torn-down circuit.
+    private CancellationTokenSource? notesCts;
+    private const int NotesDebounceMs = 800;
 
     protected override async Task OnInitializedAsync() => await VM.InitializeAsync(BookId);
+
+    public async ValueTask DisposeAsync()
+    {
+        if (notesCts is not null)
+        {
+            await notesCts.CancelAsync();
+            notesCts.Dispose();
+        }
+    }
 
     private void ToggleWork(int id)
     {
@@ -354,6 +397,99 @@
             .Where(w => w.Title.Contains(f, StringComparison.OrdinalIgnoreCase)
                      || w.AuthorName.Contains(f, StringComparison.OrdinalIgnoreCase))
             .ToList();
+    }
+
+    private async Task OnRatingChanged(int value)
+    {
+        try { await VM.SetRatingAsync(value); }
+        catch (Exception ex) { Snackbar.Add($"Couldn't save rating: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task OnStatusChanged(BookStatus value)
+    {
+        try { await VM.SetStatusAsync(value); }
+        catch (Exception ex) { Snackbar.Add($"Couldn't save status: {ex.Message}", Severity.Error); }
+    }
+
+    private void OnNotesDirty()
+    {
+        VM.MarkNotesDirty();
+        ScheduleNotesSave();
+    }
+
+    private void ScheduleNotesSave()
+    {
+        notesCts?.Cancel();
+        notesCts?.Dispose();
+        notesCts = new CancellationTokenSource();
+        var token = notesCts.Token;
+        _ = DelayedSaveAsync(token);
+    }
+
+    private async Task DelayedSaveAsync(CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(NotesDebounceMs, ct);
+            await SaveNotesImmediateAsync();
+        }
+        catch (TaskCanceledException) { /* superseded by a newer keystroke */ }
+    }
+
+    private async Task SaveNotesImmediateAsync()
+    {
+        try
+        {
+            await VM.SaveNotesAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Couldn't save notes: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task<IEnumerable<string>> SearchTagsAsync(string query, CancellationToken ct)
+    {
+        try { return await VM.SearchTagsAsync(query ?? "", ct); }
+        catch { return []; }
+    }
+
+    private async Task OnTagKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(newTagText))
+        {
+            await AddCurrentTagAsync();
+        }
+    }
+
+    private async Task OnTagBlur(FocusEventArgs _)
+    {
+        if (!string.IsNullOrWhiteSpace(newTagText))
+        {
+            await AddCurrentTagAsync();
+        }
+    }
+
+    private async Task AddCurrentTagAsync()
+    {
+        var name = newTagText;
+        if (string.IsNullOrWhiteSpace(name)) return;
+        try
+        {
+            await VM.AddTagAsync(name);
+            newTagText = null;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Couldn't add tag: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task OnRemoveTagAsync(int tagId)
+    {
+        try { await VM.RemoveTagAsync(tagId); }
+        catch (Exception ex) { Snackbar.Add($"Couldn't remove tag: {ex.Message}", Severity.Error); }
     }
 
     private static Color StatusColor(BookStatus status) => status switch

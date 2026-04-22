@@ -5,15 +5,30 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
 
-// Read-only view model for the book detail page (View page, /books/{id}).
-// Deliberately flat display shape — no form inputs, no edit state — so the
-// page can focus on browsing. Edit surfaces will land in later PRs via
-// inline auto-save (rating/status/notes/tags) and modal dialogs
-// (work/edition/copy edits).
+// View model for the book detail page (/books/{id}). The initial load
+// projects the Book into a flat display shape (BookDetail record). Inline
+// auto-save surfaces for the "browse-and-tweak" fields (rating, status,
+// notes, tags) mutate the Current* properties + persist in the same call,
+// keeping the page focused on one value at a time. Larger structural
+// edits (Work, Edition, Copy) happen in modal dialogs in a later PR.
 public class BookDetailViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
 {
     public bool NotFound { get; private set; }
     public BookDetail? Book { get; private set; }
+
+    // Inline-editable state — initialised from Book in InitializeAsync and
+    // kept as the source of truth once the page starts mutating. The Book
+    // record is the initial snapshot; display binds to Current*.
+    public int CurrentRating { get; private set; }
+    public BookStatus CurrentStatus { get; private set; }
+    public string CurrentNotes { get; set; } = "";
+    public List<TagDetail> CurrentTags { get; private set; } = [];
+
+    // Notes-field state: the textbox binds here; a debounced save fires on
+    // change + explicit save on blur. The page drives the timing; the VM
+    // just persists on demand and tracks saved-ness for the UI indicator.
+    public bool NotesDirty { get; private set; }
+    public bool NotesSaving { get; private set; }
 
     public bool IsSingleWork => Book is not null && Book.Works.Count == 1;
     public int TotalEditions => Book?.Editions.Count ?? 0;
@@ -67,6 +82,128 @@ public class BookDetailViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
                 .OrderBy(t => t.Name)
                 .Select(t => new TagDetail(t.Id, t.Name))
                 .ToList());
+
+        CurrentRating = book.Rating;
+        CurrentStatus = book.Status;
+        CurrentNotes = book.Notes ?? "";
+        CurrentTags = Book.Tags.ToList();
+    }
+
+    public async Task SetRatingAsync(int rating)
+    {
+        if (Book is null) return;
+        if (rating < 0 || rating > 5) return;
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var book = await db.Books.FindAsync(Book.Id);
+        if (book is null) return;
+        book.Rating = rating;
+        await db.SaveChangesAsync();
+        CurrentRating = rating;
+    }
+
+    public async Task SetStatusAsync(BookStatus status)
+    {
+        if (Book is null) return;
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var book = await db.Books.FindAsync(Book.Id);
+        if (book is null) return;
+        book.Status = status;
+        await db.SaveChangesAsync();
+        CurrentStatus = status;
+    }
+
+    public void MarkNotesDirty() => NotesDirty = true;
+
+    public async Task SaveNotesAsync()
+    {
+        if (Book is null || !NotesDirty) return;
+
+        NotesSaving = true;
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            var book = await db.Books.FindAsync(Book.Id);
+            if (book is null) return;
+            book.Notes = string.IsNullOrWhiteSpace(CurrentNotes) ? null : CurrentNotes.Trim();
+            await db.SaveChangesAsync();
+            NotesDirty = false;
+        }
+        finally
+        {
+            NotesSaving = false;
+        }
+    }
+
+    /// <summary>Returns the added (or existing, re-attached) tag. Null if the name was blank.</summary>
+    public async Task<TagDetail?> AddTagAsync(string name)
+    {
+        if (Book is null || string.IsNullOrWhiteSpace(name)) return null;
+
+        var normalized = name.Trim().ToLowerInvariant();
+        if (CurrentTags.Any(t => t.Name.Equals(normalized, StringComparison.OrdinalIgnoreCase)))
+        {
+            return null;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var book = await db.Books.Include(b => b.Tags).FirstOrDefaultAsync(b => b.Id == Book.Id);
+        if (book is null) return null;
+
+        var tag = await db.Tags.FirstOrDefaultAsync(t => t.Name == normalized);
+        if (tag is null)
+        {
+            tag = new Tag { Name = normalized };
+            db.Tags.Add(tag);
+        }
+
+        if (book.Tags.All(t => t.Id != tag.Id || tag.Id == 0))
+        {
+            book.Tags.Add(tag);
+        }
+
+        await db.SaveChangesAsync();
+
+        var detail = new TagDetail(tag.Id, tag.Name);
+        CurrentTags.Add(detail);
+        CurrentTags = CurrentTags.OrderBy(t => t.Name).ToList();
+        return detail;
+    }
+
+    public async Task RemoveTagAsync(int tagId)
+    {
+        if (Book is null) return;
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var book = await db.Books.Include(b => b.Tags).FirstOrDefaultAsync(b => b.Id == Book.Id);
+        if (book is null) return;
+
+        var tag = book.Tags.FirstOrDefault(t => t.Id == tagId);
+        if (tag is not null)
+        {
+            book.Tags.Remove(tag);
+            await db.SaveChangesAsync();
+        }
+
+        CurrentTags.RemoveAll(t => t.Id == tagId);
+    }
+
+    /// <summary>Tag autocomplete — returns existing tags not already assigned, filtered by substring.</summary>
+    public async Task<IEnumerable<string>> SearchTagsAsync(string query, CancellationToken ct)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var assigned = CurrentTags.Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var q = (query ?? "").Trim().ToLowerInvariant();
+
+        var names = await db.Tags
+            .Where(t => string.IsNullOrEmpty(q) || t.Name.Contains(q))
+            .OrderBy(t => t.Name)
+            .Select(t => t.Name)
+            .Take(20)
+            .ToListAsync(ct);
+
+        return names.Where(n => !assigned.Contains(n));
     }
 
     private static WorkDetail ToWorkDetail(Work w) => new(
