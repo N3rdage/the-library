@@ -11,7 +11,7 @@ public class WorkMergeViewModelTests
     private WorkMergeViewModel CreateVm() => new(_merger);
 
     private static WorkMergeDetail Detail(int id, string title) =>
-        new(id, title, null, "A", null, null, null, [], 0, []);
+        new(id, title, null, "A", null, null, null, [], 0, [], null);
 
     [Fact]
     public async Task LoadAsync_populates_details_and_shared_book_count()
@@ -46,7 +46,7 @@ public class WorkMergeViewModelTests
         _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
             .Returns(new WorkMergeLoadResult(Detail(1, "A"), Detail(2, "B"), null, 0));
         _merger.MergeAsync(1, 2, Arg.Any<CancellationToken>())
-            .Returns(new WorkMergeResult(true, null, 3, 0, "A", "B"));
+            .Returns(new WorkMergeResult(true, null, 3, 0, 0, "A", "B"));
 
         var vm = CreateVm();
         await vm.LoadAsync(1, 2);
@@ -65,7 +65,7 @@ public class WorkMergeViewModelTests
         _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
             .Returns(new WorkMergeLoadResult(Detail(1, "A"), Detail(2, "B"), null, 0));
         _merger.MergeAsync(1, 2, Arg.Any<CancellationToken>())
-            .Returns(new WorkMergeResult(false, "boom", 0, 0, null, null));
+            .Returns(new WorkMergeResult(false, "boom", 0, 0, 0, null, null));
 
         var vm = CreateVm();
         await vm.LoadAsync(1, 2);

@@ -98,6 +98,14 @@ else
                         Make @detail.Name the winner
                     </label>
                 </div>
+                @if (!string.IsNullOrEmpty(detail.CoverArtUrl))
+                {
+                    <div class="mb-2">
+                        <img src="@detail.CoverArtUrl" alt="@detail.Name" loading="lazy"
+                             style="max-height: 140px; max-width: 100px; object-fit: contain;"
+                             class="border rounded" />
+                    </div>
+                }
                 <div class="small mb-1">
                     @if (detail.CanonicalAuthorId.HasValue)
                     {
