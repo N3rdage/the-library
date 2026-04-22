@@ -86,6 +86,7 @@
 
                 <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" Class="mt-3">
                     <MudButton OnClick="OpenBookEditDialog"
+                               Disabled="@dialogOpening"
                                Variant="Variant.Outlined"
                                Color="Color.Primary"
                                StartIcon="@Icons.Material.Filled.Edit"
@@ -95,6 +96,7 @@
                     @if (VM.IsSingleWork && primary is not null)
                     {
                         <MudButton OnClick="@(() => OpenWorkEditDialog(primary.Id))"
+                                   Disabled="@dialogOpening"
                                    Variant="Variant.Outlined"
                                    Color="Color.Primary"
                                    StartIcon="@Icons.Material.Filled.Edit"
@@ -245,6 +247,7 @@
                                                 }
                                                 <div class="mt-1">
                                                     <MudButton OnClick="@(() => OpenWorkEditDialog(w.Id))"
+                                                               Disabled="@dialogOpening"
                                                                Variant="Variant.Outlined"
                                                                Color="Color.Primary"
                                                                StartIcon="@Icons.Material.Filled.Edit"
@@ -311,12 +314,14 @@
 
                                         <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
                                             <MudButton OnClick="@(() => OpenEditEditionDialog(edition.Id))"
+                                                       Disabled="@dialogOpening"
                                                        Variant="Variant.Outlined"
                                                        Size="Size.Small"
                                                        StartIcon="@Icons.Material.Filled.Edit">
                                                 Edit edition
                                             </MudButton>
                                             <MudButton OnClick="@(() => OpenAddCopyDialog(edition.Id))"
+                                                       Disabled="@dialogOpening"
                                                        Variant="Variant.Outlined"
                                                        Size="Size.Small"
                                                        StartIcon="@Icons.Material.Filled.Add">
@@ -350,12 +355,14 @@
                                                         @if (!confirming)
                                                         {
                                                             <MudButton OnClick="@(() => OpenEditCopyDialog(copyId))"
+                                                                       Disabled="@dialogOpening"
                                                                        Variant="Variant.Text"
                                                                        Size="Size.Small"
                                                                        StartIcon="@Icons.Material.Filled.Edit">
                                                                 Edit
                                                             </MudButton>
                                                             <MudButton OnClick="@(() => confirmingDeleteCopyId = copyId)"
+                                                                       Disabled="@dialogOpening"
                                                                        Variant="Variant.Text"
                                                                        Color="Color.Error"
                                                                        Size="Size.Small"
@@ -367,6 +374,7 @@
                                                         {
                                                             <MudText Typo="Typo.caption" Color="Color.Warning" Class="align-self-center">Delete this copy?</MudText>
                                                             <MudButton OnClick="@(() => ConfirmDeleteCopyAsync(copyId))"
+                                                                       Disabled="@dialogOpening"
                                                                        Variant="Variant.Filled"
                                                                        Color="Color.Error"
                                                                        Size="Size.Small">
@@ -390,6 +398,7 @@
                 }
 
                 <MudButton OnClick="OpenAddEditionDialog"
+                           Disabled="@dialogOpening"
                            Variant="Variant.Outlined"
                            Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.Add"
@@ -456,6 +465,12 @@
     private readonly HashSet<int> expandedWorkIds = [];
     private string? newTagText;
     private int? confirmingDeleteCopyId;
+
+    // Single flag shared across every dialog-opening button on this page.
+    // Set true before a dialog is shown, reset in finally. Bound to each
+    // trigger's Disabled attribute so the second click of a fast double-tap
+    // can't slip through and stack a second dialog on top of the first.
+    private bool dialogOpening;
 
     // Notes debounce: 800ms after the last keystroke OR immediate on blur.
     // CTS is re-created per keystroke so the previous pending save is
@@ -583,7 +598,22 @@
         catch (Exception ex) { Snackbar.Add($"Couldn't remove tag: {ex.Message}", Severity.Error); }
     }
 
-    private async Task OpenBookEditDialog()
+    // Dialog-opener guard. Wraps the whole show-dialog-then-refresh sequence,
+    // so `dialogOpening` stays true until the dialog closes AND the page has
+    // re-initialised — prevents a double-tap from stacking two dialogs.
+    private async Task OpenDialogGuardedAsync(Func<Task> show)
+    {
+        if (dialogOpening) return;
+        dialogOpening = true;
+        try { await show(); }
+        finally
+        {
+            dialogOpening = false;
+            StateHasChanged();
+        }
+    }
+
+    private Task OpenBookEditDialog() => OpenDialogGuardedAsync(async () =>
     {
         if (VM.Book is null) return;
         var parameters = new DialogParameters<BookEditDialog> { { x => x.BookId, VM.Book.Id } };
@@ -594,11 +624,10 @@
         {
             Snackbar.Add("Book saved", Severity.Success);
             await VM.InitializeAsync(BookId);
-            StateHasChanged();
         }
-    }
+    });
 
-    private async Task OpenWorkEditDialog(int workId)
+    private Task OpenWorkEditDialog(int workId) => OpenDialogGuardedAsync(async () =>
     {
         if (VM.Book is null) return;
         var parameters = new DialogParameters<WorkEditDialog>
@@ -613,11 +642,10 @@
         {
             Snackbar.Add("Work saved", Severity.Success);
             await VM.InitializeAsync(BookId);
-            StateHasChanged();
         }
-    }
+    });
 
-    private async Task OpenAddEditionDialog()
+    private Task OpenAddEditionDialog() => OpenDialogGuardedAsync(async () =>
     {
         if (VM.Book is null) return;
         var parameters = new DialogParameters<EditionFormDialog>
@@ -632,11 +660,10 @@
         {
             Snackbar.Add("Edition added", Severity.Success);
             await VM.InitializeAsync(BookId);
-            StateHasChanged();
         }
-    }
+    });
 
-    private async Task OpenEditEditionDialog(int editionId)
+    private Task OpenEditEditionDialog(int editionId) => OpenDialogGuardedAsync(async () =>
     {
         var parameters = new DialogParameters<EditionFormDialog>
         {
@@ -650,11 +677,10 @@
         {
             Snackbar.Add("Edition saved", Severity.Success);
             await VM.InitializeAsync(BookId);
-            StateHasChanged();
         }
-    }
+    });
 
-    private async Task OpenAddCopyDialog(int editionId)
+    private Task OpenAddCopyDialog(int editionId) => OpenDialogGuardedAsync(async () =>
     {
         var parameters = new DialogParameters<CopyFormDialog>
         {
@@ -668,11 +694,10 @@
         {
             Snackbar.Add("Copy added", Severity.Success);
             await VM.InitializeAsync(BookId);
-            StateHasChanged();
         }
-    }
+    });
 
-    private async Task OpenEditCopyDialog(int copyId)
+    private Task OpenEditCopyDialog(int copyId) => OpenDialogGuardedAsync(async () =>
     {
         var parameters = new DialogParameters<CopyFormDialog>
         {
@@ -686,11 +711,13 @@
         {
             Snackbar.Add("Copy saved", Severity.Success);
             await VM.InitializeAsync(BookId);
-            StateHasChanged();
         }
-    }
+    });
 
-    private async Task ConfirmDeleteCopyAsync(int copyId)
+    // Delete uses the same guard — the inline Delete confirm button lives
+    // outside the dialog flow but still wants the same "one click at a time"
+    // protection (a double-tap would otherwise fire two deletes in sequence).
+    private Task ConfirmDeleteCopyAsync(int copyId) => OpenDialogGuardedAsync(async () =>
     {
         try
         {
@@ -698,13 +725,12 @@
             confirmingDeleteCopyId = null;
             Snackbar.Add("Copy deleted", Severity.Success);
             await VM.InitializeAsync(BookId);
-            StateHasChanged();
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Couldn't delete copy: {ex.Message}", Severity.Error);
         }
-    }
+    });
 
     private static Color StatusColor(BookStatus status) => status switch
     {
