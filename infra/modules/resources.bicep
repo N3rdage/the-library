@@ -203,8 +203,6 @@ module appConfig './app-config.bicep' = {
     sqlDatabaseName: sqlDatabaseName
     appInsightsConnectionString: obs.outputs.appInsightsConnectionString
     keyVaultName: keyVaultName
-    hasAnthropicKey: !empty(anthropicApiKey)
-    hasTroveKey: !empty(troveApiKey)
     aiAzureOpenAIEndpoint: ai.outputs.openAIEndpoint
     aiAzureOpenAIDeployment: ai.outputs.openAIDeploymentName
   }

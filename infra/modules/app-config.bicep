@@ -13,12 +13,6 @@ param appInsightsConnectionString string
 @description('Key Vault name. Used to build @Microsoft.KeyVault references for secret app settings.')
 param keyVaultName string
 
-@description('True if the optional Anthropic API key was supplied (and therefore stored in KV). When false the AI__Anthropic__ApiKey setting is omitted.')
-param hasAnthropicKey bool = false
-
-@description('True if the optional Trove API key was supplied (and therefore stored in KV). When false the Trove__ApiKey setting is omitted.')
-param hasTroveKey bool = false
-
 // AI provider config (non-secret values only — secrets resolve via KV refs).
 // MicrosoftFoundry settings are intentionally omitted: this subscription is
 // Sponsored, so Claude on Foundry isn't deployable; the MicrosoftFoundry
@@ -32,6 +26,16 @@ param aiDefaultProvider string = 'Anthropic'
 // identity (which has Key Vault Secrets User role) and caches the resolved
 // value for the lifetime of the worker. Omitting the secret version tells
 // Azure to pick up the latest secret version automatically.
+//
+// References are ALWAYS emitted, regardless of whether a secret has been
+// written to KV yet. An unresolved reference surfaces as an empty string
+// to the app (which reads it as "no key configured" — the provider
+// silently drops out of the picker). The reason we always emit it: a
+// re-deploy without `-AnthropicApiKey` / `-TroveApiKey` used to *remove*
+// the app setting entirely, because it was conditional on the deploy
+// param. That left the app without any reference to pick up the secret
+// on next restart, and a subsequent slot-swap (without the setting on
+// both slots) moved the hole around unpredictably.
 #disable-next-line no-hardcoded-env-urls
 var kvBase = 'https://${keyVaultName}.vault.azure.net/secrets'
 var authClientSecretRef = '@Microsoft.KeyVault(SecretUri=${kvBase}/AuthClientSecret/)'
@@ -39,9 +43,10 @@ var openAIKeyRef = '@Microsoft.KeyVault(SecretUri=${kvBase}/AIAzureOpenAIApiKey/
 var anthropicKeyRef = '@Microsoft.KeyVault(SecretUri=${kvBase}/AIAnthropicApiKey/)'
 var troveKeyRef = '@Microsoft.KeyVault(SecretUri=${kvBase}/TroveApiKey/)'
 
-// Build app settings as a single object so prod and staging stay in sync.
-// Conditional members let us omit Anthropic when no key was provided.
-var baseAppSettings = {
+// Same shape for prod + staging; slotConfigNames below marks the secret-ish
+// entries as slot-sticky so swaps don't move them if the two slots' values
+// ever diverge.
+var appSettingsValues = {
   ASPNETCORE_ENVIRONMENT: 'Production'
   APPLICATIONINSIGHTS_CONNECTION_STRING: appInsightsConnectionString
   MICROSOFT_PROVIDER_AUTHENTICATION_SECRET: authClientSecretRef
@@ -49,9 +54,25 @@ var baseAppSettings = {
   AI__AzureOpenAI__Endpoint: aiAzureOpenAIEndpoint
   AI__AzureOpenAI__ApiKey: openAIKeyRef
   AI__AzureOpenAI__Deployment: aiAzureOpenAIDeployment
+  AI__Anthropic__ApiKey: anthropicKeyRef
+  Trove__ApiKey: troveKeyRef
 }
-var withAnthropic = hasAnthropicKey ? union(baseAppSettings, { AI__Anthropic__ApiKey: anthropicKeyRef }) : baseAppSettings
-var appSettingsValues = hasTroveKey ? union(withAnthropic, { Trove__ApiKey: troveKeyRef }) : withAnthropic
+
+// Settings that must stay pinned to their slot during a swap. Keys and
+// environment-flavoured values should never hop between prod and staging,
+// even if today they happen to be identical. Azure's slot swap moves any
+// setting NOT in this list with the code; listing them here is the only
+// way to make them slot-bound.
+var slotStickyAppSettingNames = [
+  'ASPNETCORE_ENVIRONMENT'
+  'MICROSOFT_PROVIDER_AUTHENTICATION_SECRET'
+  'AI__Anthropic__ApiKey'
+  'AI__AzureOpenAI__ApiKey'
+  'AI__AzureOpenAI__Endpoint'
+  'AI__AzureOpenAI__Deployment'
+  'AI__DefaultProvider'
+  'Trove__ApiKey'
+]
 
 // Paths served publicly (without Easy Auth). Limited to the PWA assets
 // Chrome/Safari fetch without credentials during the install-validation
@@ -84,6 +105,16 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
   parent: app
   name: 'appsettings'
   properties: appSettingsValues
+}
+
+// Slot-sticky setting names. Attached to the production site (not the slot)
+// per Azure's model — a single list governs swap behaviour for all slots.
+resource slotConfigNames 'Microsoft.Web/sites/config@2023-12-01' = {
+  parent: app
+  name: 'slotConfigNames'
+  properties: {
+    appSettingNames: slotStickyAppSettingNames
+  }
 }
 
 resource connStrings 'Microsoft.Web/sites/config@2023-12-01' = {

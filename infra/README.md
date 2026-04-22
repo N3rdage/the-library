@@ -65,6 +65,23 @@ All secret App Settings resolve via `@Microsoft.KeyVault(SecretUri=…)` referen
 
 App Service caches resolved KV values; rotating a secret takes effect on the next reference refresh (~24h, or immediate via portal "Refresh Key Vault references").
 
+**KV references are always emitted.** Every deploy writes the four KV-reference app settings above regardless of whether `-AnthropicApiKey` / `-TroveApiKey` is supplied on that run. The reference is stable; the *secret* is only written to Key Vault when the corresponding key param is non-empty. A deploy without the key therefore leaves the existing secret (and reference resolution) untouched. An un-provisioned secret resolves as empty to the app, which silently drops the provider from the picker.
+
+### Slot-sticky settings
+
+The following app settings are marked `slotConfigNames.appSettingNames` so they stay pinned to their slot during a swap (rather than moving with the code):
+
+- `ASPNETCORE_ENVIRONMENT`
+- `MICROSOFT_PROVIDER_AUTHENTICATION_SECRET`
+- `AI__Anthropic__ApiKey`
+- `AI__AzureOpenAI__ApiKey`
+- `AI__AzureOpenAI__Endpoint`
+- `AI__AzureOpenAI__Deployment`
+- `AI__DefaultProvider`
+- `Trove__ApiKey`
+
+Reason: swap-then-redeploy-without-the-key previously let the Anthropic key drift between slots and eventually get lost. Making keys and AI config slot-bound means swaps are purely code-shaped — secrets and environment stay where they were configured.
+
 ## Prereqs
 
 - PowerShell 7+ on Windows.
