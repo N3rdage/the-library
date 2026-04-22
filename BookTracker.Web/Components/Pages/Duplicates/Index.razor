@@ -92,7 +92,8 @@ else
             @foreach (var pair in VM.ActiveWorkPairs)
             {
                 <PairCard MatchReason="@pair.MatchReason"
-                          OnDismiss="() => VM.DismissAsync(DuplicateEntityType.Work, pair.Lower.Id, pair.Higher.Id)">
+                          OnDismiss="() => VM.DismissAsync(DuplicateEntityType.Work, pair.Lower.Id, pair.Higher.Id)"
+                          MergeHref="@($"/duplicates/merge/work/{pair.Lower.Id}/{pair.Higher.Id}")">
                     <Left><WorkSide Snap="pair.Lower" /></Left>
                     <Right><WorkSide Snap="pair.Higher" /></Right>
                 </PairCard>
@@ -213,6 +214,12 @@ else
     [SupplyParameterFromQuery(Name = "aliasesReassigned")] public int? AliasesReassigned { get; set; }
     [SupplyParameterFromQuery(Name = "promoted")] public string? Promoted { get; set; }
 
+    // Same pattern for the Work-merge redirect (from /duplicates/merge/work/*).
+    [SupplyParameterFromQuery(Name = "mergedWorkWinner")] public string? MergedWorkWinner { get; set; }
+    [SupplyParameterFromQuery(Name = "mergedWorkLoser")] public string? MergedWorkLoser { get; set; }
+    [SupplyParameterFromQuery(Name = "booksReassigned")] public int? BooksReassigned { get; set; }
+    [SupplyParameterFromQuery(Name = "booksAlreadyShared")] public int? BooksAlreadyShared { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         await VM.LoadAsync();
@@ -226,6 +233,15 @@ else
             VM.SuccessMessage = $"Merged \"{MergedAuthorLoser}\" into \"{MergedAuthorWinner}\" — "
                 + $"{works} work{(works == 1 ? "" : "s")}, {aliases} alias{(aliases == 1 ? "" : "es")} reassigned."
                 + (promoted ? $" \"{MergedAuthorWinner}\" was promoted to canonical." : "");
+        }
+        else if (!string.IsNullOrEmpty(MergedWorkWinner) && !string.IsNullOrEmpty(MergedWorkLoser))
+        {
+            VM.ActiveTab = DuplicateEntityType.Work;
+            var reassigned = BooksReassigned ?? 0;
+            var shared = BooksAlreadyShared ?? 0;
+            VM.SuccessMessage = $"Merged \"{MergedWorkLoser}\" into \"{MergedWorkWinner}\" — "
+                + $"{reassigned} book{(reassigned == 1 ? "" : "s")} reassigned"
+                + (shared > 0 ? $", {shared} already contained both (winner kept, loser dropped)." : ".");
         }
     }
 }
