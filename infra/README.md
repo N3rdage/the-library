@@ -170,10 +170,18 @@ After the first `deploy.ps1` run, set up the GitHub → Azure OIDC link:
 
 The script creates a `booktracker-ci` app registration with federated identity credentials (one for pushes to `main`, one for pull requests), assigns it Contributor on `rg-booktracker-prod`, and prints six GitHub repository variables for you to configure at `Settings → Secrets and variables → Actions → Variables`.
 
+The script also grants the CI SP the narrow permissions needed by the scheduled Easy Auth secret rotation:
+- **Key Vault Secrets Officer** on the single KV in the RG (write access to `AuthClientSecret`).
+- **Owner** of the `Library-Patrons` app registration (so it can rotate passwords on that specific app reg).
+- **Microsoft Graph `Application.ReadWrite.OwnedBy`** as an app role (narrow — only apps the SP owns). This is the "admin consent" — the user running the script needs `Application.ReadWrite.All` or Global Admin to issue it.
+
+The KV role assignment and app-reg ownership require the KV + app reg to already exist. If you run `setup-github-oidc.ps1` before `deploy.ps1`, those steps are skipped with a warning; re-run it after the first deploy to fill them in.
+
 Workflows under `.github/workflows/`:
 - `ci.yml` — build on PRs.
 - `deploy.yml` — on push to `main`: build, publish, deploy to the **staging** slot.
 - `swap.yml` — manual: `az webapp deployment slot swap staging -> production`. (Adding a GitHub Environment with required reviewers is tracked in `TODO.md`.)
+- `rotate-easy-auth-secret.yml` — cron (twice yearly, 1st of every 6th month at 02:00 UTC) + manual dispatch: generates a new password on the `Library-Patrons` app registration, writes it to KV, trims old passwords to keep the latest 2. App Service picks up the new secret via the KV reference within ~24h. Manual dispatch: `gh workflow run rotate-easy-auth-secret.yml`.
 
 Schema migrations currently run on app startup via `db.Database.MigrateAsync()`. Fine for a single-instance app; switching to a deploy-time migration bundle is tracked in `TODO.md`.
 
