@@ -13,7 +13,11 @@ param(
     [string] $MainBranch = 'main',
     [string] $CiAppName = 'booktracker-ci',
     [string] $ResourceGroupName = 'rg-booktracker-prod',
-    [string] $SlotName = 'staging'
+    [string] $SlotName = 'staging',
+    # The Easy Auth app registration that rotate-easy-auth-secret.yml manages.
+    # Must already exist (created by deploy.ps1); owner + Graph permissions are
+    # granted here so the CI SP can call Add-/Remove-MgApplicationPassword on it.
+    [string] $EasyAuthAppRegName = 'Library-Patrons'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -90,6 +94,63 @@ if (-not $existingRole) {
     Write-Host "  Assigned Contributor on $ResourceGroupName"
 } else {
     Write-Host "  Contributor already assigned on $ResourceGroupName"
+}
+
+# ---- Key Vault Secrets Officer (for rotate-easy-auth-secret workflow) -------
+# The KV is RBAC-authorised; Contributor on the RG lets the SP manage KV
+# resources but not read/write secret data. Secrets Officer gives it write
+# access to secrets specifically — scoped to the single KV, not the whole RG.
+$kvs = Get-AzKeyVault -ResourceGroupName $ResourceGroupName -ErrorAction SilentlyContinue
+if ($kvs.Count -eq 1) {
+    $kvScope = $kvs[0].ResourceId
+    $existingKvRole = Get-AzRoleAssignment -ObjectId $sp.Id -Scope $kvScope -RoleDefinitionName 'Key Vault Secrets Officer' -ErrorAction SilentlyContinue
+    if (-not $existingKvRole) {
+        New-AzRoleAssignment -ObjectId $sp.Id -RoleDefinitionName 'Key Vault Secrets Officer' -Scope $kvScope | Out-Null
+        Write-Host "  Assigned Key Vault Secrets Officer on $($kvs[0].VaultName)"
+    } else {
+        Write-Host "  Key Vault Secrets Officer already assigned on $($kvs[0].VaultName)"
+    }
+} else {
+    Write-Host "  (Skipping KV role assignment — $($kvs.Count) vaults in RG, expected 1. Re-run after deploy.ps1 has created the KV.)"
+}
+
+# ---- Ownership of the Easy Auth app registration ----------------------------
+# The CI SP needs to rotate passwords on this app reg via Graph. Ownership +
+# Application.ReadWrite.OwnedBy (below) together let it do that without the
+# broader Application.ReadWrite.All Graph role.
+$easyAuthApp = Get-MgApplication -Filter "displayName eq '$EasyAuthAppRegName'" -ConsistencyLevel eventual -CountVariable _ | Select-Object -First 1
+if ($easyAuthApp) {
+    $currentOwners = Get-MgApplicationOwner -ApplicationId $easyAuthApp.Id
+    if ($currentOwners | Where-Object { $_.Id -eq $sp.Id }) {
+        Write-Host "  Already an owner of '$EasyAuthAppRegName' app registration"
+    } else {
+        New-MgApplicationOwnerByRef -ApplicationId $easyAuthApp.Id -BodyParameter @{
+            '@odata.id' = "https://graph.microsoft.com/v1.0/directoryObjects/$($sp.Id)"
+        }
+        Write-Host "  Added CI SP as owner of '$EasyAuthAppRegName' app registration"
+    }
+} else {
+    Write-Host "  (Skipping app-reg ownership — '$EasyAuthAppRegName' not found. Re-run after deploy.ps1 has created it.)"
+}
+
+# ---- Microsoft Graph app role: Application.ReadWrite.OwnedBy ----------------
+# This is the narrow Graph role that, combined with owner-of-app-reg above,
+# lets the CI SP rotate passwords on ONLY the app regs it owns. Granting the
+# app role IS the admin consent — the user running this script needs
+# Application.ReadWrite.All or Global Admin to issue it.
+$graphSp = Get-MgServicePrincipal -Filter "appId eq '00000003-0000-0000-c000-000000000000'" | Select-Object -First 1
+$ownedByRole = $graphSp.AppRoles | Where-Object { $_.Value -eq 'Application.ReadWrite.OwnedBy' } | Select-Object -First 1
+$existingAssignment = Get-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $sp.Id -ErrorAction SilentlyContinue |
+    Where-Object { $_.AppRoleId -eq $ownedByRole.Id -and $_.ResourceId -eq $graphSp.Id }
+if (-not $existingAssignment) {
+    New-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $sp.Id -BodyParameter @{
+        principalId = $sp.Id
+        resourceId  = $graphSp.Id
+        appRoleId   = $ownedByRole.Id
+    } | Out-Null
+    Write-Host "  Granted Graph Application.ReadWrite.OwnedBy to CI SP"
+} else {
+    Write-Host "  Graph Application.ReadWrite.OwnedBy already granted"
 }
 
 # ---- Discover the App Service name in the RG --------------------------------
