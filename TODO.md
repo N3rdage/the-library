@@ -13,7 +13,8 @@ Outstanding work items for BookTracker. This is the single source of truth — c
 
 ## UI / UX
 
-- [ ] Evaluate Blazor component library (MudBlazor, Radzen, FluentUI) to replace hand-rolled Bootstrap (`Program.cs:9`)
+- [x] **Progressive Web App** (shipped): installable on mobile + desktop via manifest + icons + service worker. Network-first-with-cache-fallback for static assets; `/_blazor/*` passes through. Icons reproducible via `scripts/generate-pwa-icons.ps1`.
+- [ ] Evaluate Blazor component library (MudBlazor, Radzen, FluentUI) to replace hand-rolled Bootstrap (`Program.cs:9`) — **next up: pilot in MudBlazor on `/duplicates/merge/book` + `/` Home**, decide from there
 - [ ] Manage publishers UI — rename/merge duplicates, delete unused (`Publisher.cs:5`)
 - [ ] Accessibility review — screen reader support, keyboard nav, ARIA labels, colour contrast, focus management
 - [ ] UI testing approach — evaluate bUnit (component-level) and/or Playwright (browser-level) for testing screens and views
