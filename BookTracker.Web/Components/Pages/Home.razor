@@ -133,13 +133,15 @@
                             @foreach (var a in VM.TopAuthors)
                             {
                                 var pct = VM.MaxAuthor == 0 ? 0 : (double)a.Count * 100.0 / VM.MaxAuthor;
-                                <div>
-                                    <MudStack Row Justify="Justify.SpaceBetween" Class="mb-1">
-                                        <MudText Typo="Typo.body2" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">@a.Author</MudText>
-                                        <MudText Typo="Typo.body2" Color="Color.Secondary">@a.Count</MudText>
-                                    </MudStack>
-                                    <MudProgressLinear Value="@pct" Color="Color.Primary" Size="Size.Small" />
-                                </div>
+                                <MudLink Href="@($"/authors?expand={a.CanonicalAuthorId}")" Underline="Underline.None" Color="Color.Inherit">
+                                    <div>
+                                        <MudStack Row Justify="Justify.SpaceBetween" Class="mb-1">
+                                            <MudText Typo="Typo.body2" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">@a.Author</MudText>
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">@a.Count</MudText>
+                                        </MudStack>
+                                        <MudProgressLinear Value="@pct" Color="Color.Primary" Size="Size.Small" />
+                                    </div>
+                                </MudLink>
                             }
                         </MudStack>
                     }

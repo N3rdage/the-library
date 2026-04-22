@@ -42,7 +42,7 @@ public class HomeViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
             .ToDictionaryAsync(x => x.Id, x => x.Name);
 
         TopAuthors = authorTotals
-            .Select(t => new AuthorCount(nameLookup.GetValueOrDefault(t.CanonicalId) ?? "(unknown)", t.Count))
+            .Select(t => new AuthorCount(t.CanonicalId, nameLookup.GetValueOrDefault(t.CanonicalId) ?? "(unknown)", t.Count))
             .OrderByDescending(a => a.Count)
             .ThenBy(a => a.Author)
             .ToList();
@@ -60,6 +60,6 @@ public class HomeViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
         MaxGenre = TopGenres.Count > 0 ? TopGenres.Max(g => g.Count) : 0;
     }
 
-    public record AuthorCount(string Author, int Count);
+    public record AuthorCount(int CanonicalAuthorId, string Author, int Count);
     public record GenreCount(string Genre, int Count);
 }

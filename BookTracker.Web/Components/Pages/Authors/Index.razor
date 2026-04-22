@@ -1,108 +1,277 @@
 @page "/authors"
 @inject AuthorListViewModel VM
+@inject NavigationManager Nav
 
 <PageTitle>Authors - BookTracker</PageTitle>
 
-<h1 class="mb-3">Authors</h1>
-<p class="text-muted">
-    Each author has its own row. Pen names are linked back to a canonical author so aggregations
-    (top-authors stats, author filter) roll the totals together. Stephen King's tally includes
-    his Bachman titles when you mark Bachman as an alias of King.
-</p>
+@* MudBlazor rewrite. Each author row expands to a drill-down showing
+   either the author's Works or the Books containing them (per-row
+   toggle). Canonical rows roll up any aliases — Stephen King's
+   drill-down includes Bachman titles. A deep link from Home
+   (/authors?expand=<id>) pre-opens the matching row. *@
 
-@if (!string.IsNullOrEmpty(VM.SuccessMessage))
-{
-    <div class="alert alert-success alert-dismissible fade show" role="alert">
-        @VM.SuccessMessage
-        <button type="button" class="btn-close" @onclick="() => VM.SuccessMessage = null" aria-label="Close"></button>
-    </div>
-}
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-3">
 
-@if (VM.Loading)
-{
-    <div class="text-center py-5">
-        <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
-    </div>
-}
-else if (VM.Authors.Count == 0)
-{
-    <p class="text-muted">No authors yet — add a book to seed the list.</p>
-}
-else
-{
-    <div class="table-responsive">
-        <table class="table table-sm align-middle">
-            <thead class="table-light">
-                <tr>
-                    <th>Name</th>
-                    <th>Status</th>
-                    <th class="text-end" style="width: 80px;">Works</th>
-                    <th style="width: 360px;">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var author in VM.Authors)
-                {
-                    <tr>
-                        <td>
-                            @if (editingId == author.Id)
-                            {
-                                <div class="input-group input-group-sm" style="max-width: 300px;">
-                                    <input type="text" class="form-control" @bind="editingName" />
-                                    <button type="button" class="btn btn-outline-success" @onclick="() => SaveRenameAsync(author.Id)">Save</button>
-                                    <button type="button" class="btn btn-outline-secondary" @onclick="() => editingId = null">Cancel</button>
-                                </div>
-                            }
-                            else
-                            {
-                                <span class="fw-semibold">@author.Name</span>
-                            }
-                        </td>
-                        <td>
-                            @if (author.CanonicalAuthorId.HasValue)
-                            {
-                                <span class="badge bg-info text-dark">alias of @author.CanonicalName</span>
-                            }
-                            else
-                            {
-                                <span class="badge bg-light text-dark border">canonical</span>
-                            }
-                        </td>
-                        <td class="text-end">@author.WorkCount</td>
-                        <td>
-                            <div class="d-flex gap-2 align-items-center">
-                                @if (editingId != author.Id)
-                                {
-                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => StartRename(author)">Rename</button>
-                                }
+    <MudText Typo="Typo.h4" Class="mb-2">Authors</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+        Each author has its own row. Pen names are linked back to a canonical author so aggregations
+        (top-authors stats, author filter) roll the totals together. Stephen King's tally includes
+        his Bachman titles when you mark Bachman as an alias of King.
+    </MudText>
+
+    @if (!string.IsNullOrEmpty(VM.SuccessMessage))
+    {
+        <MudAlert Severity="Severity.Success"
+                  ShowCloseIcon="true"
+                  CloseIconClicked="@(() => { VM.SuccessMessage = null; StateHasChanged(); })"
+                  Class="mb-3">@VM.SuccessMessage</MudAlert>
+    }
+
+    @if (VM.Loading)
+    {
+        <MudStack AlignItems="AlignItems.Center" Class="py-5">
+            <MudProgressCircular Indeterminate="true" />
+        </MudStack>
+    }
+    else if (VM.Authors.Count == 0)
+    {
+        <MudText Color="Color.Secondary">No authors yet — add a book to seed the list.</MudText>
+    }
+    else
+    {
+        <MudPaper Elevation="1">
+            @foreach (var author in VM.Authors)
+            {
+                var expanded = VM.ExpandedAuthorIds.Contains(author.Id);
+                <div class="author-row">
+                    <MudStack Row="true"
+                              Spacing="2"
+                              AlignItems="AlignItems.Center"
+                              Wrap="Wrap.Wrap"
+                              Class="pa-3"
+                              Style="cursor: pointer;"
+                              @onclick="@(() => OnToggleExpandAsync(author.Id))">
+                        <MudIcon Icon="@(expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" Size="Size.Small" />
+                        <MudText Typo="Typo.body1" Class="flex-grow-1" Style="font-weight: 500;">@author.Name</MudText>
+                        @if (author.CanonicalAuthorId.HasValue)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">
+                                alias of @author.CanonicalName
+                            </MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text">canonical</MudChip>
+                        }
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Style="min-width: 60px; text-align: right;">
+                            @author.WorkCount work@(author.WorkCount == 1 ? "" : "s")
+                        </MudText>
+                    </MudStack>
+
+                    @* Action row — rename + alias-management. stopPropagation keeps
+                       clicks here from re-toggling the row. *@
+                    <div @onclick:stopPropagation="true" class="px-3 pb-3">
+                        @if (editingId == author.Id)
+                        {
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                <MudTextField T="string" @bind-Value="editingName" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 320px;" />
+                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SaveRenameAsync(author.Id))">Save</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => editingId = null)">Cancel</MudButton>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Edit"
+                                           OnClick="@(() => StartRename(author))">Rename</MudButton>
                                 @if (author.CanonicalAuthorId.HasValue)
                                 {
-                                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => VM.PromoteToCanonicalAsync(author.Id)">Promote to canonical</button>
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Upgrade"
+                                               OnClick="@(() => VM.PromoteToCanonicalAsync(author.Id))">
+                                        Promote to canonical
+                                    </MudButton>
                                 }
                                 else
                                 {
-                                    <select class="form-select form-select-sm" style="width: 220px;" @onchange="e => MarkAsAliasAsync(author.Id, e)">
-                                        <option value="">Mark as alias of…</option>
+                                    <MudSelect T="int?"
+                                               Value="null"
+                                               ValueChanged="@(async (int? id) => { if (id is int cid) await VM.MarkAsAliasAsync(author.Id, cid); })"
+                                               Label="Mark as alias of…"
+                                               Variant="Variant.Outlined"
+                                               Margin="Margin.Dense"
+                                               Dense="true"
+                                               Style="max-width: 260px;">
                                         @foreach (var canonical in VM.CanonicalAuthors.Where(c => c.Id != author.Id))
                                         {
-                                            <option value="@canonical.Id">@canonical.Name</option>
+                                            <MudSelectItem T="int?" Value="@((int?)canonical.Id)">@canonical.Name</MudSelectItem>
                                         }
-                                    </select>
+                                    </MudSelect>
                                 }
-                            </div>
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-}
+                            </MudStack>
+                        }
+                    </div>
+
+                    @if (expanded)
+                    {
+                        <div @onclick:stopPropagation="true" class="px-3 pb-3">
+                            @if (!VM.DetailByAuthorId.TryGetValue(author.Id, out var detail))
+                            {
+                                <MudStack AlignItems="AlignItems.Center" Class="py-3">
+                                    <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                                </MudStack>
+                            }
+                            else
+                            {
+                                var view = VM.GetViewMode(author.Id);
+
+                                @if (detail.AliasNames.Count > 0)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                                        Including @detail.AliasNames.Count alias@(detail.AliasNames.Count == 1 ? "" : "es"):
+                                        @string.Join(", ", detail.AliasNames)
+                                    </MudText>
+                                }
+
+                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-2">
+                                    <MudChip T="AuthorListViewModel.AuthorViewMode"
+                                             Size="Size.Small"
+                                             OnClick="@(() => SetView(author.Id, AuthorListViewModel.AuthorViewMode.Works))"
+                                             Color="@(view == AuthorListViewModel.AuthorViewMode.Works ? Color.Primary : Color.Default)"
+                                             Variant="@(view == AuthorListViewModel.AuthorViewMode.Works ? Variant.Filled : Variant.Outlined)">
+                                        Works (@detail.Works.Count)
+                                    </MudChip>
+                                    <MudChip T="AuthorListViewModel.AuthorViewMode"
+                                             Size="Size.Small"
+                                             OnClick="@(() => SetView(author.Id, AuthorListViewModel.AuthorViewMode.Books))"
+                                             Color="@(view == AuthorListViewModel.AuthorViewMode.Books ? Color.Primary : Color.Default)"
+                                             Variant="@(view == AuthorListViewModel.AuthorViewMode.Books ? Variant.Filled : Variant.Outlined)">
+                                        Books (@detail.Books.Count)
+                                    </MudChip>
+                                </MudStack>
+
+                                @if (view == AuthorListViewModel.AuthorViewMode.Works)
+                                {
+                                    @if (detail.Works.Count == 0)
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">No works recorded for this author.</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudList T="int" Dense="true" Class="pa-0">
+                                            @foreach (var w in detail.Works)
+                                            {
+                                                <MudListItem T="int" Class="px-2">
+                                                    <MudStack Spacing="0">
+                                                        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                                                            @if (w.SeriesOrder is int so)
+                                                            {
+                                                                <MudText Typo="Typo.body2" Color="Color.Secondary">#@so</MudText>
+                                                            }
+                                                            <MudText Typo="Typo.body1" Style="font-weight: 500;">@w.Title</MudText>
+                                                            @if (!string.IsNullOrEmpty(w.WrittenAs))
+                                                            {
+                                                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Info">as @w.WrittenAs</MudChip>
+                                                            }
+                                                        </MudStack>
+                                                        @if (!string.IsNullOrEmpty(w.Subtitle))
+                                                        {
+                                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-style: italic;">@w.Subtitle</MudText>
+                                                        }
+                                                        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                                                            @if (!string.IsNullOrEmpty(w.FirstPublishedDisplay))
+                                                            {
+                                                                <MudText Typo="Typo.caption" Color="Color.Secondary">First published @w.FirstPublishedDisplay</MudText>
+                                                            }
+                                                            @if (!string.IsNullOrEmpty(w.SeriesName))
+                                                            {
+                                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                                    @(w.SeriesType == BookTracker.Data.Models.SeriesType.Collection ? "Collection" : "Series"): @w.SeriesName
+                                                                </MudText>
+                                                            }
+                                                        </MudStack>
+                                                        @if (w.InBooks.Count > 0)
+                                                        {
+                                                            <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" Class="mt-1">
+                                                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="align-self-center">In:</MudText>
+                                                                @foreach (var b in w.InBooks)
+                                                                {
+                                                                    <MudLink Href="@($"/books/{b.Id}")"
+                                                                             Typo="Typo.caption">@b.Title</MudLink>
+                                                                }
+                                                            </MudStack>
+                                                        }
+                                                    </MudStack>
+                                                </MudListItem>
+                                            }
+                                        </MudList>
+                                    }
+                                }
+                                else
+                                {
+                                    @if (detail.Books.Count == 0)
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">No books recorded for this author.</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudList T="int" Dense="true" Class="pa-0">
+                                            @foreach (var b in detail.Books)
+                                            {
+                                                <MudListItem T="int" OnClick="@(() => Nav.NavigateTo($"/books/{b.Id}"))" Class="px-2">
+                                                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap">
+                                                        @if (!string.IsNullOrEmpty(b.CoverUrl))
+                                                        {
+                                                            <MudImage Src="@b.CoverUrl" Alt="@b.Title" Width="36" Height="52" Style="object-fit: cover; border-radius: 2px; flex: 0 0 auto;" />
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudIcon Icon="@Icons.Material.Filled.MenuBook" Color="Color.Secondary" />
+                                                        }
+                                                        <MudStack Spacing="0" Class="flex-grow-1" Style="min-width: 0;">
+                                                            <MudText Typo="Typo.body1" Style="word-break: break-word;">@b.Title</MudText>
+                                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                                @b.EditionCount edition@(b.EditionCount == 1 ? "" : "s") · @b.CopyCount cop@(b.CopyCount == 1 ? "y" : "ies")
+                                                            </MudText>
+                                                        </MudStack>
+                                                    </MudStack>
+                                                </MudListItem>
+                                            }
+                                        </MudList>
+                                    }
+                                }
+                            }
+                        </div>
+                    }
+                </div>
+                <MudDivider />
+            }
+        </MudPaper>
+    }
+
+</MudContainer>
 
 @code {
+    [SupplyParameterFromQuery(Name = "expand")] public int? ExpandId { get; set; }
+
     private int? editingId;
     private string editingName = "";
 
-    protected override async Task OnInitializedAsync() => await VM.LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        await VM.LoadAsync();
+        if (ExpandId is int id && VM.Authors.Any(a => a.Id == id))
+        {
+            await VM.ExpandAsync(id);
+        }
+    }
+
+    private async Task OnToggleExpandAsync(int authorId)
+    {
+        await VM.ToggleExpandAsync(authorId);
+    }
+
+    private void SetView(int authorId, AuthorListViewModel.AuthorViewMode mode) =>
+        VM.SetViewMode(authorId, mode);
 
     private void StartRename(AuthorListViewModel.AuthorRow author)
     {
@@ -114,13 +283,5 @@ else
     {
         await VM.RenameAsync(authorId, editingName);
         editingId = null;
-    }
-
-    private async Task MarkAsAliasAsync(int authorId, ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var canonicalId))
-        {
-            await VM.MarkAsAliasAsync(authorId, canonicalId);
-        }
     }
 }
