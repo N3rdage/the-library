@@ -1,0 +1,174 @@
+@page "/duplicates/merge/book/{idA:int}/{idB:int}"
+@using BookTracker.Web.Services
+@inject BookMergeViewModel VM
+@inject NavigationManager Nav
+
+<PageTitle>Merge books - BookTracker</PageTitle>
+
+<h1 class="mb-3">Merge books</h1>
+<p class="text-muted">
+    Pick a winner. All editions (and their copies), works, and tags attached
+    to the loser will move to the winner. Empty winner fields (notes, cover,
+    rating-if-unrated) will be auto-filled from the loser; fields the winner
+    already has stay. The loser Book row is then deleted.
+</p>
+
+@if (!string.IsNullOrEmpty(VM.ErrorMessage))
+{
+    <div class="alert alert-danger">@VM.ErrorMessage</div>
+}
+
+@if (VM.Loading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
+    </div>
+}
+else if (VM.Lower is null || VM.Higher is null)
+{
+    <a href="/duplicates" class="btn btn-outline-secondary">Back to duplicates</a>
+}
+else
+{
+    <div class="row g-3 mb-3">
+        <div class="col-md-6">@BookCard(VM.Lower)</div>
+        <div class="col-md-6">@BookCard(VM.Higher)</div>
+    </div>
+
+    @if (VM.SelectedWinnerId is not null && VM.Loser is not null)
+    {
+        var loser = VM.Loser;
+        var winnerDetail = VM.SelectedWinnerId == VM.Lower.Id ? VM.Lower : VM.Higher;
+        <div class="alert alert-info">
+            <div class="mb-2">
+                <strong>Winner:</strong> @winnerDetail.Title
+            </div>
+            <div class="small">
+                Will move <strong>@loser.EditionCount edition@(loser.EditionCount == 1 ? "" : "s")</strong>
+                (with <strong>@loser.CopyCount cop@(loser.CopyCount == 1 ? "y" : "ies")</strong>)
+                from "@loser.Title" to the winner.
+                @if (VM.WorksToUnion > 0)
+                {
+                    <span>Will add <strong>@VM.WorksToUnion</strong> work@(VM.WorksToUnion == 1 ? "" : "s") the winner didn't already have.</span>
+                }
+                @if (VM.TagsToUnion > 0)
+                {
+                    <span>Will add <strong>@VM.TagsToUnion</strong> tag@(VM.TagsToUnion == 1 ? "" : "s") the winner didn't already have.</span>
+                }
+            </div>
+            @if (VM.EnrichmentHints.Count > 0)
+            {
+                <div class="small mt-2">
+                    <strong>Will auto-fill from loser:</strong>
+                    <ul class="mb-0 mt-1 ps-3">
+                        @foreach (var hint in VM.EnrichmentHints)
+                        {
+                            <li>@hint</li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+    }
+
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-primary"
+                disabled="@(!VM.CanMerge || VM.Merging)"
+                @onclick="OnMergeClickAsync">
+            @(VM.Merging ? "Merging..." : "Merge")
+        </button>
+        <a href="/duplicates" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+}
+
+@code {
+    [Parameter] public int IdA { get; set; }
+    [Parameter] public int IdB { get; set; }
+
+    protected override async Task OnInitializedAsync() => await VM.LoadAsync(IdA, IdB);
+
+    private async Task OnMergeClickAsync()
+    {
+        var result = await VM.MergeAsync();
+        if (result is { Success: true })
+        {
+            var winner = Uri.EscapeDataString(result.WinnerTitle ?? "winner");
+            var loser = Uri.EscapeDataString(result.LoserTitle ?? "loser");
+            Nav.NavigateTo($"/duplicates?mergedBookWinner={winner}&mergedBookLoser={loser}&editionsReassigned={result.EditionsReassigned}&worksUnioned={result.WorksUnioned}&tagsUnioned={result.TagsUnioned}&bookFieldsAutoFilled={result.FieldsAutoFilled}");
+        }
+    }
+
+    private RenderFragment BookCard(BookMergeDetail detail) =>
+        @<div class="card @(VM.SelectedWinnerId == detail.Id ? "border-primary" : "")">
+            <div class="card-body">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="radio"
+                           name="winner" id="@($"winner-{detail.Id}")"
+                           checked="@(VM.SelectedWinnerId == detail.Id)"
+                           @onchange="() => VM.SelectedWinnerId = detail.Id" />
+                    <label class="form-check-label fw-semibold" for="@($"winner-{detail.Id}")">
+                        Make "@detail.Title" the winner
+                    </label>
+                </div>
+                @if (!string.IsNullOrEmpty(detail.CoverArtUrl))
+                {
+                    <div class="mb-2">
+                        <img src="@detail.CoverArtUrl" alt="@detail.Title" loading="lazy"
+                             style="max-height: 140px; max-width: 100px; object-fit: contain;"
+                             class="border rounded" />
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(detail.AuthorName))
+                {
+                    <div class="small mb-1">by @detail.AuthorName</div>
+                }
+                <div class="small mb-1">
+                    <a href="@($"/books/{detail.Id}/edit")" target="_blank" rel="noopener">Open edit page ↗</a>
+                    <span class="text-muted ms-2">id @detail.Id</span>
+                </div>
+                <div class="small text-muted mb-2">
+                    @detail.Category · @detail.Status
+                    @if (detail.Rating > 0)
+                    {
+                        <text> · @detail.Rating/5</text>
+                    }
+                    · added @detail.DateAdded.ToLocalTime().ToString("d MMM yyyy")
+                </div>
+                <div class="small text-muted mb-2">
+                    @detail.EditionCount edition@(detail.EditionCount == 1 ? "" : "s") ·
+                    @detail.CopyCount cop@(detail.CopyCount == 1 ? "y" : "ies")
+                </div>
+                @if (detail.WorkTitles.Count > 0)
+                {
+                    <div class="small mb-2">
+                        <div class="text-muted mb-1">Works (@detail.WorkTitles.Count):</div>
+                        <ul class="mb-0 ps-3">
+                            @foreach (var title in detail.WorkTitles.Take(5))
+                            {
+                                <li>@title</li>
+                            }
+                            @if (detail.WorkTitles.Count > 5)
+                            {
+                                <li class="text-muted">…and @(detail.WorkTitles.Count - 5) more</li>
+                            }
+                        </ul>
+                    </div>
+                }
+                @if (detail.TagNames.Count > 0)
+                {
+                    <div class="small">
+                        @foreach (var t in detail.TagNames)
+                        {
+                            <span class="badge bg-light text-dark border me-1">@t</span>
+                        }
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(detail.Notes))
+                {
+                    <div class="small text-muted mt-2 fst-italic">
+                        @(detail.Notes.Length > 100 ? detail.Notes[..100] + "…" : detail.Notes)
+                    </div>
+                }
+            </div>
+        </div>;
+}
