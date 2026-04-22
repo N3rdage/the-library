@@ -278,7 +278,7 @@
             <MudCardContent>
                 @if (book.Editions.Count == 0)
                 {
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">No editions recorded yet.</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">No editions recorded yet.</MudText>
                 }
                 else
                 {
@@ -309,10 +309,27 @@
                                             <FieldRow Label="Printed" Value="@edition.DatePrintedDisplay" />
                                         }
 
+                                        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                                            <MudButton OnClick="@(() => OpenEditEditionDialog(edition.Id))"
+                                                       Variant="Variant.Outlined"
+                                                       Size="Size.Small"
+                                                       StartIcon="@Icons.Material.Filled.Edit">
+                                                Edit edition
+                                            </MudButton>
+                                            <MudButton OnClick="@(() => OpenAddCopyDialog(edition.Id))"
+                                                       Variant="Variant.Outlined"
+                                                       Size="Size.Small"
+                                                       StartIcon="@Icons.Material.Filled.Add">
+                                                Add copy
+                                            </MudButton>
+                                        </MudStack>
+
                                         <MudDivider />
 
                                         @foreach (var (copy, idx) in edition.Copies.Select((c, i) => (c, i)))
                                         {
+                                            var copyId = copy.Id;
+                                            var confirming = confirmingDeleteCopyId == copyId;
                                             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Start" Wrap="Wrap.Wrap">
                                                 <MudText Typo="Typo.body2" Style="min-width: 70px;">
                                                     <b>Copy @(idx + 1)</b>
@@ -329,6 +346,39 @@
                                                     {
                                                         <MudText Typo="Typo.caption" Color="Color.Secondary" Style="white-space: pre-wrap;">@copy.Notes</MudText>
                                                     }
+                                                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" Class="mt-1">
+                                                        @if (!confirming)
+                                                        {
+                                                            <MudButton OnClick="@(() => OpenEditCopyDialog(copyId))"
+                                                                       Variant="Variant.Text"
+                                                                       Size="Size.Small"
+                                                                       StartIcon="@Icons.Material.Filled.Edit">
+                                                                Edit
+                                                            </MudButton>
+                                                            <MudButton OnClick="@(() => confirmingDeleteCopyId = copyId)"
+                                                                       Variant="Variant.Text"
+                                                                       Color="Color.Error"
+                                                                       Size="Size.Small"
+                                                                       StartIcon="@Icons.Material.Filled.Delete">
+                                                                Delete
+                                                            </MudButton>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText Typo="Typo.caption" Color="Color.Warning" Class="align-self-center">Delete this copy?</MudText>
+                                                            <MudButton OnClick="@(() => ConfirmDeleteCopyAsync(copyId))"
+                                                                       Variant="Variant.Filled"
+                                                                       Color="Color.Error"
+                                                                       Size="Size.Small">
+                                                                Delete
+                                                            </MudButton>
+                                                            <MudButton OnClick="@(() => confirmingDeleteCopyId = null)"
+                                                                       Variant="Variant.Text"
+                                                                       Size="Size.Small">
+                                                                Cancel
+                                                            </MudButton>
+                                                        }
+                                                    </MudStack>
                                                 </MudStack>
                                             </MudStack>
                                         }
@@ -338,6 +388,15 @@
                         }
                     </MudExpansionPanels>
                 }
+
+                <MudButton OnClick="OpenAddEditionDialog"
+                           Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Add"
+                           Size="Size.Small"
+                           Class="mt-2">
+                    Add edition
+                </MudButton>
             </MudCardContent>
         </MudCard>
 
@@ -396,6 +455,7 @@
     private string workFilter = "";
     private readonly HashSet<int> expandedWorkIds = [];
     private string? newTagText;
+    private int? confirmingDeleteCopyId;
 
     // Notes debounce: 800ms after the last keystroke OR immediate on blur.
     // CTS is re-created per keystroke so the previous pending save is
@@ -554,6 +614,95 @@
             Snackbar.Add("Work saved", Severity.Success);
             await VM.InitializeAsync(BookId);
             StateHasChanged();
+        }
+    }
+
+    private async Task OpenAddEditionDialog()
+    {
+        if (VM.Book is null) return;
+        var parameters = new DialogParameters<EditionFormDialog>
+        {
+            { x => x.BookId, VM.Book.Id },
+            { x => x.IsNew, true },
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<EditionFormDialog>("Add edition", parameters, options);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            Snackbar.Add("Edition added", Severity.Success);
+            await VM.InitializeAsync(BookId);
+            StateHasChanged();
+        }
+    }
+
+    private async Task OpenEditEditionDialog(int editionId)
+    {
+        var parameters = new DialogParameters<EditionFormDialog>
+        {
+            { x => x.EditionId, (int?)editionId },
+            { x => x.IsNew, false },
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<EditionFormDialog>("Edit edition", parameters, options);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            Snackbar.Add("Edition saved", Severity.Success);
+            await VM.InitializeAsync(BookId);
+            StateHasChanged();
+        }
+    }
+
+    private async Task OpenAddCopyDialog(int editionId)
+    {
+        var parameters = new DialogParameters<CopyFormDialog>
+        {
+            { x => x.EditionId, (int?)editionId },
+            { x => x.IsNew, true },
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<CopyFormDialog>("Add copy", parameters, options);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            Snackbar.Add("Copy added", Severity.Success);
+            await VM.InitializeAsync(BookId);
+            StateHasChanged();
+        }
+    }
+
+    private async Task OpenEditCopyDialog(int copyId)
+    {
+        var parameters = new DialogParameters<CopyFormDialog>
+        {
+            { x => x.CopyId, (int?)copyId },
+            { x => x.IsNew, false },
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<CopyFormDialog>("Edit copy", parameters, options);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            Snackbar.Add("Copy saved", Severity.Success);
+            await VM.InitializeAsync(BookId);
+            StateHasChanged();
+        }
+    }
+
+    private async Task ConfirmDeleteCopyAsync(int copyId)
+    {
+        try
+        {
+            await VM.DeleteCopyAsync(copyId);
+            confirmingDeleteCopyId = null;
+            Snackbar.Add("Copy deleted", Severity.Success);
+            await VM.InitializeAsync(BookId);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Couldn't delete copy: {ex.Message}", Severity.Error);
         }
     }
 

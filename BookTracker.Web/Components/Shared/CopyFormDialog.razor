@@ -1,0 +1,98 @@
+@* Modal dialog for Add Copy (against an existing Edition) and Edit Copy.
+   IsNew picks between flows. Fields: condition, date acquired, notes. *@
+
+@inject CopyFormDialogViewModel VM
+
+<MudDialog>
+    <DialogContent>
+        @if (VM.NotFound)
+        {
+            <MudAlert Severity="Severity.Warning">Copy not found.</MudAlert>
+        }
+        else
+        {
+            <MudStack Spacing="3" Style="min-width: 280px;">
+                <MudSelect T="BookCondition"
+                           @bind-Value="VM.Condition"
+                           Label="Condition"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense">
+                    @foreach (var c in Enum.GetValues<BookCondition>())
+                    {
+                        <MudSelectItem T="BookCondition" Value="c">@ConditionLabel(c)</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudDatePicker Label="Date acquired"
+                               Date="@VM.DateAcquired"
+                               DateChanged="@((DateTime? d) => VM.DateAcquired = d)"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Clearable="true" />
+
+                <MudTextField T="string"
+                              @bind-Value="VM.Notes"
+                              Label="Notes"
+                              Lines="3"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Placeholder="e.g. signed, dust jacket, gift from..." />
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Disabled="@(VM.NotFound || saving)"
+                   OnClick="SaveAsync">
+            @(saving ? "Saving..." : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    // Exactly one of EditionId (Add) or CopyId (Edit) is set.
+    [Parameter] public int? EditionId { get; set; }
+    [Parameter] public int? CopyId { get; set; }
+    [Parameter] public bool IsNew { get; set; }
+
+    private bool saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (IsNew && EditionId is int eid)
+        {
+            VM.InitializeForAdd(eid);
+        }
+        else if (CopyId is int cid)
+        {
+            await VM.InitializeForEditAsync(cid);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        saving = true;
+        try
+        {
+            var id = await VM.SaveAsync();
+            if (id is int) MudDialog.Close(DialogResult.Ok(id));
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private static string ConditionLabel(BookCondition c) => c switch
+    {
+        BookCondition.AsNew => "As New",
+        BookCondition.VeryGood => "Very Good",
+        _ => c.ToString(),
+    };
+}

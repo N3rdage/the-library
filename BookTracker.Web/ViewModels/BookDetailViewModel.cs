@@ -171,6 +171,28 @@ public class BookDetailViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
         return detail;
     }
 
+    /// <summary>
+    /// Deletes a Copy. If it was the last Copy on its Edition, the Edition
+    /// is removed too (matches the existing Edit-page behaviour — an
+    /// Edition with no Copies doesn't represent anything useful).
+    /// </summary>
+    public async Task DeleteCopyAsync(int copyId)
+    {
+        if (Book is null) return;
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var copy = await db.Copies.Include(c => c.Edition).ThenInclude(e => e.Copies).FirstOrDefaultAsync(c => c.Id == copyId);
+        if (copy is null) return;
+
+        var edition = copy.Edition;
+        db.Copies.Remove(copy);
+        if (edition.Copies.Count <= 1)
+        {
+            db.Editions.Remove(edition);
+        }
+        await db.SaveChangesAsync();
+    }
+
     public async Task RemoveTagAsync(int tagId)
     {
         if (Book is null) return;
