@@ -38,6 +38,8 @@ builder.Services.AddTransient<SeriesMatchService>();
 
 builder.Services.AddScoped<IDuplicateDetectionService, DuplicateDetectionService>();
 builder.Services.AddScoped<IAuthorMergeService, AuthorMergeService>();
+builder.Services.AddScoped<IWorkMergeService, WorkMergeService>();
+builder.Services.AddScoped<IWorkSearchService, WorkSearchService>();
 
 // One-shot startup task that re-classifies existing Editions using the
 // richer BookFormat enum (populated from upstream metadata). Idempotent via
@@ -74,6 +76,7 @@ builder.Services.AddTransient<AuthorListViewModel>();
 builder.Services.AddTransient<ShoppingViewModel>();
 builder.Services.AddTransient<DuplicatesViewModel>();
 builder.Services.AddTransient<AuthorMergeViewModel>();
+builder.Services.AddTransient<WorkMergeViewModel>();
 builder.Services.AddScoped<AIAssistantViewModel>();
 
 var app = builder.Build();

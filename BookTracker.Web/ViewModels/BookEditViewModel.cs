@@ -7,7 +7,8 @@ namespace BookTracker.Web.ViewModels;
 
 public class BookEditViewModel(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
-    IBookLookupService lookup)
+    IBookLookupService lookup,
+    IWorkSearchService workSearch)
 {
     public BookFormViewModel.BookFormInput? BookInput { get; private set; }
 
@@ -25,6 +26,13 @@ public class BookEditViewModel(
     public List<WorkSummary> OtherWorks { get; private set; } = [];
     public string? NewWorkTitle { get; set; }
     public string? NewWorkAuthor { get; set; }
+
+    // "Attach existing Work" typeahead state — lets the user find an
+    // existing Work (e.g. a story from another compendium) and add it to
+    // this Book without creating a duplicate.
+    public string AttachWorkQuery { get; set; } = "";
+    public IReadOnlyList<WorkSearchResult> AttachWorkResults { get; private set; } = [];
+    public bool Searching { get; private set; }
 
     public bool NotFound { get; private set; }
     public bool Saving { get; private set; }
@@ -396,6 +404,40 @@ public class BookEditViewModel(
         OtherWorks.Add(new WorkSummary(work.Id, work.Title, author.Name, 0));
         NewWorkTitle = null;
         NewWorkAuthor = null;
+    }
+
+    public async Task SearchWorksToAttachAsync(int bookId)
+    {
+        Searching = true;
+        try
+        {
+            AttachWorkResults = await workSearch.SearchAsync(AttachWorkQuery, excludeBookId: bookId);
+        }
+        finally
+        {
+            Searching = false;
+        }
+    }
+
+    public async Task AttachWorkAsync(int bookId, int workId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var book = await db.Books.Include(b => b.Works).FirstOrDefaultAsync(b => b.Id == bookId);
+        var work = await db.Works.Include(w => w.Author).Include(w => w.Genres).FirstOrDefaultAsync(w => w.Id == workId);
+        if (book is null || work is null) return;
+
+        // Defensive: exclude-by-bookId already filters attached Works out of
+        // search results, but if the page was stale this prevents the EF
+        // many-to-many PK violation.
+        if (book.Works.Any(w => w.Id == workId)) return;
+
+        book.Works.Add(work);
+        await db.SaveChangesAsync();
+
+        OtherWorks.Add(new WorkSummary(work.Id, work.Title, work.Author.Name, work.Genres.Count));
+        AttachWorkQuery = "";
+        AttachWorkResults = [];
+        SuccessMessage = $"Attached \"{work.Title}\" to this book.";
     }
 
     public async Task RemoveOtherWorkAsync(int workId)
