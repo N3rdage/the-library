@@ -169,6 +169,71 @@ public class WorkEditDialogViewModelTests
     }
 
     [Fact]
+    public async Task InitializeAsync_LoadsExistingGenreIds()
+    {
+        var factory = new TestDbContextFactory();
+        int workId;
+        int fantasyId;
+        using (var db = factory.CreateDbContext())
+        {
+            var fantasy = new Genre { Name = "Fantasy" };
+            var work = new Work
+            {
+                Title = "w",
+                Author = new Author { Name = "a" },
+                Genres = [fantasy],
+            };
+            db.Books.Add(new Book { Title = "B", Works = [work] });
+            await db.SaveChangesAsync();
+            workId = work.Id;
+            fantasyId = fantasy.Id;
+        }
+
+        var vm = new WorkEditDialogViewModel(factory);
+        await vm.InitializeAsync(workId);
+
+        Assert.Single(vm.SelectedGenreIds);
+        Assert.Contains(fantasyId, vm.SelectedGenreIds);
+    }
+
+    [Fact]
+    public async Task SaveAsync_ReconcilesGenreSelection()
+    {
+        var factory = new TestDbContextFactory();
+        int workId;
+        int fantasyId;
+        int horrorId;
+        using (var db = factory.CreateDbContext())
+        {
+            var fantasy = new Genre { Name = "Fantasy" };
+            var horror = new Genre { Name = "Horror" };
+            db.Genres.AddRange(fantasy, horror);
+            var work = new Work
+            {
+                Title = "w",
+                Author = new Author { Name = "a" },
+                Genres = [fantasy], // starts with Fantasy
+            };
+            db.Books.Add(new Book { Title = "B", Works = [work] });
+            await db.SaveChangesAsync();
+            workId = work.Id;
+            fantasyId = fantasy.Id;
+            horrorId = horror.Id;
+        }
+
+        var vm = new WorkEditDialogViewModel(factory);
+        await vm.InitializeAsync(workId);
+        // Swap selection: drop Fantasy, add Horror.
+        vm.SelectedGenreIds = [horrorId];
+        await vm.SaveAsync();
+
+        using var db2 = factory.CreateDbContext();
+        var saved = db2.Works.Include(w => w.Genres).Single(w => w.Id == workId);
+        Assert.Single(saved.Genres);
+        Assert.Equal(horrorId, saved.Genres[0].Id);
+    }
+
+    [Fact]
     public async Task SearchAuthorsAsync_MatchesSubstring()
     {
         var factory = new TestDbContextFactory();

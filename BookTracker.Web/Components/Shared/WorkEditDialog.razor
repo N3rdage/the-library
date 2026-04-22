@@ -1,8 +1,6 @@
-@* Modal dialog for editing a single Work's fields (title, subtitle,
-   author with typeahead, first-published date, series + order) from
-   the View page. Genres are deliberately not in this dialog — the
-   hierarchical MudBlazor genre picker is its own future PR, so this
-   dialog links users to /edit for that one field. *@
+@* Modal dialog for editing a single Work's fields from the View page.
+   Covers title, subtitle, author (typeahead), first-published date,
+   series + order, and genres (via MudGenrePicker — PR B). *@
 
 @inject WorkEditDialogViewModel VM
 
@@ -67,9 +65,12 @@
                                      Margin="Margin.Dense"
                                      Min="1" />
                 }
-                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    Genres are edited on the <MudLink Href="@($"/books/{BookId}/edit")">full edit page</MudLink>.
-                </MudText>
+
+                <div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Genres</MudText>
+                    <MudGenrePicker SelectedGenreIds="VM.SelectedGenreIds"
+                                    SelectedGenreIdsChanged="ids => VM.SelectedGenreIds = ids" />
+                </div>
             </MudStack>
         }
     </DialogContent>
