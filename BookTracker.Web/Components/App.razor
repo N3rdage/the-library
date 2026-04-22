@@ -21,6 +21,11 @@
 
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
     <link rel="stylesheet" href="@Assets["css/site.css"]" />
+    @* MudBlazor — pilot phase, loaded alongside Bootstrap. Google Fonts
+       Roboto is MudBlazor's default typography; MudBlazor.min.css ships
+       via _content/MudBlazor. *@
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
+    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
     @* Only include scoped styles bundle if scoped .razor.css files exist *@
     <ImportMap />
     <HeadOutlet @rendermode="InteractiveServer" />
@@ -36,6 +41,7 @@
     <script src="@Assets["lib/html5-qrcode/html5-qrcode.min.js"]"></script>
     <script src="@Assets["js/barcode-scanner.js"]"></script>
     <script src="@Assets["js/photo-capture.js"]"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="@Assets["service-worker-register.js"]"></script>
 </body>
 </html>
