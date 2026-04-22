@@ -1,0 +1,74 @@
+@* Modal dialog for editing Book-level fields (title, category, cover URL)
+   from the View page. Notes are edited inline on the View page and are
+   intentionally absent here. Triggered via IDialogService. *@
+
+@inject BookEditDialogViewModel VM
+
+<MudDialog>
+    <DialogContent>
+        @if (VM.NotFound)
+        {
+            <MudAlert Severity="Severity.Warning">Book not found.</MudAlert>
+        }
+        else
+        {
+            <MudStack Spacing="3" Style="min-width: 280px;">
+                <MudTextField T="string"
+                              @bind-Value="VM.Title"
+                              Label="Title"
+                              Required="true"
+                              RequiredError="Title is required."
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense" />
+                <MudSelect T="BookCategory"
+                           @bind-Value="VM.Category"
+                           Label="Category"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense">
+                    <MudSelectItem T="BookCategory" Value="BookCategory.Fiction">Fiction</MudSelectItem>
+                    <MudSelectItem T="BookCategory" Value="BookCategory.NonFiction">Non-Fiction</MudSelectItem>
+                </MudSelect>
+                <MudTextField T="string"
+                              @bind-Value="VM.CoverUrl"
+                              Label="Cover image URL"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              HelperText="Optional. Shown on the Library list and View page header." />
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Disabled="@(VM.NotFound || string.IsNullOrWhiteSpace(VM.Title) || saving)"
+                   OnClick="SaveAsync">
+            @(saving ? "Saving..." : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public int BookId { get; set; }
+
+    private bool saving;
+
+    protected override async Task OnInitializedAsync() => await VM.InitializeAsync(BookId);
+
+    private async Task SaveAsync()
+    {
+        saving = true;
+        try
+        {
+            await VM.SaveAsync();
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}
