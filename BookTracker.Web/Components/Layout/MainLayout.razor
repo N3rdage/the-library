@@ -1,5 +1,8 @@
 @using BookTracker.Web.Theme
 @inherits LayoutComponentBase
+@implements IDisposable
+@inject NavigationManager Nav
+@inject IJSRuntime JS
 
 @* MudBlazor — root providers. Needed so any page using MudBlazor
    components (currently only pilot pages: Home + MergeBook) can dispatch
@@ -71,3 +74,22 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        // Close the mobile Bootstrap navbar collapse on every navigation.
+        // Without this the full-viewport open menu stays up after a tap
+        // and the user lands on the new page off-screen below the nav.
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        try { await JS.InvokeVoidAsync("NavbarCollapse.close"); }
+        catch (JSDisconnectedException) { /* circuit tearing down — nothing to do */ }
+        catch (TaskCanceledException) { /* ditto */ }
+    }
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}
