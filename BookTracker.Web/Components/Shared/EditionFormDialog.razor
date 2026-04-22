@@ -1,0 +1,159 @@
+@* Modal dialog for Add Edition and Edit Edition. The IsNew parameter
+   picks between the two flows — Add shows the ISBN-lookup button and a
+   first-copy condition field; Edit is field-only. *@
+
+@inject EditionFormDialogViewModel VM
+
+<MudDialog>
+    <DialogContent>
+        @if (VM.NotFound)
+        {
+            <MudAlert Severity="Severity.Warning">Edition not found.</MudAlert>
+        }
+        else
+        {
+            <MudStack Spacing="3" Style="min-width: 280px;">
+                @if (VM.IsNew)
+                {
+                    @* ISBN row with lookup button — Add flow only. *@
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Start">
+                        <MudTextField T="string"
+                                      @bind-Value="VM.Isbn"
+                                      Label="ISBN"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Class="flex-grow-1" />
+                        <MudButton OnClick="LookupAsync"
+                                   Disabled="@(VM.LookingUp || string.IsNullOrWhiteSpace(VM.Isbn))"
+                                   Variant="Variant.Outlined"
+                                   StartIcon="@Icons.Material.Filled.Search"
+                                   Size="Size.Small"
+                                   Class="mt-1">
+                            @(VM.LookingUp ? "Looking..." : "Lookup")
+                        </MudButton>
+                    </MudStack>
+                    @if (!string.IsNullOrEmpty(VM.LookupMessage))
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@VM.LookupMessage</MudText>
+                    }
+                }
+                else
+                {
+                    <MudTextField T="string"
+                                  @bind-Value="VM.Isbn"
+                                  Label="ISBN"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  HelperText="Leave blank for pre-1974 / self-published editions." />
+                }
+
+                <MudSelect T="BookFormat"
+                           @bind-Value="VM.Format"
+                           Label="Format"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense">
+                    @foreach (var f in Enum.GetValues<BookFormat>())
+                    {
+                        <MudSelectItem T="BookFormat" Value="f">@f.DisplayName()</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudAutocomplete T="string"
+                                 @bind-Value="VM.Publisher"
+                                 SearchFunc="VM.SearchPublishersAsync"
+                                 Label="Publisher"
+                                 Variant="Variant.Outlined"
+                                 Margin="Margin.Dense"
+                                 CoerceValue="true"
+                                 CoerceText="true"
+                                 ResetValueOnEmptyText="false"
+                                 MinCharacters="0"
+                                 HelperText="Type to find existing or create new." />
+
+                <MudTextField T="string"
+                              @bind-Value="VM.FirstPublishedOrPrintedDate"
+                              Label="Date printed"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              HelperText="Year, 'Month Year', or full date (e.g. 1987, Oct 1987, 1987-10-12)." />
+
+                <MudTextField T="string"
+                              @bind-Value="VM.CoverUrl"
+                              Label="Cover image URL"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense" />
+
+                @if (VM.IsNew)
+                {
+                    <MudSelect T="BookCondition"
+                               @bind-Value="VM.FirstCopyCondition"
+                               Label="Condition of first copy"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense">
+                        @foreach (var c in Enum.GetValues<BookCondition>())
+                        {
+                            <MudSelectItem T="BookCondition" Value="c">@ConditionLabel(c)</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Disabled="@(VM.NotFound || saving)"
+                   OnClick="SaveAsync">
+            @(saving ? "Saving..." : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    // Exactly one of (BookId + IsNew=true) or EditionId must be provided.
+    [Parameter] public int BookId { get; set; }
+    [Parameter] public int? EditionId { get; set; }
+    [Parameter] public bool IsNew { get; set; }
+
+    private bool saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (IsNew)
+        {
+            await VM.InitializeForAddAsync(BookId);
+        }
+        else if (EditionId is int eid)
+        {
+            await VM.InitializeForEditAsync(eid);
+        }
+    }
+
+    private async Task LookupAsync() => await VM.LookupAsync();
+
+    private async Task SaveAsync()
+    {
+        saving = true;
+        try
+        {
+            var id = await VM.SaveAsync();
+            if (id is int) MudDialog.Close(DialogResult.Ok(id));
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private static string ConditionLabel(BookCondition c) => c switch
+    {
+        BookCondition.AsNew => "As New",
+        BookCondition.VeryGood => "Very Good",
+        _ => c.ToString(),
+    };
+}

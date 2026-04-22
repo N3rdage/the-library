@@ -47,12 +47,15 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
 
     public async Task<IEnumerable<string>> SearchAuthorsAsync(string query, CancellationToken ct)
     {
-        var q = (query ?? "").Trim();
+        // Lowercased client-side before the LINQ Where so the EF InMemory
+        // provider (case-sensitive) and SQL Server (case-insensitive by
+        // default collation) agree on substring matching.
+        var q = (query ?? "").Trim().ToLower();
         await using var db = await dbFactory.CreateDbContextAsync();
         var matches = db.Authors.AsQueryable();
         if (!string.IsNullOrEmpty(q))
         {
-            matches = matches.Where(a => a.Name.Contains(q));
+            matches = matches.Where(a => a.Name.ToLower().Contains(q));
         }
 
         return await matches
