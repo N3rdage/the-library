@@ -4,6 +4,7 @@ using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,6 +13,12 @@ var builder = WebApplication.CreateBuilder(args);
 // work but the genres picker, dialogs, and form feedback would all benefit.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+// MudBlazor — pilot on Home + MergeBook pages. Coexists with Bootstrap
+// (both stylesheets loaded in App.razor) for the duration of the pilot.
+// If we commit to migrating fully, Bootstrap + hand-rolled cards come out
+// as pages are rewritten.
+builder.Services.AddMudServices();
 
 // Increase SignalR max message size for photo ISBN capture (base64 images).
 builder.Services.AddSignalR(options =>

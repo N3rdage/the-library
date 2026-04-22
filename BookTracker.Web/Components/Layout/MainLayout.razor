@@ -1,5 +1,13 @@
 @inherits LayoutComponentBase
 
+@* MudBlazor — root providers. Needed so any page using MudBlazor
+   components (currently only pilot pages: Home + MergeBook) can dispatch
+   theme/popover/dialog/snackbar. Harmless for Bootstrap-only pages. *@
+<MudThemeProvider />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
 <header>
     <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
         <div class="container">
