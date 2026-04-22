@@ -34,7 +34,7 @@ foreach ($m in $required) {
 
 Connect-AzAccount -Tenant $TenantId -Subscription $SubscriptionId | Out-Null
 Set-AzContext -Tenant $TenantId -Subscription $SubscriptionId | Out-Null
-Connect-MgGraph -TenantId $TenantId -Scopes 'Application.ReadWrite.All','Directory.Read.All' -NoWelcome
+Connect-MgGraph -TenantId $TenantId -Scopes 'Application.ReadWrite.All','Directory.Read.All','AppRoleAssignment.ReadWrite.All' -NoWelcome
 
 # ---- Ensure the CI app registration + service principal ---------------------
 Write-Host "Ensuring App Registration '$CiAppName'..."
@@ -143,12 +143,26 @@ $ownedByRole = $graphSp.AppRoles | Where-Object { $_.Value -eq 'Application.Read
 $existingAssignment = Get-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $sp.Id -ErrorAction SilentlyContinue |
     Where-Object { $_.AppRoleId -eq $ownedByRole.Id -and $_.ResourceId -eq $graphSp.Id }
 if (-not $existingAssignment) {
-    New-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $sp.Id -BodyParameter @{
-        principalId = $sp.Id
-        resourceId  = $graphSp.Id
-        appRoleId   = $ownedByRole.Id
-    } | Out-Null
-    Write-Host "  Granted Graph Application.ReadWrite.OwnedBy to CI SP"
+    # Granting a Graph app role to an SP requires AppRoleAssignment.ReadWrite.All
+    # in the Graph session AND Global Admin / Privileged Role Administrator in
+    # the tenant. If the user doesn't have those, the call returns 403 — catch
+    # it and tell them to grant the permission via the Portal instead, which
+    # doesn't need those scopes on the caller's session.
+    try {
+        New-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $sp.Id -ErrorAction Stop -BodyParameter @{
+            principalId = $sp.Id
+            resourceId  = $graphSp.Id
+            appRoleId   = $ownedByRole.Id
+        } | Out-Null
+        Write-Host "  Granted Graph Application.ReadWrite.OwnedBy to CI SP"
+    }
+    catch {
+        Write-Warning "  Couldn't grant Graph Application.ReadWrite.OwnedBy programmatically: $($_.Exception.Message)"
+        Write-Warning "  Grant it via Portal instead: Entra -> App registrations -> $CiAppName -> API permissions ->"
+        Write-Warning "    + Add permission -> Microsoft Graph -> Application permissions -> Application.ReadWrite.OwnedBy"
+        Write-Warning "    -> Add, then 'Grant admin consent for <tenant>'."
+        Write-Warning "  The rotation workflow will fail until this is granted."
+    }
 } else {
     Write-Host "  Graph Application.ReadWrite.OwnedBy already granted"
 }
