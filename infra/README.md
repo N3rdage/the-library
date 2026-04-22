@@ -109,6 +109,39 @@ With SQL on a Private Endpoint by default, `dotnet ef database update` from a de
 - Re-run `deploy.ps1` with `-DevClientIp <your.ipv4>`. This both creates a `DevClient` firewall rule and flips `publicNetworkAccess` to `Enabled`. Re-run without the flag later to seal it back up.
 - Or let CI run migrations (the existing on-startup `MigrateAsync` path still works since the App Service hits SQL through the PE).
 
+### Refresh the local dev DB with a copy of prod
+
+For realistic local testing (dedup UI, bulk scans, AI features against real data) the local Docker SQL Server can be refreshed from prod via BACPAC:
+
+```powershell
+./infra/refresh-local-db.ps1 -TenantId '<tenant-guid>' -SubscriptionId '<sub-guid>'
+```
+
+What it does:
+
+1. Signs in to Azure, locates the prod SQL server (`booktracker-sql-<suffix>` in `rg-booktracker-prod`).
+2. Temporarily enables SQL public network access + opens a firewall rule for the caller's IP (same pattern `deploy.ps1` uses).
+3. Runs `SqlPackage /a:Export` with AAD auth; lands the `.bacpac` in `./artifacts/` (gitignored).
+4. Restores the firewall state in `finally` even if the export aborts.
+5. Prompts before clobbering the local DB (skip with `-Force` on re-runs).
+6. Drops the local `BookTracker` DB and `SqlPackage /a:Import`s the BACPAC into the `booktracker-db` container on `localhost:1433`.
+
+Prereqs:
+
+- **SqlPackage on PATH.** Preferred install is the .NET global tool:
+
+  ```powershell
+  dotnet tool install -g microsoft.sqlpackage
+  ```
+
+  (Alternatives: Azure Data Studio's "SQL Database Projects" extension, or the standalone installer at `https://aka.ms/sqlpackage-windows`.) Open a fresh shell afterwards so the updated PATH is picked up.
+- Docker running with `docker compose up -d` already applied.
+- `Az.Accounts`, `Az.Resources`, `Az.Sql`, and `SqlServer` modules — auto-install on first run.
+
+Direction: **prod → local only**. There is no reverse path — data flows into prod through normal app usage, never this script. If this branch has migrations not yet applied to prod, run `dotnet ef database update --project .\BookTracker.Data --startup-project .\BookTracker.Web` after the import.
+
+Flags: `-SkipExport` reuses the most recent BACPAC in `./artifacts/` (handy when iterating on import). `-SkipImport` just downloads the BACPAC.
+
 ## GitHub Actions CI/CD
 
 After the first `deploy.ps1` run, set up the GitHub → Azure OIDC link:
