@@ -1,9 +1,10 @@
+@using BookTracker.Web.Theme
 @inherits LayoutComponentBase
 
 @* MudBlazor — root providers. Needed so any page using MudBlazor
    components (currently only pilot pages: Home + MergeBook) can dispatch
    theme/popover/dialog/snackbar. Harmless for Bootstrap-only pages. *@
-<MudThemeProvider />
+<MudThemeProvider Theme="BookTrackerTheme.Default" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
