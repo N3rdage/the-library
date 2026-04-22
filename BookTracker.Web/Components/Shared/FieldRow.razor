@@ -1,0 +1,12 @@
+@* Compact label/value row for read-only detail pages. Stacks the label
+   above the value so long values wrap cleanly on mobile. *@
+
+<div>
+    <MudText Typo="Typo.caption" Color="Color.Secondary">@Label</MudText>
+    <MudText Typo="Typo.body2" Style="word-break: break-word;">@Value</MudText>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter, EditorRequired] public string? Value { get; set; }
+}
