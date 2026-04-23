@@ -1,0 +1,27 @@
+---
+name: Duplicates — Edition merge + auto-fill-empties + cover art (PR 4)
+description: PR 4 of dedup series. Three bundled pieces — new Edition merge; switched Work merge from strict-replace to auto-fill-empties (retrofit); cover art thumbnails added to Author/Work/Edition merge pages. Largest dedup PR so far.
+type: project
+---
+
+## Shipped
+
+PR #89 — 17 files, +1102/-35. New `/duplicates/merge/edition/{a}/{b}` page + `EditionMergeService`. Retrofitted Work merge from strict-replace to auto-fill-empties (any empty winner field gets taken from loser, paired fields move together, genres unioned). Added cover art thumbnails to Author, Work, and Edition merge pages (Author/Work use "prefer single-Work Book, fallback to any Book"; Edition uses own CoverUrl with Book fallback). 17 new tests — 208/208 passing.
+
+## Surprise
+
+- **Mid-series design pivot on enrichment, landed as a retrofit inside PR 4.** Drew's "can't remember what we decided" question about whether loser fields get copied to winner was the trigger. Looking back: PR 2 + 3 had explicitly chosen strict-replace (user manually copies before confirming). Using the merge in practice surfaced that strict-replace was too strict — a loser with `FirstPublishedDate` populated and winner with it null shouldn't need a manual copy step. Shifted to auto-fill-empties (only fills gaps, never overwrites populated fields) and bundled the Work merge retrofit into PR 4. Now consistent across Work + Edition; Author has nothing to enrich; Book merge (PR 5) will inherit the same rule.
+- **Record param additions broke existing test factories — predictable, trivial.** Adding `CoverArtUrl` to `AuthorMergeDetail` and `WorkMergeDetail`, plus `FieldsAutoFilled` to `WorkMergeResult`, broke the `Detail()` test helpers and `new WorkMergeResult(...)` call sites. Compiler caught each. One `null` param added per helper, one `0` added per call site. The friction is consistently "nominal records + positional constructors in tests" — worth noting that keyword-argument style in test construction would absorb these changes silently. Not converting now; the friction is ~30 seconds per change and the signal when it fires is valuable.
+- **InMemory EF needed `using Microsoft.EntityFrameworkCore;` for `.Include()` in the new service tests.** Build failed with a cryptic "DbSet does not contain a definition for Include" until I added the using. Annoying because `BookTracker.Data` pulls EF in, but the extension method needs the explicit using in the test file. Easy fix but noted for pattern — every new service-test file wants the EF using even if the service file itself already has it.
+- **Cover-art logic is identical-in-shape across three services.** For Author/Work the rule is "prefer Book where Works.Count == 1, fallback to any Book". For Edition, "own CoverUrl, fallback to Book.DefaultCoverArtUrl". If I wrote a fourth I'd extract a helper. Three instances didn't justify it; each was 6 lines.
+
+## Lesson
+
+- **"User does the copy manually" doesn't survive first use.** PR 2/3 explicitly chose the manual path because it was simpler and avoided silent surprises. Correct call for a first cut. But the first real merge with a populated loser triggered an immediate "can't I just... have the obvious wins?" question from the user. **Auto-fill-empties** is the sweet spot: *only* fills gaps, never overwrites, preview surfaces what moved. Gets the obvious wins for free without the surprise risk of "helpful" enrichment.
+- **Retrofit-alongside-new-feature is a legitimate PR shape.** PR 4 was Edition merge + two retrofits (auto-fill on Work, cover art on Author/Work). ~17 files. Could have split into 3 PRs but the retrofits are tightly coupled to the new feature's design (Edition merge has auto-fill by default; showing cover on Edition without retrofitting the other merge pages would be inconsistent). Bundled made sense. The principle: if retrofits are *implied by* the new feature's design, bundle them. If they're independent improvements that just happen to be in related code, split them.
+- **Preview-what-will-happen is the single best UX pattern in the merge flow.** Every merge page shows: "Winner: X. Will reassign N books, auto-fill these M fields from loser." User sees the outcome before clicking. Three PRs in, this has absorbed every design question so far (shared-book count, "Book contains both", auto-fill, cover art). As long as the preview is truthful, users stop asking questions.
+- **Record-type positional constructors in tests are a speed bump with a signal.** Each time I add a field, the test helpers break. Not a bug — a signal that call sites need updating. The tiny cost keeps me honest about field additions. Would convert to named-param style only if the add-field cadence got annoying.
+
+## Quotable
+
+Four merge PRs in, the shape is a stable template: `LoadAsync` gathers details with enrichment-relevant fields + counts; `MergeAsync` is transactional with auto-fill logic + reassignment + `IgnoredDuplicate` cleanup + delete; VM exposes reactive `EnrichmentHints` for preview; page renders side-by-side cards with cover thumbnails, winner radio, impact preview, redirect-with-query-params banner. Each entity picks the semantically-interesting per-type decision — Author's alias-compatibility, Work's "Book contains both", Edition's cross-Book guard. The rest is template. When the template is right, the interesting decisions are the ones that write themselves onto the page.
