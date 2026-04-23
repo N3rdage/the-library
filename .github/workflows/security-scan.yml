@@ -1,0 +1,90 @@
+name: Security scan
+
+# Two responsibilities:
+# 1. Secret-scan every PR and the main branch weekly via gitleaks. A surprise
+#    leak (committed appsettings.json, pasted API key in a comment, private
+#    cert in a commit) fails the workflow so it surfaces before merge.
+# 2. Open a "Security review — YYYY-MM" issue on the 1st of each month so
+#    Drew has a forcing function to re-read SECURITY-AUDIT.md and confirm
+#    its claims still hold against any new code.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 3 * * 1'  # weekly Monday 03:00 UTC — catch anything that slipped through PR
+    - cron: '0 6 1 * *'  # monthly 1st of month 06:00 UTC — opens the review issue
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  gitleaks:
+    name: Gitleaks secret scan
+    # Skip the gitleaks job on the "open-a-review-issue" monthly tick — the
+    # weekly + PR runs cover scanning cadence; the 1st-of-month run only
+    # needs to open the issue.
+    if: github.event_name != 'schedule' || github.event.schedule != '0 6 1 * *'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so gitleaks can scan everything
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITLEAKS_LICENSE is only required for organisations — personal
+          # repos run gitleaks-action@v2 for free without a license key.
+
+  monthly-review:
+    name: Open monthly security review issue
+    # Only run on the 1st-of-month cron (and manual dispatch for testing).
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 6 1 * *'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const now = new Date();
+            const yyyyMm = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+            const title = `Security review — ${yyyyMm}`;
+
+            // Don't duplicate the issue if it already exists (e.g. manual
+            // dispatch after the scheduled run).
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'security-review',
+            });
+            if (existing.some(i => i.title === title)) {
+              core.info(`Issue '${title}' already open; skipping creation.`);
+              return;
+            }
+
+            const body = [
+              'Monthly security review. Walk through [`SECURITY-AUDIT.md`](../blob/main/SECURITY-AUDIT.md) and confirm each section still holds.',
+              '',
+              '- [ ] Gitleaks scan of past month: clean? (check the Actions tab)',
+              '- [ ] Any new routes under `excludedPaths` scope? Recheck §2.',
+              '- [ ] Any new `IJSRuntime.Invoke*` sites with user input? Recheck §9.',
+              '- [ ] Any new `FromSqlRaw` / `ExecuteSqlRaw`? Recheck §8.',
+              '- [ ] `dotnet list package --vulnerable` clean?',
+              '- [ ] Any new managed-identity role assignments in Bicep? Recheck §10.',
+              '- [ ] `Last reviewed` date updated at the top of `SECURITY-AUDIT.md`.',
+              '',
+              'Close this issue once done; push any updates to the audit doc in the same PR.',
+            ].join('\n');
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ['security-review'],
+            });

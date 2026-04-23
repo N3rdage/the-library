@@ -19,6 +19,17 @@
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
 
+    @* Content-Security-Policy — baseline defence against XSS + data exfiltration.
+       'unsafe-inline' / 'unsafe-eval' on script-src are a concession to Blazor
+       Server's framework internals; a nonce-based tightening is tracked in
+       SECURITY-AUDIT.md § Deferred items. img-src allows any HTTPS source
+       because cover art comes from many external providers (Open Library,
+       Google Books, etc.) and locking to specific hosts would break the
+       lookup pipeline. Frame-ancestors / X-Frame-Options / X-Content-Type-Options /
+       Referrer-Policy are emitted as response headers from Program.cs
+       (meta-tag CSP can't express frame-ancestors). *@
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss:; media-src 'self' blob:; base-uri 'self'; form-action 'self';" />
+
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
     <link rel="stylesheet" href="@Assets["css/site.css"]" />
     @* MudBlazor — pilot phase, loaded alongside Bootstrap. Google Fonts
