@@ -120,6 +120,17 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// Baseline security response headers. CSP lives in App.razor as a <meta>
+// tag; the three below need to be HTTP-header-only (meta-tag equivalents
+// are either deprecated or ignored by modern browsers).
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Frame-Options"] = "DENY";                     // clickjacking
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";           // MIME sniffing
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    await next();
+});
+
 app.UseAntiforgery();
 
 app.MapStaticAssets();
