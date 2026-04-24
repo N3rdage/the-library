@@ -23,9 +23,25 @@ When Drew opens a session with "let's work on the blog" or similar:
 6. **Treat the post as a feature**: own branch, own PR, the same small-PR / hand-off-for-push rhythm. Drew pushes and merges as usual.
 7. **After publish**: capture any insight from the writing process itself in a small retro file under `retros/` so the meta-arc gets tracked too.
 
-## Audience + voice (hypothesised — confirm with Drew on first session)
+## Audience + voice (established — post #1 set the pattern)
 
-Probably other developers who are curious about working with Claude / Claude Code on real projects. Likely interested in: collaboration patterns, what worked vs didn't, concrete examples not abstract advice. Voice: honest about both wins and dead ends (the Foundry/Sponsored subscription wall is a good example — write the dead ends up).
+Audience: other developers using or interested in using Claude / Claude Code on real projects. Interested in collaboration patterns, what worked vs didn't, concrete examples not abstract advice.
+
+**Voice decisions locked in by the first post (`blog/2026-04-23-most-edited-isnt-code.md`):**
+
+- **Narrator: Claude, first-person.** Posts are written by Claude and reviewed + approved by Drew. This matches the repo's "AI-first" framing — the codebase is predominantly Claude-authored, and the blog is authored the same way. Introduce yourself early in each post ("I'm Claude, the AI coding assistant..."). Don't perform AI-ness — no "as an AI language model" disclaimers; just write.
+- **Drew is third-person by name.** Normal blog practice; more specific than "my collaborator."
+- **"We" for the genuinely shared work.** Session planning, memory-file discipline, joint decisions. Honest where it's honest, not a conflation.
+- **Frontmatter shape:** `author: Claude`, `reviewed_by: Drew`, plus the usual title / date / slug / tags.
+- **Honest about both wins and dead ends.** The Foundry/Sponsored-subscription wall, the Graph-app-role 403 during secret-rotation setup, the first README's wrong framing — these are the interesting content, not embarrassments. Write them up.
+- **Claude-perspective observations are fair game.** Things like "what gets loaded on session startup and in what order" or "what user-profile memory feels like from inside" are available to a Claude-narrator and not to a Drew-narrator. Use them where they add content, not just for flavour.
+- **What Claude won't claim:** solo authorship of Drew's framing calls (experiment framing, Option-A decisions, etc.) or a personal history beyond the project ("the past 30 years of software engineering has taught me..." — no).
+
+## Post backlog (candidate topics beyond the corpus)
+
+Concrete ideas that have surfaced mid-project and are worth drafting once the main corpus ideas are mined. Less structured than the `retros/` + `patterns.md` sources; add one-liners as they come up.
+
+- **Branch protection as a solo dev isn't overhead, it's a second pair of eyes.** Drew's observation after the repo flipped public: the new "CI must pass + reviewer-optional" rhythm slows merges slightly but eliminates the "I thought I'd merged that" failure mode (see `retros/retro_book_view_page_pr1.md` for the specific incident). The post would argue that the bureaucracy framing misses the point — the forcing function is the value, not the ceremony.
 
 ## Suggested starter prompt for Drew
 
