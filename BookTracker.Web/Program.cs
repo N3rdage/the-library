@@ -88,6 +88,7 @@ builder.Services.AddTransient<BulkAddViewModel>();
 builder.Services.AddTransient<SeriesListViewModel>();
 builder.Services.AddTransient<SeriesEditViewModel>();
 builder.Services.AddTransient<AuthorListViewModel>();
+builder.Services.AddTransient<PublisherListViewModel>();
 builder.Services.AddTransient<ShoppingViewModel>();
 builder.Services.AddTransient<DuplicatesViewModel>();
 builder.Services.AddTransient<AuthorMergeViewModel>();

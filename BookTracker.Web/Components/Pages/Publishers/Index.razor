@@ -1,0 +1,216 @@
+@page "/publishers"
+@using BookTracker.Data.Models
+@inject PublisherListViewModel VM
+@inject NavigationManager Nav
+
+<PageTitle>Publishers - BookTracker</PageTitle>
+
+@* Mirrors the /authors page. Each publisher row expands to a drill-down
+   of the editions that reference it; inline actions cover rename,
+   delete-unused, and merge-into-another-publisher. Publishers have no
+   alias model — a merge is outright (target absorbs all editions, source
+   deleted). *@
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-3">
+
+    <MudText Typo="Typo.h4" Class="mb-2">Publishers</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+        Every publisher that currently attaches to an edition. Rename in place to fix typos, delete when
+        nothing references a publisher, or merge "Tor" into "Tor Books" (or vice-versa) to collapse
+        duplicates — the target absorbs all editions and the source is deleted.
+    </MudText>
+
+    @if (!string.IsNullOrEmpty(VM.SuccessMessage))
+    {
+        <MudAlert Severity="Severity.Success"
+                  ShowCloseIcon="true"
+                  CloseIconClicked="@(() => { VM.SuccessMessage = null; StateHasChanged(); })"
+                  Class="mb-3">@VM.SuccessMessage</MudAlert>
+    }
+
+    @if (VM.Loading)
+    {
+        <MudStack AlignItems="AlignItems.Center" Class="py-5">
+            <MudProgressCircular Indeterminate="true" />
+        </MudStack>
+    }
+    else if (VM.Publishers.Count == 0)
+    {
+        <MudText Color="Color.Secondary">No publishers yet — add a book with a publisher to seed the list.</MudText>
+    }
+    else
+    {
+        <MudPaper Elevation="1">
+            @foreach (var publisher in VM.Publishers)
+            {
+                var expanded = VM.ExpandedPublisherIds.Contains(publisher.Id);
+                <div class="publisher-row">
+                    <MudStack Row="true"
+                              Spacing="2"
+                              AlignItems="AlignItems.Center"
+                              Wrap="Wrap.Wrap"
+                              Class="pa-3"
+                              Style="cursor: pointer;"
+                              @onclick="@(() => OnToggleExpandAsync(publisher.Id))">
+                        <MudIcon Icon="@(expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" Size="Size.Small" />
+                        <MudText Typo="Typo.body1" Class="flex-grow-1" Style="font-weight: 500;">@publisher.Name</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Style="min-width: 80px; text-align: right;">
+                            @publisher.EditionCount edition@(publisher.EditionCount == 1 ? "" : "s")
+                        </MudText>
+                    </MudStack>
+
+                    @* Action bar — rename / merge / delete-unused. stopPropagation
+                       keeps clicks here from re-toggling the row. *@
+                    <div @onclick:stopPropagation="true" class="px-3 pb-3">
+                        @if (renamingId == publisher.Id)
+                        {
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                                <MudTextField T="string" @bind-Value="renamingName" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 320px;" />
+                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => SaveRenameAsync(publisher.Id))">Save</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => renamingId = null)">Cancel</MudButton>
+                            </MudStack>
+                        }
+                        else if (pendingMergeSourceId == publisher.Id && pendingMergeTargetId is int targetId)
+                        {
+                            var targetName = VM.Publishers.FirstOrDefault(p => p.Id == targetId)?.Name ?? "(unknown)";
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                                <MudText Typo="Typo.body2">
+                                    Merge <strong>@publisher.Name</strong> into <strong>@targetName</strong> —
+                                    reassigns @publisher.EditionCount edition@(publisher.EditionCount == 1 ? "" : "s") and deletes <strong>@publisher.Name</strong>. This can't be undone.
+                                </MudText>
+                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="@(() => ConfirmMergeAsync(publisher.Id, targetId))">Confirm merge</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="ClearPendingMerge">Cancel</MudButton>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Edit"
+                                           OnClick="@(() => StartRename(publisher))">Rename</MudButton>
+
+                                <MudSelect T="int?"
+                                           Value="null"
+                                           ValueChanged="@((int? id) => { if (id is int tid) StartMerge(publisher.Id, tid); })"
+                                           Label="Merge into…"
+                                           Variant="Variant.Outlined"
+                                           Margin="Margin.Dense"
+                                           Dense="true"
+                                           Style="max-width: 260px;">
+                                    @foreach (var other in VM.Publishers.Where(p => p.Id != publisher.Id))
+                                    {
+                                        <MudSelectItem T="int?" Value="@((int?)other.Id)">@other.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+
+                                @if (publisher.EditionCount == 0)
+                                {
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete"
+                                               OnClick="@(() => VM.DeleteUnusedAsync(publisher.Id))">Delete</MudButton>
+                                }
+                            </MudStack>
+                        }
+                    </div>
+
+                    @if (expanded)
+                    {
+                        <div @onclick:stopPropagation="true" class="px-3 pb-3">
+                            @if (!VM.DetailByPublisherId.TryGetValue(publisher.Id, out var detail))
+                            {
+                                <MudStack AlignItems="AlignItems.Center" Class="py-3">
+                                    <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                                </MudStack>
+                            }
+                            else if (detail.Editions.Count == 0)
+                            {
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">No editions reference this publisher.</MudText>
+                            }
+                            else
+                            {
+                                <MudList T="int" Dense="true" Class="pa-0">
+                                    @foreach (var e in detail.Editions)
+                                    {
+                                        <MudListItem T="int" OnClick="@(() => Nav.NavigateTo($"/books/{e.BookId}"))" Class="px-2">
+                                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap">
+                                                @if (!string.IsNullOrEmpty(e.CoverUrl))
+                                                {
+                                                    <MudImage Src="@e.CoverUrl" Alt="@e.BookTitle" Width="36" Height="52" Style="object-fit: cover; border-radius: 2px; flex: 0 0 auto;" />
+                                                }
+                                                else
+                                                {
+                                                    <MudIcon Icon="@Icons.Material.Filled.MenuBook" Color="Color.Secondary" />
+                                                }
+                                                <MudStack Spacing="0" Class="flex-grow-1" Style="min-width: 0;">
+                                                    <MudText Typo="Typo.body1" Style="word-break: break-word;">@e.BookTitle</MudText>
+                                                    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@e.Format</MudText>
+                                                        @if (e.DatePrinted is DateOnly d)
+                                                        {
+                                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@d.Year</MudText>
+                                                        }
+                                                        @if (!string.IsNullOrEmpty(e.Isbn))
+                                                        {
+                                                            <MudText Typo="Typo.caption" Color="Color.Secondary">ISBN @e.Isbn</MudText>
+                                                        }
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                            @e.CopyCount cop@(e.CopyCount == 1 ? "y" : "ies")
+                                                        </MudText>
+                                                    </MudStack>
+                                                </MudStack>
+                                            </MudStack>
+                                        </MudListItem>
+                                    }
+                                </MudList>
+                            }
+                        </div>
+                    }
+                </div>
+                <MudDivider />
+            }
+        </MudPaper>
+    }
+
+</MudContainer>
+
+@code {
+    private int? renamingId;
+    private string renamingName = "";
+
+    private int? pendingMergeSourceId;
+    private int? pendingMergeTargetId;
+
+    protected override async Task OnInitializedAsync() => await VM.LoadAsync();
+
+    private async Task OnToggleExpandAsync(int publisherId) => await VM.ToggleExpandAsync(publisherId);
+
+    private void StartRename(PublisherListViewModel.PublisherRow publisher)
+    {
+        renamingId = publisher.Id;
+        renamingName = publisher.Name;
+        ClearPendingMerge();
+    }
+
+    private async Task SaveRenameAsync(int publisherId)
+    {
+        await VM.RenameAsync(publisherId, renamingName);
+        renamingId = null;
+    }
+
+    private void StartMerge(int sourceId, int targetId)
+    {
+        pendingMergeSourceId = sourceId;
+        pendingMergeTargetId = targetId;
+        renamingId = null;
+    }
+
+    private void ClearPendingMerge()
+    {
+        pendingMergeSourceId = null;
+        pendingMergeTargetId = null;
+    }
+
+    private async Task ConfirmMergeAsync(int sourceId, int targetId)
+    {
+        await VM.MergeAsync(sourceId, targetId);
+        ClearPendingMerge();
+    }
+}
