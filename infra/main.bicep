@@ -84,5 +84,6 @@ output stagingHostName string = resources.outputs.stagingHostName
 output stagingPrincipalId string = resources.outputs.stagingPrincipalId
 output sqlServerFqdn string = resources.outputs.sqlServerFqdn
 output sqlDatabaseName string = resources.outputs.sqlDatabaseName
+output stagingSqlDatabaseName string = resources.outputs.stagingSqlDatabaseName
 output keyVaultName string = resources.outputs.keyVaultName
 output openAIEndpoint string = resources.outputs.openAIEndpoint

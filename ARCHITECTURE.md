@@ -232,7 +232,7 @@ CI runs `dotnet test` on all PRs to main.
 
 | Setting | Source | Purpose |
 |---------|--------|---------|
-| `ConnectionStrings:DefaultConnection` | appsettings / Azure config | SQL Server connection (AAD via managed identity in Azure) |
+| `ConnectionStrings:DefaultConnection` | appsettings / Azure config | SQL Server connection (AAD via managed identity in Azure). In Azure: **slot-sticky**; prod slot reads `booktracker`, staging slot reads `booktracker-staging`, and a slot swap does not move the CS — see `infra/README.md`. |
 | `AI:DefaultProvider` | Azure App Setting | `Anthropic`, `MicrosoftFoundry`, or `AzureOpenAI` |
 | `AI:Anthropic:ApiKey` | Key Vault ref (prod) / appsettings (dev) | Anthropic API key |
 | `AI:Anthropic:FastModel` | appsettings (default: SDK constant) | Model for fast AI ops |
