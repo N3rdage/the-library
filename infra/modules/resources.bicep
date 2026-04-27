@@ -33,6 +33,7 @@ var appServiceName = '${appName}-${uniqueSuffix}'
 var appServicePlanName = '${appName}-plan'
 var sqlServerName = '${appName}-sql-${uniqueSuffix}'
 var sqlDatabaseName = appName
+var stagingSqlDatabaseName = '${appName}-staging'
 var vnetName = '${appName}-vnet'
 var vnetSecondaryName = '${appName}-vnet-${secondaryLocation}'
 var keyVaultName = '${appName}-kv-${uniqueSuffix}'
@@ -85,6 +86,7 @@ module sql './sql.bicep' = {
     tags: tags
     sqlServerName: sqlServerName
     sqlDatabaseName: sqlDatabaseName
+    stagingSqlDatabaseName: stagingSqlDatabaseName
     aadAdminObjectId: sqlAadAdminObjectId
     aadAdminLogin: sqlAadAdminLogin
     tenantId: tenantId
@@ -201,6 +203,7 @@ module appConfig './app-config.bicep' = {
     authClientId: authClientId
     sqlServerFqdn: sql.outputs.sqlServerFqdn
     sqlDatabaseName: sqlDatabaseName
+    stagingSqlDatabaseName: stagingSqlDatabaseName
     appInsightsConnectionString: obs.outputs.appInsightsConnectionString
     keyVaultName: keyVaultName
     aiAzureOpenAIEndpoint: ai.outputs.openAIEndpoint
@@ -231,6 +234,7 @@ output stagingHostName string = app.outputs.stagingHostName
 output stagingPrincipalId string = app.outputs.stagingPrincipalId
 output sqlServerFqdn string = sql.outputs.sqlServerFqdn
 output sqlDatabaseName string = sqlDatabaseName
+output stagingSqlDatabaseName string = stagingSqlDatabaseName
 output keyVaultName string = kv.outputs.keyVaultName
 output keyVaultUri string = kv.outputs.keyVaultUri
 output vnetName string = network.outputs.vnetName

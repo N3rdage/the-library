@@ -8,6 +8,7 @@ param tenantId string
 param authClientId string
 param sqlServerFqdn string
 param sqlDatabaseName string
+param stagingSqlDatabaseName string
 param appInsightsConnectionString string
 
 @description('Key Vault name. Used to build @Microsoft.KeyVault references for secret app settings.')
@@ -109,11 +110,21 @@ resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
 
 // Slot-sticky setting names. Attached to the production site (not the slot)
 // per Azure's model — a single list governs swap behaviour for all slots.
+//
+// `DefaultConnection` is slot-sticky too: prod and staging point at separate
+// databases (`booktracker` vs `booktracker-staging`). Without slot-stickiness
+// a swap would move the connection strings with the bits, which would land
+// the formerly-staging code on the prod URL but still pointing at the
+// staging DB — an immediate prod outage. Pinning the CS keeps each slot's
+// DB stable across swaps; swap is purely code-shaped.
 resource slotConfigNames 'Microsoft.Web/sites/config@2023-12-01' = {
   parent: app
   name: 'slotConfigNames'
   properties: {
     appSettingNames: slotStickyAppSettingNames
+    connectionStringNames: [
+      'DefaultConnection'
+    ]
   }
 }
 
@@ -183,7 +194,7 @@ resource stagingConnStrings 'Microsoft.Web/sites/slots/config@2023-12-01' = {
   name: 'connectionstrings'
   properties: {
     DefaultConnection: {
-      value: 'Server=tcp:${sqlServerFqdn},1433;Database=${sqlDatabaseName};Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False;'
+      value: 'Server=tcp:${sqlServerFqdn},1433;Database=${stagingSqlDatabaseName};Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False;'
       type: 'SQLAzure'
     }
   }

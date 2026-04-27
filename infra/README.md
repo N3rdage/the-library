@@ -17,8 +17,9 @@ All tagged with `Client = Drew` and `Environment = Production`.
 | Staging slot | `staging` on the App Service | `australiaeast` | own system-assigned identity; CI deploys here, `swap.yml` promotes |
 | System-assigned managed identities | on prod + staging slots | — | granted SQL DB roles + Key Vault Secrets User + Cognitive Services User on OpenAI |
 | Azure SQL logical server | `booktracker-sql-<hash>` | `australiaeast` | **AAD-only auth**; `publicNetworkAccess = Disabled` by default |
-| Azure SQL database | `booktracker` | `australiaeast` | Basic tier, 5 DTU |
-| Azure SQL Private Endpoint | `booktracker-sql-<hash>-pe` | `australiaeast` | in primary `private-endpoints` subnet |
+| Azure SQL database (prod) | `booktracker` | `australiaeast` | Basic tier, 5 DTU; reached by the prod slot only |
+| Azure SQL database (staging) | `booktracker-staging` | `australiaeast` | Basic tier, 5 DTU; reached by the staging slot only. Empty on first deploy — migrate-on-startup creates the schema. |
+| Azure SQL Private Endpoint | `booktracker-sql-<hash>-pe` | `australiaeast` | in primary `private-endpoints` subnet; serves both DBs |
 | Key Vault | `booktracker-kv-<hash>` | `australiaeast` | Standard, RBAC auth, `defaultAction = Deny`; holds AuthClientSecret + AI keys |
 | Key Vault Private Endpoint | `booktracker-kv-<hash>-pe` | `australiaeast` | in primary `private-endpoints` subnet |
 | Azure OpenAI account | `booktracker-openai-<hash>` | `eastus2` | S0; `publicNetworkAccess = Disabled`; `gpt-4o` deployment, Standard SKU, capacity 10 |
@@ -80,7 +81,25 @@ The following app settings are marked `slotConfigNames.appSettingNames` so they 
 - `AI__DefaultProvider`
 - `Trove__ApiKey`
 
-Reason: swap-then-redeploy-without-the-key previously let the Anthropic key drift between slots and eventually get lost. Making keys and AI config slot-bound means swaps are purely code-shaped — secrets and environment stay where they were configured.
+The connection string `DefaultConnection` is also slot-sticky (`slotConfigNames.connectionStringNames`). Prod points at `booktracker`, staging points at `booktracker-staging`; without the pin a swap would land the formerly-staging code on the prod URL still pointing at the staging DB, an immediate prod outage.
+
+Reason: swap-then-redeploy-without-the-key previously let the Anthropic key drift between slots and eventually get lost. Making keys and AI config slot-bound means swaps are purely code-shaped — secrets, environment, and database all stay where they were configured.
+
+### Staging is a real environment now
+
+Prod and staging hit **separate databases** (`booktracker` vs `booktracker-staging` on the same SQL server). Each slot's managed identity is granted only on its own DB. Implications:
+
+- Schema migrations are tested on staging *before* they hit prod data — the `swap.yml` slot-swap is now a real rollback story for code, not a fictional one against a shared DB.
+- Staging starts **empty** on first deploy of this change; migrate-on-startup builds the schema. Empty staging catches schema syntax errors but **misses every data-shape failure** (NOT NULL with existing nulls, unique-index dedup violations, FK orphans, type-conversion failures, performance-on-real-data). For migrations tagged `review:` the safe pattern is to refresh staging from prod first — see `TODO.md` for the bacpac-sync follow-up.
+
+### Order of operations after this lands
+
+The first time this Bicep runs against an existing deployment:
+
+1. **Run `deploy.ps1`** — Bicep creates `booktracker-staging`, repoints the staging slot's connection string at it, marks the CS slot-sticky, and `deploy.ps1` grants the staging managed identity on the new DB (and drops the orphan staging-identity grant from the prod DB).
+2. **Redeploy the app** to staging (push to `main`, or restart the staging slot) so migrate-on-startup runs against the empty staging DB and creates the schema.
+3. **Verify staging URL** loads — empty library, but the app should be alive.
+4. Prod is unaffected throughout — the prod slot's CS still points at the prod DB.
 
 ## Prereqs
 
@@ -117,7 +136,7 @@ What the script does:
 3. Rotates a 2-year client secret for Easy Auth.
 4. Runs `main.bicep` at subscription scope (creates the RG + everything else).
 5. Registers the App Service's Easy Auth callback URL on the app registration.
-6. Temporarily flips SQL `publicNetworkAccess` on, opens a temp firewall rule for the script's public IP, connects with AAD auth, grants the prod + staging managed identities `db_datareader/writer/ddladmin`, then restores SQL back to private.
+6. Temporarily flips SQL `publicNetworkAccess` on, opens a temp firewall rule for the script's public IP, connects with AAD auth, grants the prod managed identity `db_datareader/writer/ddladmin` on the prod DB and the staging managed identity the same on the staging DB (each identity only sees its own DB; the prod-DB grant also drops any orphan staging-identity grant from a pre-split deploy), then restores SQL back to private.
 
 ### Local EF migrations after the cutover
 

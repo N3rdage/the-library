@@ -145,6 +145,7 @@ $appUrl = $deployment.Outputs.appServiceUrl.Value
 $appServiceName = $deployment.Outputs.appServiceName.Value
 $sqlFqdn = $deployment.Outputs.sqlServerFqdn.Value
 $sqlDb = $deployment.Outputs.sqlDatabaseName.Value
+$stagingSqlDb = $deployment.Outputs.stagingSqlDatabaseName.Value
 $appHost = ([Uri]$appUrl).Host
 $stagingHost = $deployment.Outputs.stagingHostName.Value
 $stagingSlotSqlUserName = "$appServiceName/slots/staging"
@@ -152,7 +153,9 @@ $stagingSlotSqlUserName = "$appServiceName/slots/staging"
 Write-Host ""
 Write-Host "Infrastructure deployed."
 Write-Host "  App Service: $appUrl"
-Write-Host "  SQL Server:  $sqlFqdn / $sqlDb"
+Write-Host "  SQL Server:  $sqlFqdn"
+Write-Host "  Prod DB:     $sqlDb"
+Write-Host "  Staging DB:  $stagingSqlDb"
 
 # ---- Ensure the Easy Auth redirect URIs are registered (prod + staging) -----
 $redirects = @(
@@ -207,9 +210,16 @@ New-AzSqlServerFirewallRule `
 Start-Sleep -Seconds 10
 
 try {
-    # Both slots get their own system-assigned managed identity. The SQL user
-    # name for a slot is "<app-service-name>/slots/<slot-name>".
-    $sqlScript = @"
+    # Each slot has its own system-assigned managed identity, and each slot's
+    # connection string is slot-sticky and points at its own DB. So each
+    # identity only needs access to its slot's DB. Grant prod identity on
+    # the prod DB; grant staging identity on the staging DB.
+    #
+    # The SQL user name for a slot is "<app-service-name>/slots/<slot-name>".
+    # The prod block also drops the staging identity if it exists from a
+    # pre-split deploy (when both identities were granted on the prod DB) —
+    # leaving the orphan grant would mask a slot-sticky-CS regression.
+    $prodGrantSql = @"
 IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = '$appServiceName')
 BEGIN
     CREATE USER [$appServiceName] FROM EXTERNAL PROVIDER;
@@ -218,6 +228,10 @@ BEGIN
     ALTER ROLE db_ddladmin  ADD MEMBER [$appServiceName];
 END
 
+DROP USER IF EXISTS [$stagingSlotSqlUserName];
+"@
+
+    $stagingGrantSql = @"
 IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = '$stagingSlotSqlUserName')
 BEGIN
     CREATE USER [$stagingSlotSqlUserName] FROM EXTERNAL PROVIDER;
@@ -228,7 +242,10 @@ END
 "@
 
     $token = (Get-AzAccessToken -ResourceUrl 'https://database.windows.net').Token
-    Invoke-Sqlcmd -ServerInstance $sqlFqdn -Database $sqlDb -AccessToken $token -Query $sqlScript -Encrypt Mandatory
+    Write-Host "  Granting prod identity on '$sqlDb'..."
+    Invoke-Sqlcmd -ServerInstance $sqlFqdn -Database $sqlDb -AccessToken $token -Query $prodGrantSql -Encrypt Mandatory
+    Write-Host "  Granting staging identity on '$stagingSqlDb'..."
+    Invoke-Sqlcmd -ServerInstance $sqlFqdn -Database $stagingSqlDb -AccessToken $token -Query $stagingGrantSql -Encrypt Mandatory
 }
 finally {
     Write-Host "  Removing temporary SQL firewall rule..."
