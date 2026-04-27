@@ -1,8 +1,9 @@
 name: Swap staging to production
 
-# TODO: configure a GitHub Environment named "production" (Settings -> Environments)
-# with required reviewers, then add `environment: production` to the job below so
-# the swap requires human approval before it runs.
+# The `production` GitHub Environment (Settings -> Environments) gates this
+# job: 2-minute wait timer (cancellable window for fat-finger dispatches) and
+# Deployment branches restricted to `main`. Required-reviewer approval is a
+# future step, blocked on having a collaborator (TODO.md #26).
 on:
   workflow_dispatch:
 
@@ -13,6 +14,7 @@ permissions:
 jobs:
   swap:
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Azure login (OIDC)
         uses: azure/login@v2
