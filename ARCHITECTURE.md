@@ -119,13 +119,16 @@ A short-lived context is created per operation. Never inject `DbContext` directl
 | `/` | Home | Dashboard — book count, author/genre stats |
 | `/books` | Library | Filterable book list (search, category, genre, tag, author). Group-by picker (Author / Genre / Series / None) renders the books as a collapsible accordion of groups, each with its own paginated book list (lazy-loaded on first expand). Filters reduce within groups. Desktop table + mobile cards. |
 | `/books/add` | Add Book | ISBN lookup + manual entry. Creates Book + Edition + Copy. Series suggestion after lookup. |
-| `/books/{id}/edit` | Edit Book | Edit metadata, genres, tags, series assignment. Manage editions and copies. Delete book. |
+| `/books/{id}` | Book Detail | Default browsing surface for a single book. Read-only scaffold with inline auto-save (rating / status / notes / tags). Modal edits open `BookEditDialog` / `WorkEditDialog` / `EditionFormDialog` / `CopyFormDialog`. |
+| `/books/{id}/edit` | Edit Book | Full-edit escape hatch. Edit metadata, genres, tags, series assignment. Manage editions and copies. Delete book. |
 | `/books/bulk-add` | Bulk Add | Rapid ISBN entry (text or barcode scanner). Discovery grid with async lookup, accept/follow-up, duplicate detection. |
 | `/series` | Series List | All series/collections with completion status |
 | `/series/new` | New Series | Create a new series or collection |
 | `/series/{id}` | Edit Series | Edit series, manage books in series, reorder |
 | `/shopping` | Shopping Mode | Mobile-optimised. "Do I have this?" (scan/search), series gaps, shopping list with "bought" action. |
 | `/assistant` | AI Assistant | Book advisor (Opus), genre cleanup, collection cataloguing, shopping suggestions (Sonnet). |
+| `/authors` | Authors | MudBlazor list with per-row drill-down to Works/Books, alias rollup on canonical rows, inline rename / merge / alias-resolve. Deep-linked from Home top-10. |
+| `/publishers` | Publishers | MudBlazor list mirroring `/authors` structurally — per-row drill-down to editions, inline rename, two-step-confirm merge (no alias model — outright absorption), delete-unused. |
 | `/duplicates` | Duplicates | Tabs for Authors / Works / Books / Editions. Lists candidate duplicate pairs detected on-demand. Dismiss false positives (reversible via the "Dismissed" section). Author pairs have a Merge → button. Web-primary, desktop-first layout. |
 | `/duplicates/merge/author/{idA}/{idB}` | Merge authors | Side-by-side review of the pair, radio to pick a winner, preview of impact (N works + M aliases to reassign), transactional merge. Refuses when the two authors resolve to different canonicals — user resolves aliases on `/authors` first. |
 | `/duplicates/merge/work/{idA}/{idB}` | Merge works | Side-by-side review, radio to pick a winner, preview of impact (books to reassign + any books that already contain both → loser dropped). Transactional with auto-fill-empties semantics. Refuses if the two resolve to different authors (merge authors first). |
@@ -204,7 +207,7 @@ For older books without barcodes, `photo-capture.js` opens the camera for a stil
 
 Mid-migration from Bootstrap to **MudBlazor 9** (`BookTracker.Web.csproj`). Current state:
 
-- **Pages using MudBlazor:** Home, Duplicates/MergeBook, Book Detail (`/books/{id}`) and its dialogs (BookEditDialog, WorkEditDialog, EditionFormDialog, CopyFormDialog), the `MudGenrePicker` shared component, Authors. These use `MudCard`, `MudButton`, `MudText`, `MudContainer`, `MudDialog`, `MudAutocomplete`, etc.
+- **Pages using MudBlazor:** Home, Duplicates/MergeBook, Book Detail (`/books/{id}`) and its dialogs (BookEditDialog, WorkEditDialog, EditionFormDialog, CopyFormDialog), the `MudGenrePicker` shared component, Authors, Publishers. These use `MudCard`, `MudButton`, `MudText`, `MudContainer`, `MudDialog`, `MudAutocomplete`, etc.
 - **Pages still on Bootstrap:** Library list, Book Add, Book Bulk Add, Book Edit (the "full edit page" escape hatch), Series, Shopping, AI Assistant, Duplicates list. The navbar in `MainLayout.razor` is still Bootstrap.
 - **Rollout strategy:** no migration deadline — pages convert as they're touched for other reasons. Low-traffic pages may stay Bootstrap indefinitely; that's fine.
 - **Coexistence:** both stylesheets are loaded in `App.razor`. MudBlazor's four root providers (`MudThemeProvider`, `MudPopoverProvider`, `MudDialogProvider`, `MudSnackbarProvider`) sit in `MainLayout.razor` — harmless on Bootstrap-only pages. Each page picks one lane.
