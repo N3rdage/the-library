@@ -55,6 +55,10 @@ else
                                     <option value="@SeriesType.Series">Series</option>
                                     <option value="@SeriesType.Collection">Collection</option>
                                 </InputSelect>
+                                <div class="form-text">
+                                    <strong>Series</strong>: numbered, known order (e.g. Ender's Game Saga).<br />
+                                    <strong>Collection</strong>: loose grouping (e.g. Discworld, Hercule Poirot).
+                                </div>
                             </div>
                             @if (VM.Input.Type == SeriesType.Series)
                             {
