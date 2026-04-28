@@ -3,6 +3,7 @@
 - [Drew — solo developer](user_drew.md) — context on the user, their stack (Windows/PowerShell/Azure/GitHub `N3rdage/the-library`, Gandi DNS), and collaboration style.
 - [Auto-commit locally](feedback_commit_locally.md) — always stage and commit before handing off; don't wait to be asked.
 - [Delete merged branches](feedback_delete_merged_branch.md) — delete local feature branch after pulling the merge into main.
+- [Branch from main](feedback_branch_from_main.md) — always start a new branch from a fresh `main` pull; never from a sibling branch (squash-merge would bundle content).
 - [Ask about mobile priority](feedback_mobile_priority.md) — when planning features, ask if mobile+web or web-only.
 - [Feature planning conventions](feedback_planning_conventions.md) — always plan first, PR breakdown for medium+, flag 5+ file changes as complex.
 - [Testing conventions](feedback_testing_conventions.md) — minimal tests for new logic to prevent regression; skip for pure markup.
@@ -11,3 +12,4 @@
 - [TODO tracking](feedback_todo_tracking.md) — all TODOs in TODO.md; "sync TODOs" reconciles memory + code + TODO.md.
 - [Memory excluded from PRs](feedback_memory_commits.md) — don't stage .claude-memory/ in feature commits; flag changes for a separate commit.
 - [Keep ARCHITECTURE.md updated](feedback_architecture_doc.md) — update when structural changes are made (entities, pages, services, patterns).
+- [Blog post backlog](blog_post_backlog.md) — corpus-derived candidate posts mineable from existing retros + `patterns.md`. Definitive count as of 2026-04-28: 3 shipped, 9 strong candidates, 6 possible.
