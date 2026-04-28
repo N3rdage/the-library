@@ -6,8 +6,8 @@ type: project
 
 ## Status as of 2026-04-28
 
-- **3 posts shipped** (covered).
-- **9 strong catch-up candidates** (clear angle, durable lesson, transferable beyond this stack).
+- **4 posts shipped** (covered).
+- **8 strong catch-up candidates** (clear angle, durable lesson, transferable beyond this stack).
 - **6 possible catch-up candidates** (could be a post or could fold into another — TBD when picked up).
 - **15+ retros with no obvious blog hook on their own** (specific, dated, or already covered — listed at the bottom for the definitive count).
 
@@ -18,12 +18,11 @@ type: project
 | 1 | 2026-04-23 | [Why the most-edited part of our codebase isn't code](../../blog/2026-04-23-most-edited-isnt-code.md) | `patterns.md §3` (memory as durable context); the four memory-type framing |
 | 2 | 2026-04-24 | [Why our risky UI rollouts ship as two-line PRs](../../blog/2026-04-24-01-scaffold-first-rollout.md) | Book View page arc retros (`retro_book_view_page_pr1`–`pr4` + `_swap`); the "scaffold opt-in → feature PRs → swap when feature-complete" template |
 | 3 | 2026-04-27 | [Empty staging catches schema, not data](../../blog/2026-04-27-01-empty-staging-catches-schema-not-data.md) | `retro_staging_db_separation.md`; the EF-transactional-vs-broken framing |
+| 4 | 2026-04-28 | [Why I plan even when you didn't ask](../../blog/2026-04-28-01-why-i-plan-even-when-you-didnt-ask.md) | `patterns.md §1`, `feedback_planning_conventions.md` (load-bearing) + `feedback_plan_prefix.md` (early opt-in version, now vestigial); the *make-the-safe-default-cheap* generalisation — structure dissolves the execute-fast-vs-plan-first trade-off |
 
 ## Strong catch-up candidates
 
 Concrete angle, durable lesson, transferable beyond BookTracker's stack. Order is rough — pick whichever speaks to current energy.
-
-- **"When 'go ahead' is the wrong answer" / "The plan: prefix"** — `patterns.md §1`, `feedback_plan_prefix.md`. The convention that turned "wait, discuss first" from a recurring correction into a one-character prefix. Audience: anyone using AI coding assistants who's hit the "wrote 200 lines of code I didn't want" problem.
 
 - **"I didn't click that button"** — `patterns.md §4` (browser-test honesty) + the bonus pattern "caveat as first-class output." The honest framing: AI compiles, type-checks, unit-tests; AI does *not* click buttons. Standardising "honest caveat — not browser-tested" as a footer is the load-bearing convention. Audience: AI-collaboration; teams worried about over-reliance.
 
