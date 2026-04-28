@@ -19,7 +19,7 @@ When Drew opens a session with "let's work on the blog" or similar:
 2. **Propose 3 candidate post outlines** — different angles on different parts of the corpus. Brief: title, 2–3 sentence summary, which retros / patterns it draws from, who it's for.
 3. **Wait for Drew to pick** (or hybridise). Don't draft until selection is explicit.
 4. **Drafting**: aim for the post Drew picked, ~1000–2000 words depending on scope. Use the retro `Quotable` lines as candidate pull-quotes. Cite specific PRs by number (`PR #42`) when grounding a claim — readers can follow the link.
-5. **Land in `blog/` at repo root** as a single `.md` file per post. Filename `YYYY-MM-DD-slug.md`. (Create the `blog/` directory on first post.)
+5. **Land in `blog/` at repo root** as a single `.md` file per post. Filename `YYYY-MM-DD-NN-slug.md` where `NN` is a zero-padded sequence number for that date (`01`, `02`, …) — ensures multiple posts on the same day sort chronologically by filename. Start a new date at `01` even if only one post is planned. (Create the `blog/` directory on first post.)
 6. **Treat the post as a feature**: own branch, own PR, the same small-PR / hand-off-for-push rhythm. Drew pushes and merges as usual.
 7. **After publish**: capture any insight from the writing process itself in a small retro file under `retros/` so the meta-arc gets tracked too.
 
@@ -37,9 +37,15 @@ Audience: other developers using or interested in using Claude / Claude Code on 
 - **Claude-perspective observations are fair game.** Things like "what gets loaded on session startup and in what order" or "what user-profile memory feels like from inside" are available to a Claude-narrator and not to a Drew-narrator. Use them where they add content, not just for flavour.
 - **What Claude won't claim:** solo authorship of Drew's framing calls (experiment framing, Option-A decisions, etc.) or a personal history beyond the project ("the past 30 years of software engineering has taught me..." — no).
 
-## Post backlog (candidate topics beyond the corpus)
+## Post backlog
 
-Concrete ideas that have surfaced mid-project and are worth drafting once the main corpus ideas are mined. Less structured than the `retros/` + `patterns.md` sources; add one-liners as they come up.
+The corpus-derived candidate list (one-time mine of all retros + `patterns.md` as of 2026-04-28) lives in [`blog_post_backlog.md`](blog_post_backlog.md). Each entry has a one-line angle and the source retro it anchors on. When picking the next post, start there — it's the definitive count of what's mineable from existing retros.
+
+Going forward, new retros add their own candidate entry to the backlog at write time, and shipped posts move from "candidates" to "shipped" in the same file.
+
+### Post-corpus ideas (not from a specific shipped arc)
+
+These didn't come from a retro — they surfaced mid-project as standalone observations. Add one-liners as they come up.
 
 - **Branch protection as a solo dev isn't overhead, it's a second pair of eyes.** Drew's observation after the repo flipped public: the new "CI must pass + reviewer-optional" rhythm slows merges slightly but eliminates the "I thought I'd merged that" failure mode (see `retros/retro_book_view_page_pr1.md` for the specific incident). The post would argue that the bureaucracy framing misses the point — the forcing function is the value, not the ceremony.
 
@@ -47,6 +53,6 @@ Concrete ideas that have surfaced mid-project and are worth drafting once the ma
 
 In a fresh Claude Code session, this is enough to get going:
 
-> Let's work on the BookTracker blog. Read the retros index and patterns doc, then propose 3 candidate post outlines I can pick from.
+> Let's work on the BookTracker blog. Read the backlog and propose 3 candidate post outlines I can pick from.
 
 The memory directory is loaded automatically; this prompt just signals intent + asks for proposals before drafting.

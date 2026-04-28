@@ -12,3 +12,4 @@
 - [TODO tracking](feedback_todo_tracking.md) — all TODOs in TODO.md; "sync TODOs" reconciles memory + code + TODO.md.
 - [Memory excluded from PRs](feedback_memory_commits.md) — don't stage .claude-memory/ in feature commits; flag changes for a separate commit.
 - [Keep ARCHITECTURE.md updated](feedback_architecture_doc.md) — update when structural changes are made (entities, pages, services, patterns).
+- [Blog post backlog](blog_post_backlog.md) — corpus-derived candidate posts mineable from existing retros + `patterns.md`. Definitive count as of 2026-04-28: 3 shipped, 9 strong candidates, 6 possible.
