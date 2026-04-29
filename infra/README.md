@@ -187,7 +187,9 @@ After the first `deploy.ps1` run, set up the GitHub → Azure OIDC link:
     -GitHubOrg 'N3rdage' -GitHubRepo 'the-library'
 ```
 
-The script creates a `booktracker-ci` app registration with federated identity credentials (one for pushes to `main`, one for pull requests), assigns it Contributor on `rg-booktracker-prod`, and prints six GitHub repository variables for you to configure at `Settings → Secrets and variables → Actions → Variables`.
+The script creates a `booktracker-ci` app registration with federated identity credentials (one for pushes to `main`, one for pull requests, one for the `production` GitHub Environment used by `swap.yml`), assigns it Contributor on `rg-booktracker-prod`, and prints six GitHub repository variables for you to configure at `Settings → Secrets and variables → Actions → Variables`.
+
+> **Heads-up on environment FICs.** Any workflow that opts into a GitHub Environment (`environment: production` on a job) presents a different OIDC subject claim shape — `repo:<org>/<repo>:environment:<env-name>` instead of `…:ref:refs/heads/<branch>`. If you add a new Environment to a workflow without a matching FIC on `booktracker-ci`, dispatch fails with `AADSTS700213: No matching federated identity record found`. Re-run `setup-github-oidc.ps1` after adding new environments — the `$desiredFics` block in the script is the source of truth.
 
 The script also grants the CI SP the narrow permissions needed by the scheduled Easy Auth secret rotation:
 - **Key Vault Secrets Officer** on the single KV in the RG (write access to `AuthClientSecret`).
