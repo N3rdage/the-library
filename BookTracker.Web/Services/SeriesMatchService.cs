@@ -5,11 +5,68 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.Services;
 
-// TODO: enhance series detection with Open Library series data from ISBN
-// lookup results. Currently uses local-only matching (author + title patterns).
-
 public partial class SeriesMatchService(IDbContextFactory<BookTrackerDbContext> dbFactory)
 {
+    /// <summary>
+    /// Returns a series suggestion using upstream series data from an ISBN
+    /// lookup if present, otherwise falls back to the local title+author
+    /// pattern matching. Prefer this overload over the title/author one in
+    /// any flow that has a <see cref="BookLookupResult"/> in hand — Open
+    /// Library's `series` field is far more reliable than name pattern
+    /// guessing once the lookup actually returned series data.
+    /// </summary>
+    public async Task<SeriesMatch?> FindMatchAsync(BookLookupResult lookup)
+    {
+        if (!string.IsNullOrWhiteSpace(lookup.Series))
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            var apiSeriesName = lookup.Series.Trim();
+
+            // Local match by name (case-insensitive). When the API series
+            // matches an existing local Series, attach to that one — the
+            // user might have already created it from a previous capture.
+            var localMatch = await db.Series
+                .Where(s => s.Name.ToLower() == apiSeriesName.ToLower())
+                .FirstOrDefaultAsync();
+
+            var orderHint = FormatOrderHint(lookup.SeriesNumber, lookup.SeriesNumberRaw);
+
+            if (localMatch is not null)
+            {
+                return new SeriesMatch(
+                    localMatch.Id, localMatch.Name, localMatch.Type,
+                    MatchReason.ApiMatchExisting,
+                    $"{lookup.Source} indicates this is part of \"{localMatch.Name}\"{orderHint}");
+            }
+
+            // No local match — propose creating a new series. SeriesId is
+            // null; SeriesName carries the proposed name so the UI / save
+            // path can find-or-create on accept (PR-B follow-up will wire
+            // this up; today the banner just informs the user).
+            return new SeriesMatch(
+                null, apiSeriesName, null,
+                MatchReason.ApiMatchNewSeries,
+                $"{lookup.Source} suggests this is part of \"{apiSeriesName}\"{orderHint} — not yet in the library; create it on the Series page after saving.");
+        }
+
+        // No upstream series data — fall back to local title/author matching.
+        return await FindMatchAsync(lookup.Title, lookup.Author);
+    }
+
+    private static string FormatOrderHint(int? seriesNumber, string? seriesNumberRaw)
+    {
+        if (seriesNumber is int n) return $" #{n}";
+        if (!string.IsNullOrWhiteSpace(seriesNumberRaw))
+        {
+            // Non-integer order from upstream (e.g. "5.5", "1A") — surface
+            // the source value so the user can set Work.SeriesOrder manually
+            // if they want a position. Cannot store directly; tracked as a
+            // follow-up TODO ("Support non-integer / hierarchical SeriesOrder").
+            return $" (order '{seriesNumberRaw}', left blank)";
+        }
+        return string.Empty;
+    }
+
     /// <summary>
     /// Checks if a book (by title and author) likely belongs to an existing series.
     /// Returns a match suggestion or null if no match found.
@@ -151,5 +208,9 @@ public enum MatchReason
     AuthorMatch,
     TitleAndAuthorMatch,
     AuthorHasMultipleBooks,
-    TitlePattern
+    TitlePattern,
+    /// <summary>Upstream lookup (Open Library) named a series that already exists locally.</summary>
+    ApiMatchExisting,
+    /// <summary>Upstream lookup named a series not yet in the local library.</summary>
+    ApiMatchNewSeries,
 }

@@ -110,7 +110,7 @@ public class BookAddViewModel(
 
             LookupMessage = $"Prefilled from {result.Source}. Edit anything before saving.";
 
-            SeriesSuggestion = await seriesMatch.FindMatchAsync(result.Title, result.Author);
+            SeriesSuggestion = await seriesMatch.FindMatchAsync(result);
             SeriesSuggestionDismissed = false;
         }
         finally

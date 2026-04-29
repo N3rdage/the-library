@@ -66,7 +66,7 @@ public class BulkAddViewModel(
                 row.Format = result.Format;
                 row.Status = RowStatus.Found;
 
-                row.SeriesSuggestion = await seriesMatch.FindMatchAsync(result.Title, result.Author);
+                row.SeriesSuggestion = await seriesMatch.FindMatchAsync(result);
             }
             else
             {

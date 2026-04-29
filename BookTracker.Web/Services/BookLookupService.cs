@@ -1,12 +1,13 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using BookTracker.Data.Models;
 using Microsoft.Extensions.Options;
 
 namespace BookTracker.Web.Services;
 
-public class BookLookupService(
+public partial class BookLookupService(
     HttpClient http,
     ILogger<BookLookupService> logger,
     IOptions<TroveOptions> troveOptions) : IBookLookupService
@@ -94,6 +95,7 @@ public class BookLookupService(
                 .ToList();
 
             var (olDate, olPrecision) = ParseLooseDate(book.PublishDate);
+            var (seriesName, seriesNumber, seriesNumberRaw) = ParseOpenLibrarySeries(book.Series);
             return new BookLookupResult(
                 Isbn: isbn,
                 Title: book.Title,
@@ -105,7 +107,10 @@ public class BookLookupService(
                 CoverUrl: book.Cover?.Large ?? book.Cover?.Medium ?? $"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg",
                 Source: "Open Library",
                 Format: BookFormatNormalizer.Normalize(book.PhysicalFormat, book.PhysicalDimensions),
-                DatePrintedPrecision: olPrecision);
+                DatePrintedPrecision: olPrecision,
+                Series: seriesName,
+                SeriesNumber: seriesNumber,
+                SeriesNumberRaw: seriesNumberRaw);
         }
         catch (Exception ex)
         {
@@ -236,6 +241,58 @@ public class BookLookupService(
 
     private static string? CleanGenre(string raw) => GenreCandidateCleaner.Clean(raw);
 
+    /// <summary>
+    /// Parses Open Library's free-text `series` field into a name, integer
+    /// order, and raw order string. Real-world examples:
+    /// <list type="bullet">
+    ///   <item><description><c>"Discworld"</c> → ("Discworld", null, null)</description></item>
+    ///   <item><description><c>"Discworld -- 5"</c> → ("Discworld", 5, "5")</description></item>
+    ///   <item><description><c>"Foundation series ; bk. 1"</c> → ("Foundation series", 1, "1")</description></item>
+    ///   <item><description><c>"The Wheel of Time #5.5"</c> → ("The Wheel of Time", null, "5.5")</description></item>
+    /// </list>
+    /// Non-integer orders ("5.5", "1A") leave <see cref="BookLookupResult.SeriesNumber"/>
+    /// null (the current model can only store integer order — see the follow-up
+    /// TODO "Support non-integer / hierarchical SeriesOrder") but preserve the
+    /// raw string so the suggestion message can surface it for manual entry.
+    /// </summary>
+    internal static (string? Name, int? Number, string? NumberRaw) ParseOpenLibrarySeries(IList<string>? series)
+    {
+        var raw = series?.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s))?.Trim();
+        if (string.IsNullOrWhiteSpace(raw)) return (null, null, null);
+
+        // Pattern A: "Name <separator> <number>" where separator is one of
+        // -- / # / ; / , optionally followed by a "bk."/"book"/"vol."/"volume"/"no."/"pt."
+        // marker. Captures the trailing number — supports decimals so "5.5"
+        // surfaces in the raw column without truncation.
+        var separatorMatch = SeriesSeparatorRegex().Match(raw);
+        if (separatorMatch.Success)
+        {
+            var name = separatorMatch.Groups[1].Value.Trim().TrimEnd(';', ',', '-').Trim();
+            var rawNum = separatorMatch.Groups[2].Value;
+            var intNum = int.TryParse(rawNum, out var n) ? n : (int?)null;
+            return (string.IsNullOrWhiteSpace(name) ? null : name, intNum, rawNum);
+        }
+
+        // Pattern B: trailing space then number, e.g. "Discworld 5".
+        var trailingMatch = SeriesTrailingNumberRegex().Match(raw);
+        if (trailingMatch.Success)
+        {
+            var name = trailingMatch.Groups[1].Value.Trim();
+            var rawNum = trailingMatch.Groups[2].Value;
+            var intNum = int.TryParse(rawNum, out var n) ? n : (int?)null;
+            return (string.IsNullOrWhiteSpace(name) ? null : name, intNum, rawNum);
+        }
+
+        // No number — full string is the series name.
+        return (raw, null, null);
+    }
+
+    [GeneratedRegex(@"^(.+?)\s*(?:--|#|;\s*(?:bk\.?|book|vol\.?|volume|no\.?|pt\.?|part)?|,\s*(?:bk\.?|book|vol\.?|volume|no\.?|pt\.?|part)?)\s*(\d+(?:\.\d+)?)\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex SeriesSeparatorRegex();
+
+    [GeneratedRegex(@"^(.+?)\s+(\d+(?:\.\d+)?)\s*$")]
+    private static partial Regex SeriesTrailingNumberRegex();
+
     // Open Library / Google Books often only give a year ("1934") so we
     // route through the same partial-date parser used by the form inputs
     // — the precision is then carried alongside the DateOnly so the UI
@@ -268,6 +325,10 @@ public class BookLookupService(
         [JsonPropertyName("cover")] public OpenLibraryCover? Cover { get; set; }
         [JsonPropertyName("physical_format")] public string? PhysicalFormat { get; set; }
         [JsonPropertyName("physical_dimensions")] public string? PhysicalDimensions { get; set; }
+        // `series` arrives as a list of free-text strings — entries like
+        // "Discworld", "Discworld -- 5", or "Foundation series ; bk. 1".
+        // Parsed via ParseOpenLibrarySeries.
+        [JsonPropertyName("series")] public List<string>? Series { get; set; }
     }
     private sealed class OpenLibraryAuthor { [JsonPropertyName("name")] public string? Name { get; set; } }
     private sealed class OpenLibraryPublisher { [JsonPropertyName("name")] public string? Name { get; set; } }
