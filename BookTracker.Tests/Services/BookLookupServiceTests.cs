@@ -167,6 +167,73 @@ public class BookLookupServiceTests
         Assert.Empty(handler.Requests);
     }
 
+    [Fact]
+    public async Task LookupByIsbnAsync_PopulatesSeries_FromOpenLibrary()
+    {
+        var handler = new FakeHandler
+        {
+            ["openlibrary.org/api/books"] = OkJson($$"""
+                {
+                  "ISBN:{{Isbn}}": {
+                    "title": "Sourcery",
+                    "authors": [ { "name": "Terry Pratchett" } ],
+                    "series": [ "Discworld -- 5" ]
+                  }
+                }
+                """)
+        };
+
+        var svc = CreateService(handler, troveKey: "present");
+        var result = await svc.LookupByIsbnAsync(Isbn, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("Discworld", result!.Series);
+        Assert.Equal(5, result.SeriesNumber);
+        Assert.Equal("5", result.SeriesNumberRaw);
+    }
+
+    [Theory]
+    // Plain name, no order.
+    [InlineData("Discworld", "Discworld", null, null)]
+    // Common Open Library separator patterns.
+    [InlineData("Discworld -- 5", "Discworld", 5, "5")]
+    [InlineData("Discworld #5", "Discworld", 5, "5")]
+    [InlineData("Foundation series ; bk. 1", "Foundation series", 1, "1")]
+    [InlineData("The Lord of the Rings ;, pt. 1", "The Lord of the Rings", 1, "1")]
+    // Trailing-space-then-number fallback.
+    [InlineData("Discworld 5", "Discworld", 5, "5")]
+    // Non-integer order — name extracted, integer null, raw preserved
+    // (per the revised Q3 default: don't truncate, surface raw for manual use).
+    [InlineData("Discworld -- 5.5", "Discworld", null, "5.5")]
+    [InlineData("Stormlight Archive #4.5", "Stormlight Archive", null, "4.5")]
+    // Whitespace + edge cases.
+    [InlineData("  Discworld  ", "Discworld", null, null)]
+    public void ParseOpenLibrarySeries_HandlesCommonShapes(string raw, string? expectedName, int? expectedNumber, string? expectedRaw)
+    {
+        var (name, number, numberRaw) = BookLookupService.ParseOpenLibrarySeries([raw]);
+
+        Assert.Equal(expectedName, name);
+        Assert.Equal(expectedNumber, number);
+        Assert.Equal(expectedRaw, numberRaw);
+    }
+
+    [Fact]
+    public void ParseOpenLibrarySeries_ReturnsNull_WhenInputIsMissingOrEmpty()
+    {
+        Assert.Equal((null, (int?)null, null), BookLookupService.ParseOpenLibrarySeries(null));
+        Assert.Equal((null, (int?)null, null), BookLookupService.ParseOpenLibrarySeries([]));
+        Assert.Equal((null, (int?)null, null), BookLookupService.ParseOpenLibrarySeries(["", "   "]));
+    }
+
+    [Fact]
+    public void ParseOpenLibrarySeries_TakesFirstNonEmptyEntry_WhenMultiple()
+    {
+        // Open Library sometimes returns multiple `series` strings — varies in
+        // quality, so we trust the first non-empty entry.
+        var (name, _, _) = BookLookupService.ParseOpenLibrarySeries(["Foundation series", "Foundation"]);
+        Assert.Equal("Foundation series", name);
+    }
+
     private static BookLookupService CreateService(FakeHandler handler, string troveKey)
     {
         var http = new HttpClient(handler);

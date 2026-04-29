@@ -99,4 +99,105 @@ public class SeriesMatchServiceTests
     {
         Assert.Equal(expected, SeriesMatchService.ExtractSeriesNumber(title));
     }
+
+    [Fact]
+    public async Task FindMatchAsync_FromLookup_ApiSeriesMatchesLocal_ReturnsApiMatchExisting()
+    {
+        var factory = new TestDbContextFactory();
+        using (var db = factory.CreateDbContext())
+        {
+            db.Series.Add(new Series { Name = "Discworld", Author = "Terry Pratchett", Type = SeriesType.Collection });
+            await db.SaveChangesAsync();
+        }
+
+        var service = new SeriesMatchService(factory);
+        var lookup = new BookLookupResult(
+            Isbn: "9780552134613", Title: "Sourcery", Subtitle: null,
+            Author: "Terry Pratchett", Publisher: null,
+            GenreCandidates: [], DatePrinted: null, CoverUrl: null,
+            Source: "Open Library",
+            Series: "Discworld", SeriesNumber: 5, SeriesNumberRaw: "5");
+
+        var match = await service.FindMatchAsync(lookup);
+
+        Assert.NotNull(match);
+        Assert.Equal(MatchReason.ApiMatchExisting, match.Reason);
+        Assert.Equal("Discworld", match.SeriesName);
+        Assert.NotNull(match.SeriesId); // Should point to the existing local series.
+        Assert.Contains("Open Library", match.Message);
+        Assert.Contains("#5", match.Message);
+    }
+
+    [Fact]
+    public async Task FindMatchAsync_FromLookup_ApiSeriesNoLocalMatch_ReturnsApiMatchNewSeries()
+    {
+        // No local Series rows seeded — the API series is a new one to us.
+        var factory = new TestDbContextFactory();
+        var service = new SeriesMatchService(factory);
+
+        var lookup = new BookLookupResult(
+            Isbn: "9780765326355", Title: "The Way of Kings", Subtitle: null,
+            Author: "Brandon Sanderson", Publisher: null,
+            GenreCandidates: [], DatePrinted: null, CoverUrl: null,
+            Source: "Open Library",
+            Series: "The Stormlight Archive", SeriesNumber: 1, SeriesNumberRaw: "1");
+
+        var match = await service.FindMatchAsync(lookup);
+
+        Assert.NotNull(match);
+        Assert.Equal(MatchReason.ApiMatchNewSeries, match.Reason);
+        Assert.Equal("The Stormlight Archive", match.SeriesName);
+        Assert.Null(match.SeriesId); // No local row yet — UI should propose creating one.
+        Assert.Contains("not yet in the library", match.Message);
+    }
+
+    [Fact]
+    public async Task FindMatchAsync_FromLookup_NonIntegerOrder_SurfacesRawValueInMessage()
+    {
+        // Per revised Q3 default: non-integer orders leave SeriesNumber null
+        // but the raw publisher string surfaces in the suggestion message so
+        // the user can set Work.SeriesOrder manually if they want a position.
+        var factory = new TestDbContextFactory();
+        var service = new SeriesMatchService(factory);
+
+        var lookup = new BookLookupResult(
+            Isbn: "9780765326362", Title: "Edgedancer", Subtitle: null,
+            Author: "Brandon Sanderson", Publisher: null,
+            GenreCandidates: [], DatePrinted: null, CoverUrl: null,
+            Source: "Open Library",
+            Series: "The Stormlight Archive", SeriesNumber: null, SeriesNumberRaw: "2.5");
+
+        var match = await service.FindMatchAsync(lookup);
+
+        Assert.NotNull(match);
+        Assert.Contains("'2.5'", match.Message);
+        Assert.Contains("left blank", match.Message);
+    }
+
+    [Fact]
+    public async Task FindMatchAsync_FromLookup_NoApiSeries_FallsBackToLocalMatching()
+    {
+        var factory = new TestDbContextFactory();
+        using (var db = factory.CreateDbContext())
+        {
+            db.Series.Add(new Series { Name = "Discworld", Author = "Terry Pratchett", Type = SeriesType.Collection });
+            await db.SaveChangesAsync();
+        }
+
+        var service = new SeriesMatchService(factory);
+        var lookup = new BookLookupResult(
+            Isbn: "9780552134613", Title: "Mort", Subtitle: null,
+            Author: "Terry Pratchett", Publisher: null,
+            GenreCandidates: [], DatePrinted: null, CoverUrl: null,
+            Source: "Open Library",
+            Series: null, SeriesNumber: null, SeriesNumberRaw: null);
+
+        var match = await service.FindMatchAsync(lookup);
+
+        // Falls back to FindMatchAsync(title, author) which finds the existing
+        // Discworld series via author match.
+        Assert.NotNull(match);
+        Assert.Equal(MatchReason.AuthorMatch, match.Reason);
+        Assert.Equal("Discworld", match.SeriesName);
+    }
 }
