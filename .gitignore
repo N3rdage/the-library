@@ -21,6 +21,11 @@ x86/
 # Claude Code — per-machine local settings (shared .claude/settings.json may be tracked)
 .claude/settings.local.json
 
+# Local scratch — screenshots and other debug artefacts shared with Claude
+# during sessions. The `[Dd]ebug/` rule above only catches build dirs; the
+# leading-dot variant is for Drew's IDE-side workspace.
+.debug/
+
 # .NET
 project.lock.json
 project.fragment.lock.json
