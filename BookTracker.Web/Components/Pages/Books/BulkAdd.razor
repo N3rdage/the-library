@@ -217,9 +217,15 @@
                                     }
                                     else
                                     {
-                                        <div class="fw-semibold text-truncate">@(row.Title ?? "\u2014")</div>
+                                        @* Wrap multi-line on mobile rather than truncating with ellipsis \u2014
+                                           Open Library titles sometimes include format/contributor noise
+                                           ("by X (Author) ON Compact Disc") and ellipsis hides useful
+                                           context. text-break handles long unbroken substrings (URLs,
+                                           glued-up titles like "TheArt of Discworld") that would
+                                           otherwise overflow the flex container. *@
+                                        <div class="fw-semibold text-break">@(row.Title ?? "\u2014")</div>
                                     }
-                                    <div class="text-muted small">@(row.Author ?? "\u2014")</div>
+                                    <div class="text-muted small text-break">@(row.Author ?? "\u2014")</div>
                                     <div class="font-monospace text-muted" style="font-size: 0.7rem;">@row.Isbn</div>
                                 </div>
                                 <button type="button" class="btn btn-outline-danger btn-sm flex-shrink-0 ms-2" @onclick="() => VM.RemoveRow(row)" title="Remove">
@@ -486,7 +492,10 @@
     {
         if (row.SeriesSuggestion is not null && row.Action == BulkAddViewModel.RowAction.Pending)
         {
-            <div class="text-warning small mt-1">
+            @* text-break ensures the suggestion message wraps cleanly even when
+               it contains long unbroken segments (series names, em-dash phrases).
+               Without it, mobile cards show the message clipped at the right edge. *@
+            <div class="text-warning small mt-1 text-break">
                 <strong>Series:</strong> @row.SeriesSuggestion.Message
                 @if (row.SeriesSuggestion.SeriesId.HasValue)
                 {
