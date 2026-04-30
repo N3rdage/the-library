@@ -4,6 +4,7 @@
 - [Auto-commit locally](feedback_commit_locally.md) — always stage and commit before handing off; don't wait to be asked.
 - [Delete merged branches](feedback_delete_merged_branch.md) — delete local feature branch after pulling the merge into main.
 - [Branch from main](feedback_branch_from_main.md) — always start a new branch from a fresh `main` pull; never from a sibling branch (squash-merge would bundle content).
+- [Use PowerShell tool](feedback_use_powershell.md) — default shell for this project is PowerShell 7, not Bash; CLAUDE.md mandates Windows shell and Drew works in PowerShell.
 - [Ask about mobile priority](feedback_mobile_priority.md) — when planning features, ask if mobile+web or web-only.
 - [Feature planning conventions](feedback_planning_conventions.md) — always plan first, PR breakdown for medium+, flag 5+ file changes as complex.
 - [Testing conventions](feedback_testing_conventions.md) — minimal tests for new logic to prevent regression; skip for pure markup.
