@@ -95,7 +95,11 @@ public partial class BookLookupService(
                 .ToList();
 
             var (olDate, olPrecision) = ParseLooseDate(book.PublishDate);
-            var (seriesName, seriesNumber, seriesNumberRaw) = ParseOpenLibrarySeries(book.Series);
+            // Series lives in the `jscmd=details` view, not the `jscmd=data`
+            // curated view we hit above — so this is a separate call. Failure
+            // here is non-fatal: the result still returns with Series=null and
+            // the suggestion banner falls back to local title/author matching.
+            var (seriesName, seriesNumber, seriesNumberRaw) = await TryFetchOpenLibrarySeriesAsync(isbn, ct);
             return new BookLookupResult(
                 Isbn: isbn,
                 Title: book.Title,
@@ -116,6 +120,25 @@ public partial class BookLookupService(
         {
             logger.LogWarning(ex, "Open Library lookup failed for ISBN {Isbn}", isbn);
             return null;
+        }
+    }
+
+    private async Task<(string?, int?, string?)> TryFetchOpenLibrarySeriesAsync(string isbn, CancellationToken ct)
+    {
+        try
+        {
+            var url = $"https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=details";
+            var doc = await http.GetFromJsonAsync<Dictionary<string, OpenLibraryDetailsWrapper>>(url, ct);
+            if (doc is null || !doc.TryGetValue($"ISBN:{isbn}", out var wrapper) || wrapper.Details is null)
+            {
+                return (null, null, null);
+            }
+            return ParseOpenLibrarySeries(wrapper.Details.Series);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Open Library details lookup failed for ISBN {Isbn}", isbn);
+            return (null, null, null);
         }
     }
 
@@ -325,9 +348,19 @@ public partial class BookLookupService(
         [JsonPropertyName("cover")] public OpenLibraryCover? Cover { get; set; }
         [JsonPropertyName("physical_format")] public string? PhysicalFormat { get; set; }
         [JsonPropertyName("physical_dimensions")] public string? PhysicalDimensions { get; set; }
-        // `series` arrives as a list of free-text strings — entries like
-        // "Discworld", "Discworld -- 5", or "Foundation series ; bk. 1".
-        // Parsed via ParseOpenLibrarySeries.
+    }
+
+    // The `jscmd=details` view wraps the Edition's raw record under `details`.
+    // Used only for the `series` field — everything else parses from the
+    // friendlier `jscmd=data` shape (OpenLibraryBook above).
+    private sealed class OpenLibraryDetailsWrapper
+    {
+        [JsonPropertyName("details")] public OpenLibraryDetails? Details { get; set; }
+    }
+    private sealed class OpenLibraryDetails
+    {
+        // Free-text strings — entries like "Discworld", "Discworld -- 5",
+        // or "Foundation series ; bk. 1". Parsed via ParseOpenLibrarySeries.
         [JsonPropertyName("series")] public List<string>? Series { get; set; }
     }
     private sealed class OpenLibraryAuthor { [JsonPropertyName("name")] public string? Name { get; set; } }

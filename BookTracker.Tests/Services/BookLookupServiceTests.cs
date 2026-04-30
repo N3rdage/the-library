@@ -168,16 +168,29 @@ public class BookLookupServiceTests
     }
 
     [Fact]
-    public async Task LookupByIsbnAsync_PopulatesSeries_FromOpenLibrary()
+    public async Task LookupByIsbnAsync_PopulatesSeries_FromOpenLibraryDetailsView()
     {
+        // Open Library's `jscmd=data` view (the curated abbreviated shape) does
+        // NOT include the series field. Series lives only in `jscmd=details`.
+        // The service makes two OL calls — data for the friendly fields, then
+        // details for series — and combines the result. This test proves both
+        // calls happen and the details payload is what populates Series.
         var handler = new FakeHandler
         {
-            ["openlibrary.org/api/books"] = OkJson($$"""
+            ["jscmd=data"] = OkJson($$"""
                 {
                   "ISBN:{{Isbn}}": {
                     "title": "Sourcery",
-                    "authors": [ { "name": "Terry Pratchett" } ],
-                    "series": [ "Discworld -- 5" ]
+                    "authors": [ { "name": "Terry Pratchett" } ]
+                  }
+                }
+                """),
+            ["jscmd=details"] = OkJson($$"""
+                {
+                  "ISBN:{{Isbn}}": {
+                    "details": {
+                      "series": [ "Discworld -- 5" ]
+                    }
                   }
                 }
                 """)
@@ -187,9 +200,39 @@ public class BookLookupServiceTests
         var result = await svc.LookupByIsbnAsync(Isbn, CancellationToken.None);
 
         Assert.NotNull(result);
-        Assert.Equal("Discworld", result!.Series);
+        Assert.Equal("Sourcery", result!.Title);
+        Assert.Equal("Discworld", result.Series);
         Assert.Equal(5, result.SeriesNumber);
         Assert.Equal("5", result.SeriesNumberRaw);
+        Assert.Contains(handler.Requests, r => r.Contains("jscmd=details"));
+    }
+
+    [Fact]
+    public async Task LookupByIsbnAsync_LeavesSeriesNull_WhenDetailsCallFails()
+    {
+        // Graceful degrade: if the details call fails (404, parse error, etc.),
+        // the data view still produces a valid result with Series=null. The
+        // suggestion banner falls back to local title/author matching.
+        var handler = new FakeHandler
+        {
+            ["jscmd=data"] = OkJson($$"""
+                {
+                  "ISBN:{{Isbn}}": {
+                    "title": "Sourcery",
+                    "authors": [ { "name": "Terry Pratchett" } ]
+                  }
+                }
+                """)
+            // No mock for jscmd=details — handler returns 404, service swallows.
+        };
+
+        var svc = CreateService(handler, troveKey: "present");
+        var result = await svc.LookupByIsbnAsync(Isbn, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("Sourcery", result!.Title);
+        Assert.Null(result.Series);
+        Assert.Null(result.SeriesNumber);
     }
 
     [Theory]
