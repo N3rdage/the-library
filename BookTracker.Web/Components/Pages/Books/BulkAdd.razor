@@ -490,16 +490,41 @@
 
     private RenderFragment RenderSeriesSuggestion(BulkAddViewModel.DiscoveryRow row) => __builder =>
     {
-        if (row.SeriesSuggestion is not null && row.Action == BulkAddViewModel.RowAction.Pending)
+        if (row.SeriesSuggestion is null || row.Action != BulkAddViewModel.RowAction.Pending) return;
+
+        @* Two visual states per row, mirroring Add Book:
+           - Pending: warning text + Accept (only for API-sourced reasons).
+           - Accepted: success text + Undo. *@
+        if (row.SeriesSuggestionAccepted)
         {
-            @* text-break ensures the suggestion message wraps cleanly even when
-               it contains long unbroken segments (series names, em-dash phrases).
-               Without it, mobile cards show the message clipped at the right edge. *@
-            <div class="text-warning small mt-1 text-break">
-                <strong>Series:</strong> @row.SeriesSuggestion.Message
-                @if (row.SeriesSuggestion.SeriesId.HasValue)
+            <div class="text-success small mt-1 text-break d-flex align-items-start gap-2 flex-wrap">
+                <span>
+                    <strong>✓ Series:</strong> @row.AcceptedSeriesName
+                    @if (row.AcceptedSeriesOrder is int order)
+                    {
+                        <span> #@order</span>
+                    }
+                    @if (row.AcceptedSeriesId is null)
+                    {
+                        <span class="text-muted"> (will be created)</span>
+                    }
+                </span>
+                <button type="button" class="btn btn-link btn-sm p-0 lh-1" @onclick="() => VM.UndoSeriesSuggestionAccept(row)">Undo</button>
+            </div>
+        }
+        else
+        {
+            <div class="text-warning small mt-1 text-break d-flex align-items-start gap-2 flex-wrap">
+                <span>
+                    <strong>Series:</strong> @row.SeriesSuggestion.Message
+                    @if (row.SeriesSuggestion.SeriesId.HasValue)
+                    {
+                        <a href="@($"/series/{row.SeriesSuggestion.SeriesId}")" class="ms-1" target="_blank">View</a>
+                    }
+                </span>
+                @if (row.SeriesSuggestion.Reason is MatchReason.ApiMatchExisting or MatchReason.ApiMatchNewSeries)
                 {
-                    <a href="@($"/series/{row.SeriesSuggestion.SeriesId}")" class="ms-1" target="_blank">View</a>
+                    <button type="button" class="btn btn-success btn-sm py-0 px-2" @onclick="() => VM.AcceptSeriesSuggestion(row)">Accept</button>
                 }
             </div>
         }

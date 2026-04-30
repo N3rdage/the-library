@@ -171,6 +171,31 @@ public class BulkAddViewModel(
             Author = author,
         };
 
+        // Series attachment if the user accepted the suggestion on this row.
+        // Mirrors BookAddViewModel.SaveAsync: existing local series wins via
+        // SeriesId; otherwise find-or-create by name and attach the new row.
+        if (row.SeriesSuggestionAccepted)
+        {
+            if (row.AcceptedSeriesId is int existingId)
+            {
+                work.SeriesId = existingId;
+                work.SeriesOrder = row.AcceptedSeriesOrder;
+            }
+            else if (!string.IsNullOrWhiteSpace(row.AcceptedSeriesName))
+            {
+                var seriesName = row.AcceptedSeriesName.Trim();
+                var series = await db.Series
+                    .FirstOrDefaultAsync(s => s.Name.ToLower() == seriesName.ToLower());
+                if (series is null)
+                {
+                    series = new Series { Name = seriesName, Type = SeriesType.Series };
+                    db.Series.Add(series);
+                }
+                work.Series = series;
+                work.SeriesOrder = row.AcceptedSeriesOrder;
+            }
+        }
+
         if (row.GenreCandidates.Count > 0)
         {
             var allGenres = await db.Genres.ToListAsync();
@@ -261,6 +286,37 @@ public class BulkAddViewModel(
         public RowAction Action { get; set; } = RowAction.Pending;
         public bool IsDuplicate { get; set; }
         public SeriesMatch? SeriesSuggestion { get; set; }
+        // Per-row acceptance state for the series suggestion banner. When the
+        // user clicks Accept on this row, we capture the suggestion's identity
+        // here; SaveBookAsync reads it and attaches the Work to the right
+        // Series row (find-or-create for ApiMatchNewSeries).
+        public bool SeriesSuggestionAccepted { get; set; }
+        public int? AcceptedSeriesId { get; set; }
+        public string? AcceptedSeriesName { get; set; }
+        public int? AcceptedSeriesOrder { get; set; }
+    }
+
+    public void AcceptSeriesSuggestion(DiscoveryRow row)
+    {
+        if (row.SeriesSuggestion is null) return;
+        // Only API-sourced suggestions (Existing / NewSeries) are actionable —
+        // mirrors BookAddViewModel.AcceptSeriesSuggestion.
+        if (row.SeriesSuggestion.Reason is not (MatchReason.ApiMatchExisting or MatchReason.ApiMatchNewSeries))
+        {
+            return;
+        }
+        row.AcceptedSeriesId = row.SeriesSuggestion.SeriesId;
+        row.AcceptedSeriesName = row.SeriesSuggestion.SeriesName;
+        row.AcceptedSeriesOrder = row.SeriesSuggestion.SuggestedOrder;
+        row.SeriesSuggestionAccepted = true;
+    }
+
+    public void UndoSeriesSuggestionAccept(DiscoveryRow row)
+    {
+        row.SeriesSuggestionAccepted = false;
+        row.AcceptedSeriesId = null;
+        row.AcceptedSeriesName = null;
+        row.AcceptedSeriesOrder = null;
     }
 
     public enum RowStatus { Searching, Found, NotFound }
