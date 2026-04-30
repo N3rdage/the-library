@@ -55,9 +55,16 @@ if (-not $sp) {
 }
 
 # ---- Federated identity credentials -----------------------------------------
-# A FIC binds a GitHub workflow run (subject) to this app registration.
-# Adding both the branch FIC (for push-to-main deploys) and the pull-request
-# FIC (so future PR workflows can validate against Azure if needed).
+# A FIC binds a GitHub workflow run (subject) to this app registration. The
+# OIDC subject claim shape differs by trigger:
+#   - branch push:    repo:<org>/<repo>:ref:refs/heads/<branch>
+#   - pull request:   repo:<org>/<repo>:pull_request
+#   - environment:    repo:<org>/<repo>:environment:<env-name>
+# Workflows that opt into a GitHub Environment (e.g. swap.yml uses
+# `environment: production` for the wait-timer + branch-restriction guards)
+# present the third shape, so a separate FIC is needed for that subject.
+# Without the env FIC, the swap dispatch fails with AADSTS700213
+# ("No matching federated identity record found...").
 $existingFics = Get-MgApplicationFederatedIdentityCredential -ApplicationId $app.Id
 $desiredFics = @(
     @{
@@ -69,6 +76,11 @@ $desiredFics = @(
         Name = 'github-pull-request'
         Subject = "repo:${GitHubOrg}/${GitHubRepo}:pull_request"
         Description = "$GitHubOrg/$GitHubRepo pull_request"
+    },
+    @{
+        Name = 'github-environment-production'
+        Subject = "repo:${GitHubOrg}/${GitHubRepo}:environment:production"
+        Description = "$GitHubOrg/$GitHubRepo environment:production (swap.yml)"
     }
 )
 foreach ($f in $desiredFics) {
