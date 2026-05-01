@@ -239,4 +239,141 @@ public class BookAddViewModelTests
         Assert.Equal(new DateOnly(1937, 9, 21), work.FirstPublishedDate);
         Assert.Equal(DatePrecision.Day, work.FirstPublishedDatePrecision);
     }
+
+    [Fact]
+    public async Task SaveAsync_WithAcceptedExistingSeries_AttachesWorkBySeriesId()
+    {
+        // Seed a Series so the lookup-driven match returns ApiMatchExisting.
+        int seededSeriesId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var series = new Series { Name = "Discworld", Type = SeriesType.Series };
+            db.Series.Add(series);
+            await db.SaveChangesAsync();
+            seededSeriesId = series.Id;
+        }
+
+        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: "9780552134613", Title: "Sourcery", Subtitle: null,
+                Author: "Terry Pratchett", Publisher: null,
+                GenreCandidates: [], DatePrinted: null, CoverUrl: null,
+                Source: "Open Library",
+                Series: "Discworld", SeriesNumber: 5, SeriesNumberRaw: "5"));
+
+        var vm = CreateVm();
+        vm.LookupIsbn = "9780552134613";
+        await vm.LookupAsync(CreateGenrePicker());
+
+        // Sanity: suggestion should be the existing-series flavour.
+        Assert.NotNull(vm.SeriesSuggestion);
+        Assert.Equal(MatchReason.ApiMatchExisting, vm.SeriesSuggestion!.Reason);
+
+        vm.AcceptSeriesSuggestion();
+        Assert.True(vm.SeriesSuggestionAccepted);
+
+        await vm.SaveAsync(new List<int>());
+
+        using var db2 = _factory.CreateDbContext();
+        var work = db2.Works.Include(w => w.Series).Single();
+        Assert.Equal(seededSeriesId, work.SeriesId);
+        Assert.Equal(5, work.SeriesOrder);
+        // No new Series row created — attached to the existing one.
+        Assert.Equal(1, db2.Series.Count());
+    }
+
+    [Fact]
+    public async Task SaveAsync_WithAcceptedNewSeries_FindOrCreatesSeriesAndAttaches()
+    {
+        // No Series rows seeded — lookup-driven match returns ApiMatchNewSeries.
+        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: "9780765326355", Title: "The Way of Kings", Subtitle: null,
+                Author: "Brandon Sanderson", Publisher: null,
+                GenreCandidates: [], DatePrinted: null, CoverUrl: null,
+                Source: "Open Library",
+                Series: "The Stormlight Archive", SeriesNumber: 1, SeriesNumberRaw: "1"));
+
+        var vm = CreateVm();
+        vm.LookupIsbn = "9780765326355";
+        await vm.LookupAsync(CreateGenrePicker());
+
+        Assert.Equal(MatchReason.ApiMatchNewSeries, vm.SeriesSuggestion!.Reason);
+        vm.AcceptSeriesSuggestion();
+
+        // SaveAsync needs the form filled enough to construct the Work.
+        // LookupAsync prefills WorkInput from the result, so we just save.
+        await vm.SaveAsync(new List<int>());
+
+        using var db = _factory.CreateDbContext();
+        var series = Assert.Single(db.Series);
+        Assert.Equal("The Stormlight Archive", series.Name);
+        Assert.Equal(SeriesType.Series, series.Type); // Q1 default — not Collection.
+
+        var work = db.Works.Include(w => w.Series).Single();
+        Assert.Equal(series.Id, work.SeriesId);
+        Assert.Equal(1, work.SeriesOrder);
+    }
+
+    [Fact]
+    public async Task SaveAsync_WithoutAcceptedSuggestion_DoesNotAttachSeries()
+    {
+        // Same setup as the new-series test, but DON'T call Accept.
+        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: "9780765326355", Title: "The Way of Kings", Subtitle: null,
+                Author: "Brandon Sanderson", Publisher: null,
+                GenreCandidates: [], DatePrinted: null, CoverUrl: null,
+                Source: "Open Library",
+                Series: "The Stormlight Archive", SeriesNumber: 1, SeriesNumberRaw: "1"));
+
+        var vm = CreateVm();
+        vm.LookupIsbn = "9780765326355";
+        await vm.LookupAsync(CreateGenrePicker());
+
+        // No Accept call.
+        await vm.SaveAsync(new List<int>());
+
+        using var db = _factory.CreateDbContext();
+        Assert.Empty(db.Series);
+        var work = db.Works.Single();
+        Assert.Null(work.SeriesId);
+        Assert.Null(work.SeriesOrder);
+    }
+
+    [Fact]
+    public async Task AcceptSeriesSuggestion_OnLocalFallbackReason_IsNoOp()
+    {
+        // Seed: an author with 2+ ungrouped works → MatchReason.AuthorHasMultipleBooks
+        // (a local fallback). Accept should be ignored on this reason because
+        // the suggestion names no concrete series to attach to.
+        using (var db = _factory.CreateDbContext())
+        {
+            var author = new Author { Name = "Some Author" };
+            db.Books.AddRange(
+                new Book { Title = "Book A", Works = [new Work { Title = "Book A", Author = author }] },
+                new Book { Title = "Book B", Works = [new Work { Title = "Book B", Author = author }] });
+            await db.SaveChangesAsync();
+        }
+
+        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: "9780000000000", Title: "Book C", Subtitle: null,
+                Author: "Some Author", Publisher: null,
+                GenreCandidates: [], DatePrinted: null, CoverUrl: null,
+                Source: "Open Library",
+                Series: null, SeriesNumber: null, SeriesNumberRaw: null));
+
+        var vm = CreateVm();
+        vm.LookupIsbn = "9780000000000";
+        await vm.LookupAsync(CreateGenrePicker());
+
+        Assert.Equal(MatchReason.AuthorHasMultipleBooks, vm.SeriesSuggestion!.Reason);
+
+        vm.AcceptSeriesSuggestion();
+        // Accept call is a no-op — SeriesSuggestionAccepted stays false.
+        Assert.False(vm.SeriesSuggestionAccepted);
+        Assert.Null(vm.AcceptedSeriesId);
+        Assert.Null(vm.AcceptedSeriesName);
+    }
 }

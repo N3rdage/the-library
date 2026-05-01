@@ -129,15 +129,47 @@
                     }
                     @if (VM.SeriesSuggestion is not null && !VM.SeriesSuggestionDismissed)
                     {
-                        <div class="alert alert-warning mt-3 mb-0 py-2 d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong>Series suggestion:</strong> @VM.SeriesSuggestion.Message
-                                @if (VM.SeriesSuggestion.SeriesId.HasValue)
+                        @* Two visual states:
+                           - Pending (default): show the suggestion message + Accept / dismiss
+                             buttons (Accept only for actionable API-sourced reasons).
+                           - Accepted: show "✓ Will attach" with the series name + an Undo
+                             button. Dismiss (×) still available alongside Undo. *@
+                        <div class="alert mt-3 mb-0 py-2 d-flex justify-content-between align-items-start gap-2 @(VM.SeriesSuggestionAccepted ? "alert-success" : "alert-warning")">
+                            <div class="text-break">
+                                @if (VM.SeriesSuggestionAccepted)
                                 {
-                                    <span> &mdash; <a href="@($"/series/{VM.SeriesSuggestion.SeriesId}")">View series</a></span>
+                                    <strong>✓ Will attach to series:</strong>
+                                    <span>@VM.AcceptedSeriesName</span>
+                                    @if (VM.AcceptedSeriesOrder is int order)
+                                    {
+                                        <span> #@order</span>
+                                    }
+                                    @if (VM.AcceptedSeriesId is null)
+                                    {
+                                        <span class="text-muted small"> (will be created on save)</span>
+                                    }
+                                }
+                                else
+                                {
+                                    <strong>Series suggestion:</strong>
+                                    <span>@VM.SeriesSuggestion.Message</span>
+                                    @if (VM.SeriesSuggestion.SeriesId.HasValue)
+                                    {
+                                        <span> &mdash; <a href="@($"/series/{VM.SeriesSuggestion.SeriesId}")" target="_blank">View series</a></span>
+                                    }
                                 }
                             </div>
-                            <button type="button" class="btn-close btn-close-sm ms-2" @onclick="() => VM.SeriesSuggestionDismissed = true" aria-label="Dismiss"></button>
+                            <div class="d-flex gap-1 align-items-center flex-shrink-0">
+                                @if (VM.SeriesSuggestionAccepted)
+                                {
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="VM.UndoSeriesSuggestionAccept">Undo</button>
+                                }
+                                else if (VM.SeriesSuggestion.Reason is MatchReason.ApiMatchExisting or MatchReason.ApiMatchNewSeries)
+                                {
+                                    <button type="button" class="btn btn-success btn-sm" @onclick="VM.AcceptSeriesSuggestion">Accept</button>
+                                }
+                                <button type="button" class="btn-close btn-close-sm" @onclick="() => VM.SeriesSuggestionDismissed = true" aria-label="Dismiss"></button>
+                            </div>
                         </div>
                     }
                 </div>

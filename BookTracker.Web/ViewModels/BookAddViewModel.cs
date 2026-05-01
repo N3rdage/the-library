@@ -35,6 +35,41 @@ public class BookAddViewModel(
     public SeriesMatch? SeriesSuggestion { get; private set; }
     public bool SeriesSuggestionDismissed { get; set; }
 
+    // Acceptance state for the series suggestion banner. When the user clicks
+    // Accept, we capture the suggestion's identity (existing SeriesId, or a
+    // proposed name to find-or-create on save) plus the suggested order. The
+    // save path reads these and attaches the Work to the right Series row.
+    // Cleared on Reset() and on a fresh successful lookup so accept-state
+    // can't bleed across captures.
+    public bool SeriesSuggestionAccepted { get; private set; }
+    public int? AcceptedSeriesId { get; private set; }
+    public string? AcceptedSeriesName { get; private set; }
+    public int? AcceptedSeriesOrder { get; private set; }
+
+    public void AcceptSeriesSuggestion()
+    {
+        if (SeriesSuggestion is null) return;
+        // Only API-sourced suggestions (Existing or NewSeries) are actionable —
+        // the local-fallback paths name no concrete series to attach. The UI
+        // should only render an Accept button for those reasons.
+        if (SeriesSuggestion.Reason is not (MatchReason.ApiMatchExisting or MatchReason.ApiMatchNewSeries))
+        {
+            return;
+        }
+        AcceptedSeriesId = SeriesSuggestion.SeriesId;
+        AcceptedSeriesName = SeriesSuggestion.SeriesName;
+        AcceptedSeriesOrder = SeriesSuggestion.SuggestedOrder;
+        SeriesSuggestionAccepted = true;
+    }
+
+    public void UndoSeriesSuggestionAccept()
+    {
+        SeriesSuggestionAccepted = false;
+        AcceptedSeriesId = null;
+        AcceptedSeriesName = null;
+        AcceptedSeriesOrder = null;
+    }
+
     // Existing-book detection — set during LookupAsync when the ISBN
     // already maps to an Edition in the library. The Add page surfaces a
     // banner offering "add another copy" / "edit existing" instead of
@@ -112,6 +147,11 @@ public class BookAddViewModel(
 
             SeriesSuggestion = await seriesMatch.FindMatchAsync(result);
             SeriesSuggestionDismissed = false;
+            // Fresh lookup → clear any acceptance carried over from a prior
+            // ISBN attempt in this session (e.g. user typed wrong ISBN,
+            // accepted a Discworld suggestion, then corrected to a non-series
+            // book — the prior accept must not silently apply).
+            UndoSeriesSuggestionAccept();
         }
         finally
         {
@@ -161,6 +201,7 @@ public class BookAddViewModel(
         ExistingBook = null;
         SeriesSuggestion = null;
         SeriesSuggestionDismissed = false;
+        UndoSeriesSuggestionAccept();
         SearchTitle = null;
         SearchAuthor = null;
         SearchCandidates = [];
@@ -218,6 +259,7 @@ public class BookAddViewModel(
 
         SeriesSuggestion = await seriesMatch.FindMatchAsync(candidate.Title, candidate.Author);
         SeriesSuggestionDismissed = false;
+        UndoSeriesSuggestionAccept();
 
         // No genre auto-pick for the no-ISBN flow — search results don't
         // carry subjects. User selects genres manually via the picker.
@@ -258,6 +300,34 @@ public class BookAddViewModel(
                 FirstPublishedDatePrecision = firstPub.Precision,
                 Genres = selectedGenres,
             };
+
+            // Attach to the accepted series, if any. AcceptedSeriesId points at
+            // an existing local Series row; AcceptedSeriesName (without an Id)
+            // means the upstream API named a series we don't have yet — find-
+            // or-create it by name. Default new series to SeriesType.Series
+            // (numbered) per the Q1/Q2 defaults — user can flip to Collection
+            // on /series/{id} later if wrong.
+            if (SeriesSuggestionAccepted)
+            {
+                if (AcceptedSeriesId is int existingId)
+                {
+                    work.SeriesId = existingId;
+                    work.SeriesOrder = AcceptedSeriesOrder;
+                }
+                else if (!string.IsNullOrWhiteSpace(AcceptedSeriesName))
+                {
+                    var seriesName = AcceptedSeriesName.Trim();
+                    var series = await db.Series
+                        .FirstOrDefaultAsync(s => s.Name.ToLower() == seriesName.ToLower());
+                    if (series is null)
+                    {
+                        series = new Series { Name = seriesName, Type = SeriesType.Series };
+                        db.Series.Add(series);
+                    }
+                    work.Series = series;
+                    work.SeriesOrder = AcceptedSeriesOrder;
+                }
+            }
 
             var datePrinted = PartialDateParser.TryParse(EditionInput.DatePrinted) ?? PartialDate.Empty;
             var book = new Book

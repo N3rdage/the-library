@@ -148,7 +148,8 @@ public class SeriesMatchServiceTests
         Assert.Equal(MatchReason.ApiMatchNewSeries, match.Reason);
         Assert.Equal("The Stormlight Archive", match.SeriesName);
         Assert.Null(match.SeriesId); // No local row yet — UI should propose creating one.
-        Assert.Contains("not yet in the library", match.Message);
+        Assert.Contains("accept to create the series", match.Message);
+        Assert.Equal(1, match.SuggestedOrder); // Plumbed through for save-time order.
     }
 
     [Fact]

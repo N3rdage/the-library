@@ -36,17 +36,18 @@ public partial class SeriesMatchService(IDbContextFactory<BookTrackerDbContext> 
                 return new SeriesMatch(
                     localMatch.Id, localMatch.Name, localMatch.Type,
                     MatchReason.ApiMatchExisting,
-                    $"{lookup.Source} indicates this is part of \"{localMatch.Name}\"{orderHint}");
+                    $"{lookup.Source} indicates this is part of \"{localMatch.Name}\"{orderHint}",
+                    SuggestedOrder: lookup.SeriesNumber);
             }
 
             // No local match — propose creating a new series. SeriesId is
-            // null; SeriesName carries the proposed name so the UI / save
-            // path can find-or-create on accept (PR-B follow-up will wire
-            // this up; today the banner just informs the user).
+            // null; SeriesName carries the proposed name so the save path
+            // can find-or-create when the user clicks Accept on the banner.
             return new SeriesMatch(
                 null, apiSeriesName, null,
                 MatchReason.ApiMatchNewSeries,
-                $"{lookup.Source} suggests this is part of \"{apiSeriesName}\"{orderHint} — not yet in the library; create it on the Series page after saving.");
+                $"{lookup.Source} suggests this is part of \"{apiSeriesName}\"{orderHint} — accept to create the series and attach this book.",
+                SuggestedOrder: lookup.SeriesNumber);
         }
 
         // No upstream series data — fall back to local title/author matching.
@@ -201,7 +202,15 @@ public record SeriesMatch(
     string? SeriesName,
     SeriesType? SeriesType,
     MatchReason Reason,
-    string Message);
+    string Message,
+    /// <summary>
+    /// Integer order from the upstream lookup, when present and parseable
+    /// (Open Library "Discworld -- 5" → 5). Null for non-integer orders
+    /// (preserved as raw in the message via FormatOrderHint), and for all
+    /// local-only suggestion paths which have no order signal. Used by the
+    /// Accept-suggestion flow to pre-fill `Work.SeriesOrder` on save.
+    /// </summary>
+    int? SuggestedOrder = null);
 
 public enum MatchReason
 {

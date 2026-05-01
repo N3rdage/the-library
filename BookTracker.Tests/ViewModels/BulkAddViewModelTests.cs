@@ -243,4 +243,88 @@ public class BulkAddViewModelTests
         var row = new BulkAddViewModel.DiscoveryRow { Action = action };
         Assert.Equal(expected, BulkAddViewModel.RowCssClass(row));
     }
+
+    [Fact]
+    public async Task AcceptRowAsync_WithAcceptedNewSeries_FindOrCreatesSeriesAndAttaches()
+    {
+        // Per-row analogue of the BookAddViewModel test: accepting an
+        // ApiMatchNewSeries suggestion in bulk capture should create the
+        // Series row on save and attach the new Work to it.
+        var vm = CreateVm();
+        vm.OnStateChanged = () => Task.CompletedTask;
+
+        // Construct the row directly to avoid the async lookup-pipeline
+        // setup. AcceptSeriesSuggestion + SaveBookAsync don't depend on how
+        // the row got its SeriesSuggestion populated.
+        var row = new BulkAddViewModel.DiscoveryRow
+        {
+            Isbn = "9780765326355",
+            Title = "The Way of Kings",
+            Author = "Brandon Sanderson",
+            Status = BulkAddViewModel.RowStatus.Found,
+            SeriesSuggestion = new SeriesMatch(
+                SeriesId: null,
+                SeriesName: "The Stormlight Archive",
+                SeriesType: null,
+                Reason: MatchReason.ApiMatchNewSeries,
+                Message: "Open Library suggests this is part of \"The Stormlight Archive\" #1 — accept to create the series and attach this book.",
+                SuggestedOrder: 1)
+        };
+        vm.Rows.Add(row);
+
+        vm.AcceptSeriesSuggestion(row);
+        Assert.True(row.SeriesSuggestionAccepted);
+
+        await vm.AcceptRowAsync(row);
+
+        using var db = _factory.CreateDbContext();
+        var series = Assert.Single(db.Series);
+        Assert.Equal("The Stormlight Archive", series.Name);
+        Assert.Equal(SeriesType.Series, series.Type);
+
+        var work = db.Works.Include(w => w.Series).Single();
+        Assert.Equal(series.Id, work.SeriesId);
+        Assert.Equal(1, work.SeriesOrder);
+    }
+
+    [Fact]
+    public async Task AcceptRowAsync_WithAcceptedExistingSeries_AttachesBySeriesId()
+    {
+        int seededSeriesId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var series = new Series { Name = "Discworld", Type = SeriesType.Series };
+            db.Series.Add(series);
+            await db.SaveChangesAsync();
+            seededSeriesId = series.Id;
+        }
+
+        var vm = CreateVm();
+        vm.OnStateChanged = () => Task.CompletedTask;
+        var row = new BulkAddViewModel.DiscoveryRow
+        {
+            Isbn = "9780552134613",
+            Title = "Sourcery",
+            Author = "Terry Pratchett",
+            Status = BulkAddViewModel.RowStatus.Found,
+            SeriesSuggestion = new SeriesMatch(
+                SeriesId: seededSeriesId,
+                SeriesName: "Discworld",
+                SeriesType: SeriesType.Series,
+                Reason: MatchReason.ApiMatchExisting,
+                Message: "Open Library indicates this is part of \"Discworld\" #5",
+                SuggestedOrder: 5)
+        };
+        vm.Rows.Add(row);
+
+        vm.AcceptSeriesSuggestion(row);
+        await vm.AcceptRowAsync(row);
+
+        using var db2 = _factory.CreateDbContext();
+        var work = db2.Works.Include(w => w.Series).Single();
+        Assert.Equal(seededSeriesId, work.SeriesId);
+        Assert.Equal(5, work.SeriesOrder);
+        // No new Series row created — attached to the seeded one.
+        Assert.Equal(1, db2.Series.Count());
+    }
 }
