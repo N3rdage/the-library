@@ -26,6 +26,12 @@ x86/
 # leading-dot variant is for Drew's IDE-side workspace.
 .debug/
 
+# security-audit skill output — per-run audit reports. Living-doc summary
+# of audit posture is in SECURITY-AUDIT.md; the per-run snapshots stay
+# local because they may surface ongoing soft-spots we don't want
+# advertised in a public repo.
+audits/
+
 # .NET
 project.lock.json
 project.fragment.lock.json
