@@ -30,9 +30,16 @@ public class PublisherListViewModel(IDbContextFactory<BookTrackerDbContext> dbFa
         Loading = true;
         await using var db = await dbFactory.CreateDbContextAsync();
 
+        // OrderBy before Select so EF orders on the source entity column, not on
+        // a property of a constructed PublisherRow. EF Core 10.x can't translate
+        // OrderBy-on-record-projection when the record's constructor includes a
+        // navigation aggregate (here `p.Editions.Count`) — it tries to invoke
+        // the constructor inside the ORDER BY and fails. Anonymous types still
+        // translate fine because EF maps property names back to source columns;
+        // record positional constructors break that mapping.
         Publishers = await db.Publishers
-            .Select(p => new PublisherRow(p.Id, p.Name, p.Editions.Count))
             .OrderBy(p => p.Name)
+            .Select(p => new PublisherRow(p.Id, p.Name, p.Editions.Count))
             .ToListAsync();
 
         Loading = false;
