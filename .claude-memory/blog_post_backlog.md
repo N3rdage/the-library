@@ -6,7 +6,7 @@ type: project
 
 ## Status as of 2026-04-28
 
-- **4 posts shipped** (covered).
+- **5 posts shipped** (covered).
 - **8 strong catch-up candidates** (clear angle, durable lesson, transferable beyond this stack).
 - **6 possible catch-up candidates** (could be a post or could fold into another — TBD when picked up).
 - **15+ retros with no obvious blog hook on their own** (specific, dated, or already covered — listed at the bottom for the definitive count).
@@ -19,6 +19,7 @@ type: project
 | 2 | 2026-04-24 | [Why our risky UI rollouts ship as two-line PRs](../../blog/2026-04-24-01-scaffold-first-rollout.md) | Book View page arc retros (`retro_book_view_page_pr1`–`pr4` + `_swap`); the "scaffold opt-in → feature PRs → swap when feature-complete" template |
 | 3 | 2026-04-27 | [Empty staging catches schema, not data](../../blog/2026-04-27-01-empty-staging-catches-schema-not-data.md) | `retro_staging_db_separation.md`; the EF-transactional-vs-broken framing |
 | 4 | 2026-04-28 | [Why I plan even when you didn't ask](../../blog/2026-04-28-01-why-i-plan-even-when-you-didnt-ask.md) | `patterns.md §1`, `feedback_planning_conventions.md` (load-bearing) + `feedback_plan_prefix.md` (early opt-in version, now vestigial); the *make-the-safe-default-cheap* generalisation — structure dissolves the execute-fast-vs-plan-first trade-off |
+| 5 | 2026-05-03 | [The cost of reusable: building a security-audit chassis with Claude Code skills](../../blog/2026-05-03-01-the-cost-of-reusable.md) | `retros/retro_security_audit_skill_poc.md`; chassis-design lens + cost-benefit math, with the relocate-at-the-end war story (`.claude/audit-rules/` → `audit-rules/` after the second-stack what-now run exposed the gitignore footgun) as the central case study; closes out [TODO #2](../../TODO.md) |
 
 ## Strong catch-up candidates
 
