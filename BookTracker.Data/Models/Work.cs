@@ -21,8 +21,15 @@ public class Work
     [MaxLength(300)]
     public string? Subtitle { get; set; }
 
+    // Legacy single-author FK — kept during PR1 of the multi-author cutover
+    // for dual-write. Reads still go through this; the new WorkAuthors
+    // collection populates in parallel until PR2 cuts reads over and drops
+    // this column.
     public int AuthorId { get; set; }
     public Author Author { get; set; } = null!;
+
+    /// <summary>Multi-author join. Populated alongside AuthorId during the cutover; primary read source after PR2.</summary>
+    public List<WorkAuthor> WorkAuthors { get; set; } = [];
 
     /// <summary>The year/date the Work was first published — distinct from any specific Edition's print date.</summary>
     public DateOnly? FirstPublishedDate { get; set; }
