@@ -33,7 +33,8 @@
             }
         </div>
     }
-    <MudAutocomplete T="string"
+    <MudAutocomplete @ref="autocompleteRef"
+                     T="string"
                      Value="@newAuthor"
                      ValueChanged="OnValueChangedAsync"
                      SearchFunc="SearchAsync"
@@ -55,6 +56,7 @@
     [Parameter] public string HelperText { get; set; } = "Type to find existing or create new. Pick an item or press Enter to add.";
 
     private string? newAuthor;
+    private MudAutocomplete<string>? autocompleteRef;
 
     private async Task<IEnumerable<string>> SearchAsync(string query, CancellationToken ct)
     {
@@ -92,6 +94,15 @@
             await AuthorsChanged.InvokeAsync(Authors);
         }
         newAuthor = null;
+
+        // MudAutocomplete keeps its internal display text after a pick — setting
+        // newAuthor=null on the parameter doesn'\''t force the input to clear.
+        // ClearAsync() resets both the displayed text and the internal value
+        // so the user can type the next author without manually clearing first.
+        if (autocompleteRef is not null)
+        {
+            await autocompleteRef.ClearAsync();
+        }
     }
 
     private async Task RemoveAsync(string name)
