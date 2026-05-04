@@ -111,7 +111,7 @@ public class EditionFormatBackfillServiceTests
             db.Books.Add(new Book
             {
                 Title = "Test",
-                Works = [new Work { Title = "Test", Author = new Author { Name = "Test" } }],
+                Works = [new Work { Title = "Test", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Test" }, Order = 0 }] }],
                 Editions = [new Edition { Isbn = isbn, Format = format, Copies = [new Copy { Condition = BookCondition.Good }] }]
             });
         }

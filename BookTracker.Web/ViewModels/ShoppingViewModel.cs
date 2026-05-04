@@ -86,7 +86,7 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
                 .Include(e => e.Book)
                     .ThenInclude(b => b.Works).ThenInclude(w => w.Series)
                 .Include(e => e.Book)
-                    .ThenInclude(b => b.Works).ThenInclude(w => w.Author)
+                    .ThenInclude(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
                 .Include(e => e.Copies)
                 .Where(e => e.Isbn == isbn)
                 .ToListAsync();
@@ -138,8 +138,8 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
                 .Include(b => b.Editions)
                     .ThenInclude(e => e.Copies)
                 .Include(b => b.Works).ThenInclude(w => w.Series)
-                .Include(b => b.Works).ThenInclude(w => w.Author)
-                .Where(b => b.Title.Contains(term) || b.Works.Any(w => w.Title.Contains(term) || w.Author.Name.Contains(term)))
+                .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
+                .Where(b => b.Title.Contains(term) || b.Works.Any(w => w.Title.Contains(term) || w.Authors.Any(a => a.Name.Contains(term))))
                 .OrderBy(b => b.Title)
                 .Take(10)
                 .ToListAsync();
@@ -196,7 +196,7 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             .Include(b => b.Editions)
                 .ThenInclude(e => e.Copies)
             .Include(b => b.Works).ThenInclude(w => w.Series)
-            .Include(b => b.Works).ThenInclude(w => w.Author)
+            .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .FirstOrDefaultAsync(b => b.Id == bookId);
 
         if (book is null) return;
@@ -221,11 +221,11 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     private static string PrimaryAuthor(Book book)
     {
         var names = book.Works
-            .Select(w => string.IsNullOrWhiteSpace(w.Author?.Name) ? null : w.Author!.Name)
-            .Where(n => n is not null)
+            .SelectMany(w => w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author?.Name))
+            .Where(n => !string.IsNullOrWhiteSpace(n))
             .Distinct()
             .ToList();
-        return names.Count > 0 ? string.Join(", ", names) : "(unknown)";
+        return names.Count > 0 ? string.Join(", ", names!) : "(unknown)";
     }
 
     private static async Task<SeriesInfo?> GetSeriesInfoAsync(BookTrackerDbContext db, Book book)
@@ -340,12 +340,14 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         }
 
         var author = await AuthorResolver.FindOrCreateAsync(item.Author, db);
+        var work = new Work { Title = item.Title };
+        AuthorResolver.AssignAuthors(work, [author]);
         var book = new Book
         {
             Title = item.Title,
             Tags = [followUpTag],
             Editions = [],
-            Works = [new Work { Title = item.Title, Author = author }]
+            Works = [work]
         };
 
         if (!string.IsNullOrWhiteSpace(item.Isbn))

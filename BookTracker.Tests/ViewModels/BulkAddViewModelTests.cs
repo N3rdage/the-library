@@ -93,7 +93,7 @@ public class BulkAddViewModelTests
             db.Books.Add(new Book
             {
                 Title = "Existing",
-                Works = [new Work { Title = "Existing", Author = new Author { Name = "Author" } }],
+                Works = [new Work { Title = "Existing", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Author" }, Order = 0 }] }],
                 Editions = [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }]
             });
             await db.SaveChangesAsync();
@@ -137,9 +137,9 @@ public class BulkAddViewModelTests
         Assert.Equal(BulkAddViewModel.RowAction.Accepted, row.Action);
 
         using var db = _factory.CreateDbContext();
-        var book = db.Books.Include(b => b.Works).ThenInclude(w => w.Author).FirstOrDefault(b => b.Title == "The Hobbit");
+        var book = db.Books.Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author).FirstOrDefault(b => b.Title == "The Hobbit");
         Assert.NotNull(book);
-        Assert.Equal("J.R.R. Tolkien", book.Works.Single().Author.Name);
+        Assert.Equal("J.R.R. Tolkien", book.Works.Single().WorkAuthors.OrderBy(wa => wa.Order).First().Author.Name);
     }
 
     [Fact]
@@ -160,10 +160,10 @@ public class BulkAddViewModelTests
         await vm.AcceptRowAsync(row);
 
         using var db = _factory.CreateDbContext();
-        var book = db.Books.Include(b => b.Works).ThenInclude(w => w.Author).Single(b => b.Title == "The Hobbit");
+        var book = db.Books.Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author).Single(b => b.Title == "The Hobbit");
         var work = Assert.Single(book.Works);
         Assert.Equal("The Hobbit", work.Title);
-        Assert.Equal("J.R.R. Tolkien", work.Author.Name);
+        Assert.Equal("J.R.R. Tolkien", work.WorkAuthors.OrderBy(wa => wa.Order).First().Author.Name);
     }
 
     [Fact]

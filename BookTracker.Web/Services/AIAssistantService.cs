@@ -108,7 +108,7 @@ Rules:
             .Select(b => new
             {
                 b.Title,
-                Author = string.Join(", ", b.Works.Select(w => w.Author).Distinct())
+                Author = string.Join(", ", b.Works.SelectMany(w => w.Authors.Select(a => a.Name)).Distinct())
             })
             .ToListAsync(ct);
 
@@ -151,7 +151,7 @@ Rules:
             .Select(b => new
             {
                 b.Title,
-                Author = string.Join(", ", b.Works.Select(w => w.Author).Distinct()),
+                Author = string.Join(", ", b.Works.SelectMany(w => w.Authors.Select(a => a.Name)).Distinct()),
                 b.Rating,
                 Genres = b.Works.SelectMany(w => w.Genres).Select(g => g.Name).Distinct().ToList()
             })

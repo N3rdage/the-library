@@ -45,7 +45,7 @@ public class BookDetailViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
             .Include(b => b.Editions)
                 .ThenInclude(e => e.Publisher)
             .Include(b => b.Works)
-                .ThenInclude(w => w.Author)
+                .ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .Include(b => b.Works)
                 .ThenInclude(w => w.Genres)
             .Include(b => b.Works)
@@ -232,8 +232,12 @@ public class BookDetailViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
         w.Id,
         w.Title,
         w.Subtitle,
-        w.Author.Name,
-        w.AuthorId,
+        // AuthorName carries the formatted multi-author display ("Preston & Child")
+        // post-PR2; the field name stays so Razor consumers don't have to change.
+        WorkAuthorshipFormatter.Display(w),
+        // LeadAuthorId is the first WorkAuthor entry's Author — used by the
+        // BookDetail '+author' link to deep-link into the /authors page.
+        w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.AuthorId).FirstOrDefault(),
         PartialDateParser.Format(w.FirstPublishedDate, w.FirstPublishedDatePrecision),
         w.Genres.OrderBy(g => g.Name).Select(g => g.Name).ToList(),
         w.Series is null ? null : new SeriesInfo(w.Series.Id, w.Series.Name, w.Series.Type, w.SeriesOrder));
@@ -269,8 +273,10 @@ public class BookDetailViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
         int Id,
         string Title,
         string? Subtitle,
+        /// <summary>Formatted display string ("Preston" / "Preston &amp; Child" / "Preston, Child, Pendergast").</summary>
         string AuthorName,
-        int AuthorId,
+        /// <summary>The lead author'\''s Id — used for /authors/{id} deep-links from the BookDetail page.</summary>
+        int LeadAuthorId,
         string FirstPublishedDisplay,
         IReadOnlyList<string> Genres,
         SeriesInfo? Series);

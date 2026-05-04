@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using BookTracker.Data;
 using BookTracker.Data.Models;
+using BookTracker.Web.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
@@ -38,7 +39,7 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
 
         var series = await db.Series
             .Include(s => s.Works).ThenInclude(w => w.Books)
-            .Include(s => s.Works).ThenInclude(w => w.Author)
+            .Include(s => s.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .FirstOrDefaultAsync(s => s.Id == seriesId);
 
         if (series is null)
@@ -62,7 +63,7 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
             .Select(w => new SeriesWorkRow(
                 w.Id,
                 w.Title,
-                w.Author.Name,
+                WorkAuthorshipFormatter.Display(w),
                 w.SeriesOrder,
                 w.Books.Select(b => new ContainingBook(b.Id, b.Title)).ToList()))
             .ToList();
@@ -146,10 +147,14 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
         await using var db = await dbFactory.CreateDbContextAsync();
         WorkSearchResults = await db.Works
             .Where(w => !currentWorkIds.Contains(w.Id))
-            .Where(w => w.Title.Contains(term) || w.Author.Name.Contains(term))
+            .Where(w => w.Title.Contains(term) || w.Authors.Any(a => a.Name.Contains(term)))
             .OrderBy(w => w.Title)
             .Take(10)
-            .Select(w => new WorkSearchResult(w.Id, w.Title, w.Author.Name, w.SeriesId))
+            .Select(w => new WorkSearchResult(
+                w.Id,
+                w.Title,
+                w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name).FirstOrDefault() ?? "",
+                w.SeriesId))
             .ToListAsync();
     }
 
@@ -158,7 +163,7 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
         await using var db = await dbFactory.CreateDbContextAsync();
         var work = await db.Works
             .Include(w => w.Books)
-            .Include(w => w.Author)
+            .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .FirstOrDefaultAsync(w => w.Id == workId);
         if (work is null) return;
 
@@ -171,7 +176,7 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
         Works.Add(new SeriesWorkRow(
             work.Id,
             work.Title,
-            work.Author.Name,
+            WorkAuthorshipFormatter.Display(work),
             nextOrder,
             work.Books.Select(b => new ContainingBook(b.Id, b.Title)).ToList()));
         WorkSearchResults.RemoveAll(r => r.Id == workId);

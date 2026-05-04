@@ -69,11 +69,10 @@ public static class AuthorResolver
     }
 
     /// <summary>
-    /// PR1 dual-write helper. Sets Work.Author to the lead (first) author for
-    /// legacy-FK compat AND replaces Work.WorkAuthors with one join row per
-    /// author, Order ascending from 0. Caller is responsible for ensuring
-    /// authors come from FindOrCreateAllAsync (so brand-new ones are
-    /// already attached to the DbContext) and for SaveChangesAsync.
+    /// Replace Work.WorkAuthors with one join row per author, Order ascending
+    /// from 0. Caller is responsible for ensuring authors come from
+    /// FindOrCreateAllAsync (so brand-new ones are already attached to the
+    /// DbContext) and for SaveChangesAsync.
     /// </summary>
     public static void AssignAuthors(Work work, IReadOnlyList<Author> authors)
     {
@@ -81,8 +80,6 @@ public static class AuthorResolver
         {
             throw new ArgumentException("At least one author required.", nameof(authors));
         }
-
-        work.Author = authors[0];
 
         work.WorkAuthors.Clear();
         for (var i = 0; i < authors.Count; i++)

@@ -165,7 +165,7 @@ public class BookMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
     {
         var book = await db.Books
             .Include(b => b.Editions)
-            .Include(b => b.Works).ThenInclude(w => w.Author)
+            .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .Include(b => b.Tags)
             .FirstOrDefaultAsync(b => b.Id == id, ct);
         if (book is null) return null;
@@ -178,7 +178,11 @@ public class BookMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
             ? book.DefaultCoverArtUrl
             : book.Editions.Select(e => e.CoverUrl).FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
 
-        var firstAuthor = book.Works.FirstOrDefault()?.Author.Name;
+        // First Work's authorship for the merge dialog headline. Multi-Work
+        // books show the first Work's display string; the user can drill into
+        // BookDetail for the full picture.
+        var primaryWork = book.Works.FirstOrDefault();
+        var firstAuthor = primaryWork is null ? null : WorkAuthorshipFormatter.Display(primaryWork);
 
         return new BookMergeDetail(
             book.Id, book.Title, firstAuthor,

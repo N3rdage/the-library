@@ -33,23 +33,23 @@ public class BookListViewModelTests
             new Book
             {
                 Title = "Carrie",
-                Works = [new Work { Title = "Carrie", Author = king, Genres = [horror] }]
+                Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }], Genres = [horror] }]
             },
             new Book
             {
                 Title = "The Long Walk",
-                Works = [new Work { Title = "The Long Walk", Author = bachman, Genres = [horror] }]
+                Works = [new Work { Title = "The Long Walk", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }], Genres = [horror] }]
             },
             new Book
             {
                 Title = "Murder on the Orient Express",
-                Works = [new Work { Title = "Murder on the Orient Express", Author = christie, Genres = [mystery], Series = poirot, SeriesOrder = 9 }]
+                Works = [new Work { Title = "Murder on the Orient Express", WorkAuthors = [new WorkAuthor { Author = christie, Order = 0 }], Genres = [mystery], Series = poirot, SeriesOrder = 9 }]
             },
             new Book
             {
                 // No genre, no series — exercises the trailing buckets.
                 Title = "Mystery Book Without Tags",
-                Works = [new Work { Title = "Mystery Book Without Tags", Author = christie }]
+                Works = [new Work { Title = "Mystery Book Without Tags", WorkAuthors = [new WorkAuthor { Author = christie, Order = 0 }] }]
             });
 
         await db.SaveChangesAsync();

@@ -26,8 +26,9 @@ public class Author
     /// <summary>Inverse of CanonicalAuthorId — pen names that resolve to this Author.</summary>
     public List<Author> Aliases { get; set; } = [];
 
+    /// <summary>Skip-navigation through WorkAuthor (M:N). Includes works where this Author is a co-author, not just the lead.</summary>
     public List<Work> Works { get; set; } = [];
 
-    /// <summary>Multi-author join entries — every Work this Author is credited on, including co-authored ones.</summary>
+    /// <summary>Explicit join collection — useful when the Order field matters or when iterating join rows directly.</summary>
     public List<WorkAuthor> WorkAuthors { get; set; } = [];
 }

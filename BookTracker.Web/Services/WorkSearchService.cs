@@ -55,7 +55,10 @@ public class WorkSearchService(IDbContextFactory<BookTrackerDbContext> dbFactory
                 w.Id,
                 w.Title,
                 w.Subtitle,
-                AuthorName = w.Author.Name,
+                // Lead-author name only — the search dropdown row is tight, so
+                // co-authors are elided here. The full multi-author display
+                // appears once the user picks the work and lands on BookDetail.
+                AuthorName = w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name).FirstOrDefault() ?? "",
                 BookCount = w.Books.Count,
                 TitleLower = w.Title.ToLower()
             })

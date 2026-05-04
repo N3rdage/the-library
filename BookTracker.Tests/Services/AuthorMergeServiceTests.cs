@@ -80,7 +80,7 @@ public class AuthorMergeServiceTests
         Assert.Equal("Doug Preston", result.LoserName);
 
         using var db = _factory.CreateDbContext();
-        Assert.Equal(3, db.Works.Count(w => w.AuthorId == ids[0]));
+        Assert.Equal(3, db.Works.Count(w => w.WorkAuthors.Any(wa => wa.AuthorId == ids[0])));
         Assert.Null(db.Authors.FirstOrDefault(a => a.Id == ids[1]));
     }
 
@@ -220,7 +220,7 @@ public class AuthorMergeServiceTests
                 db.Books.Add(new Book
                 {
                     Title = t,
-                    Works = [new Work { Title = t, Author = author }]
+                    Works = [new Work { Title = t, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]
                 });
             }
             authors.Add(author);

@@ -28,7 +28,7 @@ public class BookEditDialogViewModelTests
                 Title = "Mort",
                 Category = BookCategory.Fiction,
                 DefaultCoverArtUrl = "https://example.com/mort.jpg",
-                Works = [new Work { Title = "Mort", Author = new Author { Name = "Pratchett" } }],
+                Works = [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Pratchett" }, Order = 0 }] }],
             };
             db.Books.Add(book);
             await db.SaveChangesAsync();
@@ -55,7 +55,7 @@ public class BookEditDialogViewModelTests
             {
                 Title = "Old title",
                 Category = BookCategory.Fiction,
-                Works = [new Work { Title = "w", Author = new Author { Name = "a" } }],
+                Works = [new Work { Title = "w", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "a" }, Order = 0 }] }],
             };
             db.Books.Add(book);
             await db.SaveChangesAsync();
@@ -87,7 +87,7 @@ public class BookEditDialogViewModelTests
             {
                 Title = "T",
                 DefaultCoverArtUrl = "https://old.example.com",
-                Works = [new Work { Title = "w", Author = new Author { Name = "a" } }],
+                Works = [new Work { Title = "w", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "a" }, Order = 0 }] }],
             };
             db.Books.Add(book);
             await db.SaveChangesAsync();
@@ -113,7 +113,7 @@ public class BookEditDialogViewModelTests
             var book = new Book
             {
                 Title = "Untouched",
-                Works = [new Work { Title = "w", Author = new Author { Name = "a" } }],
+                Works = [new Work { Title = "w", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "a" }, Order = 0 }] }],
             };
             db.Books.Add(book);
             await db.SaveChangesAsync();

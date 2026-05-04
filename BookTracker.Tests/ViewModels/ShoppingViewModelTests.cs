@@ -10,7 +10,7 @@ public class ShoppingViewModelTests
     {
         // Regression for the NullReferenceException that surfaced on the
         // Shopping page when an ISBN matched an existing edition. The query
-        // was missing .Include(w => w.Author), so PrimaryAuthor dereferenced
+        // was missing .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author), so PrimaryAuthor dereferenced
         // a null navigation property. This test seeds a book + edition and
         // ensures the result comes back with the author populated.
         var factory = new TestDbContextFactory();
@@ -22,7 +22,7 @@ public class ShoppingViewModelTests
             var book = new Book
             {
                 Title = "Mort",
-                Works = [new Work { Title = "Mort", Author = author }],
+                Works = [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
                 Editions =
                 [
                     new Edition
@@ -71,7 +71,7 @@ public class ShoppingViewModelTests
             var book = new Book
             {
                 Title = "Good Omens",
-                Works = [new Work { Title = "Good Omens", Author = new Author { Name = "Terry Pratchett & Neil Gaiman" } }],
+                Works = [new Work { Title = "Good Omens", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Terry Pratchett & Neil Gaiman" }, Order = 0 }] }],
                 Editions = [new Edition { Isbn = "x", Copies = [new Copy { Condition = BookCondition.Good }] }],
             };
             db.Books.Add(book);

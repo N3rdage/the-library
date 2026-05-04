@@ -114,7 +114,7 @@ public partial class SeriesMatchService(IDbContextFactory<BookTrackerDbContext> 
         // that might suggest grouping
         var authorName = author.Trim();
         var authorWorkCount = await db.Works
-            .CountAsync(w => w.Author.Name == authorName && w.SeriesId == null);
+            .CountAsync(w => w.Authors.Any(a => a.Name == authorName) && w.SeriesId == null);
 
         if (authorWorkCount >= 2)
         {

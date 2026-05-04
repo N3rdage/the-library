@@ -179,9 +179,9 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         return SelectedGroupBy switch
         {
             // Author key is the CANONICAL author id — match any Work whose
-            // Author is the canonical OR an alias of it.
+            // Authors include the canonical OR an alias of it.
             LibraryGroupBy.Author => q.Where(b => b.Works.Any(w =>
-                w.Author.Id == id || w.Author.CanonicalAuthorId == id)),
+                w.Authors.Any(a => a.Id == id || a.CanonicalAuthorId == id))),
             LibraryGroupBy.Genre => q.Where(b => b.Works.Any(w => w.Genres.Any(g => g.Id == id))),
             LibraryGroupBy.Collection => q.Where(b => b.Works.Any(w => w.SeriesId == id)),
             _ => q,
@@ -191,13 +191,15 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     private async Task<List<GroupRow>> GroupByAuthorAsync(BookTrackerDbContext db, IQueryable<Book> filtered)
     {
         // Roll up by canonical author id (CanonicalAuthorId ?? Id) so a
-        // Bachman title appears under King.
+        // Bachman title appears under King. Co-authored works expand into
+        // one row per credited author — Preston + Child appears under both
+        // canonicals (post-PR2 behaviour change vs the lead-only legacy).
         var raw = await filtered
-            .SelectMany(b => b.Works.Select(w => new
+            .SelectMany(b => b.Works.SelectMany(w => w.Authors.Select(a => new
             {
                 BookId = b.Id,
-                CanonicalId = w.Author.CanonicalAuthorId ?? w.Author.Id,
-            }))
+                CanonicalId = a.CanonicalAuthorId ?? a.Id,
+            })))
             .Distinct() // Avoid double-counting a book whose two Works share a canonical author.
             .GroupBy(x => x.CanonicalId)
             .Select(g => new { CanonicalId = g.Key, Count = g.Count() })
@@ -285,7 +287,7 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     private IQueryable<Book> BookQueryWithIncludes(BookTrackerDbContext db) => db.Books
         .Include(b => b.Tags)
         .Include(b => b.Works).ThenInclude(w => w.Genres)
-        .Include(b => b.Works).ThenInclude(w => w.Author);
+        .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author);
 
     private IQueryable<Book> ApplyFilters(IQueryable<Book> query)
     {
@@ -294,7 +296,7 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             var term = SearchTerm.Trim();
             query = query.Where(b =>
                 b.Title.Contains(term) ||
-                b.Works.Any(w => w.Title.Contains(term) || w.Author.Name.Contains(term)));
+                b.Works.Any(w => w.Title.Contains(term) || w.Authors.Any(a => a.Name.Contains(term))));
         }
 
         if (!string.IsNullOrEmpty(SelectedCategory) && Enum.TryParse<BookCategory>(SelectedCategory, out var cat))
@@ -316,8 +318,9 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         {
             var author = SelectedAuthor.Trim();
             query = query.Where(b => b.Works.Any(w =>
-                w.Author.Name == author ||
-                (w.Author.CanonicalAuthor != null && w.Author.CanonicalAuthor.Name == author)));
+                w.Authors.Any(a =>
+                    a.Name == author ||
+                    (a.CanonicalAuthor != null && a.CanonicalAuthor.Name == author))));
         }
 
         return query;
@@ -327,7 +330,12 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         b.Id,
         b.Title,
         b.Works.FirstOrDefault()?.Subtitle,
-        string.Join(", ", b.Works.Select(w => w.Author.Name).Distinct()),
+        // Comma-join unique author names across all Works on this Book. For a
+        // single-Work co-authored book this renders "Preston, Child" rather
+        // than the prettier "Preston & Child" — list views stay uniform; the
+        // " & " formatter is reserved for single-book / single-Work surfaces
+        // (BookDetail, dialogs).
+        string.Join(", ", b.Works.SelectMany(w => w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name)).Distinct()),
         b.DefaultCoverArtUrl,
         b.Status,
         b.Rating,

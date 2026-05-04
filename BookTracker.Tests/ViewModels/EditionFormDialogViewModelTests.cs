@@ -54,7 +54,7 @@ public class EditionFormDialogViewModelTests
             db.Books.Add(new Book
             {
                 Title = "Mort",
-                Works = [new Work { Title = "Mort", Author = new Author { Name = "Pratchett" } }],
+                Works = [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Pratchett" }, Order = 0 }] }],
                 Editions = [edition],
             });
             await db.SaveChangesAsync();
@@ -82,7 +82,7 @@ public class EditionFormDialogViewModelTests
             var book = new Book
             {
                 Title = "B",
-                Works = [new Work { Title = "B", Author = new Author { Name = "A" } }],
+                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
             };
             db.Books.Add(book);
             await db.SaveChangesAsync();
@@ -118,7 +118,7 @@ public class EditionFormDialogViewModelTests
             var book = new Book
             {
                 Title = "B",
-                Works = [new Work { Title = "B", Author = new Author { Name = "A" } }],
+                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
             };
             db.Books.Add(book);
             await db.SaveChangesAsync();
@@ -150,7 +150,7 @@ public class EditionFormDialogViewModelTests
             var book = new Book
             {
                 Title = "B",
-                Works = [new Work { Title = "B", Author = new Author { Name = "A" } }],
+                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
             };
             db.Books.Add(book);
             await db.SaveChangesAsync();
@@ -186,7 +186,7 @@ public class EditionFormDialogViewModelTests
             db.Books.Add(new Book
             {
                 Title = "B",
-                Works = [new Work { Title = "B", Author = new Author { Name = "A" } }],
+                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
                 Editions = [seedEdition],
             });
             await db.SaveChangesAsync();
@@ -222,7 +222,7 @@ public class EditionFormDialogViewModelTests
             var book = new Book
             {
                 Title = "B",
-                Works = [new Work { Title = "B", Author = new Author { Name = "A" } }],
+                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
             };
             db.Books.Add(book);
             await db.SaveChangesAsync();

@@ -32,9 +32,9 @@ public class HomeViewModelTests
             var author1 = new Author { Name = "Author 1" };
             var author2 = new Author { Name = "Author 2" };
             db.Books.AddRange(
-                new Book { Title = "Book A", Works = [new Work { Title = "Book A", Author = author1 }] },
-                new Book { Title = "Book B", Works = [new Work { Title = "Book B", Author = author1 }] },
-                new Book { Title = "Book C", Works = [new Work { Title = "Book C", Author = author2 }] }
+                new Book { Title = "Book A", Works = [new Work { Title = "Book A", WorkAuthors = [new WorkAuthor { Author = author1, Order = 0 }] }] },
+                new Book { Title = "Book B", Works = [new Work { Title = "Book B", WorkAuthors = [new WorkAuthor { Author = author1, Order = 0 }] }] },
+                new Book { Title = "Book C", Works = [new Work { Title = "Book C", WorkAuthors = [new WorkAuthor { Author = author2, Order = 0 }] }] }
             );
             await db.SaveChangesAsync();
         }
@@ -65,8 +65,8 @@ public class HomeViewModelTests
             var bachman = new Author { Name = "Richard Bachman", CanonicalAuthorId = king.Id };
             db.Authors.Add(bachman);
 
-            db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", Author = king }] });
-            db.Books.Add(new Book { Title = "The Long Walk", Works = [new Work { Title = "The Long Walk", Author = bachman }] });
+            db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] });
+            db.Books.Add(new Book { Title = "The Long Walk", Works = [new Work { Title = "The Long Walk", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }] }] });
             await db.SaveChangesAsync();
         }
 
@@ -92,9 +92,9 @@ public class HomeViewModelTests
             var c = new Author { Name = "C" };
 
             db.Books.AddRange(
-                new Book { Title = "Book A", Works = [new Work { Title = "Book A", Author = a, Genres = [fantasy] }] },
-                new Book { Title = "Book B", Works = [new Work { Title = "Book B", Author = b, Genres = [fantasy, sciFi] }] },
-                new Book { Title = "Book C", Works = [new Work { Title = "Book C", Author = c, Genres = [sciFi] }] }
+                new Book { Title = "Book A", Works = [new Work { Title = "Book A", WorkAuthors = [new WorkAuthor { Author = a, Order = 0 }], Genres = [fantasy] }] },
+                new Book { Title = "Book B", Works = [new Work { Title = "Book B", WorkAuthors = [new WorkAuthor { Author = b, Order = 0 }], Genres = [fantasy, sciFi] }] },
+                new Book { Title = "Book C", Works = [new Work { Title = "Book C", WorkAuthors = [new WorkAuthor { Author = c, Order = 0 }], Genres = [sciFi] }] }
             );
             await db.SaveChangesAsync();
         }

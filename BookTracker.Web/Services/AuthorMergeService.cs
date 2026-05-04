@@ -95,11 +95,36 @@ public class AuthorMergeService(IDbContextFactory<BookTrackerDbContext> dbFactor
             winner.CanonicalAuthorId = null;
         }
 
-        var works = await db.Works.Where(w => w.AuthorId == loser.Id).ToListAsync(ct);
-        foreach (var w in works)
+        // Reassign every WorkAuthor row from loser to winner. Composite PK
+        // (WorkId, AuthorId) means we can'\''t UPDATE the AuthorId column —
+        // delete + add. If winner is already credited on the same Work, drop
+        // the loser row to avoid a duplicate composite key (the merge
+        // collapses both into one credit).
+        var loserWorkAuthors = await db.WorkAuthors
+            .Where(wa => wa.AuthorId == loser.Id)
+            .ToListAsync(ct);
+
+        var winnerCreditedWorkIds = (await db.WorkAuthors
+            .Where(wa => wa.AuthorId == winner.Id)
+            .Select(wa => wa.WorkId)
+            .ToListAsync(ct))
+            .ToHashSet();
+
+        foreach (var wa in loserWorkAuthors)
         {
-            w.AuthorId = winner.Id;
+            db.WorkAuthors.Remove(wa);
+            if (!winnerCreditedWorkIds.Contains(wa.WorkId))
+            {
+                db.WorkAuthors.Add(new WorkAuthor
+                {
+                    WorkId = wa.WorkId,
+                    AuthorId = winner.Id,
+                    Order = wa.Order,
+                });
+                winnerCreditedWorkIds.Add(wa.WorkId);
+            }
         }
+        var worksReassignedCount = loserWorkAuthors.Count;
 
         // External aliases of the loser become aliases of the winner. Must
         // exclude the winner explicitly — if winner was an alias of loser its
@@ -131,7 +156,7 @@ public class AuthorMergeService(IDbContextFactory<BookTrackerDbContext> dbFactor
         return new AuthorMergeResult(
             Success: true,
             ErrorMessage: null,
-            WorksReassigned: works.Count,
+            WorksReassigned: worksReassignedCount,
             AliasesReassigned: aliases.Count,
             WinnerPromotedToCanonical: winnerWasAliasOfLoser,
             WinnerName: winner.Name,
@@ -145,25 +170,25 @@ public class AuthorMergeService(IDbContextFactory<BookTrackerDbContext> dbFactor
             .FirstOrDefaultAsync(a => a.Id == id, ct);
         if (author is null) return null;
 
-        var workCount = await db.Works.CountAsync(w => w.AuthorId == id, ct);
+        var workCount = await db.Works.CountAsync(w => w.Authors.Any(a => a.Id == id), ct);
         var aliasCount = await db.Authors.CountAsync(a => a.CanonicalAuthorId == id, ct);
         var sampleTitles = await db.Works
-            .Where(w => w.AuthorId == id)
+            .Where(w => w.Authors.Any(a => a.Id == id))
             .OrderBy(w => w.Title)
             .Take(SampleWorkLimit)
             .Select(w => w.Title)
             .ToListAsync(ct);
 
-        // Cover pick: prefer a Book that contains a single Work by this
-        // author (its cover faithfully represents one of the author's
+        // Cover pick: prefer a Book that contains a single Work credited to
+        // this author (its cover faithfully represents one of the author's
         // Works); fall back to any Book by the author.
         var singleWorkBookCover = await db.Books
-            .Where(b => b.Works.Any(w => w.AuthorId == id) && b.Works.Count == 1)
+            .Where(b => b.Works.Any(w => w.Authors.Any(a => a.Id == id)) && b.Works.Count == 1)
             .Select(b => b.DefaultCoverArtUrl)
             .FirstOrDefaultAsync(ct);
         var cover = singleWorkBookCover is null
             ? await db.Books
-                .Where(b => b.Works.Any(w => w.AuthorId == id))
+                .Where(b => b.Works.Any(w => w.Authors.Any(a => a.Id == id)))
                 .Select(b => b.DefaultCoverArtUrl)
                 .FirstOrDefaultAsync(ct)
             : singleWorkBookCover;

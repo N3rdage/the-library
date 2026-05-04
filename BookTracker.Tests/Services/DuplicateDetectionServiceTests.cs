@@ -150,7 +150,7 @@ public class DuplicateDetectionServiceTests
         // have been one Book with two Editions" case.
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "J.R.R. Tolkien" };
-        var work = new Work { Title = "The Hobbit", Author = author };
+        var work = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         db.Books.Add(new Book { Title = "Hobbit HB", Works = [work] });
         db.Books.Add(new Book { Title = "Hobbit PB", Works = [work] });
         await db.SaveChangesAsync();
@@ -167,7 +167,7 @@ public class DuplicateDetectionServiceTests
         // Same title AND same work-set: dedup so the pair appears once.
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "J.R.R. Tolkien" };
-        var work = new Work { Title = "The Hobbit", Author = author };
+        var work = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         db.Books.Add(new Book { Title = "The Hobbit", Works = [work] });
         db.Books.Add(new Book { Title = "The Hobbit", Works = [work] });
         await db.SaveChangesAsync();
@@ -184,7 +184,7 @@ public class DuplicateDetectionServiceTests
     {
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "Agatha Christie" };
-        var work = new Work { Title = "Murder on the Orient Express", Author = author };
+        var work = new Work { Title = "Murder on the Orient Express", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var publisher = new Publisher { Name = "Collins Crime Club" };
         var book = new Book
         {
@@ -209,7 +209,7 @@ public class DuplicateDetectionServiceTests
     {
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "Agatha Christie" };
-        var work = new Work { Title = "Murder on the Orient Express", Author = author };
+        var work = new Work { Title = "Murder on the Orient Express", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var publisher = new Publisher { Name = "Collins Crime Club" };
         var book = new Book
         {
@@ -333,7 +333,7 @@ public class DuplicateDetectionServiceTests
         var book = new Book
         {
             Title = title,
-            Works = [new Work { Title = title, Author = author }]
+            Works = [new Work { Title = title, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]
         };
         db.Books.Add(book);
         await db.SaveChangesAsync();

@@ -100,7 +100,7 @@ public class BookAddViewModel(
             {
                 var existing = await db.Editions
                     .Include(e => e.Book)
-                        .ThenInclude(b => b.Works).ThenInclude(w => w.Author)
+                        .ThenInclude(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
                     .Include(e => e.Copies)
                     .FirstOrDefaultAsync(e => e.Isbn == cleanIsbn);
 
@@ -110,7 +110,9 @@ public class BookAddViewModel(
                         existing.Book.Id,
                         existing.Id,
                         existing.Book.Title,
-                        string.Join(", ", existing.Book.Works.Select(w => w.Author.Name).Distinct()),
+                        string.Join(", ", existing.Book.Works
+                            .SelectMany(w => w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name))
+                            .Distinct()),
                         existing.Copies.Count);
                     LookupMessage = null;
                     return;
