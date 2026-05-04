@@ -33,7 +33,6 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
 
         await using var db = await dbFactory.CreateDbContextAsync();
         var work = await db.Works
-            .Include(w => w.Author)
             .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .Include(w => w.Genres)
             .FirstOrDefaultAsync(w => w.Id == workId);
@@ -42,11 +41,11 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
         Title = work.Title;
         Subtitle = work.Subtitle;
         // Order ascending so the lead author shows first in the chip list.
-        // Fallback to the legacy single Author if WorkAuthors is empty —
-        // shouldn'\''t happen post-backfill but defensive.
-        AuthorNames = work.WorkAuthors.Count > 0
-            ? work.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name).ToList()
-            : [work.Author.Name];
+        // Every Work has at least one WorkAuthor post-PR1 backfill.
+        AuthorNames = work.WorkAuthors
+            .OrderBy(wa => wa.Order)
+            .Select(wa => wa.Author.Name)
+            .ToList();
         FirstPublishedDate = PartialDateParser.Format(work.FirstPublishedDate, work.FirstPublishedDatePrecision);
         SelectedSeriesId = work.SeriesId;
         SeriesOrder = work.SeriesOrder;
@@ -84,7 +83,6 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
 
         await using var db = await dbFactory.CreateDbContextAsync();
         var work = await db.Works
-            .Include(w => w.Author)
             .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .Include(w => w.Genres)
             .FirstOrDefaultAsync(w => w.Id == WorkId);

@@ -168,7 +168,7 @@ public class BookAddViewModelTests
             db.Books.Add(new Book
             {
                 Title = "The Hobbit",
-                Works = [new Work { Title = "The Hobbit", Author = new Author { Name = "Tolkien" } }],
+                Works = [new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Tolkien" }, Order = 0 }] }],
                 Editions = [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }]
             });
             await db.SaveChangesAsync();
@@ -199,7 +199,7 @@ public class BookAddViewModelTests
             var book = new Book
             {
                 Title = "The Hobbit",
-                Works = [new Work { Title = "The Hobbit", Author = new Author { Name = "Tolkien" } }],
+                Works = [new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Tolkien" }, Order = 0 }] }],
                 Editions = [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }]
             };
             db.Books.Add(book);
@@ -232,10 +232,10 @@ public class BookAddViewModelTests
 
         Assert.NotNull(ok);
         using var db = _factory.CreateDbContext();
-        var book = db.Books.Include(b => b.Works).ThenInclude(w => w.Author).Single();
+        var book = db.Books.Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author).Single();
         var work = Assert.Single(book.Works);
         Assert.Equal("The Hobbit", work.Title);
-        Assert.Equal("J.R.R. Tolkien", work.Author.Name);
+        Assert.Equal("J.R.R. Tolkien", work.WorkAuthors.OrderBy(wa => wa.Order).First().Author.Name);
         Assert.Equal(new DateOnly(1937, 9, 21), work.FirstPublishedDate);
         Assert.Equal(DatePrecision.Day, work.FirstPublishedDatePrecision);
     }
@@ -258,10 +258,8 @@ public class BookAddViewModelTests
         Assert.NotNull(ok);
         using var db = _factory.CreateDbContext();
         var work = db.Works
-            .Include(w => w.Author)
             .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .Single();
-        Assert.Equal("Douglas Preston", work.Author.Name);
         Assert.Equal(2, work.WorkAuthors.Count);
         var ordered = work.WorkAuthors.OrderBy(wa => wa.Order).ToList();
         Assert.Equal("Douglas Preston", ordered[0].Author.Name);
@@ -383,8 +381,8 @@ public class BookAddViewModelTests
         {
             var author = new Author { Name = "Some Author" };
             db.Books.AddRange(
-                new Book { Title = "Book A", Works = [new Work { Title = "Book A", Author = author }] },
-                new Book { Title = "Book B", Works = [new Work { Title = "Book B", Author = author }] });
+                new Book { Title = "Book A", Works = [new Work { Title = "Book A", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }] },
+                new Book { Title = "Book B", Works = [new Work { Title = "Book B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }] });
             await db.SaveChangesAsync();
         }
 

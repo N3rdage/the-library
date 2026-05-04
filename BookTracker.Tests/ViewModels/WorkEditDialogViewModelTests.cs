@@ -29,7 +29,7 @@ public class WorkEditDialogViewModelTests
             {
                 Title = "Mort",
                 Subtitle = "A Discworld Novel",
-                Author = new Author { Name = "Terry Pratchett" },
+                WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Terry Pratchett" }, Order = 0 }],
                 FirstPublishedDate = new DateOnly(1987, 11, 12),
                 FirstPublishedDatePrecision = DatePrecision.Day,
                 Series = series,
@@ -63,7 +63,7 @@ public class WorkEditDialogViewModelTests
             var work = new Work
             {
                 Title = "Old",
-                Author = new Author { Name = "Old Author" },
+                WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Old Author" }, Order = 0 }],
             };
             db.Books.Add(new Book { Title = "B", Works = [work] });
             await db.SaveChangesAsync();
@@ -79,7 +79,7 @@ public class WorkEditDialogViewModelTests
         await vm.SaveAsync();
 
         using var db2 = factory.CreateDbContext();
-        var saved = db2.Works.Include(w => w.Author).Single(w => w.Id == workId);
+        var saved = db2.Works.Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author).Single(w => w.Id == workId);
         Assert.Equal("Mort", saved.Title);
         Assert.Equal("A Discworld Novel", saved.Subtitle);
         Assert.Equal(new DateOnly(1987, 1, 1), saved.FirstPublishedDate);
@@ -96,7 +96,7 @@ public class WorkEditDialogViewModelTests
         {
             var a1 = new Author { Name = "Terry Pratchett" };
             var a2 = new Author { Name = "Placeholder" };
-            var work = new Work { Title = "w", Author = a2 };
+            var work = new Work { Title = "w", WorkAuthors = [new WorkAuthor { Author = a2, Order = 0 }] };
             db.Books.Add(new Book { Title = "B", Works = [work] });
             db.Authors.Add(a1);
             await db.SaveChangesAsync();
@@ -110,8 +110,8 @@ public class WorkEditDialogViewModelTests
         await vm.SaveAsync();
 
         using var db2 = factory.CreateDbContext();
-        var saved = db2.Works.Include(w => w.Author).Single(w => w.Id == workId);
-        Assert.Equal(existingAuthorId, saved.Author.Id);
+        var saved = db2.Works.Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author).Single(w => w.Id == workId);
+        Assert.Equal(existingAuthorId, saved.WorkAuthors.OrderBy(wa => wa.Order).First().Author.Id);
         Assert.Equal(2, db2.Authors.Count());
     }
 
@@ -122,7 +122,7 @@ public class WorkEditDialogViewModelTests
         int workId;
         using (var db = factory.CreateDbContext())
         {
-            var work = new Work { Title = "w", Author = new Author { Name = "Old Author" } };
+            var work = new Work { Title = "w", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Old Author" }, Order = 0 }] };
             db.Books.Add(new Book { Title = "B", Works = [work] });
             await db.SaveChangesAsync();
             workId = work.Id;
@@ -148,7 +148,7 @@ public class WorkEditDialogViewModelTests
             var work = new Work
             {
                 Title = "w",
-                Author = new Author { Name = "a" },
+                WorkAuthors = [new WorkAuthor { Author = new Author { Name = "a" }, Order = 0 }],
                 Series = series,
                 SeriesOrder = 3,
             };
@@ -180,7 +180,7 @@ public class WorkEditDialogViewModelTests
             var work = new Work
             {
                 Title = "w",
-                Author = new Author { Name = "a" },
+                WorkAuthors = [new WorkAuthor { Author = new Author { Name = "a" }, Order = 0 }],
                 Genres = [fantasy],
             };
             db.Books.Add(new Book { Title = "B", Works = [work] });
@@ -211,7 +211,7 @@ public class WorkEditDialogViewModelTests
             var work = new Work
             {
                 Title = "w",
-                Author = new Author { Name = "a" },
+                WorkAuthors = [new WorkAuthor { Author = new Author { Name = "a" }, Order = 0 }],
                 Genres = [fantasy], // starts with Fantasy
             };
             db.Books.Add(new Book { Title = "B", Works = [work] });
@@ -244,7 +244,7 @@ public class WorkEditDialogViewModelTests
                 new Author { Name = "Terry Pratchett" },
                 new Author { Name = "Neil Gaiman" },
                 new Author { Name = "Pratchett & Gaiman" });
-            var work = new Work { Title = "w", Author = new Author { Name = "Seed" } };
+            var work = new Work { Title = "w", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Seed" }, Order = 0 }] };
             db.Books.Add(new Book { Title = "B", Works = [work] });
             await db.SaveChangesAsync();
             workId = work.Id;

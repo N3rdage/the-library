@@ -66,11 +66,21 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
 
         if (lower is not null && higher is not null)
         {
-            // Detection already blocks by AuthorId so this is mostly a
-            // defensive check for direct URL hits.
-            var lowerRaw = await db.Works.AsNoTracking().FirstAsync(w => w.Id == lowerId, ct);
-            var higherRaw = await db.Works.AsNoTracking().FirstAsync(w => w.Id == higherId, ct);
-            if (lowerRaw.AuthorId != higherRaw.AuthorId)
+            // Detection already blocks by author set, so this is a defensive
+            // check for direct URL hits. Both Works must credit the same set
+            // of authors (post-PR2 multi-author cutover); a single mismatch
+            // anywhere blocks the merge with the same message as before.
+            var lowerAuthorIds = await db.WorkAuthors
+                .Where(wa => wa.WorkId == lowerId)
+                .Select(wa => wa.AuthorId)
+                .OrderBy(id => id)
+                .ToListAsync(ct);
+            var higherAuthorIds = await db.WorkAuthors
+                .Where(wa => wa.WorkId == higherId)
+                .Select(wa => wa.AuthorId)
+                .OrderBy(id => id)
+                .ToListAsync(ct);
+            if (!lowerAuthorIds.SequenceEqual(higherAuthorIds))
             {
                 incompatibility = "Works belong to different authors. Merge the authors on /duplicates first, then come back.";
             }
@@ -95,17 +105,25 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
         var winner = await db.Works
             .Include(w => w.Books)
             .Include(w => w.Genres)
+            .Include(w => w.WorkAuthors)
             .FirstOrDefaultAsync(w => w.Id == winnerId, ct);
         var loser = await db.Works
             .Include(w => w.Books)
             .Include(w => w.Genres)
+            .Include(w => w.WorkAuthors)
             .FirstOrDefaultAsync(w => w.Id == loserId, ct);
         if (winner is null || loser is null)
         {
             return Failure("One or both Works could not be found — they may already have been merged or deleted.");
         }
 
-        if (winner.AuthorId != loser.AuthorId)
+        // Author sets must match — two Works with different authorship can'\''t
+        // be merged into one (the result would conflate distinct creative
+        // credits). User'\''s expected to merge authors first if pen-name aliases
+        // are involved.
+        var winnerAuthorIds = winner.WorkAuthors.Select(wa => wa.AuthorId).OrderBy(id => id).ToList();
+        var loserAuthorIds = loser.WorkAuthors.Select(wa => wa.AuthorId).OrderBy(id => id).ToList();
+        if (!winnerAuthorIds.SequenceEqual(loserAuthorIds))
         {
             return Failure("Works belong to different authors. Merge the authors first on /duplicates.");
         }
@@ -195,7 +213,7 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
     private static async Task<WorkMergeDetail?> LoadDetailAsync(BookTrackerDbContext db, int id, CancellationToken ct)
     {
         var work = await db.Works
-            .Include(w => w.Author)
+            .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .Include(w => w.Series)
             .Include(w => w.Genres)
             .FirstOrDefaultAsync(w => w.Id == id, ct);
@@ -224,7 +242,7 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
 
         return new WorkMergeDetail(
             work.Id, work.Title, work.Subtitle,
-            work.Author.Name,
+            WorkAuthorshipFormatter.Display(work),
             work.FirstPublishedDate?.Year,
             work.Series?.Name,
             work.SeriesOrder,

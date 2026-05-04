@@ -102,35 +102,29 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .HasForeignKey(w => w.SeriesId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        // Each Work belongs to exactly one Author entity (which itself may
-        // be a pen-name alias of another canonical Author). Legacy single-
-        // author FK kept during PR1 of the multi-author cutover; PR2 will
-        // drop this and switch reads to the WorkAuthors join below.
-        modelBuilder.Entity<Work>()
-            .HasOne(w => w.Author)
-            .WithMany(a => a.Works)
-            .HasForeignKey(w => w.AuthorId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        // WorkAuthor join entity for the Work ↔ Author M:N relationship.
+        // Work ↔ Author is many-to-many through the WorkAuthor join entity.
         // Composite PK on (WorkId, AuthorId) — the same Author can't appear
         // twice on a single Work. Cascade on Work delete (the join row only
         // exists as long as the Work does); Restrict on Author delete (don't
         // allow deleting an Author that's still credited on a Work).
-        modelBuilder.Entity<WorkAuthor>()
-            .HasKey(wa => new { wa.WorkId, wa.AuthorId });
-
-        modelBuilder.Entity<WorkAuthor>()
-            .HasOne(wa => wa.Work)
-            .WithMany(w => w.WorkAuthors)
-            .HasForeignKey(wa => wa.WorkId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        modelBuilder.Entity<WorkAuthor>()
-            .HasOne(wa => wa.Author)
-            .WithMany(a => a.WorkAuthors)
-            .HasForeignKey(wa => wa.AuthorId)
-            .OnDelete(DeleteBehavior.Restrict);
+        //
+        // Both skip-navigations (Work.Authors, Author.Works) and the explicit
+        // join collections (Work.WorkAuthors, Author.WorkAuthors) are kept —
+        // skip-nav for "any author of this work" semantics, explicit join for
+        // ordered display via WorkAuthor.Order.
+        modelBuilder.Entity<Work>()
+            .HasMany(w => w.Authors)
+            .WithMany(a => a.Works)
+            .UsingEntity<WorkAuthor>(
+                j => j.HasOne(wa => wa.Author)
+                      .WithMany(a => a.WorkAuthors)
+                      .HasForeignKey(wa => wa.AuthorId)
+                      .OnDelete(DeleteBehavior.Restrict),
+                j => j.HasOne(wa => wa.Work)
+                      .WithMany(w => w.WorkAuthors)
+                      .HasForeignKey(wa => wa.WorkId)
+                      .OnDelete(DeleteBehavior.Cascade),
+                j => j.HasKey(wa => new { wa.WorkId, wa.AuthorId }));
 
         modelBuilder.Entity<Author>()
             .HasIndex(a => a.Name)

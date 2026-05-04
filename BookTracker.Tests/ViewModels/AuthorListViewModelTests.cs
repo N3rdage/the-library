@@ -14,8 +14,8 @@ public class AuthorListViewModelTests
             var king = new Author { Name = "Stephen King" };
             var bachman = new Author { Name = "Richard Bachman", CanonicalAuthor = king };
             db.Authors.AddRange(king, bachman);
-            db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", Author = king }] });
-            db.Books.Add(new Book { Title = "Thinner", Works = [new Work { Title = "Thinner", Author = bachman }] });
+            db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] });
+            db.Books.Add(new Book { Title = "Thinner", Works = [new Work { Title = "Thinner", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }] }] });
             await db.SaveChangesAsync();
         }
 
@@ -39,8 +39,8 @@ public class AuthorListViewModelTests
             var king = new Author { Name = "Stephen King" };
             var bachman = new Author { Name = "Richard Bachman", CanonicalAuthor = king };
             db.Authors.AddRange(king, bachman);
-            db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", Author = king }] });
-            db.Books.Add(new Book { Title = "Thinner", Works = [new Work { Title = "Thinner", Author = bachman }] });
+            db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] });
+            db.Books.Add(new Book { Title = "Thinner", Works = [new Work { Title = "Thinner", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }] }] });
             await db.SaveChangesAsync();
             kingId = king.Id;
         }
@@ -71,8 +71,8 @@ public class AuthorListViewModelTests
             var king = new Author { Name = "Stephen King" };
             var bachman = new Author { Name = "Richard Bachman", CanonicalAuthor = king };
             db.Authors.AddRange(king, bachman);
-            db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", Author = king }] });
-            db.Books.Add(new Book { Title = "Thinner", Works = [new Work { Title = "Thinner", Author = bachman }] });
+            db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] });
+            db.Books.Add(new Book { Title = "Thinner", Works = [new Work { Title = "Thinner", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }] }] });
             await db.SaveChangesAsync();
             bachmanId = bachman.Id;
         }
@@ -97,7 +97,7 @@ public class AuthorListViewModelTests
         {
             var author = new Author { Name = "A" };
             db.Authors.Add(author);
-            db.Books.Add(new Book { Title = "B", Works = [new Work { Title = "W", Author = author }] });
+            db.Books.Add(new Book { Title = "B", Works = [new Work { Title = "W", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }] });
             await db.SaveChangesAsync();
             authorId = author.Id;
         }
@@ -138,8 +138,8 @@ public class AuthorListViewModelTests
             var king = new Author { Name = "Stephen King" };
             var bachman = new Author { Name = "Richard Bachman" }; // NOT an alias yet
             db.Authors.AddRange(king, bachman);
-            db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", Author = king }] });
-            db.Books.Add(new Book { Title = "Thinner", Works = [new Work { Title = "Thinner", Author = bachman }] });
+            db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] });
+            db.Books.Add(new Book { Title = "Thinner", Works = [new Work { Title = "Thinner", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }] }] });
             await db.SaveChangesAsync();
             kingId = king.Id;
             bachmanId = bachman.Id;

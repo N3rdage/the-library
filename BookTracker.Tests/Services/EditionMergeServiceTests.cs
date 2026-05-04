@@ -29,8 +29,8 @@ public class EditionMergeServiceTests
     {
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "A" };
-        var w1 = new Work { Title = "A1", Author = author };
-        var w2 = new Work { Title = "A2", Author = author };
+        var w1 = new Work { Title = "A1", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var w2 = new Work { Title = "A2", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var b1 = new Book { Title = "B1", Works = [w1] };
         var b2 = new Book { Title = "B2", Works = [w2] };
         var e1 = new Edition { Book = b1, Isbn = "9780000000001", Format = BookFormat.Hardcover };
@@ -74,7 +74,7 @@ public class EditionMergeServiceTests
     {
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "A" };
-        var work = new Work { Title = "T", Author = author };
+        var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var publisher = new Publisher { Name = "Acme Press" };
         var book = new Book { Title = "B", Works = [work] };
         // Winner has no date, no cover, no publisher, no ISBN.
@@ -113,7 +113,7 @@ public class EditionMergeServiceTests
     {
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "A" };
-        var work = new Work { Title = "T", Author = author };
+        var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var pubA = new Publisher { Name = "Keep" };
         var pubB = new Publisher { Name = "Ignored" };
         var book = new Book { Title = "B", Works = [work] };
@@ -199,8 +199,8 @@ public class EditionMergeServiceTests
     {
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "A" };
-        var w1 = new Work { Title = "A1", Author = author };
-        var w2 = new Work { Title = "A2", Author = author };
+        var w1 = new Work { Title = "A1", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var w2 = new Work { Title = "A2", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var b1 = new Book { Title = "B1", Works = [w1] };
         var b2 = new Book { Title = "B2", Works = [w2] };
         var e1 = new Edition { Book = b1, Isbn = "9780000000001", Format = BookFormat.Hardcover };
@@ -220,7 +220,7 @@ public class EditionMergeServiceTests
     {
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "Shared" };
-        var work = new Work { Title = "T", Author = author };
+        var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var book = new Book { Title = "B", Works = [work] };
         var winner = new Edition { Book = book, Isbn = "9780000000001", Format = BookFormat.Hardcover };
         var loser = new Edition { Book = book, Isbn = "9780000000002", Format = BookFormat.Hardcover };

@@ -33,8 +33,8 @@ public class WorkMergeServiceTests
         using var db = _factory.CreateDbContext();
         var tolkien = new Author { Name = "J.R.R. Tolkien" };
         var notTolkien = new Author { Name = "Imposter" };
-        var w1 = new Work { Title = "The Hobbit", Author = tolkien };
-        var w2 = new Work { Title = "The Hobbit", Author = notTolkien };
+        var w1 = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = tolkien, Order = 0 }] };
+        var w2 = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = notTolkien, Order = 0 }] };
         db.Books.Add(new Book { Title = "A", Works = [w1] });
         db.Books.Add(new Book { Title = "B", Works = [w2] });
         await db.SaveChangesAsync();
@@ -51,8 +51,8 @@ public class WorkMergeServiceTests
         // flag that so the merge confirmation surfaces the overlap.
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "Agatha Christie" };
-        var w1 = new Work { Title = "A", Author = author };
-        var w2 = new Work { Title = "A", Author = author };
+        var w1 = new Work { Title = "A", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var w2 = new Work { Title = "A", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         db.Books.Add(new Book { Title = "Solo W1", Works = [w1] });
         db.Books.Add(new Book { Title = "Solo W2", Works = [w2] });
         db.Books.Add(new Book { Title = "Compendium", Works = [w1, w2] });
@@ -93,8 +93,8 @@ public class WorkMergeServiceTests
         // winner — the loser-side BookWork row gets dropped. No PK violation.
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "Agatha Christie" };
-        var winner = new Work { Title = "Style", Author = author };
-        var loser = new Work { Title = "Style", Author = author };
+        var winner = new Work { Title = "Style", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var loser = new Work { Title = "Style", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         db.Books.Add(new Book { Title = "Solo W2", Works = [loser] });
         db.Books.Add(new Book { Title = "Compendium", Works = [winner, loser] });
         await db.SaveChangesAsync();
@@ -172,8 +172,8 @@ public class WorkMergeServiceTests
         using var db = _factory.CreateDbContext();
         var tolkien = new Author { Name = "J.R.R. Tolkien" };
         var notTolkien = new Author { Name = "Imposter" };
-        var w1 = new Work { Title = "The Hobbit", Author = tolkien };
-        var w2 = new Work { Title = "The Hobbit", Author = notTolkien };
+        var w1 = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = tolkien, Order = 0 }] };
+        var w2 = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = notTolkien, Order = 0 }] };
         db.Books.Add(new Book { Title = "A", Works = [w1] });
         db.Books.Add(new Book { Title = "B", Works = [w2] });
         await db.SaveChangesAsync();
@@ -198,11 +198,11 @@ public class WorkMergeServiceTests
         await db.SaveChangesAsync();
 
         // Winner: bare title and author only.
-        var winner = new Work { Title = "Gunslinger", Author = author };
+        var winner = new Work { Title = "Gunslinger", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         // Loser: subtitle, first-pub date, series, genres.
         var loser = new Work
         {
-            Title = "Gunslinger", Author = author,
+            Title = "Gunslinger", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
             Subtitle = "Dark Tower I",
             FirstPublishedDate = new DateOnly(1982, 6, 10),
             FirstPublishedDatePrecision = DatePrecision.Day,
@@ -243,7 +243,7 @@ public class WorkMergeServiceTests
 
         var winner = new Work
         {
-            Title = "T", Author = author,
+            Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
             Subtitle = "Keep Me",
             FirstPublishedDate = new DateOnly(2000, 1, 1),
             FirstPublishedDatePrecision = DatePrecision.Day,
@@ -251,7 +251,7 @@ public class WorkMergeServiceTests
         };
         var loser = new Work
         {
-            Title = "T", Author = author,
+            Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
             Subtitle = "Ignored",
             FirstPublishedDate = new DateOnly(1900, 1, 1),
             Series = ignoreSeries, SeriesOrder = 7
@@ -284,8 +284,8 @@ public class WorkMergeServiceTests
         db.Genres.AddRange(horror, fantasy, mystery);
         await db.SaveChangesAsync();
 
-        var winner = new Work { Title = "T", Author = author, Genres = [horror, fantasy] };
-        var loser = new Work { Title = "T", Author = author, Genres = [fantasy, mystery] };
+        var winner = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Genres = [horror, fantasy] };
+        var loser = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Genres = [fantasy, mystery] };
         db.Books.Add(new Book { Title = "BW", Works = [winner] });
         db.Books.Add(new Book { Title = "BL", Works = [loser] });
         await db.SaveChangesAsync();
@@ -305,8 +305,8 @@ public class WorkMergeServiceTests
     {
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "Shared Author" };
-        var winner = new Work { Title = winnerTitle, Author = author };
-        var loser = new Work { Title = loserTitle, Author = author };
+        var winner = new Work { Title = winnerTitle, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var loser = new Work { Title = loserTitle, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         foreach (var t in winnerBooks)
         {
             db.Books.Add(new Book { Title = t, Works = [winner] });
@@ -323,9 +323,9 @@ public class WorkMergeServiceTests
     {
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "Shared Author" };
-        var winner = new Work { Title = "W", Author = author };
-        var loser = new Work { Title = "L", Author = author };
-        var other = new Work { Title = "O", Author = author };
+        var winner = new Work { Title = "W", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var loser = new Work { Title = "L", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var other = new Work { Title = "O", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         db.Books.Add(new Book { Title = "BW", Works = [winner] });
         db.Books.Add(new Book { Title = "BL", Works = [loser] });
         db.Books.Add(new Book { Title = "BO", Works = [other] });

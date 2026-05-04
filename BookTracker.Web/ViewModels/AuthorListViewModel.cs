@@ -101,10 +101,10 @@ public class AuthorListViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
         }
 
         var works = await db.Works
-            .Include(w => w.Author)
+            .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .Include(w => w.Books)
             .Include(w => w.Series)
-            .Where(w => ids.Contains(w.AuthorId))
+            .Where(w => w.WorkAuthors.Any(wa => ids.Contains(wa.AuthorId)))
             .OrderBy(w => w.Title)
             .ToListAsync();
 
@@ -114,8 +114,15 @@ public class AuthorListViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
             w.Subtitle,
             // Flag which alias a work was written as, but only on canonical
             // rows (on an alias row the author is always itself). For single-
-            // identity canonicals this is always null.
-            isCanonical && w.AuthorId != authorId ? w.Author.Name : null,
+            // identity canonicals this is always null. Picks the *lead*
+            // author for the alias label — co-authored works under a canonical
+            // get labelled by their lead's pen name, which is how booksellers
+            // typically attribute them.
+            isCanonical
+                ? w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author).FirstOrDefault() is { } leadAuthor && leadAuthor.Id != authorId
+                    ? leadAuthor.Name
+                    : null
+                : null,
             PartialDateParser.Format(w.FirstPublishedDate, w.FirstPublishedDatePrecision),
             w.Series?.Name,
             w.Series?.Type,

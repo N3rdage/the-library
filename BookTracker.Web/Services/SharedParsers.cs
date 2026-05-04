@@ -193,16 +193,17 @@ Rules:
 
     public static async Task<string> BuildLibraryContextAsync(BookTrackerDbContext db, CancellationToken ct)
     {
-        // Author stats come from Works — author-per-work is the model now,
-        // and a compendium contributes one entry per contained work to the
-        // author's tally, which matches the reader's reading experience.
-        var topAuthors = await db.Works
-            .GroupBy(w => w.Author)
+        // Author stats: each WorkAuthor row contributes one tally to its Author.
+        // Co-authored Works contribute to BOTH credited authors (post-PR2);
+        // pen-names stay separate (no canonical rollup here — this is the
+        // AI-prompt context where preserving published author names matters).
+        var topAuthors = await db.WorkAuthors
+            .GroupBy(wa => wa.Author.Name)
             .Select(g => new
             {
                 Author = g.Key,
                 Count = g.Count(),
-                AvgRating = g.SelectMany(w => w.Books).Average(b => (double?)b.Rating) ?? 0.0
+                AvgRating = g.SelectMany(wa => wa.Work.Books).Average(b => (double?)b.Rating) ?? 0.0
             })
             .OrderByDescending(a => a.Count)
             .Take(15)
@@ -223,7 +224,7 @@ Rules:
             .Select(b => new
             {
                 b.Title,
-                Author = string.Join(", ", b.Works.Select(w => w.Author).Distinct()),
+                Author = string.Join(", ", b.Works.SelectMany(w => w.Authors.Select(a => a.Name)).Distinct()),
                 b.Rating
             })
             .ToListAsync(ct);

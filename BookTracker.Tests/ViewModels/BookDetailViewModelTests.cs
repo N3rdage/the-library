@@ -39,7 +39,7 @@ public class BookDetailViewModelTests
                     new Work
                     {
                         Title = "A Wizard of Earthsea",
-                        Author = author,
+                        WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
                         Genres = [genre],
                     }
                 ],
@@ -79,9 +79,9 @@ public class BookDetailViewModelTests
                 Works =
                 [
                     // Intentionally out of order — VM should sort by SeriesOrder.
-                    new Work { Title = "Macbeth", Author = author, Series = series, SeriesOrder = 3 },
-                    new Work { Title = "Hamlet", Author = author, Series = series, SeriesOrder = 1 },
-                    new Work { Title = "Othello", Author = author, Series = series, SeriesOrder = 2 },
+                    new Work { Title = "Macbeth", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Series = series, SeriesOrder = 3 },
+                    new Work { Title = "Hamlet", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Series = series, SeriesOrder = 1 },
+                    new Work { Title = "Othello", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Series = series, SeriesOrder = 2 },
                 ],
             };
             db.Books.Add(book);
@@ -111,7 +111,7 @@ public class BookDetailViewModelTests
             var book = new Book
             {
                 Title = "Mort",
-                Works = [new Work { Title = "Mort", Author = author }],
+                Works = [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
                 Editions =
                 [
                     new Edition
@@ -252,7 +252,7 @@ public class BookDetailViewModelTests
             var book = new Book
             {
                 Title = "T",
-                Works = [new Work { Title = "T", Author = new Author { Name = "A" } }],
+                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
             };
             db.Books.Add(book);
             await db.SaveChangesAsync();
@@ -279,7 +279,7 @@ public class BookDetailViewModelTests
             var book = new Book
             {
                 Title = "T",
-                Works = [new Work { Title = "T", Author = new Author { Name = "A" } }],
+                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
                 Tags = [tag],
             };
             db.Books.Add(book);
@@ -307,7 +307,7 @@ public class BookDetailViewModelTests
             var book = new Book
             {
                 Title = "T",
-                Works = [new Work { Title = "T", Author = new Author { Name = "A" } }],
+                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
                 Tags = [tag],
             };
             db.Books.Add(book);
@@ -348,7 +348,7 @@ public class BookDetailViewModelTests
             var book = new Book
             {
                 Title = "B",
-                Works = [new Work { Title = "B", Author = new Author { Name = "A" } }],
+                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
                 Editions = [edition],
             };
             db.Books.Add(book);
@@ -380,7 +380,7 @@ public class BookDetailViewModelTests
             var book = new Book
             {
                 Title = "B",
-                Works = [new Work { Title = "B", Author = new Author { Name = "A" } }],
+                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
                 Editions = [edition],
             };
             db.Books.Add(book);
@@ -412,7 +412,7 @@ public class BookDetailViewModelTests
             var book = new Book
             {
                 Title = "T",
-                Works = [new Work { Title = "T", Author = new Author { Name = "A" } }],
+                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
                 Tags = [assigned],
             };
             db.Books.Add(book);
@@ -442,7 +442,7 @@ public class BookDetailViewModelTests
             Status = status,
             Rating = rating,
             Notes = notes,
-            Works = [new Work { Title = "Seed", Author = new Author { Name = "Seed Author" } }],
+            Works = [new Work { Title = "Seed", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Seed Author" }, Order = 0 }] }],
         };
         db.Books.Add(book);
         await db.SaveChangesAsync();
@@ -461,7 +461,7 @@ public class BookDetailViewModelTests
             var book = new Book
             {
                 Title = "Tagged",
-                Works = [new Work { Title = "Tagged", Author = author }],
+                Works = [new Work { Title = "Tagged", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
                 Tags =
                 [
                     new Tag { Name = "signed" },

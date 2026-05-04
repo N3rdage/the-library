@@ -51,8 +51,8 @@ public class SeriesMatchServiceTests
         {
             var someAuthor = new Author { Name = "Some Author" };
             db.Books.AddRange(
-                new Book { Title = "Book A", Works = [new Work { Title = "Book A", Author = someAuthor }] },
-                new Book { Title = "Book B", Works = [new Work { Title = "Book B", Author = someAuthor }] }
+                new Book { Title = "Book A", Works = [new Work { Title = "Book A", WorkAuthors = [new WorkAuthor { Author = someAuthor, Order = 0 }] }] },
+                new Book { Title = "Book B", Works = [new Work { Title = "Book B", WorkAuthors = [new WorkAuthor { Author = someAuthor, Order = 0 }] }] }
             );
             await db.SaveChangesAsync();
         }

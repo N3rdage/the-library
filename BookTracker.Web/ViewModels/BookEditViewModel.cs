@@ -76,8 +76,6 @@ public class BookEditViewModel(
             .Include(b => b.Works)
                 .ThenInclude(w => w.Genres)
             .Include(b => b.Works)
-                .ThenInclude(w => w.Author)
-            .Include(b => b.Works)
                 .ThenInclude(w => w.WorkAuthors)
                     .ThenInclude(wa => wa.Author)
             .FirstOrDefaultAsync(b => b.Id == bookId);
@@ -103,12 +101,12 @@ public class BookEditViewModel(
         {
             PrimaryWorkId = primary.Id;
             // Hydrate the chip list from WorkAuthors (Order ascending so the
-            // lead is first). Fallback to the legacy single Author if for some
-            // reason the join row is missing — shouldn'\''t happen post-backfill
-            // but defensive against corrupted state.
-            var authorNames = primary.WorkAuthors.Count > 0
-                ? primary.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name).ToList()
-                : [primary.Author.Name];
+            // lead is first). Every Work has at least one WorkAuthor row
+            // post-PR1 backfill, so no legacy fallback needed post-PR2.
+            var authorNames = primary.WorkAuthors
+                .OrderBy(wa => wa.Order)
+                .Select(wa => wa.Author.Name)
+                .ToList();
 
             PrimaryWorkInput = new WorkFormViewModel.WorkFormInput
             {
@@ -128,7 +126,7 @@ public class BookEditViewModel(
         }
 
         OtherWorks = book.Works.Skip(1)
-            .Select(w => new WorkSummary(w.Id, w.Title, w.Author.Name, w.Genres.Count))
+            .Select(w => new WorkSummary(w.Id, w.Title, WorkAuthorshipFormatter.Display(w), w.Genres.Count))
             .ToList();
 
         AssignedTags = book.Tags.Select(t => new TagItem(t.Id, t.Name)).ToList();
@@ -407,8 +405,8 @@ public class BookEditViewModel(
         var work = new Work
         {
             Title = NewWorkTitle.Trim(),
-            Author = author,
         };
+        AuthorResolver.AssignAuthors(work, [author]);
         book.Works.Add(work);
         await db.SaveChangesAsync();
 
@@ -434,7 +432,10 @@ public class BookEditViewModel(
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var book = await db.Books.Include(b => b.Works).FirstOrDefaultAsync(b => b.Id == bookId);
-        var work = await db.Works.Include(w => w.Author).Include(w => w.Genres).FirstOrDefaultAsync(w => w.Id == workId);
+        var work = await db.Works
+            .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
+            .Include(w => w.Genres)
+            .FirstOrDefaultAsync(w => w.Id == workId);
         if (book is null || work is null) return;
 
         // Defensive: exclude-by-bookId already filters attached Works out of
@@ -445,7 +446,7 @@ public class BookEditViewModel(
         book.Works.Add(work);
         await db.SaveChangesAsync();
 
-        OtherWorks.Add(new WorkSummary(work.Id, work.Title, work.Author.Name, work.Genres.Count));
+        OtherWorks.Add(new WorkSummary(work.Id, work.Title, WorkAuthorshipFormatter.Display(work), work.Genres.Count));
         AttachWorkQuery = "";
         AttachWorkResults = [];
         SuccessMessage = $"Attached \"{work.Title}\" to this book.";
@@ -488,7 +489,6 @@ public class BookEditViewModel(
             var book = await db.Books
                 .Include(b => b.Tags)
                 .Include(b => b.Works).ThenInclude(w => w.Genres)
-                .Include(b => b.Works).ThenInclude(w => w.Author)
                 .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
                 .FirstOrDefaultAsync(b => b.Id == bookId);
 

@@ -30,7 +30,7 @@ public class BookMergeServiceTests
     {
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "A" };
-        var work = new Work { Title = "T", Author = author };
+        var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = new Book { Title = "B", Works = [work] };
         var loser = new Book { Title = "B", Works = [work] };
         var loserEdition = new Edition
@@ -61,8 +61,8 @@ public class BookMergeServiceTests
     {
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "A" };
-        var sharedWork = new Work { Title = "Shared", Author = author };
-        var loserOnlyWork = new Work { Title = "LoserOnly", Author = author };
+        var sharedWork = new Work { Title = "Shared", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var loserOnlyWork = new Work { Title = "LoserOnly", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = new Book { Title = "B", Works = [sharedWork] };
         var loser = new Book { Title = "B", Works = [sharedWork, loserOnlyWork] };
         db.Books.AddRange(winner, loser);
@@ -82,7 +82,7 @@ public class BookMergeServiceTests
     {
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "A" };
-        var work = new Work { Title = "T", Author = author };
+        var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var tagA = new Tag { Name = "tag-a" };
         var tagB = new Tag { Name = "tag-b" };
         db.Tags.AddRange(tagA, tagB);
@@ -105,7 +105,7 @@ public class BookMergeServiceTests
     {
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "A" };
-        var work = new Work { Title = "T", Author = author };
+        var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = new Book
         {
             Title = "B",
@@ -142,7 +142,7 @@ public class BookMergeServiceTests
     {
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "A" };
-        var work = new Work { Title = "T", Author = author };
+        var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = new Book
         {
             Title = "B", Works = [work],
@@ -172,7 +172,7 @@ public class BookMergeServiceTests
     {
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "A" };
-        var work = new Work { Title = "T", Author = author };
+        var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = new Book { Title = "B", Works = [work], Rating = 0 };
         var loser = new Book { Title = "B", Works = [work], Rating = 3 };
         db.Books.AddRange(winner, loser);
@@ -189,7 +189,7 @@ public class BookMergeServiceTests
     {
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "A" };
-        var work = new Work { Title = "T", Author = author };
+        var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = new Book { Title = "B", Works = [work], Rating = 0 };
         var loser = new Book { Title = "B", Works = [work], Rating = 0 };
         db.Books.AddRange(winner, loser);
@@ -248,7 +248,7 @@ public class BookMergeServiceTests
     {
         using var db = _factory.CreateDbContext();
         var author = new Author { Name = "Shared" };
-        var work = new Work { Title = "T", Author = author };
+        var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = new Book { Title = "B", Works = [work] };
         var loser = new Book { Title = "B", Works = [work] };
         db.Books.AddRange(winner, loser);

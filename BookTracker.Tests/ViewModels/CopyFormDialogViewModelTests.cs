@@ -48,7 +48,7 @@ public class CopyFormDialogViewModelTests
             db.Books.Add(new Book
             {
                 Title = "B",
-                Works = [new Work { Title = "B", Author = new Author { Name = "A" } }],
+                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
                 Editions = [edition],
             });
             await db.SaveChangesAsync();
@@ -76,7 +76,7 @@ public class CopyFormDialogViewModelTests
             db.Books.Add(new Book
             {
                 Title = "B",
-                Works = [new Work { Title = "B", Author = new Author { Name = "A" } }],
+                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
                 Editions = [seedEdition],
             });
             await db.SaveChangesAsync();
@@ -110,7 +110,7 @@ public class CopyFormDialogViewModelTests
             db.Books.Add(new Book
             {
                 Title = "B",
-                Works = [new Work { Title = "B", Author = new Author { Name = "A" } }],
+                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
                 Editions = [edition],
             });
             await db.SaveChangesAsync();

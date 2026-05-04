@@ -80,7 +80,6 @@ public class AuthorResolverTests
 
         AuthorResolver.AssignAuthors(work, [preston, child]);
 
-        Assert.Equal(preston, work.Author);
         Assert.Equal(2, work.WorkAuthors.Count);
         Assert.Equal(preston, work.WorkAuthors[0].Author);
         Assert.Equal(0, work.WorkAuthors[0].Order);

@@ -24,12 +24,13 @@ public class HomeViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
             .Where(a => a.CanonicalAuthorId == null)
             .CountAsync();
 
-        // Group works by their author's canonical id (or own id if canonical),
-        // then look up the canonical name for display. A compendium contributes
-        // one tally per contained Work to its author's count.
-        var authorTotals = await db.Works
-            .Include(w => w.Author).ThenInclude(a => a.CanonicalAuthor)
-            .GroupBy(w => w.Author.CanonicalAuthorId ?? w.Author.Id)
+        // Group authorship records by the canonical author id (or own id if
+        // canonical), then look up the canonical name for display. Each
+        // WorkAuthor row contributes one tally — co-authored works contribute
+        // to BOTH credited authors (post-PR2 behaviour change vs the lead-only
+        // legacy where Preston + Child only counted toward the lead).
+        var authorTotals = await db.WorkAuthors
+            .GroupBy(wa => wa.Author.CanonicalAuthorId ?? wa.AuthorId)
             .Select(g => new { CanonicalId = g.Key, Count = g.Count() })
             .OrderByDescending(x => x.Count)
             .Take(10)

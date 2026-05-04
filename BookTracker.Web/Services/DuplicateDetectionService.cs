@@ -209,28 +209,32 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
         Dictionary<(int Lower, int Higher), IgnoredDuplicate>? ignored,
         CancellationToken ct)
     {
+        // Project an Author "fingerprint" — sorted, comma-joined Author IDs —
+        // so works with the same author SET (regardless of order or co-author
+        // count) bucket together for duplicate detection. Single-author works
+        // get a single-id fingerprint; "Preston, Child" works share a
+        // fingerprint distinct from a "Preston" solo work.
         var works = (await db.Works
-            .Include(w => w.Author)
             .Select(w => new
             {
                 w.Id,
                 w.Title,
                 w.Subtitle,
-                w.AuthorId,
-                AuthorName = w.Author.Name,
+                AuthorIdsJoined = string.Join(",", w.WorkAuthors.OrderBy(wa => wa.AuthorId).Select(wa => wa.AuthorId)),
+                AuthorNames = string.Join(", ", w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name)),
                 BookCount = w.Books.Count,
                 FirstPublishedDate = w.FirstPublishedDate
             })
             .ToListAsync(ct))
             .Select(w => new
             {
-                w.Id, w.Title, w.Subtitle, w.AuthorId, w.AuthorName, w.BookCount,
+                w.Id, w.Title, w.Subtitle, w.AuthorIdsJoined, w.AuthorNames, w.BookCount,
                 FirstPublishedYear = w.FirstPublishedDate?.Year
             })
             .ToList();
 
         var pairs = new List<WorkDuplicatePair>();
-        foreach (var group in works.GroupBy(w => (w.AuthorId, DuplicateNormalization.Title(w.Title))))
+        foreach (var group in works.GroupBy(w => (w.AuthorIdsJoined, DuplicateNormalization.Title(w.Title))))
         {
             if (string.IsNullOrEmpty(group.Key.Item2) || group.Count() < 2) continue;
 
@@ -241,8 +245,8 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
                 {
                     var a = members[i];
                     var b = members[j];
-                    var snapA = new WorkSnapshot(a.Id, a.Title, a.Subtitle, a.AuthorName, a.BookCount, a.FirstPublishedYear);
-                    var snapB = new WorkSnapshot(b.Id, b.Title, b.Subtitle, b.AuthorName, b.BookCount, b.FirstPublishedYear);
+                    var snapA = new WorkSnapshot(a.Id, a.Title, a.Subtitle, a.AuthorNames, a.BookCount, a.FirstPublishedYear);
+                    var snapB = new WorkSnapshot(b.Id, b.Title, b.Subtitle, b.AuthorNames, b.BookCount, b.FirstPublishedYear);
                     pairs.Add(new WorkDuplicatePair(
                         Lower: snapA,
                         Higher: snapB,
@@ -269,8 +273,12 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
                 EditionCount = b.Editions.Count,
                 CopyCount = b.Editions.SelectMany(e => e.Copies).Count(),
                 WorkIds = b.Works.Select(w => w.Id).ToList(),
-                FirstAuthorId = b.Works.Select(w => (int?)w.AuthorId).FirstOrDefault(),
-                FirstAuthorName = b.Works.Select(w => w.Author.Name).FirstOrDefault()
+                FirstAuthorId = b.Works
+                    .SelectMany(w => w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => (int?)wa.AuthorId))
+                    .FirstOrDefault(),
+                FirstAuthorName = b.Works
+                    .SelectMany(w => w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name))
+                    .FirstOrDefault()
             })
             .ToListAsync(ct);
 
