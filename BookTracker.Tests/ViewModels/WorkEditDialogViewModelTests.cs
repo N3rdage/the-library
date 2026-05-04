@@ -46,7 +46,7 @@ public class WorkEditDialogViewModelTests
         Assert.False(vm.NotFound);
         Assert.Equal("Mort", vm.Title);
         Assert.Equal("A Discworld Novel", vm.Subtitle);
-        Assert.Equal("Terry Pratchett", vm.AuthorName);
+        Assert.Equal(new[] { "Terry Pratchett" }, vm.AuthorNames);
         Assert.Equal("12 Nov 1987", vm.FirstPublishedDate);
         Assert.NotNull(vm.SelectedSeriesId);
         Assert.Equal(4, vm.SeriesOrder);
@@ -74,7 +74,7 @@ public class WorkEditDialogViewModelTests
         await vm.InitializeAsync(workId);
         vm.Title = "  Mort  ";
         vm.Subtitle = "A Discworld Novel";
-        vm.AuthorName = "Old Author";
+        vm.AuthorNames = ["Old Author"];
         vm.FirstPublishedDate = "1987";
         await vm.SaveAsync();
 
@@ -106,7 +106,7 @@ public class WorkEditDialogViewModelTests
 
         var vm = new WorkEditDialogViewModel(factory);
         await vm.InitializeAsync(workId);
-        vm.AuthorName = "Terry Pratchett";
+        vm.AuthorNames = ["Terry Pratchett"];
         await vm.SaveAsync();
 
         using var db2 = factory.CreateDbContext();
@@ -130,7 +130,7 @@ public class WorkEditDialogViewModelTests
 
         var vm = new WorkEditDialogViewModel(factory);
         await vm.InitializeAsync(workId);
-        vm.AuthorName = "Brand New Author";
+        vm.AuthorNames = ["Brand New Author"];
         await vm.SaveAsync();
 
         using var db2 = factory.CreateDbContext();

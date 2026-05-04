@@ -16,6 +16,7 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
     public DbSet<MaintenanceLog> MaintenanceLogs => Set<MaintenanceLog>();
     public DbSet<Work> Works => Set<Work>();
     public DbSet<Author> Authors => Set<Author>();
+    public DbSet<WorkAuthor> WorkAuthors => Set<WorkAuthor>();
     public DbSet<IgnoredDuplicate> IgnoredDuplicates => Set<IgnoredDuplicate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -102,11 +103,33 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .OnDelete(DeleteBehavior.SetNull);
 
         // Each Work belongs to exactly one Author entity (which itself may
-        // be a pen-name alias of another canonical Author).
+        // be a pen-name alias of another canonical Author). Legacy single-
+        // author FK kept during PR1 of the multi-author cutover; PR2 will
+        // drop this and switch reads to the WorkAuthors join below.
         modelBuilder.Entity<Work>()
             .HasOne(w => w.Author)
             .WithMany(a => a.Works)
             .HasForeignKey(w => w.AuthorId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // WorkAuthor join entity for the Work ↔ Author M:N relationship.
+        // Composite PK on (WorkId, AuthorId) — the same Author can't appear
+        // twice on a single Work. Cascade on Work delete (the join row only
+        // exists as long as the Work does); Restrict on Author delete (don't
+        // allow deleting an Author that's still credited on a Work).
+        modelBuilder.Entity<WorkAuthor>()
+            .HasKey(wa => new { wa.WorkId, wa.AuthorId });
+
+        modelBuilder.Entity<WorkAuthor>()
+            .HasOne(wa => wa.Work)
+            .WithMany(w => w.WorkAuthors)
+            .HasForeignKey(wa => wa.WorkId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<WorkAuthor>()
+            .HasOne(wa => wa.Author)
+            .WithMany(a => a.WorkAuthors)
+            .HasForeignKey(wa => wa.AuthorId)
             .OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<Author>()

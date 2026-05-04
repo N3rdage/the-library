@@ -176,7 +176,14 @@
                                     }
                                     @RenderSeriesSuggestion(row)
                                 </td>
-                                <td>@(row.Author ?? "\u2014")</td>
+                                <td>
+                                    @* Editable so multi-author and lookup-miss rows can be
+                                       fixed inline. Comma or "&" separates multiple authors \u2014
+                                       parsed at save time via AuthorResolver.ParseNames. *@
+                                    <input type="text" class="form-control form-control-sm"
+                                           @bind="row.Author"
+                                           placeholder="Author(s) \u2014 use commas for co-authors" />
+                                </td>
                                 <td>
                                     @RenderSource(row)
                                 </td>
@@ -225,7 +232,9 @@
                                            otherwise overflow the flex container. *@
                                         <div class="fw-semibold text-break">@(row.Title ?? "\u2014")</div>
                                     }
-                                    <div class="text-muted small text-break">@(row.Author ?? "\u2014")</div>
+                                    <input type="text" class="form-control form-control-sm mb-1"
+                                           @bind="row.Author"
+                                           placeholder="Author(s) \u2014 commas for co-authors" />
                                     <div class="font-monospace text-muted" style="font-size: 0.7rem;">@row.Isbn</div>
                                 </div>
                                 <button type="button" class="btn btn-outline-danger btn-sm flex-shrink-0 ms-2" @onclick="() => VM.RemoveRow(row)" title="Remove">

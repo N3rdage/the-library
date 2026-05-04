@@ -15,8 +15,13 @@ public class WorkFormViewModel
         [StringLength(300)]
         public string? Subtitle { get; set; }
 
-        [Required, StringLength(200)]
-        public string? Author { get; set; }
+        // Multi-author input — populated by MudAuthorPicker as the user adds
+        // chips. Save path requires at least one entry; uses the list to
+        // dual-write Work.Author (legacy lead-author FK) and Work.WorkAuthors
+        // (the new M:N join with Order). DataAnnotations [Required] doesn'\''t
+        // map cleanly to "non-empty list of non-empty strings", so this is
+        // validated at save time rather than via the validator.
+        public List<string> Authors { get; set; } = [];
 
         // Free-form text — accepts "1973", "Oct 1973", "12 Oct 1973",
         // "1973-10", "1973-10-12". Parsed into Work.FirstPublishedDate +

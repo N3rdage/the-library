@@ -27,4 +27,7 @@ public class Author
     public List<Author> Aliases { get; set; } = [];
 
     public List<Work> Works { get; set; } = [];
+
+    /// <summary>Multi-author join entries — every Work this Author is credited on, including co-authored ones.</summary>
+    public List<WorkAuthor> WorkAuthors { get; set; } = [];
 }

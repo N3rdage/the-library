@@ -163,13 +163,20 @@ public class BulkAddViewModel(
         }
 
         var bookTitle = (row.Title ?? $"Unknown book — {row.Isbn}").Trim();
-        var author = await AuthorResolver.FindOrCreateAsync(row.Author ?? "Unknown", db);
+        // row.Author can be a comma- or ampersand-separated list of names from
+        // the inline cell (Drew typing "Preston, Lincoln Child"). ParseNames
+        // splits + trims; the fallback to "Unknown" matches the prior single-
+        // author behaviour for not-found / blank rows.
+        var authorNames = AuthorResolver.ParseNames(row.Author);
+        if (authorNames.Count == 0) authorNames = ["Unknown"];
+        var authors = await AuthorResolver.FindOrCreateAllAsync(authorNames, db);
         var work = new Work
         {
             Title = bookTitle,
             Subtitle = row.Subtitle,
-            Author = author,
         };
+        // Dual-write: Work.Author = lead (legacy compat); Work.WorkAuthors = all.
+        AuthorResolver.AssignAuthors(work, authors);
 
         // Series attachment if the user accepted the suggestion on this row.
         // Mirrors BookAddViewModel.SaveAsync: existing local series wins via

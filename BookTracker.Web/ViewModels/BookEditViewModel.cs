@@ -77,6 +77,9 @@ public class BookEditViewModel(
                 .ThenInclude(w => w.Genres)
             .Include(b => b.Works)
                 .ThenInclude(w => w.Author)
+            .Include(b => b.Works)
+                .ThenInclude(w => w.WorkAuthors)
+                    .ThenInclude(wa => wa.Author)
             .FirstOrDefaultAsync(b => b.Id == bookId);
 
         if (book is null)
@@ -99,11 +102,19 @@ public class BookEditViewModel(
         if (primary is not null)
         {
             PrimaryWorkId = primary.Id;
+            // Hydrate the chip list from WorkAuthors (Order ascending so the
+            // lead is first). Fallback to the legacy single Author if for some
+            // reason the join row is missing — shouldn'\''t happen post-backfill
+            // but defensive against corrupted state.
+            var authorNames = primary.WorkAuthors.Count > 0
+                ? primary.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name).ToList()
+                : [primary.Author.Name];
+
             PrimaryWorkInput = new WorkFormViewModel.WorkFormInput
             {
                 Title = primary.Title,
                 Subtitle = primary.Subtitle,
-                Author = primary.Author.Name,
+                Authors = authorNames,
                 FirstPublishedDate = PartialDateParser.Format(primary.FirstPublishedDate, primary.FirstPublishedDatePrecision),
             };
             SelectedGenreIds = primary.Genres.Select(g => g.Id).ToList();
@@ -478,6 +489,7 @@ public class BookEditViewModel(
                 .Include(b => b.Tags)
                 .Include(b => b.Works).ThenInclude(w => w.Genres)
                 .Include(b => b.Works).ThenInclude(w => w.Author)
+                .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
                 .FirstOrDefaultAsync(b => b.Id == bookId);
 
             if (book is null) { NotFound = true; return; }
@@ -505,7 +517,18 @@ public class BookEditViewModel(
             {
                 primary.Title = PrimaryWorkInput.Title!.Trim();
                 primary.Subtitle = string.IsNullOrWhiteSpace(PrimaryWorkInput.Subtitle) ? null : PrimaryWorkInput.Subtitle.Trim();
-                primary.Author = await AuthorResolver.FindOrCreateAsync(PrimaryWorkInput.Author!, db);
+
+                // Need WorkAuthors loaded for the dual-write to replace the
+                // existing chip set rather than appending. The Include chain
+                // in InitializeAsync covers the read; the Save reload below
+                // mirrors it so AssignAuthors can Clear() safely.
+                var authors = await AuthorResolver.FindOrCreateAllAsync(PrimaryWorkInput.Authors, db);
+                if (authors.Count == 0)
+                {
+                    throw new InvalidOperationException("At least one author is required to save a Work.");
+                }
+                AuthorResolver.AssignAuthors(primary, authors);
+
                 var firstPub = PartialDateParser.TryParse(PrimaryWorkInput.FirstPublishedDate) ?? PartialDate.Empty;
                 primary.FirstPublishedDate = firstPub.Date;
                 primary.FirstPublishedDatePrecision = firstPub.Precision;

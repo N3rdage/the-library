@@ -25,19 +25,14 @@
                               Label="Subtitle"
                               Variant="Variant.Outlined"
                               Margin="Margin.Dense" />
-                <MudAutocomplete T="string"
-                                 @bind-Value="VM.AuthorName"
-                                 SearchFunc="VM.SearchAuthorsAsync"
-                                 Label="Author"
-                                 Required="true"
-                                 RequiredError="Author is required."
-                                 Variant="Variant.Outlined"
-                                 Margin="Margin.Dense"
-                                 CoerceValue="true"
-                                 CoerceText="true"
-                                 ResetValueOnEmptyText="false"
-                                 MinCharacters="0"
-                                 HelperText="Type to find existing or create new." />
+                <div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Author(s)</MudText>
+                    @* Multi-author chip list. Lead chip = legacy AuthorId during
+                       the PR1/PR2 cutover. *@
+                    <MudAuthorPicker Authors="VM.AuthorNames"
+                                     AuthorsChanged="list => VM.AuthorNames = list"
+                                     Label="Add author" />
+                </div>
                 <MudTextField T="string"
                               @bind-Value="VM.FirstPublishedDate"
                               Label="First published"
@@ -78,7 +73,7 @@
         <MudButton OnClick="Cancel">Cancel</MudButton>
         <MudButton Color="Color.Primary"
                    Variant="Variant.Filled"
-                   Disabled="@(VM.NotFound || string.IsNullOrWhiteSpace(VM.Title) || string.IsNullOrWhiteSpace(VM.AuthorName) || saving)"
+                   Disabled="@(VM.NotFound || string.IsNullOrWhiteSpace(VM.Title) || VM.AuthorNames.Count == 0 || saving)"
                    OnClick="SaveAsync">
             @(saving ? "Saving..." : "Save")
         </MudButton>
