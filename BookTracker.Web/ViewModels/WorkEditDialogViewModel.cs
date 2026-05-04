@@ -16,7 +16,10 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
 
     public string Title { get; set; } = "";
     public string? Subtitle { get; set; }
-    public string AuthorName { get; set; } = "";
+    // Multi-author chip list — populated from WorkAuthors on init, dual-
+    // written on save. Lead = AuthorNames[0] for legacy Work.AuthorId compat
+    // during the PR1/PR2 cutover.
+    public List<string> AuthorNames { get; set; } = [];
     public string FirstPublishedDate { get; set; } = "";
     public int? SelectedSeriesId { get; set; }
     public int? SeriesOrder { get; set; }
@@ -31,13 +34,19 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
         await using var db = await dbFactory.CreateDbContextAsync();
         var work = await db.Works
             .Include(w => w.Author)
+            .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .Include(w => w.Genres)
             .FirstOrDefaultAsync(w => w.Id == workId);
         if (work is null) { NotFound = true; return; }
 
         Title = work.Title;
         Subtitle = work.Subtitle;
-        AuthorName = work.Author.Name;
+        // Order ascending so the lead author shows first in the chip list.
+        // Fallback to the legacy single Author if WorkAuthors is empty —
+        // shouldn'\''t happen post-backfill but defensive.
+        AuthorNames = work.WorkAuthors.Count > 0
+            ? work.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name).ToList()
+            : [work.Author.Name];
         FirstPublishedDate = PartialDateParser.Format(work.FirstPublishedDate, work.FirstPublishedDatePrecision);
         SelectedSeriesId = work.SeriesId;
         SeriesOrder = work.SeriesOrder;
@@ -71,18 +80,22 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
 
     public async Task SaveAsync()
     {
-        if (NotFound || string.IsNullOrWhiteSpace(Title) || string.IsNullOrWhiteSpace(AuthorName)) return;
+        if (NotFound || string.IsNullOrWhiteSpace(Title) || AuthorNames.All(string.IsNullOrWhiteSpace)) return;
 
         await using var db = await dbFactory.CreateDbContextAsync();
         var work = await db.Works
             .Include(w => w.Author)
+            .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .Include(w => w.Genres)
             .FirstOrDefaultAsync(w => w.Id == WorkId);
         if (work is null) return;
 
         work.Title = Title.Trim();
         work.Subtitle = string.IsNullOrWhiteSpace(Subtitle) ? null : Subtitle.Trim();
-        work.Author = await AuthorResolver.FindOrCreateAsync(AuthorName, db);
+
+        var authors = await AuthorResolver.FindOrCreateAllAsync(AuthorNames, db);
+        if (authors.Count == 0) return;
+        AuthorResolver.AssignAuthors(work, authors);
 
         var parsed = PartialDateParser.TryParse(FirstPublishedDate) ?? PartialDate.Empty;
         work.FirstPublishedDate = parsed.Date;

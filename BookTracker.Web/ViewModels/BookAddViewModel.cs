@@ -131,7 +131,13 @@ public class BookAddViewModel(
             if (string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl)) BookInput.DefaultCoverArtUrl = result.CoverUrl;
             if (string.IsNullOrWhiteSpace(WorkInput.Title)) WorkInput.Title = result.Title ?? "";
             if (string.IsNullOrWhiteSpace(WorkInput.Subtitle)) WorkInput.Subtitle = result.Subtitle;
-            if (string.IsNullOrWhiteSpace(WorkInput.Author)) WorkInput.Author = result.Author ?? "";
+            // Lookup gives a single author string — seed the chip list with it
+            // when empty. User can add additional co-authors via the picker
+            // before saving.
+            if (WorkInput.Authors.Count == 0 && !string.IsNullOrWhiteSpace(result.Author))
+            {
+                WorkInput.Authors = [result.Author];
+            }
             if (string.IsNullOrWhiteSpace(EditionInput.Isbn)) EditionInput.Isbn = result.Isbn;
             if (string.IsNullOrWhiteSpace(EditionInput.Publisher)) EditionInput.Publisher = result.Publisher;
             if (string.IsNullOrWhiteSpace(EditionInput.DatePrinted) && result.DatePrinted is DateOnly d)
@@ -246,7 +252,10 @@ public class BookAddViewModel(
         if (string.IsNullOrWhiteSpace(BookInput.Title)) BookInput.Title = candidate.Title ?? "";
         if (string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl)) BookInput.DefaultCoverArtUrl = candidate.CoverUrl;
         if (string.IsNullOrWhiteSpace(WorkInput.Title)) WorkInput.Title = candidate.Title ?? "";
-        if (string.IsNullOrWhiteSpace(WorkInput.Author)) WorkInput.Author = candidate.Author ?? "";
+        if (WorkInput.Authors.Count == 0 && !string.IsNullOrWhiteSpace(candidate.Author))
+        {
+            WorkInput.Authors = [candidate.Author];
+        }
         // first_publish_year is the WORK's first year — perfect fit for
         // Work.FirstPublishedDate; not the edition's print date. We only
         // know the year so format it as such.
@@ -289,17 +298,24 @@ public class BookAddViewModel(
                 }
             }
 
-            var author = await AuthorResolver.FindOrCreateAsync(WorkInput.Author!, db);
+            var authors = await AuthorResolver.FindOrCreateAllAsync(WorkInput.Authors, db);
+            if (authors.Count == 0)
+            {
+                throw new InvalidOperationException("At least one author is required to save a Work.");
+            }
             var firstPub = PartialDateParser.TryParse(WorkInput.FirstPublishedDate) ?? PartialDate.Empty;
             var work = new Work
             {
                 Title = (WorkInput.Title ?? BookInput.Title)!.Trim(),
                 Subtitle = string.IsNullOrWhiteSpace(WorkInput.Subtitle) ? null : WorkInput.Subtitle!.Trim(),
-                Author = author,
                 FirstPublishedDate = firstPub.Date,
                 FirstPublishedDatePrecision = firstPub.Precision,
                 Genres = selectedGenres,
             };
+            // Dual-write: Work.Author = lead chip (legacy FK compat); Work.WorkAuthors
+            // = all chips with Order ascending. PR2 will drop Author/AuthorId and
+            // switch reads to the join.
+            AuthorResolver.AssignAuthors(work, authors);
 
             // Attach to the accepted series, if any. AcceptedSeriesId points at
             // an existing local Series row; AcceptedSeriesName (without an Id)

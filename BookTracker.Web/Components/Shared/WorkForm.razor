@@ -8,9 +8,14 @@
                 <ValidationMessage For="() => Input.Title" class="text-danger small" />
             </div>
             <div class="col-md-4">
-                <label class="form-label">Author</label>
-                <InputText @bind-Value="Input.Author" class="form-control" />
-                <ValidationMessage For="() => Input.Author" class="text-danger small" />
+                <label class="form-label">Author(s)</label>
+                @* Multi-author chip picker — list of names; first chip is the
+                   lead author (Work.AuthorId for legacy compat in PR1).
+                   Validation lives in the save path because DataAnnotations
+                   doesn'\''t map "non-empty list of non-empty strings" cleanly. *@
+                <MudAuthorPicker Authors="Input.Authors"
+                                 AuthorsChanged="list => Input.Authors = list"
+                                 Label="Add author" />
             </div>
             <div class="col-md-8">
                 <label class="form-label">Subtitle</label>

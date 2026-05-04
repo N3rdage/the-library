@@ -89,7 +89,7 @@ public class BookAddViewModelTests
         // WorkInput (for the auto-created primary Work).
         Assert.Equal("And Then There Were None", vm.BookInput.Title);
         Assert.Equal("And Then There Were None", vm.WorkInput.Title);
-        Assert.Equal("Agatha Christie", vm.WorkInput.Author);
+        Assert.Equal(new[] { "Agatha Christie" }, vm.WorkInput.Authors);
         Assert.Equal("https://example.invalid/cover.jpg", vm.BookInput.DefaultCoverArtUrl);
         // Year-only candidate → year-precision text in the input.
         Assert.Equal("1939", vm.WorkInput.FirstPublishedDate);
@@ -101,7 +101,7 @@ public class BookAddViewModelTests
         var vm = CreateVm();
         vm.BookInput.Title = "User typed this";
         vm.WorkInput.Title = "User typed this";
-        vm.WorkInput.Author = "User author";
+        vm.WorkInput.Authors = ["User author"];
         vm.WorkInput.FirstPublishedDate = "15 Jun 1939";
 
         var candidate = new BookSearchCandidate(
@@ -116,7 +116,7 @@ public class BookAddViewModelTests
         await vm.ApplyCandidateAsync(candidate, CreateGenrePicker());
 
         Assert.Equal("User typed this", vm.BookInput.Title);
-        Assert.Equal("User author", vm.WorkInput.Author);
+        Assert.Equal(new[] { "User author" }, vm.WorkInput.Authors);
         Assert.Equal("15 Jun 1939", vm.WorkInput.FirstPublishedDate);
     }
 
@@ -126,7 +126,7 @@ public class BookAddViewModelTests
         var vm = CreateVm();
         vm.BookInput.Title = "And Then There Were None";
         vm.WorkInput.Title = "And Then There Were None";
-        vm.WorkInput.Author = "Agatha Christie";
+        vm.WorkInput.Authors = ["Agatha Christie"];
         vm.EditionInput.Isbn = "";
 
         var ok = await vm.SaveAsync(new List<int>());
@@ -146,13 +146,13 @@ public class BookAddViewModelTests
         var vm1 = CreateVm();
         vm1.BookInput.Title = "Book A";
         vm1.WorkInput.Title = "Book A";
-        vm1.WorkInput.Author = "Author A";
+        vm1.WorkInput.Authors = ["Author A"];
         Assert.NotNull(await vm1.SaveAsync(new List<int>()));
 
         var vm2 = CreateVm();
         vm2.BookInput.Title = "Book B";
         vm2.WorkInput.Title = "Book B";
-        vm2.WorkInput.Author = "Author B";
+        vm2.WorkInput.Authors = ["Author B"];
         Assert.NotNull(await vm2.SaveAsync(new List<int>()));
 
         using var db = _factory.CreateDbContext();
@@ -185,7 +185,7 @@ public class BookAddViewModelTests
         // Form fields stay empty — the prefill path is skipped because the
         // user is being told "you already own this book" instead.
         Assert.Null(vm.BookInput.Title);
-        Assert.Null(vm.WorkInput.Author);
+        Assert.Empty(vm.WorkInput.Authors);
         // Open Library shouldn't have been hit.
         await _lookup.DidNotReceiveWithAnyArgs().LookupByIsbnAsync(default!, default);
     }
@@ -224,7 +224,7 @@ public class BookAddViewModelTests
         var vm = CreateVm();
         vm.BookInput.Title = "The Hobbit";
         vm.WorkInput.Title = "The Hobbit";
-        vm.WorkInput.Author = "J.R.R. Tolkien";
+        vm.WorkInput.Authors = ["J.R.R. Tolkien"];
         vm.WorkInput.FirstPublishedDate = "21 Sep 1937";
         vm.EditionInput.Isbn = "9780345391803";
 
@@ -238,6 +238,38 @@ public class BookAddViewModelTests
         Assert.Equal("J.R.R. Tolkien", work.Author.Name);
         Assert.Equal(new DateOnly(1937, 9, 21), work.FirstPublishedDate);
         Assert.Equal(DatePrecision.Day, work.FirstPublishedDatePrecision);
+    }
+
+    [Fact]
+    public async Task SaveAsync_MultipleAuthors_DualWritesLeadAndJoin()
+    {
+        // Multi-author cutover PR1: save path sets Work.Author = lead chip
+        // (legacy AuthorId for backwards compat) AND populates Work.WorkAuthors
+        // with all chips, Order ascending. Co-author becomes a real Author row
+        // via find-or-create.
+        var vm = CreateVm();
+        vm.BookInput.Title = "Relic";
+        vm.WorkInput.Title = "Relic";
+        vm.WorkInput.Authors = ["Douglas Preston", "Lincoln Child"];
+        vm.EditionInput.Isbn = "9780812543261";
+
+        var ok = await vm.SaveAsync(new List<int>());
+
+        Assert.NotNull(ok);
+        using var db = _factory.CreateDbContext();
+        var work = db.Works
+            .Include(w => w.Author)
+            .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
+            .Single();
+        Assert.Equal("Douglas Preston", work.Author.Name);
+        Assert.Equal(2, work.WorkAuthors.Count);
+        var ordered = work.WorkAuthors.OrderBy(wa => wa.Order).ToList();
+        Assert.Equal("Douglas Preston", ordered[0].Author.Name);
+        Assert.Equal(0, ordered[0].Order);
+        Assert.Equal("Lincoln Child", ordered[1].Author.Name);
+        Assert.Equal(1, ordered[1].Order);
+        // Both authors exist as canonical Author rows.
+        Assert.Equal(2, db.Authors.Count(a => a.Name == "Douglas Preston" || a.Name == "Lincoln Child"));
     }
 
     [Fact]

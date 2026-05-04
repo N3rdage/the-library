@@ -1,0 +1,102 @@
+@* Multi-author input with autocomplete + chips. Used on Add Book, the
+   /edit page's Primary Work form, and the Work edit dialog (BookDetail
+   modal). Mirrors the MudAutocomplete + chips shape from MudGenrePicker
+   but flatter — no taxonomy, just a list of names with find-or-create-on-
+   type semantics.
+
+   Two-way binding via `Authors` + `AuthorsChanged`:
+       <MudAuthorPicker Authors="vm.Authors"
+                        AuthorsChanged="list => vm.Authors = list" />
+
+   PR1 of the multi-author cutover (#14): the picker collects names; the
+   save path resolves each via AuthorResolver.FindOrCreateAllAsync and
+   dual-writes (Work.Author = lead for legacy compat, Work.WorkAuthors =
+   all entries with Order). PR2 will switch reads to the join. *@
+
+@using BookTracker.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<BookTrackerDbContext> DbFactory
+
+<MudPaper Outlined="true" Class="pa-2">
+    @if (Authors.Count > 0)
+    {
+        <div class="d-flex flex-wrap gap-1 mb-2">
+            @foreach (var name in Authors)
+            {
+                var captured = name;
+                <MudChip T="string"
+                         Text="@captured"
+                         Variant="Variant.Filled"
+                         Color="Color.Primary"
+                         Size="Size.Small"
+                         OnClose="@(() => RemoveAsync(captured))" />
+            }
+        </div>
+    }
+    <MudAutocomplete T="string"
+                     Value="@newAuthor"
+                     ValueChanged="OnValueChangedAsync"
+                     SearchFunc="SearchAsync"
+                     Label="@Label"
+                     Variant="Variant.Outlined"
+                     Margin="Margin.Dense"
+                     CoerceValue="true"
+                     CoerceText="true"
+                     ResetValueOnEmptyText="false"
+                     MinCharacters="0"
+                     ShowProgressIndicator="true"
+                     HelperText="@HelperText" />
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public List<string> Authors { get; set; } = [];
+    [Parameter] public EventCallback<List<string>> AuthorsChanged { get; set; }
+    [Parameter] public string Label { get; set; } = "Author";
+    [Parameter] public string HelperText { get; set; } = "Type to find existing or create new. Pick an item or press Enter to add.";
+
+    private string? newAuthor;
+
+    private async Task<IEnumerable<string>> SearchAsync(string query, CancellationToken ct)
+    {
+        // Lowercased client-side before the LINQ Where so EF InMemory (case-
+        // sensitive) and SQL Server (case-insensitive default collation) agree
+        // on substring matching. Mirrors WorkEditDialogViewModel.SearchAuthorsAsync.
+        var q = (query ?? "").Trim().ToLower();
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var matches = db.Authors.AsQueryable();
+        if (!string.IsNullOrEmpty(q))
+        {
+            matches = matches.Where(a => a.Name.ToLower().Contains(q));
+        }
+
+        var existing = Authors.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return await matches
+            .OrderBy(a => a.Name)
+            .Select(a => a.Name)
+            .Where(n => !existing.Contains(n))
+            .Take(20)
+            .ToListAsync(ct);
+    }
+
+    private async Task OnValueChangedAsync(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+        var trimmed = value.Trim().TrimEnd(',', ';', '&').Trim();
+        if (string.IsNullOrEmpty(trimmed)) return;
+
+        // Case-insensitive de-dup on the existing list — typing an author
+        // already in the chip set should be a no-op rather than a duplicate.
+        if (!Authors.Any(a => a.Equals(trimmed, StringComparison.OrdinalIgnoreCase)))
+        {
+            Authors.Add(trimmed);
+            await AuthorsChanged.InvokeAsync(Authors);
+        }
+        newAuthor = null;
+    }
+
+    private async Task RemoveAsync(string name)
+    {
+        Authors.RemoveAll(a => a.Equals(name, StringComparison.OrdinalIgnoreCase));
+        await AuthorsChanged.InvokeAsync(Authors);
+    }
+}
