@@ -1,0 +1,28 @@
+@*
+    Shared 404 markup. Rendered in two places:
+      1. /NotFound page (Pages/NotFound.razor) — what the server-side
+         UseStatusCodePagesWithReExecute middleware lands on for cold
+         loads of bad URLs (correct HTTP 404 status).
+      2. Routes.razor <NotFound> template — what Blazor's client-side
+         router renders when an in-app navigation hits an unmatched
+         route, so the user doesn't briefly see (1) then have Blazor
+         fall back to the framework's default blank "Not found" text.
+
+    Both code paths land on the same friendly view.
+*@
+
+<div class="container py-5">
+    <div class="card shadow-sm mx-auto" style="max-width: 600px;">
+        <div class="card-body text-center p-4 p-md-5">
+            <img src="/icons/icon.svg" alt="" width="120" height="120" class="mb-4" />
+            <h1 class="h3 mb-3">Looks like that page wandered off the shelf</h1>
+            <p class="text-muted mb-4">
+                We couldn't find the page you were looking for. It might have moved, or never existed.
+            </p>
+            <div class="d-flex gap-2 justify-content-center flex-wrap">
+                <a href="/" class="btn btn-primary">Home</a>
+                <a href="/books" class="btn btn-outline-secondary">Library</a>
+            </div>
+        </div>
+    </div>
+</div>

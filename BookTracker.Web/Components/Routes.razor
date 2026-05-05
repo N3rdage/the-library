@@ -1,8 +1,24 @@
 @using BookTracker.Web.Components.Layout
+@using BookTracker.Web.Components.Shared
 
 <Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
         <RouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)" />
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
+    <NotFound>
+        @*
+            Stops the framework default blank "Not found" text from
+            briefly replacing the server-rendered /NotFound page after
+            Blazor's client-side router takes over a re-executed request
+            whose URL doesn't match any @page directive. Wraps in
+            LayoutView because <NotFound> bypasses RouteView's
+            DefaultLayout, so without it the friendly content would
+            render outside MainLayout.
+        *@
+        <PageTitle>Page not found - BookTracker</PageTitle>
+        <LayoutView Layout="typeof(MainLayout)">
+            <NotFoundContent />
+        </LayoutView>
+    </NotFound>
 </Router>
