@@ -5,6 +5,7 @@
 - [Delete merged branches](feedback_delete_merged_branch.md) — delete local feature branch after pulling the merge into main.
 - [Branch from main](feedback_branch_from_main.md) — always start a new branch from a fresh `main` pull; never from a sibling branch (squash-merge would bundle content).
 - [Use PowerShell tool](feedback_use_powershell.md) — default shell for this project is PowerShell 7, not Bash; CLAUDE.md mandates Windows shell and Drew works in PowerShell.
+- [Avoid encoded PowerShell args](feedback_avoid_encoded_powershell.md) — long PS here-strings get base64-encoded by the tool layer and trigger Drew's security scanner. For multi-line commit messages, prefer Bash heredoc or temp file + `git commit -F`.
 - [Ask about mobile priority](feedback_mobile_priority.md) — when planning features, ask if mobile+web or web-only.
 - [Feature planning conventions](feedback_planning_conventions.md) — always plan first, PR breakdown for medium+, flag 5+ file changes as complex.
 - [Testing conventions](feedback_testing_conventions.md) — minimal tests for new logic to prevent regression; skip for pure markup.
