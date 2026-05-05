@@ -82,14 +82,21 @@ public class WorkSearchServiceTests
     private async Task SeedWorksAsync(params (string Title, string AuthorName)[] data)
     {
         using var db = _factory.CreateDbContext();
+        // Pre-build distinct authors once — `FirstOrDefault` on a yet-to-save
+        // entity wouldn'\''t see in-memory pending entities, so successive
+        // iterations would create duplicate Author rows that conflict on the
+        // unique Name index under real SQL.
+        var authorsByName = data
+            .Select(d => d.AuthorName)
+            .Distinct()
+            .ToDictionary(name => name, name => new Author { Name = name });
+
         foreach (var (title, authorName) in data)
         {
-            var author = db.Authors.FirstOrDefault(a => a.Name == authorName)
-                         ?? new Author { Name = authorName };
             db.Books.Add(new Book
             {
                 Title = title,
-                Works = [new Work { Title = title, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]
+                Works = [new Work { Title = title, WorkAuthors = [new WorkAuthor { Author = authorsByName[authorName], Order = 0 }] }]
             });
         }
         await db.SaveChangesAsync();

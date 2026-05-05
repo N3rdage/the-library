@@ -11,11 +11,11 @@ public class GenrePickerViewModelTests
         var factory = new TestDbContextFactory();
         using (var db = factory.CreateDbContext())
         {
-            var fantasy = new Genre { Id = 1, Name = "Fantasy" };
+            var fantasy = new Genre { Name = "Fantasy" };
             db.Genres.Add(fantasy);
-            db.Genres.Add(new Genre { Id = 2, Name = "High Fantasy", ParentGenreId = 1 });
-            db.Genres.Add(new Genre { Id = 3, Name = "Urban Fantasy", ParentGenreId = 1 });
-            db.Genres.Add(new Genre { Id = 4, Name = "Science Fiction" });
+            db.Genres.Add(new Genre { Name = "High Fantasy", ParentGenre = fantasy });
+            db.Genres.Add(new Genre { Name = "Urban Fantasy", ParentGenre = fantasy });
+            db.Genres.Add(new Genre { Name = "Science Fiction" });
             await db.SaveChangesAsync();
         }
 
@@ -31,41 +31,49 @@ public class GenrePickerViewModelTests
     public async Task ToggleGenre_SelectingChild_AutoSelectsParent()
     {
         var factory = new TestDbContextFactory();
+        int parentId, childId;
         using (var db = factory.CreateDbContext())
         {
-            db.Genres.Add(new Genre { Id = 1, Name = "Fantasy" });
-            db.Genres.Add(new Genre { Id = 2, Name = "High Fantasy", ParentGenreId = 1 });
+            var fantasy = new Genre { Name = "Fantasy" };
+            var highFantasy = new Genre { Name = "High Fantasy", ParentGenre = fantasy };
+            db.Genres.AddRange(fantasy, highFantasy);
             await db.SaveChangesAsync();
+            parentId = fantasy.Id;
+            childId = highFantasy.Id;
         }
 
         var vm = new GenrePickerViewModel(factory);
         await vm.InitializeAsync();
 
-        vm.ToggleGenre(2, true);
+        vm.ToggleGenre(childId, true);
 
-        Assert.Contains(2, vm.SelectedGenreIds);
-        Assert.Contains(1, vm.SelectedGenreIds); // parent auto-selected
+        Assert.Contains(childId, vm.SelectedGenreIds);
+        Assert.Contains(parentId, vm.SelectedGenreIds); // parent auto-selected
     }
 
     [Fact]
     public async Task ToggleGenre_UnselectingParent_LeavesChildrenAlone()
     {
         var factory = new TestDbContextFactory();
+        int parentId, childId;
         using (var db = factory.CreateDbContext())
         {
-            db.Genres.Add(new Genre { Id = 1, Name = "Fantasy" });
-            db.Genres.Add(new Genre { Id = 2, Name = "High Fantasy", ParentGenreId = 1 });
+            var fantasy = new Genre { Name = "Fantasy" };
+            var highFantasy = new Genre { Name = "High Fantasy", ParentGenre = fantasy };
+            db.Genres.AddRange(fantasy, highFantasy);
             await db.SaveChangesAsync();
+            parentId = fantasy.Id;
+            childId = highFantasy.Id;
         }
 
         var vm = new GenrePickerViewModel(factory);
         await vm.InitializeAsync();
-        vm.ToggleGenre(2, true); // selects child + parent
+        vm.ToggleGenre(childId, true); // selects child + parent
 
-        vm.ToggleGenre(1, false); // unselect parent
+        vm.ToggleGenre(parentId, false); // unselect parent
 
-        Assert.DoesNotContain(1, vm.SelectedGenreIds);
-        Assert.Contains(2, vm.SelectedGenreIds); // child stays
+        Assert.DoesNotContain(parentId, vm.SelectedGenreIds);
+        Assert.Contains(childId, vm.SelectedGenreIds); // child stays
     }
 
     [Theory]

@@ -106,12 +106,16 @@ public class EditionFormatBackfillServiceTests
     private async Task SeedEditionsAsync(params (string Isbn, BookFormat Format)[] editions)
     {
         using var db = _factory.CreateDbContext();
+        // Single shared Author across all books — Author.Name has a unique
+        // index, so creating `new Author { Name = "Test" }` per iteration
+        // would conflict on the second insert under real SQL.
+        var sharedAuthor = new Author { Name = "Test" };
         foreach (var (isbn, format) in editions)
         {
             db.Books.Add(new Book
             {
                 Title = "Test",
-                Works = [new Work { Title = "Test", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Test" }, Order = 0 }] }],
+                Works = [new Work { Title = "Test", WorkAuthors = [new WorkAuthor { Author = sharedAuthor, Order = 0 }] }],
                 Editions = [new Edition { Isbn = isbn, Format = format, Copies = [new Copy { Condition = BookCondition.Good }] }]
             });
         }
