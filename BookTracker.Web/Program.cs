@@ -37,7 +37,11 @@ builder.Services.Configure<TroveOptions>(
 
 builder.Services.AddHttpClient<IBookLookupService, BookLookupService>(client =>
 {
-    client.Timeout = TimeSpan.FromSeconds(10);
+    // Open Library can be slow under load — 10s was on the edge and caused
+    // 2-3 of 5 lookups to time out in real bulk-scan use. 25s gives the
+    // upstream APIs more headroom while still capping the worst case so a
+    // hung connection doesn't block the UI indefinitely.
+    client.Timeout = TimeSpan.FromSeconds(25);
     client.DefaultRequestHeaders.UserAgent.ParseAdd("BookTracker/0.1 (+github.com/N3rdage/the-library)");
 });
 

@@ -172,17 +172,17 @@
                                     }
                                     else
                                     {
-                                        @(row.Title ?? "\u2014")
+                                        @(row.Title ?? "—")
                                     }
                                     @RenderSeriesSuggestion(row)
                                 </td>
                                 <td>
                                     @* Editable so multi-author and lookup-miss rows can be
-                                       fixed inline. Comma or "&" separates multiple authors \u2014
+                                       fixed inline. Comma or "&" separates multiple authors —
                                        parsed at save time via AuthorResolver.ParseNames. *@
                                     <input type="text" class="form-control form-control-sm"
                                            @bind="row.Author"
-                                           placeholder="Author(s) \u2014 use commas for co-authors" />
+                                           placeholder="Author(s) — use commas for co-authors" />
                                 </td>
                                 <td>
                                     @RenderSource(row)
@@ -224,17 +224,17 @@
                                     }
                                     else
                                     {
-                                        @* Wrap multi-line on mobile rather than truncating with ellipsis \u2014
+                                        @* Wrap multi-line on mobile rather than truncating with ellipsis —
                                            Open Library titles sometimes include format/contributor noise
                                            ("by X (Author) ON Compact Disc") and ellipsis hides useful
                                            context. text-break handles long unbroken substrings (URLs,
                                            glued-up titles like "TheArt of Discworld") that would
                                            otherwise overflow the flex container. *@
-                                        <div class="fw-semibold text-break">@(row.Title ?? "\u2014")</div>
+                                        <div class="fw-semibold text-break">@(row.Title ?? "—")</div>
                                     }
                                     <input type="text" class="form-control form-control-sm mb-1"
                                            @bind="row.Author"
-                                           placeholder="Author(s) \u2014 commas for co-authors" />
+                                           placeholder="Author(s) — commas for co-authors" />
                                     <div class="font-monospace text-muted" style="font-size: 0.7rem;">@row.Isbn</div>
                                 </div>
                                 <button type="button" class="btn btn-outline-danger btn-sm flex-shrink-0 ms-2" @onclick="() => VM.RemoveRow(row)" title="Remove">

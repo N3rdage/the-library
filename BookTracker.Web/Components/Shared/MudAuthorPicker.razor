@@ -1,19 +1,19 @@
 @* Multi-author input with autocomplete + chips. Used on Add Book, the
    /edit page's Primary Work form, and the Work edit dialog (BookDetail
-   modal). Mirrors the MudAutocomplete + chips shape from MudGenrePicker
-   but flatter — no taxonomy, just a list of names with find-or-create-on-
-   type semantics.
+   modal). Flat list of names with find-or-create-on-save semantics.
 
    Two-way binding via `Authors` + `AuthorsChanged`:
        <MudAuthorPicker Authors="vm.Authors"
                         AuthorsChanged="list => vm.Authors = list" />
 
-   PR1 of the multi-author cutover (#14): the picker collects names; the
-   save path resolves each via AuthorResolver.FindOrCreateAllAsync and
-   dual-writes (Work.Author = lead for legacy compat, Work.WorkAuthors =
-   all entries with Order). PR2 will switch reads to the join. *@
+   Add semantics: pick a name from the dropdown OR type a new one and press
+   Enter (comma also commits). `CoerceValue="false"` ensures intermediate
+   keystrokes don't fire ValueChanged — the original `CoerceValue="true"`
+   shipped a chip-per-keystroke bug. The Enter/comma path reads the
+   autocomplete's displayed text via the component ref. *@
 
 @using BookTracker.Data
+@using Microsoft.AspNetCore.Components.Web
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<BookTrackerDbContext> DbFactory
 
@@ -36,16 +36,17 @@
     <MudAutocomplete @ref="autocompleteRef"
                      T="string"
                      Value="@newAuthor"
-                     ValueChanged="OnValueChangedAsync"
+                     ValueChanged="OnPickedAsync"
                      SearchFunc="SearchAsync"
                      Label="@Label"
                      Variant="Variant.Outlined"
                      Margin="Margin.Dense"
-                     CoerceValue="true"
+                     CoerceValue="false"
                      CoerceText="true"
                      ResetValueOnEmptyText="false"
                      MinCharacters="0"
                      ShowProgressIndicator="true"
+                     OnKeyDown="OnKeyDownAsync"
                      HelperText="@HelperText" />
 </MudPaper>
 
@@ -53,7 +54,7 @@
     [Parameter, EditorRequired] public List<string> Authors { get; set; } = [];
     [Parameter] public EventCallback<List<string>> AuthorsChanged { get; set; }
     [Parameter] public string Label { get; set; } = "Author";
-    [Parameter] public string HelperText { get; set; } = "Type to find existing or create new. Pick an item or press Enter to add.";
+    [Parameter] public string HelperText { get; set; } = "Type to find existing or create new. Pick from the list, or press Enter to add.";
 
     private string? newAuthor;
     private MudAutocomplete<string>? autocompleteRef;
@@ -80,14 +81,39 @@
             .ToListAsync(ct);
     }
 
-    private async Task OnValueChangedAsync(string? value)
+    private async Task OnPickedAsync(string? value)
+    {
+        // Fires when the user selects a name from the suggestion dropdown.
+        // CoerceValue="false" prevents this from firing on intermediate
+        // keystrokes — that was the chip-per-keystroke bug.
+        await TryAddAsync(value);
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        // Enter or comma commits the typed text as a chip — covers the
+        // "type a brand new name" case (no dropdown match available).
+        if (e.Key == "Enter" || e.Key == ",")
+        {
+            // Read the autocomplete'\''s displayed text directly. MudBlazor'\''s
+            // MUD0012 analyzer prefers GetState(), but that helper isn'\''t public
+            // API in v9 — Text is a public property on MudBaseInput, just
+            // analyzer-flagged for external reads. Suppress here.
+#pragma warning disable MUD0012
+            var typed = autocompleteRef?.Text;
+#pragma warning restore MUD0012
+            await TryAddAsync(typed);
+        }
+    }
+
+    private async Task TryAddAsync(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return;
         var trimmed = value.Trim().TrimEnd(',', ';', '&').Trim();
         if (string.IsNullOrEmpty(trimmed)) return;
 
-        // Case-insensitive de-dup on the existing list — typing an author
-        // already in the chip set should be a no-op rather than a duplicate.
+        // Case-insensitive de-dup — typing an author already in the chip set
+        // is a no-op rather than a duplicate.
         if (!Authors.Any(a => a.Equals(trimmed, StringComparison.OrdinalIgnoreCase)))
         {
             Authors.Add(trimmed);
@@ -95,10 +121,8 @@
         }
         newAuthor = null;
 
-        // MudAutocomplete keeps its internal display text after a pick — setting
-        // newAuthor=null on the parameter doesn'\''t force the input to clear.
-        // ClearAsync() resets both the displayed text and the internal value
-        // so the user can type the next author without manually clearing first.
+        // ClearAsync resets both the displayed text and the internal value
+        // so the user can type the next author without manually clearing.
         if (autocompleteRef is not null)
         {
             await autocompleteRef.ClearAsync();

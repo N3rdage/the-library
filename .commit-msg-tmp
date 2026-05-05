@@ -1,0 +1,11 @@
+fix(authors): three post-PR2 multi-author bugs
+
+(a) MudAuthorPicker added a chip per keystroke. With CoerceValue="true", MudAutocomplete fires ValueChanged on every typed character — every keystroke became a "committed value" and got added as a new chip. Switch to CoerceValue="false" so ValueChanged only fires when the user picks from the dropdown; add an OnKeyDown handler that reads the displayed text via the component ref and commits on Enter or comma. This preserves the autocomplete dropdown for existing-Author suggestions while only adding a chip when the user actually intends one.
+
+(b) Bulk Add Author placeholder rendered "—" as literal text instead of an em dash. The Razor file stored the escape sequence as text rather than the codepoint — replaced with the actual em dash character. Same fix on the row.Title null-fallback strings (which were already correct as C# string literals; they now use the literal character for consistency).
+
+(c) Open Library lookups timing out 2-3 of 5 in real bulk-scan use. Bumped HttpClient timeout from 10s to 25s — gives the upstream APIs more headroom while still capping the worst case so a hung connection doesn't block the UI indefinitely.
+
+322 tests pass.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
