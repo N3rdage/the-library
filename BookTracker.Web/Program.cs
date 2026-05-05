@@ -126,14 +126,17 @@ using (var scope = app.Services.CreateScope())
     await db.Database.MigrateAsync();
 }
 
-// TODO: replace the default /Error page and exception handler with proper error
-// handling — structured logging, user-friendly messages by category, correlation
-// ids surfaced to the user, and separate 404 handling.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
 }
+
+// 404s re-execute through /NotFound so the user lands on the friendly
+// "page wandered off the shelf" view rather than the framework default.
+// Outside the if-block so dev gets the friendly page too — the dev
+// exception page only handles thrown exceptions, not 404s.
+app.UseStatusCodePagesWithReExecute("/NotFound");
 
 app.UseHttpsRedirection();
 

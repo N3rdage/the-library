@@ -1,0 +1,27 @@
+@page "/NotFound"
+
+@*
+    Hit by UseStatusCodePagesWithReExecute("/NotFound") when routing
+    fails to match. Plain HTML + Bootstrap by the same defensive
+    reasoning as Error.razor — and direct /icons/icon.svg path because
+    the icon is in Easy Auth's excludedPaths and reachable without
+    going through the @@Assets[] pipeline.
+*@
+
+<PageTitle>Page not found - BookTracker</PageTitle>
+
+<div class="container py-5">
+    <div class="card shadow-sm mx-auto" style="max-width: 600px;">
+        <div class="card-body text-center p-4 p-md-5">
+            <img src="/icons/icon.svg" alt="" width="120" height="120" class="mb-4" />
+            <h1 class="h3 mb-3">Looks like that page wandered off the shelf</h1>
+            <p class="text-muted mb-4">
+                We couldn't find the page you were looking for. It might have moved, or never existed.
+            </p>
+            <div class="d-flex gap-2 justify-content-center flex-wrap">
+                <a href="/" class="btn btn-primary">Home</a>
+                <a href="/books" class="btn btn-outline-secondary">Library</a>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,42 +1,54 @@
 @page "/Error"
 @using System.Diagnostics
+@using BookTracker.Web.Services
+@using Microsoft.AspNetCore.Diagnostics
 
-@* TODO: replace the default error page with proper error handling —
-   structured logging, user-friendly categorized messages, a correlation id
-   the user can quote, and distinct templates for 404 / 500 / validation-type
-   failures. Current page is the stock template. *@
+@*
+    Sticks to plain HTML + Bootstrap rather than MudBlazor: this page is
+    rendered when something else has already broken, so depending on as
+    little of the rest of the app as possible is the right defensive
+    posture. Same reasoning as the App.razor PWA-asset paths using
+    direct /icons/* rather than @@Assets[...].
+*@
 
-<PageTitle>Error - BookTracker</PageTitle>
+<PageTitle>Something went wrong - BookTracker</PageTitle>
 
-<h1 class="text-danger">Error.</h1>
-<h2 class="text-danger">An error occurred while processing your request.</h2>
-
-@if (ShowRequestId)
-{
-    <p>
-        <strong>Request ID:</strong> <code>@RequestId</code>
-    </p>
-}
-
-<h3>Development Mode</h3>
-<p>
-    Swapping to the <strong>Development</strong> environment displays detailed information about the error.
-</p>
-<p>
-    <strong>The Development environment shouldn't be enabled for deployed applications.</strong>
-    It can result in displaying sensitive information from exceptions to end users.
-    For local debugging, enable the <strong>Development</strong> environment by setting the
-    <strong>ASPNETCORE_ENVIRONMENT</strong> environment variable to <strong>Development</strong>
-    and restarting the app.
-</p>
+<div class="container py-5">
+    <div class="card shadow-sm mx-auto" style="max-width: 600px;">
+        <div class="card-body p-4 p-md-5">
+            <h1 class="h3 mb-3">@Message.Title</h1>
+            <p class="mb-3">@Message.Body</p>
+            @if (!string.IsNullOrEmpty(TraceId))
+            {
+                <p class="text-muted small mb-4">
+                    Trace ID: <code>@TraceId</code>
+                </p>
+            }
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="/" class="btn btn-primary">Home</a>
+                <a href="/books" class="btn btn-outline-secondary">Library</a>
+            </div>
+        </div>
+    </div>
+</div>
 
 @code {
     [CascadingParameter]
     private HttpContext? HttpContext { get; set; }
 
-    private string? RequestId { get; set; }
-    private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
+    private ErrorMessageMapper.FriendlyMessage Message { get; set; } =
+        new("Something went wrong", "");
+    private string? TraceId { get; set; }
 
-    protected override void OnInitialized() =>
-        RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+    protected override void OnInitialized()
+    {
+        // Activity.Current.TraceId is the W3C trace id (32-hex), which
+        // is what App Insights uses for `operation_Id` correlation.
+        // Falls back to HttpContext.TraceIdentifier if no Activity is
+        // active (shouldn't happen post-PR1 but cheap to be defensive).
+        TraceId = Activity.Current?.TraceId.ToString() ?? HttpContext?.TraceIdentifier;
+
+        var ex = HttpContext?.Features.Get<IExceptionHandlerFeature>()?.Error;
+        Message = ErrorMessageMapper.Map(ex);
+    }
 }
