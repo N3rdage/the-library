@@ -11,16 +11,18 @@
    intermediate keystrokes don't fire ValueChanged (which had shipped a
    chip-per-keystroke bug under CoerceValue="true").
 
-   Enter/comma key handling needs a JS-side preventDefault because Blazor's
-   @onkeydown:preventDefault directive can't be conditional on the key value
-   at runtime — without that, Enter would submit the surrounding form and
-   comma would get inserted into the input field. The chipPicker.suppressEnterAndComma
-   helper (wwwroot/js/chip-picker-keys.js) registers a keydown listener that
-   preventDefaults those two keys; the .NET-side OnKeyDown still fires and
-   handles the chip commit. *@
+   Enter and comma are handled entirely on the JS side
+   (wwwroot/js/chip-picker-keys.js) — JS preventDefaults the key (so the
+   surrounding form doesn't submit and the comma doesn't get inserted into
+   the input) and then invokes the .NET-side OnCommitKey via
+   DotNetObjectReference with the current input.value. Going through JS
+   rather than Blazor's @onkeydown is necessary because preventDefault
+   can't be made conditional on key value through pure managed code, and
+   reading the autocomplete's Text from the .NET side at keydown time
+   came back stale. *@
 
+@implements IDisposable
 @using BookTracker.Data
-@using Microsoft.AspNetCore.Components.Web
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<BookTrackerDbContext> DbFactory
 @inject IJSRuntime JS
@@ -42,7 +44,7 @@
         </div>
     }
     @* Wrapping div gives us an ElementReference for the JS-side keydown
-       suppressor to anchor on (MudPaper'\''s @ref returns the component, not
+       suppressor to anchor on (MudPaper's @ref returns the component, not
        the DOM element). *@
     <div @ref="containerRef">
         <MudAutocomplete @ref="autocompleteRef"
@@ -58,7 +60,6 @@
                          ResetValueOnEmptyText="false"
                          MinCharacters="0"
                          ShowProgressIndicator="true"
-                         OnKeyDown="OnKeyDownAsync"
                          HelperText="@HelperText" />
     </div>
 </MudPaper>
@@ -67,23 +68,20 @@
     [Parameter, EditorRequired] public List<string> Authors { get; set; } = [];
     [Parameter] public EventCallback<List<string>> AuthorsChanged { get; set; }
     [Parameter] public string Label { get; set; } = "Author";
-    [Parameter] public string HelperText { get; set; } = "Type to find existing or create new. Pick from the list, or press Enter to add.";
+    [Parameter] public string HelperText { get; set; } = "Type to find existing or create new. Pick from the list, or press Enter or comma to add.";
 
     private string? newAuthor;
     private MudAutocomplete<string>? autocompleteRef;
     private ElementReference containerRef;
+    private DotNetObjectReference<MudAuthorPicker>? selfRef;
     private bool keysSuppressed;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Wire up the JS-side keydown suppressor on first render. The host
-        // element is the MudPaper container; the JS helper queries for the
-        // first descendant <input> (the autocomplete'\''s typing field).
-        // Idempotent — keysSuppressed gates re-registration if the picker
-        // re-renders for any reason.
         if (firstRender && !keysSuppressed)
         {
-            await JS.InvokeVoidAsync("chipPicker.suppressEnterAndComma", containerRef);
+            selfRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("chipPicker.suppressEnterAndComma", containerRef, selfRef);
             keysSuppressed = true;
         }
     }
@@ -114,25 +112,20 @@
     {
         // Fires when the user selects a name from the suggestion dropdown.
         // CoerceValue="false" prevents this from firing on intermediate
-        // keystrokes — that was the chip-per-keystroke bug.
+        // keystrokes (the original chip-per-keystroke bug).
         await TryAddAsync(value);
     }
 
-    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    [JSInvokable]
+    public async Task OnCommitKey(string text)
     {
-        // Enter or comma commits the typed text as a chip — covers the
-        // "type a brand new name" case (no dropdown match available).
-        if (e.Key == "Enter" || e.Key == ",")
-        {
-            // Read the autocomplete'\''s displayed text directly. MudBlazor'\''s
-            // MUD0012 analyzer prefers GetState(), but that helper isn'\''t public
-            // API in v9 — Text is a public property on MudBaseInput, just
-            // analyzer-flagged for external reads. Suppress here.
-#pragma warning disable MUD0012
-            var typed = autocompleteRef?.Text;
-#pragma warning restore MUD0012
-            await TryAddAsync(typed);
-        }
+        // Invoked by the JS-side keydown listener when the user presses Enter
+        // or comma. `text` is the input.value at the exact moment of keydown
+        // — reading the autocomplete's .NET-side Text property in OnKeyDown
+        // had been returning stale or empty values, so the JS reads
+        // input.value directly and passes it across.
+        await TryAddAsync(text);
+        StateHasChanged();
     }
 
     private async Task TryAddAsync(string? value)
@@ -162,5 +155,10 @@
     {
         Authors.RemoveAll(a => a.Equals(name, StringComparison.OrdinalIgnoreCase));
         await AuthorsChanged.InvokeAsync(Authors);
+    }
+
+    public void Dispose()
+    {
+        selfRef?.Dispose();
     }
 }
