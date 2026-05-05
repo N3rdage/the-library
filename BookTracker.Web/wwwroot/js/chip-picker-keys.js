@@ -21,18 +21,20 @@ window.chipPicker = {
         input.addEventListener('keydown', async (e) => {
             if (e.key !== 'Enter' && e.key !== ',') return;
 
-            // If the user has arrow-keyed to highlight a dropdown item, let
-            // MudAutocomplete handle Enter natively — its own keydown handler
-            // commits the highlighted pick via ValueChanged (which routes
-            // through OnPickedAsync on the .NET side and adds the chip with
-            // the FULL author name, not the partial typed text).
-            //
-            // aria-activedescendant is the standard combobox attribute and
-            // MudAutocomplete sets it on the input only when arrow keys
-            // focus a list item — empty/absent when the user is just typing
-            // without navigating the dropdown. Belt-and-braces with a DOM
-            // query for the selected-item class so the check works across
-            // any MudBlazor versions that don't set aria-activedescendant.
+            // ALWAYS preventDefault Enter/comma — keeps the surrounding form
+            // from submitting (Enter) and the comma from being inserted into
+            // the input. preventDefault only stops the browser's default
+            // action; other keydown listeners (including MudAutocomplete's
+            // own) still fire normally.
+            e.preventDefault();
+
+            // For Enter specifically: if a dropdown item is keyboard-highlighted,
+            // MudAutocomplete's own keydown handler will commit the pick via
+            // ValueChanged → OnPickedAsync (chip added with the FULL author
+            // name). Don't ALSO invoke our typed-text commit in that case —
+            // doing so would double-add or replace the proper pick with the
+            // partial typed text. Comma is unconditional because no dropdown
+            // navigation is expected for that key.
             if (e.key === 'Enter') {
                 const ariaActive = input.getAttribute('aria-activedescendant');
                 const domHighlighted = document.querySelector('.mud-popover-open .mud-selected-item');
@@ -41,7 +43,6 @@ window.chipPicker = {
                 }
             }
 
-            e.preventDefault();
             const text = input.value;
             if (text && text.trim()) {
                 await dotnetRef.invokeMethodAsync('OnCommitKey', text);
