@@ -19,12 +19,32 @@ window.chipPicker = {
         const input = container.querySelector('input');
         if (!input) return;
         input.addEventListener('keydown', async (e) => {
-            if (e.key === 'Enter' || e.key === ',') {
-                e.preventDefault();
-                const text = input.value;
-                if (text && text.trim()) {
-                    await dotnetRef.invokeMethodAsync('OnCommitKey', text);
+            if (e.key !== 'Enter' && e.key !== ',') return;
+
+            // If the user has arrow-keyed to highlight a dropdown item, let
+            // MudAutocomplete handle Enter natively — its own keydown handler
+            // commits the highlighted pick via ValueChanged (which routes
+            // through OnPickedAsync on the .NET side and adds the chip with
+            // the FULL author name, not the partial typed text).
+            //
+            // aria-activedescendant is the standard combobox attribute and
+            // MudAutocomplete sets it on the input only when arrow keys
+            // focus a list item — empty/absent when the user is just typing
+            // without navigating the dropdown. Belt-and-braces with a DOM
+            // query for the selected-item class so the check works across
+            // any MudBlazor versions that don't set aria-activedescendant.
+            if (e.key === 'Enter') {
+                const ariaActive = input.getAttribute('aria-activedescendant');
+                const domHighlighted = document.querySelector('.mud-popover-open .mud-selected-item');
+                if (ariaActive || domHighlighted) {
+                    return;
                 }
+            }
+
+            e.preventDefault();
+            const text = input.value;
+            if (text && text.trim()) {
+                await dotnetRef.invokeMethodAsync('OnCommitKey', text);
             }
         });
     }
