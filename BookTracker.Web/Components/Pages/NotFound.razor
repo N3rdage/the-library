@@ -1,0 +1,13 @@
+@page "/NotFound"
+@using BookTracker.Web.Components.Shared
+
+@*
+    Hit by UseStatusCodePagesWithReExecute("/NotFound") when routing
+    fails to match. Markup lives in Shared/NotFoundContent.razor so it
+    can also render from Blazor's <Router><NotFound> fallback for
+    in-app navigations to unmatched routes.
+*@
+
+<PageTitle>Page not found - BookTracker</PageTitle>
+
+<NotFoundContent />
