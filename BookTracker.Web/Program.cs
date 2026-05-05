@@ -1,12 +1,24 @@
 using BookTracker.Data;
 using BookTracker.Web.Components;
 using BookTracker.Web.Services;
+using BookTracker.Web.Telemetry;
 using BookTracker.Web.ViewModels;
+using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Application Insights: explicit SDK registration (the App Service codeless
+// attach gives baseline request/dependency telemetry but NOT structured
+// ILogger output — message-template properties like {Isbn} only become
+// custom dimensions once the SDK is wired here). Connection string
+// resolves from APPLICATIONINSIGHTS_CONNECTION_STRING (set in
+// app-config.bicep).
+builder.Services.AddApplicationInsightsTelemetry();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<ITelemetryInitializer, UserTelemetryInitializer>();
 
 // TODO: evaluate a Blazor-native component library (MudBlazor, Radzen, FluentUI)
 // instead of hand-rolling Bootstrap markup in every component. The current pages
