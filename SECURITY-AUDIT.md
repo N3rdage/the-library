@@ -2,7 +2,7 @@
 
 Living security posture review. Per-area verdicts: **Pass** / **Concern** / **Action required**. Fixes applied in the same PR are listed at the bottom; deferred items link to `TODO.md`. Monthly scan + review is automated via `.github/workflows/security-scan.yml`.
 
-**Last reviewed:** 2026-04-23 (initial audit — TODO #2)
+**Last reviewed:** 2026-05-05 (monthly cycle; per-run report in `audits/security-2026-05-05.md`).
 
 ---
 
@@ -125,14 +125,15 @@ No user identifiers, email addresses, tokens, or auth material in any log string
 
 **Verdict:** **Pass.**
 
-All `IJSRuntime.Invoke*` call sites use **hardcoded string identifiers** for the JS function names (`"NavbarCollapse.close"`, `"ScrollTo.element"`, `"BarcodeScanner.start/stop"`, `"PhotoCapture.start/stop/capture"`). The function names are not user-controlled.
+All `IJSRuntime.Invoke*` call sites use **hardcoded string identifiers** for the JS function names (`"NavbarCollapse.close"`, `"ScrollTo.element"`, `"BarcodeScanner.start/stop"`, `"PhotoCapture.start/stop/capture"`, `"chipPicker.suppressEnterAndComma"`). The function names are not user-controlled.
 
 Arguments passed to JS:
 - `ScrollTo.element` — `$"author-row-{id}"` where `id` is a typed `int`. Not injectable.
 - `BarcodeScanner.start` — a DOM element id (`"barcode-reader"` or `"shopping-barcode-reader"`, hardcoded) plus a `DotNetObjectReference`. Safe.
 - `PhotoCapture.start` / `capture` — hardcoded DOM id `"photo-video"`. Safe.
+- `chipPicker.suppressEnterAndComma` (added 2026-05-04, multi-author chip-picker arc) — typed `ElementReference` (the picker's container `div`) + `DotNetObjectReference<MudAuthorPicker>`. The JS handler in `wwwroot/js/chip-picker-keys.js` reads `input.value` at keydown time and round-trips it to `[JSInvokable] OnCommitKey`; the .NET side trims and dedupes before adding to `Authors`, which renders via `<MudChip Text="@captured">` (Razor auto-escape). Safe.
 
-No `innerHTML`-style JS methods are exposed to the Blazor side. No user strings flow into `eval`-equivalent patterns.
+No `innerHTML`-style JS methods are exposed to the Blazor side. No user strings flow into `eval`-equivalent patterns. The new `chip-picker-keys.js` uses only safe DOM APIs (`addEventListener`, `getAttribute`, `querySelector`, reading `input.value`).
 
 ---
 
