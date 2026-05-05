@@ -17,16 +17,25 @@ public partial class BookLookupService(
         var cleanIsbn = new string(isbn.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
         if (cleanIsbn.Length is not (10 or 13))
         {
+            logger.LogInformation("ISBN lookup skipped — invalid length for {Isbn}", cleanIsbn);
             return null;
         }
+
+        logger.LogInformation("ISBN lookup starting for {Isbn}", cleanIsbn);
 
         // Trove (National Library of Australia) sits last in the chain as a
         // coverage-of-last-resort for self-published / Australian titles that
         // Open Library and Google Books tend to miss. Skipped silently when
         // no API key is configured.
-        return await TryOpenLibraryAsync(cleanIsbn, ct)
+        var result = await TryOpenLibraryAsync(cleanIsbn, ct)
             ?? await TryGoogleBooksAsync(cleanIsbn, ct)
             ?? await TryTroveAsync(cleanIsbn, ct);
+
+        if (result is null)
+        {
+            logger.LogWarning("ISBN lookup found no result from any provider for {Isbn}", cleanIsbn);
+        }
+        return result;
     }
 
     public async Task<IReadOnlyList<BookSearchCandidate>> SearchByTitleAuthorAsync(
@@ -81,6 +90,7 @@ public partial class BookLookupService(
             var doc = await http.GetFromJsonAsync<Dictionary<string, OpenLibraryBook>>(url, ct);
             if (doc is null || !doc.TryGetValue($"ISBN:{isbn}", out var book))
             {
+                logger.LogDebug("Open Library returned no record for ISBN {Isbn}", isbn);
                 return null;
             }
 
@@ -151,6 +161,7 @@ public partial class BookLookupService(
             var item = doc?.Items?.FirstOrDefault()?.VolumeInfo;
             if (item is null)
             {
+                logger.LogDebug("Google Books returned no record for ISBN {Isbn}", isbn);
                 return null;
             }
 
@@ -191,6 +202,7 @@ public partial class BookLookupService(
         var key = troveOptions.Value.ApiKey;
         if (string.IsNullOrWhiteSpace(key))
         {
+            logger.LogDebug("Trove skipped for ISBN {Isbn} — no API key configured", isbn);
             return null;
         }
 
@@ -206,6 +218,7 @@ public partial class BookLookupService(
                 .Records?.Work?.FirstOrDefault();
             if (work is null || string.IsNullOrWhiteSpace(work.Title))
             {
+                logger.LogDebug("Trove returned no record for ISBN {Isbn}", isbn);
                 return null;
             }
 
