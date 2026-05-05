@@ -7,15 +7,23 @@
                         AuthorsChanged="list => vm.Authors = list" />
 
    Add semantics: pick a name from the dropdown OR type a new one and press
-   Enter (comma also commits). `CoerceValue="false"` ensures intermediate
-   keystrokes don't fire ValueChanged — the original `CoerceValue="true"`
-   shipped a chip-per-keystroke bug. The Enter/comma path reads the
-   autocomplete's displayed text via the component ref. *@
+   Enter or comma to commit as a chip. `CoerceValue="false"` ensures
+   intermediate keystrokes don't fire ValueChanged (which had shipped a
+   chip-per-keystroke bug under CoerceValue="true").
+
+   Enter/comma key handling needs a JS-side preventDefault because Blazor's
+   @onkeydown:preventDefault directive can't be conditional on the key value
+   at runtime — without that, Enter would submit the surrounding form and
+   comma would get inserted into the input field. The chipPicker.suppressEnterAndComma
+   helper (wwwroot/js/chip-picker-keys.js) registers a keydown listener that
+   preventDefaults those two keys; the .NET-side OnKeyDown still fires and
+   handles the chip commit. *@
 
 @using BookTracker.Data
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<BookTrackerDbContext> DbFactory
+@inject IJSRuntime JS
 
 <MudPaper Outlined="true" Class="pa-2">
     @if (Authors.Count > 0)
@@ -33,21 +41,26 @@
             }
         </div>
     }
-    <MudAutocomplete @ref="autocompleteRef"
-                     T="string"
-                     Value="@newAuthor"
-                     ValueChanged="OnPickedAsync"
-                     SearchFunc="SearchAsync"
-                     Label="@Label"
-                     Variant="Variant.Outlined"
-                     Margin="Margin.Dense"
-                     CoerceValue="false"
-                     CoerceText="true"
-                     ResetValueOnEmptyText="false"
-                     MinCharacters="0"
-                     ShowProgressIndicator="true"
-                     OnKeyDown="OnKeyDownAsync"
-                     HelperText="@HelperText" />
+    @* Wrapping div gives us an ElementReference for the JS-side keydown
+       suppressor to anchor on (MudPaper'\''s @ref returns the component, not
+       the DOM element). *@
+    <div @ref="containerRef">
+        <MudAutocomplete @ref="autocompleteRef"
+                         T="string"
+                         Value="@newAuthor"
+                         ValueChanged="OnPickedAsync"
+                         SearchFunc="SearchAsync"
+                         Label="@Label"
+                         Variant="Variant.Outlined"
+                         Margin="Margin.Dense"
+                         CoerceValue="false"
+                         CoerceText="true"
+                         ResetValueOnEmptyText="false"
+                         MinCharacters="0"
+                         ShowProgressIndicator="true"
+                         OnKeyDown="OnKeyDownAsync"
+                         HelperText="@HelperText" />
+    </div>
 </MudPaper>
 
 @code {
@@ -58,6 +71,22 @@
 
     private string? newAuthor;
     private MudAutocomplete<string>? autocompleteRef;
+    private ElementReference containerRef;
+    private bool keysSuppressed;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Wire up the JS-side keydown suppressor on first render. The host
+        // element is the MudPaper container; the JS helper queries for the
+        // first descendant <input> (the autocomplete'\''s typing field).
+        // Idempotent — keysSuppressed gates re-registration if the picker
+        // re-renders for any reason.
+        if (firstRender && !keysSuppressed)
+        {
+            await JS.InvokeVoidAsync("chipPicker.suppressEnterAndComma", containerRef);
+            keysSuppressed = true;
+        }
+    }
 
     private async Task<IEnumerable<string>> SearchAsync(string query, CancellationToken ct)
     {
