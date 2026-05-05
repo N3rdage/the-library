@@ -126,6 +126,47 @@ public class AuthorListViewModelTests
     }
 
     [Fact]
+    public async Task ToggleExpandAsync_OrdersWorksByInSeries_ThenSeriesOrder_ThenTitle()
+    {
+        // Drew set up Discworld manually with SeriesOrder 1..N and expects
+        // the /authors expand to read Discworld 1, 2, 3, ..., then standalone
+        // works alphabetical — not pure title-alphabetical (which buried the
+        // numbered series order entirely). This test fixes that ordering.
+        var factory = new TestDbContextFactory();
+        int authorId;
+        using (var db = factory.CreateDbContext())
+        {
+            var pratchett = new Author { Name = "Terry Pratchett" };
+            db.Authors.Add(pratchett);
+            var discworld = new Series { Name = "Discworld", Type = SeriesType.Collection };
+            var bromeliad = new Series { Name = "Bromeliad", Type = SeriesType.Series };
+            db.Series.AddRange(discworld, bromeliad);
+
+            db.Books.AddRange(
+                // Standalone (no series) — expect at the END despite alpha-early titles.
+                new Book { Title = "Good Omens", Works = [new Work { Title = "Good Omens", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }] }] },
+                new Book { Title = "Nation", Works = [new Work { Title = "Nation", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }] }] },
+                // Discworld — out-of-order titles to prove SeriesOrder wins over Title.
+                new Book { Title = "Mort", Works = [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = discworld, SeriesOrder = 4 }] },
+                new Book { Title = "The Colour of Magic", Works = [new Work { Title = "The Colour of Magic", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = discworld, SeriesOrder = 1 }] },
+                new Book { Title = "Equal Rites", Works = [new Work { Title = "Equal Rites", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = discworld, SeriesOrder = 3 }] },
+                // Bromeliad — single work; cluster comes BEFORE Discworld alphabetically.
+                new Book { Title = "Truckers", Works = [new Work { Title = "Truckers", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = bromeliad, SeriesOrder = 1 }] });
+            await db.SaveChangesAsync();
+            authorId = pratchett.Id;
+        }
+
+        var vm = new AuthorListViewModel(factory);
+        await vm.LoadAsync();
+        await vm.ToggleExpandAsync(authorId);
+
+        var titles = vm.DetailByAuthorId[authorId].Works.Select(w => w.Title).ToList();
+        Assert.Equal(
+            ["Truckers", "The Colour of Magic", "Equal Rites", "Mort", "Good Omens", "Nation"],
+            titles);
+    }
+
+    [Fact]
     public async Task MarkAsAliasAsync_InvalidatesDetailCache()
     {
         // Structural change (mark X as alias of Y) should drop any cached
