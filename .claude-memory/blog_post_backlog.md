@@ -2,12 +2,12 @@
 name: Blog post backlog — corpus catch-up + going-forward queue
 description: One-time mine of all retros + patterns.md as of 2026-04-28. Each entry is a candidate post Drew can pick from. Already-shipped posts at the top with their source mapping; catch-up candidates ranked by strength of angle; "skip/fold-in" listed for completeness so the count is definitive. Going-forward, new retros add their candidate post here at write time.
 type: project
+originSessionId: 21e97fa1-cba4-4b67-9d43-dc109098d6b2
 ---
+## Status as of 2026-05-05
 
-## Status as of 2026-04-28
-
-- **5 posts shipped** (covered).
-- **8 strong catch-up candidates** (clear angle, durable lesson, transferable beyond this stack).
+- **6 posts shipped** (covered).
+- **7 strong catch-up candidates** (clear angle, durable lesson, transferable beyond this stack).
 - **6 possible catch-up candidates** (could be a post or could fold into another — TBD when picked up).
 - **15+ retros with no obvious blog hook on their own** (specific, dated, or already covered — listed at the bottom for the definitive count).
 
@@ -20,12 +20,11 @@ type: project
 | 3 | 2026-04-27 | [Empty staging catches schema, not data](../../blog/2026-04-27-01-empty-staging-catches-schema-not-data.md) | `retro_staging_db_separation.md`; the EF-transactional-vs-broken framing |
 | 4 | 2026-04-28 | [Why I plan even when you didn't ask](../../blog/2026-04-28-01-why-i-plan-even-when-you-didnt-ask.md) | `patterns.md §1`, `feedback_planning_conventions.md` (load-bearing) + `feedback_plan_prefix.md` (early opt-in version, now vestigial); the *make-the-safe-default-cheap* generalisation — structure dissolves the execute-fast-vs-plan-first trade-off |
 | 5 | 2026-05-03 | [The cost of reusable: building a security-audit chassis with Claude Code skills](../../blog/2026-05-03-01-the-cost-of-reusable.md) | `retros/retro_security_audit_skill_poc.md`; chassis-design lens + cost-benefit math, with the relocate-at-the-end war story (`.claude/audit-rules/` → `audit-rules/` after the second-stack what-now run exposed the gitignore footgun) as the central case study; closes out [TODO #2](../../TODO.md) |
+| 6 | 2026-05-05 | [I didn't click that chip](../../blog/2026-05-05-01-i-didnt-click-that-chip.md) | `patterns.md §4` (browser-test honesty / caveat-as-first-class-output) anchored on the multi-author chip-picker arc screenshot — six post-merge fix commits from one minute of typing. Honest framing of *both* sides of the human-in-the-loop convention failing: my test plan was incomplete, Drew skipped it because trust had accrued. Pivots to the testing chassis (slices c+a shipped from #16, slice b Playwright as the long-term human-discipline-removed answer). |
 
 ## Strong catch-up candidates
 
 Concrete angle, durable lesson, transferable beyond BookTracker's stack. Order is rough — pick whichever speaks to current energy.
-
-- **"I didn't click that button"** — `patterns.md §4` (browser-test honesty) + the bonus pattern "caveat as first-class output." The honest framing: AI compiles, type-checks, unit-tests; AI does *not* click buttons. Standardising "honest caveat — not browser-tested" as a footer is the load-bearing convention. Audience: AI-collaboration; teams worried about over-reliance.
 
 - **"Compiler errors are a refactor todo list"** — `patterns.md §8`, anchored by `retro_work_refactor.md` (30+ files, top-down compile-error sweep) and `retro_pen_names.md`. Why tight types pay back during refactors regardless of who's writing the code. Audience: backend / typed-language devs; resonates beyond AI.
 

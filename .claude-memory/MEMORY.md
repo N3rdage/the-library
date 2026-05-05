@@ -14,5 +14,5 @@
 - [TODO tracking](feedback_todo_tracking.md) — all TODOs in TODO.md; "sync TODOs" reconciles memory + code + TODO.md.
 - [Memory excluded from PRs](feedback_memory_commits.md) — don't stage .claude-memory/ in feature commits; flag changes for a separate commit.
 - [Keep ARCHITECTURE.md updated](feedback_architecture_doc.md) — update when structural changes are made (entities, pages, services, patterns).
-- [Blog post backlog](blog_post_backlog.md) — corpus-derived candidate posts mineable from existing retros + `patterns.md`. 5 shipped + 8 strong / 6 possible candidates remaining from the 2026-04-28 catch-up mine.
+- [Blog post backlog](blog_post_backlog.md) — corpus-derived candidate posts mineable from existing retros + `patterns.md`. 6 shipped + 7 strong / 6 possible candidates remaining from the 2026-04-28 catch-up mine.
 - [Security-audit skill chassis pilot](retros/retro_security_audit_skill_poc.md) — two-stack validation worked; three durable lessons (relocate audit-rules/ out of `.claude/`, add Blazor JS interop rule, formalise "no applicable surface yet" as a pass-with-evidence shape).
