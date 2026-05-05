@@ -153,10 +153,14 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
 
         var total = await filtered.CountAsync();
 
-        // Inside a Collection-group expand, sort by the matching Work's
-        // SeriesOrder so the shelf reads 1→N. Compendiums (a Book whose
-        // Works span the same series at multiple orders) take the minimum.
-        // Other group-by modes stay alphabetical.
+        // Series-aware sort inside a group expand. Two shapes:
+        //   - Collection group: every book in the group belongs to that
+        //     specific series, so sort by the matching Work's SeriesOrder.
+        //     Compendiums take the minimum.
+        //   - Author group: books span any series the author wrote in.
+        //     Cluster series-having books first (alphabetical by series
+        //     name, then SeriesOrder), then standalone books by title.
+        // Genre / (no-series) / (no-genre) buckets fall back to title sort.
         IQueryable<Book> ordered;
         if (SelectedGroupBy == LibraryGroupBy.Collection
             && key != NoneKey
@@ -165,6 +169,19 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             ordered = filtered
                 .OrderBy(b => b.Works
                     .Where(w => w.SeriesId == seriesIdForSort)
+                    .Min(w => (int?)w.SeriesOrder) ?? int.MaxValue)
+                .ThenBy(b => b.Title);
+        }
+        else if (SelectedGroupBy == LibraryGroupBy.Author && key != NoneKey)
+        {
+            ordered = filtered
+                .OrderBy(b => b.Works.Any(w => w.SeriesId != null) ? 0 : 1)
+                .ThenBy(b => b.Works
+                    .Where(w => w.SeriesId != null)
+                    .Select(w => w.Series!.Name)
+                    .Min())
+                .ThenBy(b => b.Works
+                    .Where(w => w.SeriesId != null)
                     .Min(w => (int?)w.SeriesOrder) ?? int.MaxValue)
                 .ThenBy(b => b.Title);
         }
