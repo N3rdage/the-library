@@ -100,12 +100,20 @@ public class AuthorListViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
             ids.AddRange(author.Aliases.Select(a => a.Id));
         }
 
+        // Series-clustered Works first (in series-name then SeriesOrder
+        // order); standalone Works tail out alphabetically. So a Pratchett
+        // expand reads Discworld 1, 2, 3, ..., then Good Omens / Nation /
+        // etc. SeriesOrder-null Works inside a series sink to the bottom of
+        // their series via int.MaxValue.
         var works = await db.Works
             .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .Include(w => w.Books)
             .Include(w => w.Series)
             .Where(w => w.WorkAuthors.Any(wa => ids.Contains(wa.AuthorId)))
-            .OrderBy(w => w.Title)
+            .OrderBy(w => w.SeriesId == null)
+            .ThenBy(w => w.Series!.Name)
+            .ThenBy(w => w.SeriesOrder ?? int.MaxValue)
+            .ThenBy(w => w.Title)
             .ToListAsync();
 
         var workRows = works.Select(w => new WorkRow(

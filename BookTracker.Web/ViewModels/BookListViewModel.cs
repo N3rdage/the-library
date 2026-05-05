@@ -152,8 +152,28 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         filtered = ApplyGroupFilter(filtered, key);
 
         var total = await filtered.CountAsync();
-        var raw = await filtered
-            .OrderBy(b => b.Title)
+
+        // Inside a Collection-group expand, sort by the matching Work's
+        // SeriesOrder so the shelf reads 1→N. Compendiums (a Book whose
+        // Works span the same series at multiple orders) take the minimum.
+        // Other group-by modes stay alphabetical.
+        IQueryable<Book> ordered;
+        if (SelectedGroupBy == LibraryGroupBy.Collection
+            && key != NoneKey
+            && int.TryParse(key, out var seriesIdForSort))
+        {
+            ordered = filtered
+                .OrderBy(b => b.Works
+                    .Where(w => w.SeriesId == seriesIdForSort)
+                    .Min(w => (int?)w.SeriesOrder) ?? int.MaxValue)
+                .ThenBy(b => b.Title);
+        }
+        else
+        {
+            ordered = filtered.OrderBy(b => b.Title);
+        }
+
+        var raw = await ordered
             .Skip((page - 1) * PageSize)
             .Take(PageSize)
             .ToListAsync();

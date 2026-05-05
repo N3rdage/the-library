@@ -129,6 +129,40 @@ public class BookListViewModelTests
     }
 
     [Fact]
+    public async Task ToggleGroupAsync_CollectionGroup_OrdersBooksBySeriesOrder()
+    {
+        // Group by Collection then expand a series — books should appear in
+        // SeriesOrder, not title-alphabetical. Title-only sort would have
+        // hidden Drew's manually-set Discworld order on the Library page.
+        var factory = new TestDbContextFactory();
+        int seriesId;
+        using (var db = factory.CreateDbContext())
+        {
+            var pratchett = new Author { Name = "Terry Pratchett" };
+            db.Authors.Add(pratchett);
+            var discworld = new Series { Name = "Discworld", Type = SeriesType.Collection };
+            db.Series.Add(discworld);
+
+            db.Books.AddRange(
+                // Title-alphabet vs SeriesOrder are deliberately reversed so a
+                // title-only sort would produce the wrong result.
+                new Book { Title = "Mort", Works = [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = discworld, SeriesOrder = 4 }] },
+                new Book { Title = "Equal Rites", Works = [new Work { Title = "Equal Rites", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = discworld, SeriesOrder = 3 }] },
+                new Book { Title = "The Colour of Magic", Works = [new Work { Title = "The Colour of Magic", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = discworld, SeriesOrder = 1 }] });
+            await db.SaveChangesAsync();
+            seriesId = discworld.Id;
+        }
+
+        var vm = new BookListViewModel(factory) { SelectedGroupBy = LibraryGroupBy.Collection };
+        await vm.InitializeAsync();
+        var seriesGroup = vm.Groups.First(g => g.Label == "Discworld");
+        await vm.ToggleGroupAsync(seriesGroup.Key);
+
+        var titles = vm.LoadedGroups[seriesGroup.Key].Books.Select(b => b.Title).ToList();
+        Assert.Equal(["The Colour of Magic", "Equal Rites", "Mort"], titles);
+    }
+
+    [Fact]
     public async Task GroupByGenre_GenreFilterReducesGroupsAndCounts()
     {
         var factory = new TestDbContextFactory();
