@@ -7,25 +7,24 @@
    (MudText, <p class="text-muted">, etc.) as ChildContent. The component
    just owns the show/hide mechanism.
 
-   Per-instance state — collapse resets on navigation. Intentional: subtitle
-   text is reference, not stateful, so the cost of re-tapping on a fresh
-   page-load is small relative to the cost of a stuck-open subtitle eating
-   viewport for a user who's already read it once. *@
+   Single-element shape with a custom CSS class (defined in site.css) instead
+   of Bootstrap's `d-md-block` / `d-md-none` paired siblings. Earlier shape
+   produced a dead-zone at certain widths where neither sibling was visible —
+   custom class pins the breakpoint to one rule we own and removes the
+   cascade-ordering dependency.
 
-<div class="d-none d-md-block">
+   Per-instance state — collapse resets on navigation. Subtitle text is
+   reference, not stateful, so re-tapping on a fresh page-load is a small
+   cost relative to a stuck-open subtitle eating viewport for someone who's
+   already read it. *@
+
+<button type="button"
+        class="collapsible-subtitle__toggle btn btn-link btn-sm p-0 text-muted text-decoration-none mb-2"
+        @onclick="Toggle">
+    @(expanded ? "▾" : "▸") @Label
+</button>
+<div class="collapsible-subtitle__content @(expanded ? "is-expanded" : "")">
     @ChildContent
-</div>
-
-<div class="d-md-none mb-3">
-    <button type="button" class="btn btn-link btn-sm p-0 text-muted text-decoration-none" @onclick="Toggle">
-        @(expanded ? "▾" : "▸") @Label
-    </button>
-    @if (expanded)
-    {
-        <div class="mt-2">
-            @ChildContent
-        </div>
-    }
 </div>
 
 @code {
