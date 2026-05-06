@@ -11,7 +11,8 @@ namespace BookTracker.Web.Services;
 /// </summary>
 public class AnthropicAIAssistantService(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
-    AnthropicOptions options) : IAIAssistantService
+    AnthropicOptions options,
+    ILogger<AnthropicAIAssistantService> logger) : IAIAssistantService
 {
     private AnthropicClient? _client;
 
@@ -42,7 +43,23 @@ public class AnthropicAIAssistantService(
                     },
                     new TextContent
                     {
-                        Text = "Extract the ISBN number from this image. Return ONLY the ISBN (10 or 13 characters). ISBN-10 may end with the letter X as a check digit — include it if present. Return nothing else. If you cannot find an ISBN, return the word NONE."
+                        // Stronger X handling than the previous "include if present" —
+                        // Drew was seeing X-ending ISBN-10s come back as 9 digits,
+                        // which then failed the length check and returned null. The
+                        // explicit example + "MUST include" phrasing leans on
+                        // example-following rather than instruction-following, which
+                        // tends to be more reliable.
+                        Text = """
+                            Read the ISBN from this book's image. Reply with just the ISBN — no other text, no explanation, no formatting.
+
+                            ISBNs come in two forms:
+                              - ISBN-13: 13 digits (e.g. 9780123456786)
+                              - ISBN-10: 10 characters where the final character is a check digit that may be the letter X (e.g. 012345678X)
+
+                            If the printed ISBN ends in X, you MUST include the X — without it the ISBN is invalid. Do not normalize, simplify, or 'correct' the ISBN; return exactly what is printed (digits only, no hyphens or spaces).
+
+                            If no ISBN is visible, reply with NONE.
+                            """
                     }
                 }
             }
@@ -52,10 +69,23 @@ public class AnthropicAIAssistantService(
         var responseText = (response.Message?.ToString() ?? "").Trim();
 
         if (responseText.Equals("NONE", StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogInformation("ISBN OCR: model returned NONE (no ISBN found in image)");
             return null;
+        }
 
         var cleaned = new string(responseText.Where(c => char.IsDigit(c) || c == 'X' || c == 'x').ToArray());
-        return cleaned.Length is 10 or 13 ? cleaned : null;
+        var accepted = cleaned.Length is 10 or 13;
+
+        // Trace both raw and cleaned so post-deploy debugging can tell whether
+        // a rejection (accepted=false) was a model dropping the X check digit
+        // (raw "012345678" length 9), the model adding stray text (raw with
+        // long prefix), or a genuine "couldn't read" case.
+        logger.LogInformation(
+            "ISBN OCR: raw={Raw} cleaned={Cleaned} length={Length} accepted={Accepted}",
+            responseText, cleaned, cleaned.Length, accepted);
+
+        return accepted ? cleaned : null;
     }
 
     public async Task<GenreSuggestionResult> SuggestGenresAsync(

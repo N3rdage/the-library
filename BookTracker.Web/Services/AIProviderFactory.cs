@@ -10,7 +10,8 @@ namespace BookTracker.Web.Services;
 /// </summary>
 public class AIProviderFactory(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
-    IOptions<AIOptions> options)
+    IOptions<AIOptions> options,
+    ILoggerFactory loggerFactory)
 {
     private readonly AIOptions _options = options.Value;
     private AIProvider _activeProvider;
@@ -42,7 +43,7 @@ public class AIProviderFactory(
 
     private IAIAssistantService CreateService(AIProvider provider) => provider switch
     {
-        AIProvider.Anthropic => new AnthropicAIAssistantService(dbFactory, _options.Anthropic),
+        AIProvider.Anthropic => new AnthropicAIAssistantService(dbFactory, _options.Anthropic, loggerFactory.CreateLogger<AnthropicAIAssistantService>()),
         AIProvider.MicrosoftFoundry => new MicrosoftFoundryAIAssistantService(dbFactory, _options.MicrosoftFoundry),
         AIProvider.AzureOpenAI => new AzureOpenAIAssistantService(dbFactory, _options.AzureOpenAI),
         _ => throw new ArgumentOutOfRangeException(nameof(provider))
