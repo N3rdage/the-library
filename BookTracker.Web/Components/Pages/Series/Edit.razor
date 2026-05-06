@@ -215,12 +215,27 @@ else
     [Parameter]
     public int? SeriesId { get; set; }
 
-    protected override async Task OnInitializedAsync()
+    private bool _initialized;
+    private int? _initializedFor;
+
+    // OnParametersSetAsync rather than OnInitializedAsync because
+    // /series/new and /series/{id} both route to this same component
+    // — when create-new navigates from the former to the latter, Blazor
+    // reuses the component instance, OnInitializedAsync does NOT re-fire,
+    // and the VM is left in its "Create" state showing the
+    // just-submitted form. Gate the re-init on actual SeriesId changes
+    // so spurious re-renders don't reload the VM each time.
+    protected override async Task OnParametersSetAsync()
     {
+        if (_initialized && _initializedFor == SeriesId) return;
+
         if (SeriesId.HasValue)
             await VM.InitializeAsync(SeriesId.Value);
         else
             VM.InitializeNew();
+
+        _initialized = true;
+        _initializedFor = SeriesId;
     }
 
     private async Task SaveAsync()
