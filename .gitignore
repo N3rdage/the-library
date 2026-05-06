@@ -32,6 +32,10 @@ x86/
 # advertised in a public repo.
 audits/
 
+# Playwright failure dumps (PNG + HTML), written to bin on E2E test
+# failure. Local-only by design — no value committing them.
+**/e2e-artifacts/
+
 # .NET
 project.lock.json
 project.fragment.lock.json
