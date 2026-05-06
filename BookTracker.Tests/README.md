@@ -13,7 +13,7 @@ The constants are defined in [`TestCategories.cs`](TestCategories.cs):
 | `Unit` | Pure C# logic. No DB, no Razor render, no browser. NSubstitute mocks for collaborators are fine. | <10ms each | `ErrorMessageMapperTests`, `UserTelemetryInitializerTests`, the merge-VM tests using mocked services |
 | `Component` | bUnit Razor render with MudBlazor wired. Mid-tier — fast but heavier than `Unit` because of component-rendering setup. | mid-tier | `MudAuthorPickerTests` |
 | `Integration` | Real EF Core against `Testcontainers.MsSql` + Respawn. Slower per test once the container is up. | ~24s suite startup; fast per-test thereafter | most `ViewModels/*Tests`, most `Services/*Tests` |
-| `E2E` | Playwright browser tests. Slowest tier — full request/response including JS interop. | minutes | (none yet — the Playwright POC adds the first) |
+| `E2E` | Playwright browser tests against real Kestrel + Chromium. Slowest tier — full request/response including JS interop. | tens of seconds per test | `ChassisSmokeTests` (POC chassis validation) |
 | `Load` | _Reserved_ for future perf / load-shape work. No tests use it yet. | n/a | n/a |
 
 Trait at the **class level**, not the method level. A few classes have mixed-need methods (e.g., `GenrePickerViewModelTests` has both pure-logic and DB-using methods); class-level tagging picks the slowest of the methods, which is the safe side to err on.
@@ -41,6 +41,20 @@ dotnet test --filter "FullyQualifiedName~MudAuthorPickerTests"
 ## CI behaviour
 
 The PR job in `.github/workflows/ci.yml` runs `Category=Unit|Category=Component|Category=Integration` — i.e. everything except `E2E` and `Load`. When the Playwright POC ships, `E2E` will get its own job (likely scheduled / on-demand rather than per-PR, given the runtime cost).
+
+## Playwright (E2E) one-time setup
+
+After a fresh `dotnet build`, install Chromium for Playwright once per machine:
+
+```powershell
+pwsh BookTracker.Tests/bin/Debug/net10.0/playwright.ps1 install chromium
+```
+
+The browser binary lands in `%LOCALAPPDATA%\ms-playwright\` (Windows) and is reused across runs. Add `--with-deps` on Linux.
+
+The `PlaywrightFixture` builds a `WebApplication` via `ProgramSetup.Build` (the same method `Program.Main` calls) on a random Kestrel port, with the connection string overridden to point at the existing `SqlServerContainer` Testcontainer. Tests reuse one browser instance across the class via `IClassFixture`. Run them with `--filter "Category=E2E"`; they aren't included in the default CI PR job (`Unit|Component|Integration`) so they don't gate merges yet — a separate workflow / job for E2E lands in a follow-up.
+
+If a test fails, dump artefacts with the catch-and-screenshot pattern in `ChassisSmokeTests` (saves PNG + HTML to `bin/Debug/net10.0/e2e-artifacts/`). For richer debugging, swap `Headless = true` to `false` in `PlaywrightFixture` to watch the browser drive in real time.
 
 ## Testcontainers prerequisite
 
