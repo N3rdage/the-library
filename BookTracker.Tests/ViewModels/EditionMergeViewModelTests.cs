@@ -5,6 +5,7 @@ using NSubstitute;
 
 namespace BookTracker.Tests.ViewModels;
 
+[Trait("Category", TestCategories.Unit)]
 public class EditionMergeViewModelTests
 {
     private readonly IEditionMergeService _merger = Substitute.For<IEditionMergeService>();

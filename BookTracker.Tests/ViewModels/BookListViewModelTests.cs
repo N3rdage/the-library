@@ -7,6 +7,7 @@ namespace BookTracker.Tests.ViewModels;
 // The flat-list path is exercised indirectly elsewhere; here we cover the
 // new GroupBy enum + canonical-author rollup + (no genre)/(no series)
 // trailing buckets.
+[Trait("Category", TestCategories.Integration)]
 public class BookListViewModelTests
 {
     private static async Task SeedSampleLibraryAsync(TestDbContextFactory factory)

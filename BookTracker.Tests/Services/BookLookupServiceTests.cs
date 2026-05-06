@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 
 namespace BookTracker.Tests.Services;
 
+[Trait("Category", TestCategories.Unit)]
 public class BookLookupServiceTests
 {
     private const string Isbn = "9780645840407";

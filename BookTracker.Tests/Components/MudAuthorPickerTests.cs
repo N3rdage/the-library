@@ -22,6 +22,7 @@ namespace BookTracker.Tests.Components;
 /// directly from tests, which covers everything that crosses the
 /// JS↔.NET boundary on the .NET side.
 /// </summary>
+[Trait("Category", TestCategories.Component)]
 public class MudAuthorPickerTests : ComponentTestBase
 {
     public MudAuthorPickerTests()

@@ -15,4 +15,9 @@ jobs:
           dotnet-version: '10.0.x'
       - run: dotnet restore BookTracker.slnx
       - run: dotnet build BookTracker.slnx --configuration Release --no-restore
-      - run: dotnet test BookTracker.slnx --configuration Release --no-build --verbosity normal
+      # Whitelist of test categories the PR job runs. E2E (Playwright) is
+      # deliberately excluded — it'll get its own job once the Playwright
+      # POC lands. Adding a new category is opt-in: append it here when
+      # CI should run it. See BookTracker.Tests/README.md for the
+      # category contract.
+      - run: dotnet test BookTracker.slnx --configuration Release --no-build --verbosity normal --filter "Category=Unit|Category=Component|Category=Integration"
