@@ -69,10 +69,15 @@
 
 <footer class="border-top footer text-muted">
     <div class="container">
-        &copy; 2026 - BookTracker - <a href="privacy">Privacy</a>
+        @* Each segment is d-inline-block so the browser can wrap between segments
+           on a narrow viewport without breaking mid-text (e.g. "Version:" and the
+           SHA staying together). The inter-segment whitespace is the natural
+           wrap point. *@
+        <span class="d-inline-block">&copy; 2026 - BookTracker</span>
+        <span class="d-inline-block">- <a href="privacy">Privacy</a></span>
         @if (BuildInfo.ShortSha is { } sha)
         {
-            <span class="ms-2">- Version: <a href="@BuildInfo.CommitUrl" target="_blank" rel="noopener noreferrer" class="text-muted">@sha</a></span>
+            <span class="d-inline-block">- Version: <a href="@BuildInfo.CommitUrl" target="_blank" rel="noopener noreferrer" class="text-muted">@sha</a></span>
         }
     </div>
 </footer>
