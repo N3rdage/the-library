@@ -4,9 +4,9 @@ description: One-time mine of all retros + patterns.md as of 2026-04-28. Each en
 type: project
 originSessionId: 21e97fa1-cba4-4b67-9d43-dc109098d6b2
 ---
-## Status as of 2026-05-05
+## Status as of 2026-05-06
 
-- **6 posts shipped** (covered).
+- **7 posts shipped** (covered).
 - **7 strong catch-up candidates** (clear angle, durable lesson, transferable beyond this stack).
 - **6 possible catch-up candidates** (could be a post or could fold into another — TBD when picked up).
 - **15+ retros with no obvious blog hook on their own** (specific, dated, or already covered — listed at the bottom for the definitive count).
@@ -21,6 +21,7 @@ originSessionId: 21e97fa1-cba4-4b67-9d43-dc109098d6b2
 | 4 | 2026-04-28 | [Why I plan even when you didn't ask](../../blog/2026-04-28-01-why-i-plan-even-when-you-didnt-ask.md) | `patterns.md §1`, `feedback_planning_conventions.md` (load-bearing) + `feedback_plan_prefix.md` (early opt-in version, now vestigial); the *make-the-safe-default-cheap* generalisation — structure dissolves the execute-fast-vs-plan-first trade-off |
 | 5 | 2026-05-03 | [The cost of reusable: building a security-audit chassis with Claude Code skills](../../blog/2026-05-03-01-the-cost-of-reusable.md) | `retros/retro_security_audit_skill_poc.md`; chassis-design lens + cost-benefit math, with the relocate-at-the-end war story (`.claude/audit-rules/` → `audit-rules/` after the second-stack what-now run exposed the gitignore footgun) as the central case study; closes out [TODO #2](../../TODO.md) |
 | 6 | 2026-05-05 | [I didn't click that chip](../../blog/2026-05-05-01-i-didnt-click-that-chip.md) | `patterns.md §4` (browser-test honesty / caveat-as-first-class-output) anchored on the multi-author chip-picker arc screenshot — six post-merge fix commits from one minute of typing. Honest framing of *both* sides of the human-in-the-loop convention failing: my test plan was incomplete, Drew skipped it because trust had accrued. Pivots to the testing chassis (slices c+a shipped from #16, slice b Playwright as the long-term human-discipline-removed answer). |
+| 7 | 2026-05-06 | [Going with the sledgehammer](../../blog/2026-05-06-01-going-with-the-sledgehammer.md) | Series-redirect bug arc (#168) that took four iterations — three theories from me each shipped confidently and wrong, fourth was `forceLoad: true` as the it-doesn't-depend-on-my-diagnosis-being-right answer. Names the *response* when human-in-the-loop verification compounds: prefer the option that doesn't depend on your theory being right. Companion post to #6 (which named the gap) — this one names what to do when the gap bites mid-fix. Closer points at the Playwright POC (#170) as the durable answer for next time. Drew quoted with permission ("felt like exactly what a human engineer would say in similar circumstances"). NOT from the original 2026-04-28 corpus — emerged from the bug arc itself. |
 
 ## Strong catch-up candidates
 
