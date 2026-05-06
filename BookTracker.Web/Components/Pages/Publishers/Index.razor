@@ -14,11 +14,13 @@
 <MudContainer MaxWidth="MaxWidth.Large" Class="py-3">
 
     <MudText Typo="Typo.h4" Class="mb-2">Publishers</MudText>
-    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-        Every publisher that currently attaches to an edition. Rename in place to fix typos, delete when
-        nothing references a publisher, or merge "Tor" into "Tor Books" (or vice-versa) to collapse
-        duplicates — the target absorbs all editions and the source is deleted.
-    </MudText>
+    <CollapsibleSubtitle>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Every publisher that currently attaches to an edition. Rename in place to fix typos, delete when
+            nothing references a publisher, or merge "Tor" into "Tor Books" (or vice-versa) to collapse
+            duplicates — the target absorbs all editions and the source is deleted.
+        </MudText>
+    </CollapsibleSubtitle>
 
     @if (!string.IsNullOrEmpty(VM.SuccessMessage))
     {

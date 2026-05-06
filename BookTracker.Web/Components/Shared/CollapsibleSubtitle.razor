@@ -1,0 +1,42 @@
+@* Hides descriptive page subtitles behind a toggle button on mobile (collapsed
+   by default) while keeping them always-visible on desktop. Pages now lean on
+   long subtitle paragraphs for context — useful on a wide screen, but they
+   eat the top of a phone viewport before the actual content shows.
+
+   Content-agnostic: the caller passes whatever markup fits their styling
+   (MudText, <p class="text-muted">, etc.) as ChildContent. The component
+   just owns the show/hide mechanism.
+
+   Single-element shape with a custom CSS class (defined in site.css) instead
+   of Bootstrap's `d-md-block` / `d-md-none` paired siblings. Earlier shape
+   produced a dead-zone at certain widths where neither sibling was visible —
+   custom class pins the breakpoint to one rule we own and removes the
+   cascade-ordering dependency.
+
+   Per-instance state — collapse resets on navigation. Subtitle text is
+   reference, not stateful, so re-tapping on a fresh page-load is a small
+   cost relative to a stuck-open subtitle eating viewport for someone who's
+   already read it. *@
+
+<button type="button"
+        class="collapsible-subtitle__toggle btn btn-link btn-sm p-0 text-muted text-decoration-none mb-2"
+        @onclick="Toggle">
+    @(expanded ? "▾" : "▸") @Label
+</button>
+<div class="collapsible-subtitle__content @(expanded ? "is-expanded" : "")">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+
+    /// <summary>
+    /// Toggle-button label. Defaults to "About this page" — generic enough to fit
+    /// any descriptive subtitle. Override for pages where a more specific label
+    /// reads better.
+    /// </summary>
+    [Parameter] public string Label { get; set; } = "About this page";
+
+    private bool expanded;
+    private void Toggle() => expanded = !expanded;
+}

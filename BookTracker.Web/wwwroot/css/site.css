@@ -132,3 +132,20 @@ body {
   transform: translateY(-2px);
 }
 }
+
+/* CollapsibleSubtitle component — descriptive page subtitles that collapse
+   behind a toggle button below 768px and stay always-visible above it.
+   The breakpoint is pinned in one place we own (rather than relying on
+   Bootstrap's d-md-* utility ordering in the cascade) to avoid a dead-zone
+   at intermediate widths where neither paired sibling was visible. */
+.collapsible-subtitle__toggle {
+  display: none;
+}
+@media (max-width: 767.98px) {
+  .collapsible-subtitle__toggle {
+    display: inline-block;
+  }
+  .collapsible-subtitle__content:not(.is-expanded) {
+    display: none;
+  }
+}
