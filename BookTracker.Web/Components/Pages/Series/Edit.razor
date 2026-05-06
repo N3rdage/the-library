@@ -215,41 +215,27 @@ else
     [Parameter]
     public int? SeriesId { get; set; }
 
-    private bool _initialized;
-    private int? _initializedFor;
-
-    // OnParametersSetAsync rather than OnInitializedAsync because
-    // /series/new and /series/{id} both route to this same component
-    // — when create-new navigates from the former to the latter, Blazor
-    // reuses the component instance, OnInitializedAsync does NOT re-fire,
-    // and the VM is left in its "Create" state showing the
-    // just-submitted form. Gate the re-init on actual SeriesId changes
-    // so spurious re-renders don't reload the VM each time.
-    protected override async Task OnParametersSetAsync()
+    protected override async Task OnInitializedAsync()
     {
-        if (_initialized && _initializedFor == SeriesId) return;
-
         if (SeriesId.HasValue)
             await VM.InitializeAsync(SeriesId.Value);
         else
             VM.InitializeNew();
-
-        _initialized = true;
-        _initializedFor = SeriesId;
     }
 
     private async Task SaveAsync()
     {
         var resultId = await VM.SaveAsync(SeriesId);
-        // Route-parameter check ("is the URL /series/new?") rather than
-        // VM.IsNew. The VM is transient and IsNew defaults to false, so
-        // any re-instantiation in the form-post lifecycle would silently
-        // make the redirect a no-op — which is exactly the bug Drew hit.
-        // The route parameter is the intrinsic signal and can't be reset
-        // by VM state shifts.
+        // Route-parameter check (`SeriesId is null` = "this is the
+        // /series/new path") rather than VM.IsNew, because the VM is
+        // transient and IsNew can be stale by the time we get here.
+        // forceLoad: true issues a full HTTP GET to /series/{id} —
+        // fresh component, fresh VM, no Blazor enhanced-nav lifecycle
+        // subtleties. Slightly slower than soft nav but unambiguous,
+        // and "create a series" is rare enough that the cost is nil.
         if (SeriesId is null && resultId.HasValue)
         {
-            Nav.NavigateTo($"/series/{resultId.Value}");
+            Nav.NavigateTo($"/series/{resultId.Value}", forceLoad: true);
         }
     }
 
