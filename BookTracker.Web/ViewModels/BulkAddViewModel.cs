@@ -2,13 +2,15 @@ using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace BookTracker.Web.ViewModels;
 
 public class BulkAddViewModel(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
     IBookLookupService lookup,
-    SeriesMatchService seriesMatch)
+    SeriesMatchService seriesMatch,
+    ILogger<BulkAddViewModel> logger)
 {
     /// <summary>
     /// Callback for the component to marshal state changes back to the UI thread.
@@ -28,23 +30,47 @@ public class BulkAddViewModel(
 
         // Re-scanning the same ISBN is allowed and meaningful: each row
         // represents one physical book to add, so a second scan adds a
-        // second copy. CheckDuplicateAsync flags the row as a duplicate
-        // (either against the DB or a previous in-session row) and the
-        // save path appends a new Copy to the existing Edition rather
-        // than trying to create a colliding Book.
+        // second copy. TryHydrateFromExistingAsync flags the row as a
+        // duplicate (against the DB) and populates display fields from
+        // the local Edition so the user sees what they own — upstream
+        // lookup is skipped in that case because the providers may not
+        // index the ISBN even though it's already in the library, which
+        // would otherwise leave the row reading "Unknown book".
         var row = new DiscoveryRow { Isbn = isbn, Status = RowStatus.Searching };
         Rows.Insert(0, row);
         IsbnInput = "";
 
-        await CheckDuplicateAsync(row);
+        if (await TryHydrateFromExistingAsync(row)) return;
 
         _ = LookupRowAsync(row);
     }
 
-    private async Task CheckDuplicateAsync(DiscoveryRow row)
+    private async Task<bool> TryHydrateFromExistingAsync(DiscoveryRow row)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        row.IsDuplicate = await db.Editions.AnyAsync(e => e.Isbn == row.Isbn);
+        var existing = await db.Editions
+            .Include(e => e.Book).ThenInclude(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
+            .Include(e => e.Publisher)
+            .FirstOrDefaultAsync(e => e.Isbn == row.Isbn);
+
+        if (existing is null) return false;
+
+        // Single-Work books are the common case; compendiums fall back to
+        // the lead Work for subtitle/author display. Save path doesn't care
+        // (it appends a Copy to the existing Edition either way).
+        var firstWork = existing.Book.Works.FirstOrDefault();
+        row.IsDuplicate = true;
+        row.Title = existing.Book.Title;
+        row.Subtitle = firstWork?.Subtitle;
+        row.Author = firstWork is not null ? WorkAuthorshipFormatter.Display(firstWork) : null;
+        row.CoverUrl = existing.CoverUrl ?? existing.Book.DefaultCoverArtUrl;
+        row.Source = "Local library";
+        row.Publisher = existing.Publisher?.Name;
+        row.DatePrinted = existing.DatePrinted;
+        row.DatePrintedPrecision = existing.DatePrintedPrecision;
+        row.Format = existing.Format;
+        row.Status = RowStatus.Found;
+        return true;
     }
 
     private async Task LookupRowAsync(DiscoveryRow row)
@@ -66,7 +92,16 @@ public class BulkAddViewModel(
                 row.Format = result.Format;
                 row.Status = RowStatus.Found;
 
-                row.SeriesSuggestion = await seriesMatch.FindMatchAsync(result);
+                // SeriesMatch is best-effort enrichment — failure here must not
+                // flip the row back to NotFound, so it's wrapped separately.
+                try
+                {
+                    row.SeriesSuggestion = await seriesMatch.FindMatchAsync(result);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Series match failed for ISBN {Isbn} — row left without suggestion", row.Isbn);
+                }
             }
             else
             {
@@ -74,8 +109,12 @@ public class BulkAddViewModel(
                 row.Status = RowStatus.NotFound;
             }
         }
-        catch
+        catch (Exception ex)
         {
+            // Silent catch was masking real failure modes (disposed HttpClient,
+            // upstream timeout, EF translation regression). Log so the next
+            // failure has a trace to follow.
+            logger.LogError(ex, "Bulk-add lookup failed for ISBN {Isbn}", row.Isbn);
             row.Title = $"Unknown book — {row.Isbn}";
             row.Status = RowStatus.NotFound;
         }

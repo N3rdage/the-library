@@ -2,6 +2,7 @@ using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace BookTracker.Tests.ViewModels;
@@ -12,7 +13,7 @@ public class BulkAddViewModelTests
     private readonly TestDbContextFactory _factory = new();
     private readonly IBookLookupService _lookup = Substitute.For<IBookLookupService>();
 
-    private BulkAddViewModel CreateVm() => new(_factory, _lookup, new SeriesMatchService(_factory));
+    private BulkAddViewModel CreateVm() => new(_factory, _lookup, new SeriesMatchService(_factory), NullLogger<BulkAddViewModel>.Instance);
 
     [Fact]
     public async Task AddIsbnAsync_AddsRowToGrid()
@@ -107,6 +108,62 @@ public class BulkAddViewModelTests
         await vm.AddIsbnAsync();
 
         Assert.True(vm.Rows[0].IsDuplicate);
+    }
+
+    [Fact]
+    public async Task AddIsbnAsync_ExistingIsbn_HydratesFromLocalAndSkipsUpstreamLookup()
+    {
+        // Regression: bulk-add was calling LookupByIsbnAsync even for ISBNs
+        // already in the library. When upstream providers don't index the
+        // ISBN (e.g. older mass-market editions like 055210617X — Funny
+        // Money by Richard Sapir, the trigger ISBN that surfaced this bug),
+        // the row would render as "Unknown book" despite the book being on
+        // a shelf. Local hydration must short-circuit the upstream call.
+        using (var db = _factory.CreateDbContext())
+        {
+            db.Books.Add(new Book
+            {
+                Title = "Funny Money",
+                DefaultCoverArtUrl = "https://example.test/funny-money.jpg",
+                Works =
+                [
+                    new Work
+                    {
+                        Title = "Funny Money",
+                        WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Richard Sapir" }, Order = 0 }]
+                    }
+                ],
+                Editions =
+                [
+                    new Edition
+                    {
+                        Isbn = "055210617X",
+                        Format = BookFormat.MassMarketPaperback,
+                        Publisher = new Publisher { Name = "Pinnacle" },
+                        Copies = [new Copy { Condition = BookCondition.Good }]
+                    }
+                ]
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var vm = CreateVm();
+        vm.OnStateChanged = () => Task.CompletedTask;
+        vm.IsbnInput = "055210617X";
+
+        await vm.AddIsbnAsync();
+
+        var row = Assert.Single(vm.Rows);
+        Assert.True(row.IsDuplicate);
+        Assert.Equal(BulkAddViewModel.RowStatus.Found, row.Status);
+        Assert.Equal("Funny Money", row.Title);
+        Assert.Equal("Richard Sapir", row.Author);
+        Assert.Equal("Pinnacle", row.Publisher);
+        Assert.Equal(BookFormat.MassMarketPaperback, row.Format);
+        Assert.Equal("Local library", row.Source);
+        Assert.Equal("https://example.test/funny-money.jpg", row.CoverUrl);
+
+        await _lookup.DidNotReceive().LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
