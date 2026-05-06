@@ -226,9 +226,16 @@ else
     private async Task SaveAsync()
     {
         var resultId = await VM.SaveAsync(SeriesId);
-        if (VM.IsNew && resultId.HasValue)
+        // Route-parameter check (`SeriesId is null` = "this is the
+        // /series/new path") rather than VM.IsNew, because the VM is
+        // transient and IsNew can be stale by the time we get here.
+        // forceLoad: true issues a full HTTP GET to /series/{id} —
+        // fresh component, fresh VM, no Blazor enhanced-nav lifecycle
+        // subtleties. Slightly slower than soft nav but unambiguous,
+        // and "create a series" is rare enough that the cost is nil.
+        if (SeriesId is null && resultId.HasValue)
         {
-            Nav.NavigateTo($"/series/{resultId.Value}");
+            Nav.NavigateTo($"/series/{resultId.Value}", forceLoad: true);
         }
     }
 
