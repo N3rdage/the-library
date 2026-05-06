@@ -226,7 +226,13 @@ else
     private async Task SaveAsync()
     {
         var resultId = await VM.SaveAsync(SeriesId);
-        if (VM.IsNew && resultId.HasValue)
+        // Route-parameter check ("is the URL /series/new?") rather than
+        // VM.IsNew. The VM is transient and IsNew defaults to false, so
+        // any re-instantiation in the form-post lifecycle would silently
+        // make the redirect a no-op — which is exactly the bug Drew hit.
+        // The route parameter is the intrinsic signal and can't be reset
+        // by VM state shifts.
+        if (SeriesId is null && resultId.HasValue)
         {
             Nav.NavigateTo($"/series/{resultId.Value}");
         }
