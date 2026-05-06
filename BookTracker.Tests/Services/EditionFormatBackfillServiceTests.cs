@@ -5,6 +5,7 @@ using NSubstitute;
 
 namespace BookTracker.Tests.Services;
 
+[Trait("Category", TestCategories.Integration)]
 public class EditionFormatBackfillServiceTests
 {
     private readonly TestDbContextFactory _factory = new();

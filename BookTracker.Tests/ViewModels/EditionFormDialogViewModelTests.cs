@@ -6,6 +6,7 @@ using NSubstitute;
 
 namespace BookTracker.Tests.ViewModels;
 
+[Trait("Category", TestCategories.Integration)]
 public class EditionFormDialogViewModelTests
 {
     private readonly IBookLookupService _lookup = Substitute.For<IBookLookupService>();

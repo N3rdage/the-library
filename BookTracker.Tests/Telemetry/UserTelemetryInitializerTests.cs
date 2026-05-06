@@ -6,6 +6,7 @@ using NSubstitute;
 
 namespace BookTracker.Tests.Telemetry;
 
+[Trait("Category", TestCategories.Unit)]
 public class UserTelemetryInitializerTests
 {
     [Fact]

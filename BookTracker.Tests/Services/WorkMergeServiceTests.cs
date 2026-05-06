@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Tests.Services;
 
+[Trait("Category", TestCategories.Integration)]
 public class WorkMergeServiceTests
 {
     private readonly TestDbContextFactory _factory = new();

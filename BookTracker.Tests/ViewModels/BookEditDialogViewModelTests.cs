@@ -3,6 +3,7 @@ using BookTracker.Web.ViewModels;
 
 namespace BookTracker.Tests.ViewModels;
 
+[Trait("Category", TestCategories.Integration)]
 public class BookEditDialogViewModelTests
 {
     [Fact]

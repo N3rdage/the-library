@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Tests.ViewModels;
 
+[Trait("Category", TestCategories.Integration)]
 public class CopyFormDialogViewModelTests
 {
     [Fact]

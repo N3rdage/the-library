@@ -3,6 +3,7 @@ using BookTracker.Web.Services;
 
 namespace BookTracker.Tests.Services;
 
+[Trait("Category", TestCategories.Unit)]
 public class PartialDateParserTests
 {
     [Theory]

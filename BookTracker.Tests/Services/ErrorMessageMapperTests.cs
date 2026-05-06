@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Tests.Services;
 
+[Trait("Category", TestCategories.Unit)]
 public class ErrorMessageMapperTests
 {
     [Fact]

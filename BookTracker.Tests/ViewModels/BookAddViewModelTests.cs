@@ -6,6 +6,7 @@ using NSubstitute;
 
 namespace BookTracker.Tests.ViewModels;
 
+[Trait("Category", TestCategories.Integration)]
 public class BookAddViewModelTests
 {
     private readonly TestDbContextFactory _factory = new();

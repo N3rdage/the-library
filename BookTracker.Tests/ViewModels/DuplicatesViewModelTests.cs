@@ -5,6 +5,7 @@ using NSubstitute;
 
 namespace BookTracker.Tests.ViewModels;
 
+[Trait("Category", TestCategories.Unit)]
 public class DuplicatesViewModelTests
 {
     private readonly IDuplicateDetectionService _detector = Substitute.For<IDuplicateDetectionService>();

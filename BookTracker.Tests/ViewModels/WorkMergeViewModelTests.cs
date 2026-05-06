@@ -4,6 +4,7 @@ using NSubstitute;
 
 namespace BookTracker.Tests.ViewModels;
 
+[Trait("Category", TestCategories.Unit)]
 public class WorkMergeViewModelTests
 {
     private readonly IWorkMergeService _merger = Substitute.For<IWorkMergeService>();
