@@ -251,6 +251,13 @@
 
 }
 
+@* Always-visible nav back to Home — Home surfaces the running counts, which is
+   the natural "OK, I'm done capturing" destination after a bulk-add session.
+   Outside the rows-conditional so it's reachable even on a fresh page load. *@
+<div class="mt-3">
+    <a href="/" class="btn btn-outline-secondary">Back to home</a>
+</div>
+
 @code {
     private bool scannerActive;
     private string? scannerError;
