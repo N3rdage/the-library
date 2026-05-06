@@ -108,7 +108,8 @@ public static class ProgramSetup
         {
             var factory = new AIProviderFactory(
                 sp.GetRequiredService<IDbContextFactory<BookTrackerDbContext>>(),
-                sp.GetRequiredService<IOptions<AIOptions>>());
+                sp.GetRequiredService<IOptions<AIOptions>>(),
+                sp.GetRequiredService<ILoggerFactory>());
             factory.Initialize();
             return factory;
         });
