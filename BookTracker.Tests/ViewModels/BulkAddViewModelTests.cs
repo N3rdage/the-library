@@ -179,7 +179,7 @@ public class BulkAddViewModelTests
     }
 
     [Fact]
-    public async Task AcceptRowAsync_CreatesBookAndCopy()
+    public async Task AcceptRowAsync_CreatesBookAndCopy_AndRemovesRowFromGrid()
     {
         var vm = CreateVm();
         var row = new BulkAddViewModel.DiscoveryRow
@@ -189,10 +189,11 @@ public class BulkAddViewModelTests
             Author = "J.R.R. Tolkien",
             Status = BulkAddViewModel.RowStatus.Found
         };
+        vm.Rows.Add(row);
 
         await vm.AcceptRowAsync(row);
 
-        Assert.Equal(BulkAddViewModel.RowAction.Accepted, row.Action);
+        Assert.Empty(vm.Rows); // row cleared post-accept so the discovery list stays manageable
 
         using var db = _factory.CreateDbContext();
         var book = db.Books.Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author).FirstOrDefault(b => b.Title == "The Hobbit");
@@ -225,7 +226,7 @@ public class BulkAddViewModelTests
     }
 
     [Fact]
-    public async Task FollowUpRowAsync_CreatesBookWithFollowUpTag()
+    public async Task FollowUpRowAsync_CreatesBookWithFollowUpTag_AndRemovesRowFromGrid()
     {
         // Seed the follow-up tag (like the real migration does)
         using (var db = _factory.CreateDbContext())
@@ -242,10 +243,11 @@ public class BulkAddViewModelTests
             Author = "J.R.R. Tolkien",
             Status = BulkAddViewModel.RowStatus.Found
         };
+        vm.Rows.Add(row);
 
         await vm.FollowUpRowAsync(row);
 
-        Assert.Equal(BulkAddViewModel.RowAction.FollowUp, row.Action);
+        Assert.Empty(vm.Rows);
 
         using var db2 = _factory.CreateDbContext();
         var book = db2.Books.FirstOrDefault(b => b.Title == "The Hobbit");
@@ -253,7 +255,7 @@ public class BulkAddViewModelTests
     }
 
     [Fact]
-    public async Task FollowUpNotFoundAsync_UsesDefaultTitle()
+    public async Task FollowUpNotFoundAsync_UsesDefaultTitle_AndRemovesRowFromGrid()
     {
         using (var db = _factory.CreateDbContext())
         {
@@ -267,11 +269,12 @@ public class BulkAddViewModelTests
             Isbn = "1234567890",
             Status = BulkAddViewModel.RowStatus.NotFound
         };
+        vm.Rows.Add(row);
 
         await vm.FollowUpNotFoundAsync(row);
 
-        Assert.Equal(BulkAddViewModel.RowAction.FollowUp, row.Action);
-        Assert.StartsWith("Unknown book", row.Title);
+        Assert.Empty(vm.Rows);
+        Assert.StartsWith("Unknown book", row.Title); // title filled defensively before save
     }
 
     [Fact]
@@ -286,9 +289,9 @@ public class BulkAddViewModelTests
 
         await vm.AcceptAllFoundAsync();
 
-        Assert.Equal(BulkAddViewModel.RowAction.Accepted, found.Action);
-        Assert.Equal(BulkAddViewModel.RowAction.Pending, duplicate.Action); // skipped
-        Assert.Equal(BulkAddViewModel.RowAction.Pending, notFound.Action); // skipped
+        Assert.DoesNotContain(found, vm.Rows);   // accepted, removed from grid
+        Assert.Contains(duplicate, vm.Rows);     // skipped — duplicates need user review
+        Assert.Contains(notFound, vm.Rows);      // skipped — needs follow-up decision
     }
 
     [Theory]

@@ -126,13 +126,13 @@ public class BulkAddViewModel(
     public async Task AcceptRowAsync(DiscoveryRow row)
     {
         await SaveBookAsync(row, followUp: false);
-        row.Action = RowAction.Accepted;
+        Rows.Remove(row);
     }
 
     public async Task FollowUpRowAsync(DiscoveryRow row)
     {
         await SaveBookAsync(row, followUp: true);
-        row.Action = RowAction.FollowUp;
+        Rows.Remove(row);
     }
 
     public async Task FollowUpNotFoundAsync(DiscoveryRow row)
@@ -142,7 +142,7 @@ public class BulkAddViewModel(
             row.Title = $"Unknown book — {row.Isbn}";
         }
         await SaveBookAsync(row, followUp: true);
-        row.Action = RowAction.FollowUp;
+        Rows.Remove(row);
     }
 
     public async Task AcceptAllFoundAsync()
