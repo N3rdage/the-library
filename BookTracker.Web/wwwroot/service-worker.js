@@ -9,7 +9,11 @@
 //
 // Bump CACHE_VERSION whenever cache semantics need to invalidate cleanly.
 
-const CACHE_VERSION = 'booktracker-v1';
+// v2: pass navigations through entirely (see fetch handler). Bumping
+// the cache name forces the activate handler to drop the v1 cache,
+// which had been storing HTML pages alongside assets — those are
+// stale-prone for an authenticated server-rendered app.
+const CACHE_VERSION = 'booktracker-v2';
 
 self.addEventListener('install', event => {
     // Activate as soon as possible — no need to wait for all tabs to close.
@@ -37,7 +41,20 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // Only handle same-origin GETs.
+    // Pass navigations through — Blazor Server pages need a live
+    // request to render (the SignalR circuit alone can't serve them
+    // from cache), and intercepting navigation fetches caused
+    // (a) the post-form-POST redirect to /series/{id} surfacing as
+    //     "Fetch failed and no cached response" because the SW couldn't
+    //     reach the server's redirect handling cleanly, and
+    // (b) any genuinely offline navigation falling into the same
+    //     no-cached-fallback hole.
+    // Service worker is for static-asset caching only.
+    if (request.mode === 'navigate' || request.destination === 'document') {
+        return;
+    }
+
+    // Only handle same-origin GET requests for assets.
     if (request.method !== 'GET' || url.origin !== location.origin) {
         return;
     }
