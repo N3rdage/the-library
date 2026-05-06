@@ -1,0 +1,262 @@
+@page "/authors/{Id:int}"
+@inject AuthorDetailViewModel VM
+@inject NavigationManager Nav
+
+<PageTitle>@(VM.Header?.Name ?? "Author") - BookTracker</PageTitle>
+
+@* Per-author detail. Owns rename, alias-management (mark-as-alias / promote-
+   to-canonical), and the works/books drill-down. List page (/authors) lost
+   these inline affordances when it was rebuilt as a compact searchable list —
+   this page is where they now live. *@
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-3">
+
+    <MudLink Href="/authors" Underline="Underline.Hover" Class="d-inline-flex align-items-center mb-3">
+        <MudIcon Icon="@Icons.Material.Filled.ArrowBack" Size="Size.Small" Class="mr-1" />
+        Authors
+    </MudLink>
+
+    @if (VM.Loading)
+    {
+        <MudStack AlignItems="AlignItems.Center" Class="py-5">
+            <MudProgressCircular Indeterminate="true" />
+        </MudStack>
+    }
+    else if (VM.NotFound || VM.Header is null)
+    {
+        <MudAlert Severity="Severity.Warning">No author found with id @Id.</MudAlert>
+    }
+    else
+    {
+        var header = VM.Header;
+
+        @if (!string.IsNullOrEmpty(VM.SuccessMessage))
+        {
+            <MudAlert Severity="Severity.Success"
+                      ShowCloseIcon="true"
+                      CloseIconClicked="@(() => { VM.SuccessMessage = null; StateHasChanged(); })"
+                      Class="mb-3">@VM.SuccessMessage</MudAlert>
+        }
+        @if (!string.IsNullOrEmpty(VM.ErrorMessage))
+        {
+            <MudAlert Severity="Severity.Error"
+                      ShowCloseIcon="true"
+                      CloseIconClicked="@(() => { VM.ErrorMessage = null; StateHasChanged(); })"
+                      Class="mb-3">@VM.ErrorMessage</MudAlert>
+        }
+
+        <MudPaper Elevation="1" Class="pa-3 mb-3">
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-2">
+                <MudText Typo="Typo.h4" Class="flex-grow-1">@header.Name</MudText>
+                @if (header.CanonicalAuthorId.HasValue)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">
+                        alias of <MudLink Href="@($"/authors/{header.CanonicalAuthorId}")" Class="ml-1">@header.CanonicalName</MudLink>
+                    </MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text">canonical</MudChip>
+                }
+            </MudStack>
+
+            @* Rename row *@
+            @if (editingName)
+            {
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-2">
+                    <MudTextField T="string" @bind-Value="renameInput" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 320px;" />
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveRenameAsync">Save</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => editingName = false)">Cancel</MudButton>
+                </MudStack>
+            }
+            else
+            {
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-2">
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Edit"
+                               OnClick="StartRename">Rename</MudButton>
+
+                    @if (header.CanonicalAuthorId.HasValue)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Upgrade"
+                                   OnClick="VM.PromoteToCanonicalAsync">
+                            Promote to canonical
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudSelect T="int?"
+                                   Value="null"
+                                   ValueChanged="@(async (int? id) => { if (id is int cid) await VM.MarkAsAliasOfAsync(cid); })"
+                                   Label="Mark as alias of…"
+                                   Variant="Variant.Outlined"
+                                   Margin="Margin.Dense"
+                                   Dense="true"
+                                   Style="max-width: 280px;">
+                            @foreach (var canonical in VM.CanonicalCandidates)
+                            {
+                                <MudSelectItem T="int?" Value="@((int?)canonical.Id)">@canonical.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+                </MudStack>
+            }
+
+            @if (VM.Detail.AliasNames.Count > 0)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Including @VM.Detail.AliasNames.Count alias@(VM.Detail.AliasNames.Count == 1 ? "" : "es"):
+                    @string.Join(", ", VM.Detail.AliasNames)
+                </MudText>
+            }
+        </MudPaper>
+
+        @* Works / Books toggle + list *@
+        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudChip T="AuthorDetailViewModel.AuthorViewMode"
+                     Size="Size.Small"
+                     OnClick="@(() => VM.ViewMode = AuthorDetailViewModel.AuthorViewMode.Works)"
+                     Color="@(VM.ViewMode == AuthorDetailViewModel.AuthorViewMode.Works ? Color.Primary : Color.Default)"
+                     Variant="@(VM.ViewMode == AuthorDetailViewModel.AuthorViewMode.Works ? Variant.Filled : Variant.Outlined)">
+                Works (@VM.Detail.Works.Count)
+            </MudChip>
+            <MudChip T="AuthorDetailViewModel.AuthorViewMode"
+                     Size="Size.Small"
+                     OnClick="@(() => VM.ViewMode = AuthorDetailViewModel.AuthorViewMode.Books)"
+                     Color="@(VM.ViewMode == AuthorDetailViewModel.AuthorViewMode.Books ? Color.Primary : Color.Default)"
+                     Variant="@(VM.ViewMode == AuthorDetailViewModel.AuthorViewMode.Books ? Variant.Filled : Variant.Outlined)">
+                Books (@VM.Detail.Books.Count)
+            </MudChip>
+        </MudStack>
+
+        @if (VM.ViewMode == AuthorDetailViewModel.AuthorViewMode.Works)
+        {
+            @if (VM.Detail.Works.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">No works recorded for this author.</MudText>
+            }
+            else
+            {
+                <MudPaper Elevation="1">
+                    <MudList T="int" Dense="true" Class="pa-0">
+                        @foreach (var w in VM.Detail.Works)
+                        {
+                            <MudListItem T="int" Class="px-2">
+                                <MudStack Spacing="0">
+                                    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                                        @if (w.SeriesOrder is int so)
+                                        {
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">#@so</MudText>
+                                        }
+                                        <MudText Typo="Typo.body1" Style="font-weight: 500;">@w.Title</MudText>
+                                        @if (!string.IsNullOrEmpty(w.WrittenAs))
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Info">as @w.WrittenAs</MudChip>
+                                        }
+                                    </MudStack>
+                                    @if (!string.IsNullOrEmpty(w.Subtitle))
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-style: italic;">@w.Subtitle</MudText>
+                                    }
+                                    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                                        @if (!string.IsNullOrEmpty(w.FirstPublishedDisplay))
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">First published @w.FirstPublishedDisplay</MudText>
+                                        }
+                                        @if (!string.IsNullOrEmpty(w.SeriesName))
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @(w.SeriesType == BookTracker.Data.Models.SeriesType.Collection ? "Collection" : "Series"): @w.SeriesName
+                                            </MudText>
+                                        }
+                                    </MudStack>
+                                    @if (w.InBooks.Count > 0)
+                                    {
+                                        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" Class="mt-1">
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="align-self-center">In:</MudText>
+                                            @foreach (var b in w.InBooks)
+                                            {
+                                                <MudLink Href="@($"/books/{b.Id}")" Typo="Typo.caption">@b.Title</MudLink>
+                                            }
+                                        </MudStack>
+                                    }
+                                </MudStack>
+                            </MudListItem>
+                        }
+                    </MudList>
+                </MudPaper>
+            }
+        }
+        else
+        {
+            @if (VM.Detail.Books.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">No books recorded for this author.</MudText>
+            }
+            else
+            {
+                <MudPaper Elevation="1">
+                    <MudList T="int" Dense="true" Class="pa-0">
+                        @foreach (var b in VM.Detail.Books)
+                        {
+                            <MudListItem T="int" OnClick="@(() => Nav.NavigateTo($"/books/{b.Id}"))" Class="px-2">
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap">
+                                    @if (!string.IsNullOrEmpty(b.CoverUrl))
+                                    {
+                                        <MudImage Src="@b.CoverUrl" Alt="@b.Title" Width="36" Height="52" Style="object-fit: cover; border-radius: 2px; flex: 0 0 auto;" />
+                                    }
+                                    else
+                                    {
+                                        <MudIcon Icon="@Icons.Material.Filled.MenuBook" Color="Color.Secondary" />
+                                    }
+                                    <MudStack Spacing="0" Class="flex-grow-1" Style="min-width: 0;">
+                                        <MudText Typo="Typo.body1" Style="word-break: break-word;">@b.Title</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            @b.EditionCount edition@(b.EditionCount == 1 ? "" : "s") · @b.CopyCount cop@(b.CopyCount == 1 ? "y" : "ies")
+                                        </MudText>
+                                    </MudStack>
+                                </MudStack>
+                            </MudListItem>
+                        }
+                    </MudList>
+                </MudPaper>
+            }
+        }
+    }
+
+</MudContainer>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private bool editingName;
+    private string renameInput = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await VM.LoadAsync(Id);
+    }
+
+    // Re-load on Id change so client-side nav between two author detail pages
+    // (e.g. clicking the canonical link from an alias row) refreshes the data.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (VM.Header is not null && VM.Header.Id != Id)
+        {
+            editingName = false;
+            await VM.LoadAsync(Id);
+        }
+    }
+
+    private void StartRename()
+    {
+        if (VM.Header is null) return;
+        renameInput = VM.Header.Name;
+        editingName = true;
+    }
+
+    private async Task SaveRenameAsync()
+    {
+        await VM.RenameAsync(renameInput);
+        editingName = false;
+    }
+}

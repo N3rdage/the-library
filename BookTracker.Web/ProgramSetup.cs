@@ -135,6 +135,7 @@ public static class ProgramSetup
         builder.Services.AddTransient<SeriesListViewModel>();
         builder.Services.AddTransient<SeriesEditViewModel>();
         builder.Services.AddTransient<AuthorListViewModel>();
+        builder.Services.AddTransient<AuthorDetailViewModel>();
         builder.Services.AddTransient<PublisherListViewModel>();
         builder.Services.AddTransient<ShoppingViewModel>();
         builder.Services.AddTransient<DuplicatesViewModel>();

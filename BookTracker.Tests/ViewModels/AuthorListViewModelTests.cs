@@ -7,7 +7,7 @@ namespace BookTracker.Tests.ViewModels;
 public class AuthorListViewModelTests
 {
     [Fact]
-    public async Task LoadAsync_PopulatesAuthorRows()
+    public async Task LoadAsync_PopulatesAuthorRows_WithCanonicalAndAliasShape()
     {
         var factory = new TestDbContextFactory();
         using (var db = factory.CreateDbContext())
@@ -26,115 +26,49 @@ public class AuthorListViewModelTests
         Assert.Equal(2, vm.Authors.Count);
         var kingRow = vm.Authors.Single(a => a.Name == "Stephen King");
         Assert.Null(kingRow.CanonicalAuthorId);
+        Assert.Contains("Richard Bachman", kingRow.AliasNames);
+
         var bachmanRow = vm.Authors.Single(a => a.Name == "Richard Bachman");
         Assert.Equal(kingRow.Id, bachmanRow.CanonicalAuthorId);
     }
 
     [Fact]
-    public async Task ToggleExpandAsync_CanonicalRollsUpAliasWorks()
+    public async Task LoadAsync_CanonicalCountsRollUpAliasWorks_AliasCountsAreOwnOnly()
     {
+        // King has Carrie + IT (own); Bachman is an alias contributing Thinner.
+        // King's row should report 3 works / 3 books / 0 series. Bachman's row
+        // should report just its own — 1 / 1 / 0.
         var factory = new TestDbContextFactory();
-        int kingId;
         using (var db = factory.CreateDbContext())
         {
             var king = new Author { Name = "Stephen King" };
             var bachman = new Author { Name = "Richard Bachman", CanonicalAuthor = king };
             db.Authors.AddRange(king, bachman);
             db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] });
+            db.Books.Add(new Book { Title = "It", Works = [new Work { Title = "It", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] });
             db.Books.Add(new Book { Title = "Thinner", Works = [new Work { Title = "Thinner", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }] }] });
             await db.SaveChangesAsync();
-            kingId = king.Id;
         }
 
         var vm = new AuthorListViewModel(factory);
         await vm.LoadAsync();
-        await vm.ToggleExpandAsync(kingId);
 
-        Assert.Contains(kingId, vm.ExpandedAuthorIds);
-        var detail = vm.DetailByAuthorId[kingId];
-        Assert.Equal(2, detail.Works.Count);
-        Assert.Contains(detail.Works, w => w.Title == "Carrie");
-        Assert.Contains(detail.Works, w => w.Title == "Thinner");
-        Assert.Contains("Richard Bachman", detail.AliasNames);
+        var kingRow = vm.Authors.Single(a => a.Name == "Stephen King");
+        Assert.Equal(3, kingRow.WorkCount);
+        Assert.Equal(3, kingRow.BookCount);
+        Assert.Equal(0, kingRow.SeriesCount);
 
-        // The Bachman work should be flagged with WrittenAs, the King one shouldn't.
-        Assert.Equal("Richard Bachman", detail.Works.Single(w => w.Title == "Thinner").WrittenAs);
-        Assert.Null(detail.Works.Single(w => w.Title == "Carrie").WrittenAs);
+        var bachmanRow = vm.Authors.Single(a => a.Name == "Richard Bachman");
+        Assert.Equal(1, bachmanRow.WorkCount);
+        Assert.Equal(1, bachmanRow.BookCount);
+        Assert.Equal(0, bachmanRow.SeriesCount);
     }
 
     [Fact]
-    public async Task ToggleExpandAsync_AliasRowShowsOnlyOwnWorks()
+    public async Task LoadAsync_SeriesCount_DistinctSeriesAcrossWorks()
     {
+        // Pratchett: Discworld + Bromeliad + a standalone. Series count = 2.
         var factory = new TestDbContextFactory();
-        int bachmanId;
-        using (var db = factory.CreateDbContext())
-        {
-            var king = new Author { Name = "Stephen King" };
-            var bachman = new Author { Name = "Richard Bachman", CanonicalAuthor = king };
-            db.Authors.AddRange(king, bachman);
-            db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] });
-            db.Books.Add(new Book { Title = "Thinner", Works = [new Work { Title = "Thinner", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }] }] });
-            await db.SaveChangesAsync();
-            bachmanId = bachman.Id;
-        }
-
-        var vm = new AuthorListViewModel(factory);
-        await vm.LoadAsync();
-        await vm.ToggleExpandAsync(bachmanId);
-
-        var detail = vm.DetailByAuthorId[bachmanId];
-        Assert.Single(detail.Works);
-        Assert.Equal("Thinner", detail.Works[0].Title);
-        Assert.Empty(detail.AliasNames); // alias rows don't roll anything up
-        Assert.Null(detail.Works[0].WrittenAs); // no "as X" label on alias-own rows
-    }
-
-    [Fact]
-    public async Task ToggleExpandAsync_SecondCallCollapsesWithoutReload()
-    {
-        var factory = new TestDbContextFactory();
-        int authorId;
-        using (var db = factory.CreateDbContext())
-        {
-            var author = new Author { Name = "A" };
-            db.Authors.Add(author);
-            db.Books.Add(new Book { Title = "B", Works = [new Work { Title = "W", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }] });
-            await db.SaveChangesAsync();
-            authorId = author.Id;
-        }
-
-        var vm = new AuthorListViewModel(factory);
-        await vm.LoadAsync();
-        await vm.ToggleExpandAsync(authorId);
-        Assert.Contains(authorId, vm.ExpandedAuthorIds);
-        Assert.True(vm.DetailByAuthorId.ContainsKey(authorId));
-
-        await vm.ToggleExpandAsync(authorId);
-        Assert.DoesNotContain(authorId, vm.ExpandedAuthorIds);
-        // Detail cache survives the collapse — a later re-expand reuses it.
-        Assert.True(vm.DetailByAuthorId.ContainsKey(authorId));
-    }
-
-    [Fact]
-    public async Task GetViewMode_DefaultsToWorks_SetViewMode_Sticks()
-    {
-        var factory = new TestDbContextFactory();
-        var vm = new AuthorListViewModel(factory);
-
-        Assert.Equal(AuthorListViewModel.AuthorViewMode.Works, vm.GetViewMode(42));
-        vm.SetViewMode(42, AuthorListViewModel.AuthorViewMode.Books);
-        Assert.Equal(AuthorListViewModel.AuthorViewMode.Books, vm.GetViewMode(42));
-    }
-
-    [Fact]
-    public async Task ToggleExpandAsync_OrdersWorksByInSeries_ThenSeriesOrder_ThenTitle()
-    {
-        // Drew set up Discworld manually with SeriesOrder 1..N and expects
-        // the /authors expand to read Discworld 1, 2, 3, ..., then standalone
-        // works alphabetical — not pure title-alphabetical (which buried the
-        // numbered series order entirely). This test fixes that ordering.
-        var factory = new TestDbContextFactory();
-        int authorId;
         using (var db = factory.CreateDbContext())
         {
             var pratchett = new Author { Name = "Terry Pratchett" };
@@ -144,58 +78,90 @@ public class AuthorListViewModelTests
             db.Series.AddRange(discworld, bromeliad);
 
             db.Books.AddRange(
-                // Standalone (no series) — expect at the END despite alpha-early titles.
-                new Book { Title = "Good Omens", Works = [new Work { Title = "Good Omens", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }] }] },
-                new Book { Title = "Nation", Works = [new Work { Title = "Nation", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }] }] },
-                // Discworld — out-of-order titles to prove SeriesOrder wins over Title.
                 new Book { Title = "Mort", Works = [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = discworld, SeriesOrder = 4 }] },
                 new Book { Title = "The Colour of Magic", Works = [new Work { Title = "The Colour of Magic", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = discworld, SeriesOrder = 1 }] },
-                new Book { Title = "Equal Rites", Works = [new Work { Title = "Equal Rites", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = discworld, SeriesOrder = 3 }] },
-                // Bromeliad — single work; cluster comes BEFORE Discworld alphabetically.
-                new Book { Title = "Truckers", Works = [new Work { Title = "Truckers", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = bromeliad, SeriesOrder = 1 }] });
+                new Book { Title = "Truckers", Works = [new Work { Title = "Truckers", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = bromeliad, SeriesOrder = 1 }] },
+                new Book { Title = "Good Omens", Works = [new Work { Title = "Good Omens", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }] }] });
             await db.SaveChangesAsync();
-            authorId = pratchett.Id;
         }
 
         var vm = new AuthorListViewModel(factory);
         await vm.LoadAsync();
-        await vm.ToggleExpandAsync(authorId);
 
-        var titles = vm.DetailByAuthorId[authorId].Works.Select(w => w.Title).ToList();
-        Assert.Equal(
-            ["Truckers", "The Colour of Magic", "Equal Rites", "Mort", "Good Omens", "Nation"],
-            titles);
+        var p = vm.Authors.Single(a => a.Name == "Terry Pratchett");
+        Assert.Equal(4, p.WorkCount);
+        Assert.Equal(4, p.BookCount);
+        Assert.Equal(2, p.SeriesCount);
     }
 
     [Fact]
-    public async Task MarkAsAliasAsync_InvalidatesDetailCache()
+    public async Task FilteredAuthors_HidesAliases_WhenShowAliasesIsFalse()
     {
-        // Structural change (mark X as alias of Y) should drop any cached
-        // detail for X and Y so the next expand picks up the new roll-up.
         var factory = new TestDbContextFactory();
-        int kingId;
-        int bachmanId;
         using (var db = factory.CreateDbContext())
         {
             var king = new Author { Name = "Stephen King" };
-            var bachman = new Author { Name = "Richard Bachman" }; // NOT an alias yet
+            var bachman = new Author { Name = "Richard Bachman", CanonicalAuthor = king };
             db.Authors.AddRange(king, bachman);
-            db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] });
-            db.Books.Add(new Book { Title = "Thinner", Works = [new Work { Title = "Thinner", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }] }] });
             await db.SaveChangesAsync();
-            kingId = king.Id;
-            bachmanId = bachman.Id;
         }
 
         var vm = new AuthorListViewModel(factory);
         await vm.LoadAsync();
-        await vm.ToggleExpandAsync(kingId);
-        Assert.Single(vm.DetailByAuthorId[kingId].Works); // Carrie only
+        Assert.Equal(2, vm.FilteredAuthors.Count());
 
-        await vm.MarkAsAliasAsync(bachmanId, kingId);
+        vm.ShowAliases = false;
+        var only = Assert.Single(vm.FilteredAuthors);
+        Assert.Equal("Stephen King", only.Name);
+    }
 
-        Assert.False(vm.DetailByAuthorId.ContainsKey(kingId));
-        await vm.ExpandAsync(kingId);
-        Assert.Equal(2, vm.DetailByAuthorId[kingId].Works.Count); // now includes Thinner
+    [Fact]
+    public async Task FilteredAuthors_SearchIsAliasAware_AndCaseInsensitive()
+    {
+        // Typing "bachman" should surface King's row even with show-aliases off,
+        // because the alias name contains the term.
+        var factory = new TestDbContextFactory();
+        using (var db = factory.CreateDbContext())
+        {
+            var king = new Author { Name = "Stephen King" };
+            var bachman = new Author { Name = "Richard Bachman", CanonicalAuthor = king };
+            var atwood = new Author { Name = "Margaret Atwood" };
+            db.Authors.AddRange(king, bachman, atwood);
+            await db.SaveChangesAsync();
+        }
+
+        var vm = new AuthorListViewModel(factory);
+        await vm.LoadAsync();
+
+        vm.SearchTerm = "bachman";
+        var matches = vm.FilteredAuthors.Select(a => a.Name).ToList();
+        Assert.Contains("Stephen King", matches);   // matched by alias rollup
+        Assert.Contains("Richard Bachman", matches); // matched by literal name
+        Assert.DoesNotContain("Margaret Atwood", matches);
+
+        // Show-aliases=false + alias-name search still surfaces the canonical.
+        vm.ShowAliases = false;
+        var canonicalOnly = vm.FilteredAuthors.Select(a => a.Name).ToList();
+        Assert.Equal(["Stephen King"], canonicalOnly);
+    }
+
+    [Fact]
+    public async Task FilteredAuthors_EmptySearch_ReturnsAllRows()
+    {
+        var factory = new TestDbContextFactory();
+        using (var db = factory.CreateDbContext())
+        {
+            db.Authors.AddRange(
+                new Author { Name = "A" },
+                new Author { Name = "B" });
+            await db.SaveChangesAsync();
+        }
+
+        var vm = new AuthorListViewModel(factory);
+        await vm.LoadAsync();
+
+        Assert.Equal(2, vm.FilteredAuthors.Count());
+        vm.SearchTerm = "   ";
+        Assert.Equal(2, vm.FilteredAuthors.Count()); // whitespace ignored
     }
 }
