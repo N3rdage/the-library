@@ -27,7 +27,11 @@ jobs:
         run: dotnet restore BookTracker.slnx
 
       - name: Build
-        run: dotnet build BookTracker.slnx --configuration Release --no-restore
+        # /p:SourceRevisionId stamps the commit SHA into AssemblyInformationalVersionAttribute
+        # ("1.0.0+<sha>") so the runtime BuildInfo helper can surface the live commit in the
+        # UI footer. Must be set on the build step (the assembly is produced here); publish
+        # runs --no-build and would not pick up a property added there.
+        run: dotnet build BookTracker.slnx --configuration Release --no-restore /p:SourceRevisionId=${{ github.sha }}
 
       - name: Publish
         run: dotnet publish BookTracker.Web/BookTracker.Web.csproj --configuration Release --no-build -o ./publish
