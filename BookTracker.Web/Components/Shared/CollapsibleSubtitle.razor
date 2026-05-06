@@ -1,0 +1,43 @@
+@* Hides descriptive page subtitles behind a toggle button on mobile (collapsed
+   by default) while keeping them always-visible on desktop. Pages now lean on
+   long subtitle paragraphs for context — useful on a wide screen, but they
+   eat the top of a phone viewport before the actual content shows.
+
+   Content-agnostic: the caller passes whatever markup fits their styling
+   (MudText, <p class="text-muted">, etc.) as ChildContent. The component
+   just owns the show/hide mechanism.
+
+   Per-instance state — collapse resets on navigation. Intentional: subtitle
+   text is reference, not stateful, so the cost of re-tapping on a fresh
+   page-load is small relative to the cost of a stuck-open subtitle eating
+   viewport for a user who's already read it once. *@
+
+<div class="d-none d-md-block">
+    @ChildContent
+</div>
+
+<div class="d-md-none mb-3">
+    <button type="button" class="btn btn-link btn-sm p-0 text-muted text-decoration-none" @onclick="Toggle">
+        @(expanded ? "▾" : "▸") @Label
+    </button>
+    @if (expanded)
+    {
+        <div class="mt-2">
+            @ChildContent
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+
+    /// <summary>
+    /// Toggle-button label. Defaults to "About this page" — generic enough to fit
+    /// any descriptive subtitle. Override for pages where a more specific label
+    /// reads better.
+    /// </summary>
+    [Parameter] public string Label { get; set; } = "About this page";
+
+    private bool expanded;
+    private void Toggle() => expanded = !expanded;
+}

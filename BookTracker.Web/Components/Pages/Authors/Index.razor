@@ -14,11 +14,13 @@
 <MudContainer MaxWidth="MaxWidth.Large" Class="py-3">
 
     <MudText Typo="Typo.h4" Class="mb-2">Authors</MudText>
-    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-        Each author has its own row. Pen names are linked back to a canonical author so aggregations
-        (top-authors stats, author filter) roll the totals together. Stephen King's tally includes
-        his Bachman titles when you mark Bachman as an alias of King.
-    </MudText>
+    <CollapsibleSubtitle>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Each author has its own row. Pen names are linked back to a canonical author so aggregations
+            (top-authors stats, author filter) roll the totals together. Stephen King's tally includes
+            his Bachman titles when you mark Bachman as an alias of King.
+        </MudText>
+    </CollapsibleSubtitle>
 
     @if (!string.IsNullOrEmpty(VM.SuccessMessage))
     {
