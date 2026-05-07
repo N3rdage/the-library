@@ -102,7 +102,14 @@ public class BlobBookCoverStorage : IBookCoverStorage
             },
         }, ct);
 
-        return BuildPublicUrl(blobName);
+        // Cache-bust the year-long Cache-Control header by appending a unix
+        // timestamp. Re-uploads to the same blob key produce a new URL each
+        // time, forcing browsers to refetch — without this the stale image
+        // can hang around in cache for up to a year. Mirror-from-upstream
+        // doesn't need this (URL is stable per blob), so the unstamped
+        // BuildPublicUrl is still used there.
+        var stamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        return $"{BuildPublicUrl(blobName)}?v={stamp}";
     }
 
     private async Task<BlobContainerClient?> InitContainerAsync()

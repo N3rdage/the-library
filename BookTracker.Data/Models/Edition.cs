@@ -25,6 +25,16 @@ public class Edition
     [MaxLength(500)]
     public string? CoverUrl { get; set; }
 
+    /// <summary>
+    /// True when <see cref="CoverUrl"/> points at a user-uploaded photo
+    /// (typically because no online cover was available for a rare or old
+    /// edition). Mirrored covers from upstream providers stay false. Used
+    /// to (a) flag the cover with a small "your photo" badge in display
+    /// surfaces, and (b) skip user-supplied covers if a future re-mirror
+    /// pass re-fetches upstream URLs en masse.
+    /// </summary>
+    public bool IsUserSupplied { get; set; }
+
     public int? PublisherId { get; set; }
     public Publisher? Publisher { get; set; }
 

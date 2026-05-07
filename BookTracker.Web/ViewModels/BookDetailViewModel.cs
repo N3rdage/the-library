@@ -1,6 +1,8 @@
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
+using BookTracker.Web.Services.Covers;
+using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
@@ -11,8 +13,16 @@ namespace BookTracker.Web.ViewModels;
 // notes, tags) mutate the Current* properties + persist in the same call,
 // keeping the page focused on one value at a time. Larger structural
 // edits (Work, Edition, Copy) happen in modal dialogs in a later PR.
-public class BookDetailViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
+public class BookDetailViewModel(
+    IDbContextFactory<BookTrackerDbContext> dbFactory,
+    IBookCoverStorage coverStorage,
+    ILogger<BookDetailViewModel> logger)
 {
+    /// <summary>Server-side cap on user-uploaded cover photos. 10 MB is generous
+    /// enough to accept a 12MP phone-camera JPEG without rejection while
+    /// bounding the worst-case payload through Blazor Server's SignalR pipe
+    /// and the resize step in CoverImageProcessor.</summary>
+    public const long MaxUploadBytes = 10 * 1024 * 1024;
     public bool NotFound { get; private set; }
     public BookDetail? Book { get; private set; }
 
@@ -193,6 +203,71 @@ public class BookDetailViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
         await db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Uploads a user-supplied photo as the cover for a specific Edition,
+    /// replacing any existing cover. Used for rare / old editions where no
+    /// online cover is available. Returns a <see cref="UploadCoverResult"/>
+    /// with success/error shape so the page can render the right snackbar.
+    /// </summary>
+    public async Task<UploadCoverResult> UploadEditionCoverAsync(int editionId, IBrowserFile file, CancellationToken ct)
+    {
+        if (Book is null) return UploadCoverResult.Failure("Book not loaded.");
+
+        if (file.Size > MaxUploadBytes)
+        {
+            return UploadCoverResult.Failure($"File too large ({file.Size / 1024 / 1024} MB). Max is {MaxUploadBytes / 1024 / 1024} MB.");
+        }
+
+        if (!coverStorage.IsEnabled)
+        {
+            return UploadCoverResult.Failure("Cover storage is not configured.");
+        }
+
+        byte[] bytes;
+        try
+        {
+            using var stream = file.OpenReadStream(MaxUploadBytes, ct);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms, ct);
+            bytes = ms.ToArray();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to read uploaded cover stream for Edition {EditionId}.", editionId);
+            return UploadCoverResult.Failure("Couldn't read the uploaded file.");
+        }
+
+        string newUrl;
+        try
+        {
+            newUrl = await coverStorage.UploadAsync(bytes, file.ContentType, $"editions/{editionId}", ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Cover upload failed for Edition {EditionId}.", editionId);
+            return UploadCoverResult.Failure("Upload failed. Try again or check the file.");
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var edition = await db.Editions.FirstOrDefaultAsync(e => e.Id == editionId, ct);
+        if (edition is null) return UploadCoverResult.Failure("Edition not found.");
+
+        edition.CoverUrl = newUrl;
+        edition.IsUserSupplied = true;
+        await db.SaveChangesAsync(ct);
+
+        // Refresh the in-memory snapshot so the page re-renders against the new URL.
+        await InitializeAsync(Book.Id);
+
+        return UploadCoverResult.Ok(newUrl);
+    }
+
+    public record UploadCoverResult(bool Success, string? ErrorMessage, string? NewUrl)
+    {
+        public static UploadCoverResult Ok(string url) => new(true, null, url);
+        public static UploadCoverResult Failure(string error) => new(false, error, null);
+    }
+
     public async Task RemoveTagAsync(int tagId)
     {
         if (Book is null) return;
@@ -250,6 +325,7 @@ public class BookDetailViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
         e.Publisher?.Name,
         PartialDateParser.Format(e.DatePrinted, e.DatePrintedPrecision),
         e.CoverUrl,
+        e.IsUserSupplied,
         e.Copies
             .OrderBy(c => c.DateAcquired ?? DateTime.MaxValue)
             .ThenBy(c => c.Id)
@@ -291,6 +367,7 @@ public class BookDetailViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
         string? Publisher,
         string DatePrintedDisplay,
         string? CoverUrl,
+        bool IsUserSupplied,
         IReadOnlyList<CopyDetail> Copies);
 
     public record CopyDetail(int Id, BookCondition Condition, DateTime? DateAcquired, string? Notes);

@@ -1,17 +1,26 @@
 using BookTracker.Data.Models;
+using BookTracker.Web.Services.Covers;
 using BookTracker.Web.ViewModels;
+using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 
 namespace BookTracker.Tests.ViewModels;
 
 [Trait("Category", TestCategories.Integration)]
 public class BookDetailViewModelTests
 {
+    private static BookDetailViewModel CreateVm(TestDbContextFactory factory, IBookCoverStorage? coverStorage = null) =>
+        new(factory,
+            coverStorage ?? Substitute.For<IBookCoverStorage>(),
+            NullLogger<BookDetailViewModel>.Instance);
+
     [Fact]
     public async Task InitializeAsync_MissingId_MarksNotFound()
     {
         var factory = new TestDbContextFactory();
-        var vm = new BookDetailViewModel(factory);
+        var vm = CreateVm(factory);
 
         await vm.InitializeAsync(999);
 
@@ -50,7 +59,7 @@ public class BookDetailViewModelTests
             bookId = book.Id;
         }
 
-        var vm = new BookDetailViewModel(factory);
+        var vm = CreateVm(factory);
         await vm.InitializeAsync(bookId);
 
         Assert.False(vm.NotFound);
@@ -90,7 +99,7 @@ public class BookDetailViewModelTests
             bookId = book.Id;
         }
 
-        var vm = new BookDetailViewModel(factory);
+        var vm = CreateVm(factory);
         await vm.InitializeAsync(bookId);
 
         Assert.False(vm.IsSingleWork);
@@ -138,7 +147,7 @@ public class BookDetailViewModelTests
             bookId = book.Id;
         }
 
-        var vm = new BookDetailViewModel(factory);
+        var vm = CreateVm(factory);
         await vm.InitializeAsync(bookId);
 
         Assert.Equal(2, vm.TotalEditions);
@@ -154,7 +163,7 @@ public class BookDetailViewModelTests
         var factory = new TestDbContextFactory();
         var bookId = await SeedSimpleBookAsync(factory, rating: 2);
 
-        var vm = new BookDetailViewModel(factory);
+        var vm = CreateVm(factory);
         await vm.InitializeAsync(bookId);
         await vm.SetRatingAsync(5);
 
@@ -169,7 +178,7 @@ public class BookDetailViewModelTests
         var factory = new TestDbContextFactory();
         var bookId = await SeedSimpleBookAsync(factory, status: BookStatus.Unread);
 
-        var vm = new BookDetailViewModel(factory);
+        var vm = CreateVm(factory);
         await vm.InitializeAsync(bookId);
         await vm.SetStatusAsync(BookStatus.Reading);
 
@@ -184,7 +193,7 @@ public class BookDetailViewModelTests
         var factory = new TestDbContextFactory();
         var bookId = await SeedSimpleBookAsync(factory, notes: "original");
 
-        var vm = new BookDetailViewModel(factory);
+        var vm = CreateVm(factory);
         await vm.InitializeAsync(bookId);
 
         // Not dirty yet — save should be a no-op even if CurrentNotes changed.
@@ -213,7 +222,7 @@ public class BookDetailViewModelTests
         var factory = new TestDbContextFactory();
         var bookId = await SeedSimpleBookAsync(factory, notes: "will be cleared");
 
-        var vm = new BookDetailViewModel(factory);
+        var vm = CreateVm(factory);
         await vm.InitializeAsync(bookId);
         vm.CurrentNotes = "   ";
         vm.MarkNotesDirty();
@@ -229,7 +238,7 @@ public class BookDetailViewModelTests
         var factory = new TestDbContextFactory();
         var bookId = await SeedSimpleBookAsync(factory);
 
-        var vm = new BookDetailViewModel(factory);
+        var vm = CreateVm(factory);
         await vm.InitializeAsync(bookId);
         var added = await vm.AddTagAsync("Signed");
 
@@ -260,7 +269,7 @@ public class BookDetailViewModelTests
             bookId = book.Id;
         }
 
-        var vm = new BookDetailViewModel(factory);
+        var vm = CreateVm(factory);
         await vm.InitializeAsync(bookId);
         await vm.AddTagAsync("FOLLOW-UP");
 
@@ -288,7 +297,7 @@ public class BookDetailViewModelTests
             bookId = book.Id;
         }
 
-        var vm = new BookDetailViewModel(factory);
+        var vm = CreateVm(factory);
         await vm.InitializeAsync(bookId);
         var second = await vm.AddTagAsync("gift");
 
@@ -317,7 +326,7 @@ public class BookDetailViewModelTests
             tagId = tag.Id;
         }
 
-        var vm = new BookDetailViewModel(factory);
+        var vm = CreateVm(factory);
         await vm.InitializeAsync(bookId);
         await vm.RemoveTagAsync(tagId);
 
@@ -359,7 +368,7 @@ public class BookDetailViewModelTests
             copyToDelete = edition.Copies[0].Id;
         }
 
-        var vm = new BookDetailViewModel(factory);
+        var vm = CreateVm(factory);
         await vm.InitializeAsync(bookId);
         await vm.DeleteCopyAsync(copyToDelete);
 
@@ -391,7 +400,7 @@ public class BookDetailViewModelTests
             copyToDelete = edition.Copies[0].Id;
         }
 
-        var vm = new BookDetailViewModel(factory);
+        var vm = CreateVm(factory);
         await vm.InitializeAsync(bookId);
         await vm.DeleteCopyAsync(copyToDelete);
 
@@ -421,7 +430,7 @@ public class BookDetailViewModelTests
             bookId = book.Id;
         }
 
-        var vm = new BookDetailViewModel(factory);
+        var vm = CreateVm(factory);
         await vm.InitializeAsync(bookId);
         var results = (await vm.SearchTagsAsync("", CancellationToken.None)).ToList();
 
@@ -475,10 +484,134 @@ public class BookDetailViewModelTests
             bookId = book.Id;
         }
 
-        var vm = new BookDetailViewModel(factory);
+        var vm = CreateVm(factory);
         await vm.InitializeAsync(bookId);
 
         var names = vm.Book!.Tags.Select(t => t.Name).ToList();
         Assert.Equal(new[] { "follow-up", "gift", "signed" }, names);
+    }
+
+    [Fact]
+    public async Task UploadEditionCoverAsync_HappyPath_UpdatesUrlAndFlagsUserSupplied()
+    {
+        var factory = new TestDbContextFactory();
+        int bookId, editionId;
+        using (var db = factory.CreateDbContext())
+        {
+            var author = new Author { Name = "A" };
+            var book = new Book
+            {
+                Title = "B",
+                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+                Editions = [new Edition { Isbn = "1", Format = BookFormat.TradePaperback, Copies = [new Copy { Condition = BookCondition.Good }] }],
+            };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            bookId = book.Id;
+            editionId = book.Editions[0].Id;
+        }
+
+        var storage = Substitute.For<IBookCoverStorage>();
+        storage.IsEnabled.Returns(true);
+        storage.UploadAsync(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns("https://test/book-covers/editions/" + editionId + ".jpg?v=42");
+
+        var fileBytes = new byte[] { 0xFF, 0xD8, 0x01, 0x02, 0x03 }; // JPEG-ish header bytes
+        var file = Substitute.For<IBrowserFile>();
+        file.Size.Returns((long)fileBytes.Length);
+        file.Name.Returns("test.jpg");
+        file.ContentType.Returns("image/jpeg");
+        file.OpenReadStream(Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(new MemoryStream(fileBytes));
+
+        var vm = CreateVm(factory, storage);
+        await vm.InitializeAsync(bookId);
+
+        var result = await vm.UploadEditionCoverAsync(editionId, file, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal("https://test/book-covers/editions/" + editionId + ".jpg?v=42", result.NewUrl);
+
+        using var verifyDb = factory.CreateDbContext();
+        var saved = verifyDb.Editions.Single(e => e.Id == editionId);
+        Assert.Equal("https://test/book-covers/editions/" + editionId + ".jpg?v=42", saved.CoverUrl);
+        Assert.True(saved.IsUserSupplied);
+
+        // The VM snapshot should reflect the new URL after the post-upload refresh.
+        var refreshedEdition = vm.Book!.Editions.Single(e => e.Id == editionId);
+        Assert.Equal(saved.CoverUrl, refreshedEdition.CoverUrl);
+        Assert.True(refreshedEdition.IsUserSupplied);
+    }
+
+    [Fact]
+    public async Task UploadEditionCoverAsync_FileTooLarge_ReturnsFailure_AndDoesNotUpload()
+    {
+        var factory = new TestDbContextFactory();
+        int bookId, editionId;
+        using (var db = factory.CreateDbContext())
+        {
+            var author = new Author { Name = "A" };
+            var book = new Book
+            {
+                Title = "B",
+                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+                Editions = [new Edition { Format = BookFormat.TradePaperback, Copies = [new Copy { Condition = BookCondition.Good }] }],
+            };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            bookId = book.Id;
+            editionId = book.Editions[0].Id;
+        }
+
+        var storage = Substitute.For<IBookCoverStorage>();
+        storage.IsEnabled.Returns(true);
+
+        var file = Substitute.For<IBrowserFile>();
+        file.Size.Returns(BookDetailViewModel.MaxUploadBytes + 1);
+        file.Name.Returns("huge.jpg");
+        file.ContentType.Returns("image/jpeg");
+
+        var vm = CreateVm(factory, storage);
+        await vm.InitializeAsync(bookId);
+
+        var result = await vm.UploadEditionCoverAsync(editionId, file, CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Contains("too large", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        await storage.DidNotReceive().UploadAsync(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UploadEditionCoverAsync_StorageDisabled_ReturnsFailure()
+    {
+        var factory = new TestDbContextFactory();
+        int bookId, editionId;
+        using (var db = factory.CreateDbContext())
+        {
+            var author = new Author { Name = "A" };
+            var book = new Book
+            {
+                Title = "B",
+                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+                Editions = [new Edition { Format = BookFormat.TradePaperback, Copies = [new Copy { Condition = BookCondition.Good }] }],
+            };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            bookId = book.Id;
+            editionId = book.Editions[0].Id;
+        }
+
+        var storage = Substitute.For<IBookCoverStorage>();
+        storage.IsEnabled.Returns(false); // configuration missing — service idle
+
+        var file = Substitute.For<IBrowserFile>();
+        file.Size.Returns(100L);
+
+        var vm = CreateVm(factory, storage);
+        await vm.InitializeAsync(bookId);
+
+        var result = await vm.UploadEditionCoverAsync(editionId, file, CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Contains("not configured", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
     }
 }
