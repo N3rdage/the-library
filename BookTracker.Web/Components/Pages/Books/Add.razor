@@ -13,9 +13,13 @@
         <div class="col-12">
             <div class="card">
                 <div class="card-body">
-                    <div class="form-check form-switch mb-3">
+                    <div class="form-check form-switch mb-2">
                         <input type="checkbox" id="noIsbnToggle" class="form-check-input" @bind="VM.NoIsbnMode" />
                         <label for="noIsbnToggle" class="form-check-label">No ISBN (pre-1974 book)</label>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input type="checkbox" id="collectionToggle" class="form-check-input" @bind="VM.IsCollection" />
+                        <label for="collectionToggle" class="form-check-label">This is a collection (multiple works in one book)</label>
                     </div>
 
                     @if (!VM.NoIsbnMode)
@@ -180,16 +184,65 @@
             <BookForm Input="VM.BookInput" />
         </div>
 
-        <div class="col-12">
-            <WorkForm Input="VM.WorkInput" Title="Work (story / novel)" />
-        </div>
+        @if (!VM.IsCollection)
+        {
+            <div class="col-12">
+                <WorkForm Input="VM.WorkInput" Title="Work (story / novel)" />
+            </div>
 
-        <div class="col-12">
-            <GenrePicker @ref="genrePicker"
-                         SelectedGenreIds="selectedGenreIds"
-                         SelectedGenreIdsChanged="ids => selectedGenreIds = ids"
-                         LookupCandidates="VM.LookupCandidates" />
-        </div>
+            <div class="col-12">
+                <GenrePicker @ref="genrePicker"
+                             SelectedGenreIds="selectedGenreIds"
+                             SelectedGenreIdsChanged="ids => selectedGenreIds = ids"
+                             LookupCandidates="VM.LookupCandidates" />
+            </div>
+        }
+        else
+        {
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-white"><h2 class="h5 mb-0">Works in this collection</h2></div>
+                    <div class="card-body">
+                        @for (var i = 0; i < VM.CollectionWorks.Count; i++)
+                        {
+                            var index = i;
+                            var work = VM.CollectionWorks[i];
+                            <div class="border rounded p-3 mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <strong>Work @(index + 1)</strong>
+                                    @if (VM.CollectionWorks.Count > 1)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => VM.RemoveCollectionWorkRow(index)">Remove</button>
+                                    }
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-md-7">
+                                        <label class="form-label small">Title</label>
+                                        <InputText @bind-Value="work.Title" class="form-control" />
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label small">Author(s)</label>
+                                        <MudAuthorPicker Authors="work.Authors"
+                                                         AuthorsChanged="list => work.Authors = list"
+                                                         Label="Add author" />
+                                    </div>
+                                    <div class="col-md-7">
+                                        <label class="form-label small">Subtitle <span class="text-muted">(optional)</span></label>
+                                        <InputText @bind-Value="work.Subtitle" class="form-control" />
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label small">First published <span class="text-muted">(optional)</span></label>
+                                        <InputText @bind-Value="work.FirstPublishedDate" class="form-control" placeholder="e.g. 1934" />
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                        <button type="button" class="btn btn-outline-primary btn-sm" @onclick="VM.AddCollectionWorkRow">+ Add another work</button>
+                        <div class="form-text mt-2">Genres and series are set per-work after saving — open each work from the book detail page to tag.</div>
+                    </div>
+                </div>
+            </div>
+        }
 
         <div class="col-12">
             <EditionCopyForm EditionInput="VM.EditionInput" CopyInput="VM.CopyInput" Title="First edition & copy" />
@@ -219,10 +272,7 @@
 
     private async Task LookupAsync()
     {
-        if (genrePicker is not null)
-        {
-            await VM.LookupAsync(genrePicker.ViewModel);
-        }
+        await VM.LookupAsync(genrePicker?.ViewModel);
     }
 
     private async Task SearchAsync()
@@ -232,10 +282,7 @@
 
     private async Task ApplyCandidateAsync(BookSearchCandidate candidate)
     {
-        if (genrePicker is not null)
-        {
-            await VM.ApplyCandidateAsync(candidate, genrePicker.ViewModel);
-        }
+        await VM.ApplyCandidateAsync(candidate, genrePicker?.ViewModel);
     }
 
     private async Task SaveAsync()
@@ -270,8 +317,7 @@
 
     private void ResetForNextBook()
     {
-        if (genrePicker is null) return;
-        VM.Reset(genrePicker.ViewModel);
+        VM.Reset(genrePicker?.ViewModel);
         selectedGenreIds = [];
         StateHasChanged();
     }

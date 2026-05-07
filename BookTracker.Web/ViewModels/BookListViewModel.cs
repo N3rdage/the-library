@@ -366,7 +366,11 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     private static BookListItem ToBookListItem(Book b) => new(
         b.Id,
         b.Title,
-        b.Works.FirstOrDefault()?.Subtitle,
+        // Subtitle only renders for single-Work books — for collections (Works
+        // > 1) the inner-Work subtitle would be the subtitle of an arbitrary
+        // story, which reads as data noise in the list. Collections surface
+        // their multi-Work-ness via the WorkCount indicator below the title.
+        b.Works.Count == 1 ? b.Works.First().Subtitle : null,
         // Comma-join unique author names across all Works on this Book. For a
         // single-Work co-authored book this renders "Preston, Child" rather
         // than the prettier "Preston & Child" — list views stay uniform; the
@@ -376,6 +380,7 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         b.DefaultCoverArtUrl,
         b.Status,
         b.Rating,
+        b.Works.Count,
         b.Works.SelectMany(w => w.Genres).Select(g => g.Name).Distinct().ToList(),
         b.Tags.Select(t => t.Name).ToList());
 
@@ -428,7 +433,7 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
 
     public record BookListItem(
         int Id, string Title, string? Subtitle, string Author, string? CoverUrl,
-        BookStatus Status, int Rating, List<string> Genres, List<string> Tags);
+        BookStatus Status, int Rating, int WorkCount, List<string> Genres, List<string> Tags);
 
     public record GenreOption(int Id, string Name, int? ParentGenreId);
     public record TagOption(int Id, string Name);
