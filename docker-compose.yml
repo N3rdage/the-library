@@ -17,5 +17,25 @@ services:
       retries: 10
       start_period: 20s
 
+  # Azurite — Azure Storage emulator. Used by the IBookCoverStorage local-dev
+  # implementation so dev parity matches prod (single Azure.Storage.Blobs code
+  # path either way). Persists blobs to ./azurite-data/ on the host so book
+  # covers survive container restarts; bind-mount keeps the data inspectable.
+  #
+  # Runs over HTTPS using a locally-trusted cert generated via mkcert (see
+  # docs/LOCAL-DEV.md). HTTPS keeps dev parity with prod CSP — `img-src https:`
+  # in App.razor's meta tag matches the localhost Azurite endpoint and the
+  # production blob URL with one rule. Cert files live in ./azurite-certs/
+  # (gitignored) and are mounted read-only.
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: booktracker-azurite
+    command: "azurite-blob --blobHost 0.0.0.0 --location /data --cert /certs/localhost.pem --key /certs/localhost-key.pem --skipApiVersionCheck"
+    ports:
+      - "10000:10000"
+    volumes:
+      - ./azurite-data:/data
+      - ./azurite-certs:/certs:ro
+
 volumes:
   booktracker-db-data:

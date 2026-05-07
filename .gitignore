@@ -36,6 +36,17 @@ audits/
 # failure. Local-only by design — no value committing them.
 **/e2e-artifacts/
 
+# Azurite local-dev blob persistence. Holds covers uploaded by the
+# IBookCoverStorage service when running against the Azurite emulator.
+# Survives container restarts (volume bind-mount) but is local-only.
+azurite-data/
+
+# Azurite TLS certs generated per-machine via mkcert. Each dev runs
+# `mkcert localhost 127.0.0.1 ::1` and drops the resulting PEM files
+# in here; they're trusted only on the machine that ran `mkcert -install`.
+# See docs/LOCAL-DEV.md.
+azurite-certs/
+
 # .NET
 project.lock.json
 project.fragment.lock.json

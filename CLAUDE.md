@@ -53,16 +53,9 @@ dotnet ef database update       --project .\BookTracker.Data --startup-project .
 dotnet ef migrations remove     --project .\BookTracker.Data --startup-project .\BookTracker.Web
 ```
 
-## Local SQL Server via Docker Desktop
+## Local dev environment
 
-`docker-compose.yml` at the repo root runs SQL Server 2022 Developer on `localhost:1433`. SA password defaults to `BookTracker!Dev1` (override with the `MSSQL_SA_PASSWORD` env var via `$env:MSSQL_SA_PASSWORD = "..."` before `docker compose up`). Data persists in the `booktracker-db-data` named Docker volume. The dev connection string in `appsettings.Development.json` already targets this container.
-
-```powershell
-docker compose up -d        # start
-docker compose down         # stop (add -v to wipe the volume)
-```
-
-Typical first-run loop: `docker compose up -d` → `dotnet ef database update ...` → `dotnet run --project .\BookTracker.Web`.
+End-to-end setup (Docker Desktop containers for SQL Server + Azurite, mkcert for the local TLS cert that keeps Azurite on HTTPS, EF migration commands) lives in [`docs/LOCAL-DEV.md`](docs/LOCAL-DEV.md). Run through that once on a fresh machine; the daily workflow is `docker compose up -d` then `dotnet watch --project .\BookTracker.Web`.
 
 ## Mobile considerations
 
@@ -77,6 +70,14 @@ Three AI providers supported in code, selectable at runtime via toggle on the AI
 - **Azure OpenAI** — GPT-4o. Provisioned automatically in `eastus2` (with a Private Endpoint and KV-stored key) by `infra/modules/ai-services.bicep`.
 
 Config under `AI:` section in appsettings. Only providers with valid config are available; the picker auto-detects. In prod, secret values resolve via Key Vault references — see `infra/README.md` for the wiring.
+
+## Cover storage
+
+Book cover images are mirrored from upstream providers (Open Library, Google Books, Trove) into Azure Blob Storage so renders never depend on upstream latency. `IBookCoverStorage` (`BookTracker.Web/Services/Covers/`) downloads the upstream URL, normalises via ImageSharp (JPEG, max 1200px on the long edge — falls back to raw bytes with a logged warning if conversion fails per Drew's call), uploads to the `book-covers` container, and the URL stored on `Edition.CoverUrl` / `Book.DefaultCoverArtUrl` swaps to the blob URL.
+
+`CoverMirrorBackgroundService` polls every 30s for un-mirrored URLs and processes them in batches of 50. Same service handles both initial backfill (legacy upstream URLs in the DB before this shipped) and ongoing mirroring of newly-added covers — there's no save-site integration in PR1 (PR2 will move new-cover mirroring inline at the save site so the polling becomes backfill-only).
+
+Local: Azurite emulator on `localhost:10000` (see Docker Compose section above). Connection string + endpoint URL are in `appsettings.Development.Example.json` using Azurite's well-known dev account name. Prod: real Storage Account provisioned by `infra/modules/cover-storage.bicep`, connection string lives in Key Vault as `CoverStorageConnectionString` and resolves into the `CoverStorage:ConnectionString` app setting via a KV reference.
 
 ## Tests
 

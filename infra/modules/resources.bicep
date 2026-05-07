@@ -40,6 +40,9 @@ var keyVaultName = '${appName}-kv-${uniqueSuffix}'
 var logAnalyticsName = '${appName}-logs'
 var appInsightsName = '${appName}-ai'
 var openAIAccountName = '${appName}-openai-${uniqueSuffix}'
+// Storage account names: 3-24 chars, lowercase alphanumeric only. The unique
+// suffix (6 chars) keeps it stable across re-deploys.
+var coverStorageAccountName = '${appName}covers${uniqueSuffix}'
 
 module network './network.bicep' = {
   name: 'network'
@@ -194,6 +197,21 @@ module openAIPe './private-endpoint.bicep' = {
   }
 }
 
+// Cover storage — blob storage for mirrored book covers. Connection string
+// lands in KV; app-config picks it up via a KV reference.
+module coverStorage './cover-storage.bicep' = {
+  name: 'coverStorage'
+  params: {
+    location: location
+    tags: tags
+    storageAccountName: coverStorageAccountName
+    keyVaultName: keyVaultName
+  }
+  dependsOn: [
+    kv
+  ]
+}
+
 module appConfig './app-config.bicep' = {
   name: 'appConfig'
   params: {
@@ -208,8 +226,10 @@ module appConfig './app-config.bicep' = {
     keyVaultName: keyVaultName
     aiAzureOpenAIEndpoint: ai.outputs.openAIEndpoint
     aiAzureOpenAIDeployment: ai.outputs.openAIDeploymentName
+    coverStoragePublicBaseUrl: coverStorage.outputs.publicContainerUrl
   }
-  // Wait for KV (so KV refs resolve) and AI deployments (so endpoints exist).
+  // Wait for KV (so KV refs resolve). Storage is implicit via the
+  // `coverStoragePublicBaseUrl` output reference above.
   dependsOn: [
     kv
   ]
