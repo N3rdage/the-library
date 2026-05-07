@@ -13,7 +13,13 @@ param location string
 param tags object
 param storageAccountName string
 param keyVaultName string
-param containerName string = 'book-covers'
+
+// Two containers — one per slot — share a single storage account. Mirrors
+// the slot-isolation pattern used for SQL (one server, two databases). Keys
+// like `editions/{id}.jpg` would collide across slots if both wrote to the
+// same container, since prod and staging DBs assign IDs independently.
+param prodContainerName string = 'book-covers'
+param stagingContainerName string = 'book-covers-staging'
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageAccountName
@@ -50,11 +56,19 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01'
   }
 }
 
-resource container 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+resource prodContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
   parent: blobService
-  name: containerName
+  name: prodContainerName
   properties: {
     // Blob-level public read — anyone with the URL can GET, no listing.
+    publicAccess: 'Blob'
+  }
+}
+
+resource stagingContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: stagingContainerName
+  properties: {
     publicAccess: 'Blob'
   }
 }
@@ -78,6 +92,8 @@ resource secretConnectionString 'Microsoft.KeyVault/vaults/secrets@2023-07-01' =
 }
 
 output storageAccountName string = storageAccount.name
-output containerName string = containerName
 output blobEndpoint string = storageAccount.properties.primaryEndpoints.blob
-output publicContainerUrl string = '${storageAccount.properties.primaryEndpoints.blob}${containerName}'
+output prodContainerName string = prodContainerName
+output stagingContainerName string = stagingContainerName
+output prodPublicContainerUrl string = '${storageAccount.properties.primaryEndpoints.blob}${prodContainerName}'
+output stagingPublicContainerUrl string = '${storageAccount.properties.primaryEndpoints.blob}${stagingContainerName}'

@@ -23,10 +23,14 @@ param aiAzureOpenAIEndpoint string = ''
 param aiAzureOpenAIDeployment string = ''
 param aiDefaultProvider string = 'Anthropic'
 
-// Cover storage. Connection string is resolved from KV; container URL is
-// non-secret (it's the public read URL embedded in <img src> tags).
-param coverStoragePublicBaseUrl string = ''
-param coverStorageContainerName string = 'book-covers'
+// Cover storage. Connection string is resolved from KV (shared by both
+// slots — same storage account). Container name + public URL differ per
+// slot so prod and staging writes can't collide on independent Edition IDs;
+// both are slot-sticky (see slotConfigNames below).
+param coverStorageProdContainerName string = 'book-covers'
+param coverStorageStagingContainerName string = 'book-covers-staging'
+param coverStorageProdPublicBaseUrl string = ''
+param coverStorageStagingPublicBaseUrl string = ''
 
 // Key Vault reference helpers. App Service resolves these via its managed
 // identity (which has Key Vault Secrets User role) and caches the resolved
@@ -53,7 +57,10 @@ var coverStorageConnRef = '@Microsoft.KeyVault(SecretUri=${kvBase}/CoverStorageC
 // Same shape for prod + staging; slotConfigNames below marks the secret-ish
 // entries as slot-sticky so swaps don't move them if the two slots' values
 // ever diverge.
-var appSettingsValues = {
+// Shared values across both slots — connection string is one because both
+// slots use the same storage account; the container name + public URL differ
+// per slot below.
+var commonAppSettings = {
   ASPNETCORE_ENVIRONMENT: 'Production'
   APPLICATIONINSIGHTS_CONNECTION_STRING: appInsightsConnectionString
   MICROSOFT_PROVIDER_AUTHENTICATION_SECRET: authClientSecretRef
@@ -64,9 +71,17 @@ var appSettingsValues = {
   AI__Anthropic__ApiKey: anthropicKeyRef
   Trove__ApiKey: troveKeyRef
   CoverStorage__ConnectionString: coverStorageConnRef
-  CoverStorage__ContainerName: coverStorageContainerName
-  CoverStorage__PublicBaseUrl: coverStoragePublicBaseUrl
 }
+
+var prodAppSettingsValues = union(commonAppSettings, {
+  CoverStorage__ContainerName: coverStorageProdContainerName
+  CoverStorage__PublicBaseUrl: coverStorageProdPublicBaseUrl
+})
+
+var stagingAppSettingsValues = union(commonAppSettings, {
+  CoverStorage__ContainerName: coverStorageStagingContainerName
+  CoverStorage__PublicBaseUrl: coverStorageStagingPublicBaseUrl
+})
 
 // Settings that must stay pinned to their slot during a swap. Keys and
 // environment-flavoured values should never hop between prod and staging,
@@ -83,6 +98,12 @@ var slotStickyAppSettingNames = [
   'AI__DefaultProvider'
   'Trove__ApiKey'
   'CoverStorage__ConnectionString'
+  // ContainerName + PublicBaseUrl MUST be slot-sticky — they differ per slot
+  // (`book-covers` vs `book-covers-staging`) so writes don't collide on
+  // independent Edition IDs. A swap moving them with the bits would break
+  // the just-promoted slot's cover URLs.
+  'CoverStorage__ContainerName'
+  'CoverStorage__PublicBaseUrl'
 ]
 
 // Paths served publicly (without Easy Auth). Limited to the PWA assets
@@ -115,7 +136,7 @@ resource stagingSlot 'Microsoft.Web/sites/slots@2023-12-01' existing = {
 resource appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
   parent: app
   name: 'appsettings'
-  properties: appSettingsValues
+  properties: prodAppSettingsValues
 }
 
 // Slot-sticky setting names. Attached to the production site (not the slot)
@@ -196,7 +217,7 @@ resource authConfig 'Microsoft.Web/sites/config@2023-12-01' = {
 resource stagingAppSettings 'Microsoft.Web/sites/slots/config@2023-12-01' = {
   parent: stagingSlot
   name: 'appsettings'
-  properties: appSettingsValues
+  properties: stagingAppSettingsValues
 }
 
 resource stagingConnStrings 'Microsoft.Web/sites/slots/config@2023-12-01' = {
