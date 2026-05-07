@@ -1,0 +1,29 @@
+# Gitleaks configuration. Extends the default ruleset; adds a content-based
+# allowlist for the Azurite well-known dev account key, which is published by
+# Microsoft as the universal local-Azure-Storage-emulator value and is not a
+# real secret.
+#
+# Reference:
+#   https://learn.microsoft.com/azure/storage/common/storage-use-azurite#well-known-storage-account-and-key
+#
+# The value appears in:
+#   - BookTracker.Web/appsettings.Development.Example.json (committed template
+#     consumed by every dev's appsettings.Development.json copy)
+#   - docs/LOCAL-DEV.md (referenced indirectly via the Example block)
+#   - any future doc / test fixture that references the Azurite default
+#
+# Allowlisting by content rather than by path is appropriate: the value is
+# non-sensitive regardless of where it appears, so we shouldn't have to
+# add a new path exclusion every time another file references it.
+
+title = "BookTracker gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Azurite well-known dev account key (Microsoft-published universal value)"
+regexTarget = "match"
+regexes = [
+    '''Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==''',
+]
