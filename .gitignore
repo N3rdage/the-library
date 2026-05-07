@@ -36,6 +36,11 @@ audits/
 # failure. Local-only by design — no value committing them.
 **/e2e-artifacts/
 
+# Azurite local-dev blob persistence. Holds covers uploaded by the
+# IBookCoverStorage service when running against the Azurite emulator.
+# Survives container restarts (volume bind-mount) but is local-only.
+azurite-data/
+
 # .NET
 project.lock.json
 project.fragment.lock.json

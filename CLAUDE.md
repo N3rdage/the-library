@@ -53,13 +53,17 @@ dotnet ef database update       --project .\BookTracker.Data --startup-project .
 dotnet ef migrations remove     --project .\BookTracker.Data --startup-project .\BookTracker.Web
 ```
 
-## Local SQL Server via Docker Desktop
+## Local SQL Server + Azurite via Docker Desktop
 
-`docker-compose.yml` at the repo root runs SQL Server 2022 Developer on `localhost:1433`. SA password defaults to `BookTracker!Dev1` (override with the `MSSQL_SA_PASSWORD` env var via `$env:MSSQL_SA_PASSWORD = "..."` before `docker compose up`). Data persists in the `booktracker-db-data` named Docker volume. The dev connection string in `appsettings.Development.json` already targets this container.
+`docker-compose.yml` at the repo root runs:
+- **SQL Server 2022 Developer** on `localhost:1433`. SA password defaults to `BookTracker!Dev1` (override with the `MSSQL_SA_PASSWORD` env var via `$env:MSSQL_SA_PASSWORD = "..."` before `docker compose up`). Data persists in the `booktracker-db-data` named Docker volume.
+- **Azurite** (Azure Storage emulator) on `localhost:10000`. Used by the cover-mirroring service so dev parity matches prod (single Azure.Storage.Blobs code path either way). Persists blob data to `./azurite-data/` on the host (gitignored, bind-mounted so files are inspectable).
+
+The dev connection strings in `appsettings.Development.json` already target both containers — copy `appsettings.Development.Example.json` and fill in any secret values to get going.
 
 ```powershell
-docker compose up -d        # start
-docker compose down         # stop (add -v to wipe the volume)
+docker compose up -d        # start both
+docker compose down         # stop (add -v to wipe the SQL volume; Azurite data lives outside the volume)
 ```
 
 Typical first-run loop: `docker compose up -d` → `dotnet ef database update ...` → `dotnet run --project .\BookTracker.Web`.
@@ -77,6 +81,14 @@ Three AI providers supported in code, selectable at runtime via toggle on the AI
 - **Azure OpenAI** — GPT-4o. Provisioned automatically in `eastus2` (with a Private Endpoint and KV-stored key) by `infra/modules/ai-services.bicep`.
 
 Config under `AI:` section in appsettings. Only providers with valid config are available; the picker auto-detects. In prod, secret values resolve via Key Vault references — see `infra/README.md` for the wiring.
+
+## Cover storage
+
+Book cover images are mirrored from upstream providers (Open Library, Google Books, Trove) into Azure Blob Storage so renders never depend on upstream latency. `IBookCoverStorage` (`BookTracker.Web/Services/Covers/`) downloads the upstream URL, normalises via ImageSharp (JPEG, max 1200px on the long edge — falls back to raw bytes with a logged warning if conversion fails per Drew's call), uploads to the `book-covers` container, and the URL stored on `Edition.CoverUrl` / `Book.DefaultCoverArtUrl` swaps to the blob URL.
+
+`CoverMirrorBackgroundService` polls every 30s for un-mirrored URLs and processes them in batches of 50. Same service handles both initial backfill (legacy upstream URLs in the DB before this shipped) and ongoing mirroring of newly-added covers — there's no save-site integration in PR1 (PR2 will move new-cover mirroring inline at the save site so the polling becomes backfill-only).
+
+Local: Azurite emulator on `localhost:10000` (see Docker Compose section above). Connection string + endpoint URL are in `appsettings.Development.Example.json` using Azurite's well-known dev account name. Prod: real Storage Account provisioned by `infra/modules/cover-storage.bicep`, connection string lives in Key Vault as `CoverStorageConnectionString` and resolves into the `CoverStorage:ConnectionString` app setting via a KV reference.
 
 ## Tests
 

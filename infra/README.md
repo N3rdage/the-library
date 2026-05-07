@@ -27,6 +27,7 @@ All tagged with `Client = Drew` and `Environment = Production`.
 | Private DNS zones | `privatelink.database.windows.net`, `privatelink.vaultcore.azure.net`, `privatelink.openai.azure.com` | global | each linked to both VNets so the App resolves PE IPs |
 | Log Analytics workspace | `booktracker-logs` | `australiaeast` | 30-day retention |
 | Application Insights | `booktracker-ai` | `australiaeast` | workspace-based, wired to the App Service |
+| Storage Account (covers) | `booktrackercovers<hash>` | `australiaeast` | Standard_LRS, `book-covers` container with `publicAccess = Blob` so cover URLs render in `<img src>` without SAS tokens. Connection string lands in KV as `CoverStorageConnectionString`. |
 
 The App Service uses **Easy Auth v2** pointed at the `Library-Patrons` Entra app registration. With `appRoleAssignmentRequired = true` set on its service principal, only users/groups assigned to the enterprise app can sign in.
 

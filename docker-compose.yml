@@ -17,5 +17,18 @@ services:
       retries: 10
       start_period: 20s
 
+  # Azurite — Azure Storage emulator. Used by the IBookCoverStorage local-dev
+  # implementation so dev parity matches prod (single Azure.Storage.Blobs code
+  # path either way). Persists blobs to ./azurite-data/ on the host so book
+  # covers survive container restarts; bind-mount keeps the data inspectable.
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: booktracker-azurite
+    command: "azurite-blob --blobHost 0.0.0.0 --location /data --skipApiVersionCheck"
+    ports:
+      - "10000:10000"
+    volumes:
+      - ./azurite-data:/data
+
 volumes:
   booktracker-db-data:

@@ -1,6 +1,7 @@
 using BookTracker.Data;
 using BookTracker.Web.Components;
 using BookTracker.Web.Services;
+using BookTracker.Web.Services.Covers;
 using BookTracker.Web.Telemetry;
 using BookTracker.Web.ViewModels;
 using Microsoft.ApplicationInsights.Extensibility;
@@ -101,6 +102,20 @@ public static class ProgramSetup
         // a MaintenanceLog marker; safe to leave registered after the backfill has
         // run.
         builder.Services.AddHostedService<EditionFormatBackfillService>();
+
+        // Cover storage — mirrors upstream cover URLs (Open Library / Google
+        // Books / Trove) into Azure Blob Storage so renders don't depend on
+        // upstream latency. Local dev points at Azurite; prod uses a real
+        // Storage Account via KV-resolved connection string. Background
+        // service handles both initial backfill and ongoing mirroring.
+        builder.Services.Configure<CoverStorageOptions>(
+            builder.Configuration.GetSection(CoverStorageOptions.SectionName));
+        builder.Services.AddHttpClient<IBookCoverStorage, BlobBookCoverStorage>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("BookTracker/0.1 (+github.com/N3rdage/the-library)");
+        });
+        builder.Services.AddHostedService<CoverMirrorBackgroundService>();
 
         builder.Services.Configure<AIOptions>(
             builder.Configuration.GetSection(AIOptions.SectionName));

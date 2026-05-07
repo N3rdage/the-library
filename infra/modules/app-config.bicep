@@ -23,6 +23,11 @@ param aiAzureOpenAIEndpoint string = ''
 param aiAzureOpenAIDeployment string = ''
 param aiDefaultProvider string = 'Anthropic'
 
+// Cover storage. Connection string is resolved from KV; container URL is
+// non-secret (it's the public read URL embedded in <img src> tags).
+param coverStoragePublicBaseUrl string = ''
+param coverStorageContainerName string = 'book-covers'
+
 // Key Vault reference helpers. App Service resolves these via its managed
 // identity (which has Key Vault Secrets User role) and caches the resolved
 // value for the lifetime of the worker. Omitting the secret version tells
@@ -43,6 +48,7 @@ var authClientSecretRef = '@Microsoft.KeyVault(SecretUri=${kvBase}/AuthClientSec
 var openAIKeyRef = '@Microsoft.KeyVault(SecretUri=${kvBase}/AIAzureOpenAIApiKey/)'
 var anthropicKeyRef = '@Microsoft.KeyVault(SecretUri=${kvBase}/AIAnthropicApiKey/)'
 var troveKeyRef = '@Microsoft.KeyVault(SecretUri=${kvBase}/TroveApiKey/)'
+var coverStorageConnRef = '@Microsoft.KeyVault(SecretUri=${kvBase}/CoverStorageConnectionString/)'
 
 // Same shape for prod + staging; slotConfigNames below marks the secret-ish
 // entries as slot-sticky so swaps don't move them if the two slots' values
@@ -57,6 +63,9 @@ var appSettingsValues = {
   AI__AzureOpenAI__Deployment: aiAzureOpenAIDeployment
   AI__Anthropic__ApiKey: anthropicKeyRef
   Trove__ApiKey: troveKeyRef
+  CoverStorage__ConnectionString: coverStorageConnRef
+  CoverStorage__ContainerName: coverStorageContainerName
+  CoverStorage__PublicBaseUrl: coverStoragePublicBaseUrl
 }
 
 // Settings that must stay pinned to their slot during a swap. Keys and
@@ -73,6 +82,7 @@ var slotStickyAppSettingNames = [
   'AI__AzureOpenAI__Deployment'
   'AI__DefaultProvider'
   'Trove__ApiKey'
+  'CoverStorage__ConnectionString'
 ]
 
 // Paths served publicly (without Easy Auth). Limited to the PWA assets
