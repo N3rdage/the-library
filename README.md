@@ -51,21 +51,9 @@ I may later open up to proper PRs with Claude-driven code review (tracked in TOD
 
 ## Run locally
 
-Requirements: Windows with PowerShell 7+, .NET 10 SDK, Docker Desktop (for the SQL container).
+Full setup (Docker containers, mkcert for the local TLS cert, EF migrations, daily workflow) lives in [`docs/LOCAL-DEV.md`](docs/LOCAL-DEV.md).
 
-```powershell
-docker compose up -d   # SQL Server 2022 Developer on localhost:1433
-
-cd "path\to\the-library"
-# Copy the committed templates to real config files and fill in secrets:
-Copy-Item BookTracker.Web\appsettings.Example.json BookTracker.Web\appsettings.json
-Copy-Item BookTracker.Web\appsettings.Development.Example.json BookTracker.Web\appsettings.Development.json
-
-dotnet ef database update --project .\BookTracker.Data --startup-project .\BookTracker.Web
-dotnet run --project .\BookTracker.Web
-```
-
-See [`CLAUDE.md`](CLAUDE.md) for the full "how I work with this repo" guide (also used by Claude Code sessions to understand conventions) and [`infra/README.md`](infra/README.md) for the Azure deployment setup.
+For the rest: [`CLAUDE.md`](CLAUDE.md) is the "how I work with this repo" guide (also used by Claude Code sessions to understand conventions); [`infra/README.md`](infra/README.md) covers the Azure deployment setup.
 
 ## License
 

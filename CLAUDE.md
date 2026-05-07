@@ -53,20 +53,9 @@ dotnet ef database update       --project .\BookTracker.Data --startup-project .
 dotnet ef migrations remove     --project .\BookTracker.Data --startup-project .\BookTracker.Web
 ```
 
-## Local SQL Server + Azurite via Docker Desktop
+## Local dev environment
 
-`docker-compose.yml` at the repo root runs:
-- **SQL Server 2022 Developer** on `localhost:1433`. SA password defaults to `BookTracker!Dev1` (override with the `MSSQL_SA_PASSWORD` env var via `$env:MSSQL_SA_PASSWORD = "..."` before `docker compose up`). Data persists in the `booktracker-db-data` named Docker volume.
-- **Azurite** (Azure Storage emulator) on `localhost:10000`. Used by the cover-mirroring service so dev parity matches prod (single Azure.Storage.Blobs code path either way). Persists blob data to `./azurite-data/` on the host (gitignored, bind-mounted so files are inspectable).
-
-The dev connection strings in `appsettings.Development.json` already target both containers — copy `appsettings.Development.Example.json` and fill in any secret values to get going.
-
-```powershell
-docker compose up -d        # start both
-docker compose down         # stop (add -v to wipe the SQL volume; Azurite data lives outside the volume)
-```
-
-Typical first-run loop: `docker compose up -d` → `dotnet ef database update ...` → `dotnet run --project .\BookTracker.Web`.
+End-to-end setup (Docker Desktop containers for SQL Server + Azurite, mkcert for the local TLS cert that keeps Azurite on HTTPS, EF migration commands) lives in [`docs/LOCAL-DEV.md`](docs/LOCAL-DEV.md). Run through that once on a fresh machine; the daily workflow is `docker compose up -d` then `dotnet watch --project .\BookTracker.Web`.
 
 ## Mobile considerations
 

@@ -41,6 +41,12 @@ audits/
 # Survives container restarts (volume bind-mount) but is local-only.
 azurite-data/
 
+# Azurite TLS certs generated per-machine via mkcert. Each dev runs
+# `mkcert localhost 127.0.0.1 ::1` and drops the resulting PEM files
+# in here; they're trusted only on the machine that ran `mkcert -install`.
+# See docs/LOCAL-DEV.md.
+azurite-certs/
+
 # .NET
 project.lock.json
 project.fragment.lock.json
