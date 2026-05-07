@@ -149,3 +149,33 @@ body {
     display: none;
   }
 }
+
+/* MainLayout navbar — themed to match the leather/brass palette used by the
+   rest of the MudBlazor-converted pages. Colour values mirror BookTrackerTheme
+   (espresso AppbarBackground / parchment AppbarText / brass for the active
+   nav link). Bootstrap navbar structure (data-bs-toggle hamburger collapse,
+   navbar-expand-lg breakpoints) stays — only the visual changes. */
+.navbar-themed {
+  background-color: #3E2723;
+  border-bottom: 1px solid rgba(242, 234, 219, 0.08);
+}
+.navbar-themed .navbar-brand {
+  color: #F2EADB;
+  font-weight: 500;
+}
+.navbar-themed .navbar-brand:hover,
+.navbar-themed .navbar-brand:focus {
+  color: #FAF6EC;
+}
+.navbar-themed .nav-link {
+  color: rgba(242, 234, 219, 0.85);
+  transition: color 0.15s ease;
+}
+.navbar-themed .nav-link:hover,
+.navbar-themed .nav-link:focus {
+  color: #F2EADB;
+}
+.navbar-themed .nav-link.active {
+  /* Brass for the active route — sits inside the palette without shouting. */
+  color: #A67B3A;
+}

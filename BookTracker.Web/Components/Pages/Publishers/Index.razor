@@ -38,7 +38,12 @@
     }
     else if (VM.Publishers.Count == 0)
     {
-        <MudText Color="Color.Secondary">No publishers yet — add a book with a publisher to seed the list.</MudText>
+        <MudStack AlignItems="AlignItems.Center" Class="py-5">
+            <MudText Color="Color.Secondary" Class="mb-2">No publishers yet — add a book with a publisher to seed the list.</MudText>
+            <MudButton Href="/books/add" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small">
+                Add a book
+            </MudButton>
+        </MudStack>
     }
     else
     {
