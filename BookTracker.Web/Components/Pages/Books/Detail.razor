@@ -312,6 +312,20 @@
                                             <FieldRow Label="Printed" Value="@edition.DatePrintedDisplay" />
                                         }
 
+                                        @* Cover preview row — shown when the edition has a cover so the user can
+                                           see what's currently on file before replacing. The "your photo" badge
+                                           surfaces when the cover came from a user upload rather than upstream. *@
+                                        @if (!string.IsNullOrEmpty(edition.CoverUrl))
+                                        {
+                                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                                <MudImage Src="@edition.CoverUrl" Alt="" Width="48" Height="68" ObjectFit="ObjectFit.Cover" Style="border-radius: 4px;" />
+                                                @if (edition.IsUserSupplied)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">your photo</MudChip>
+                                                }
+                                            </MudStack>
+                                        }
+
                                         <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
                                             <MudButton OnClick="@(() => OpenEditEditionDialog(edition.Id))"
                                                        Disabled="@dialogOpening"
@@ -326,6 +340,13 @@
                                                        Size="Size.Small"
                                                        StartIcon="@Icons.Material.Filled.Add">
                                                 Add copy
+                                            </MudButton>
+                                            <MudButton OnClick="@(() => OpenUploadCoverDialog(edition.Id))"
+                                                       Disabled="@dialogOpening"
+                                                       Variant="Variant.Outlined"
+                                                       Size="Size.Small"
+                                                       StartIcon="@Icons.Material.Filled.PhotoCamera">
+                                                @(string.IsNullOrEmpty(edition.CoverUrl) ? "Upload photo" : "Replace photo")
                                             </MudButton>
                                         </MudStack>
 
@@ -695,6 +716,21 @@
             Snackbar.Add("Copy added", Severity.Success);
             await VM.InitializeAsync(BookId);
         }
+    });
+
+    private Task OpenUploadCoverDialog(int editionId) => OpenDialogGuardedAsync(async () =>
+    {
+        var parameters = new DialogParameters<EditionCoverUploadDialog>
+        {
+            { x => x.EditionId, editionId },
+            { x => x.ViewModel, VM },
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<EditionCoverUploadDialog>("Upload cover photo", parameters, options);
+        // The dialog itself runs the upload through VM.UploadEditionCoverAsync,
+        // which calls InitializeAsync on success — so the page already has fresh
+        // data by the time we get back here. No extra refresh needed.
+        await dialog.Result;
     });
 
     private Task OpenEditCopyDialog(int copyId) => OpenDialogGuardedAsync(async () =>
