@@ -17,8 +17,11 @@
     @* navbar-expand-lg: 11 nav items overflow horizontally well before the
        sm breakpoint (576px) was kicking in the hamburger. lg flips to the
        collapsed menu below 992px, which is roughly where the items stop
-       fitting alongside the BookTracker brand on a Bootstrap container. *@
-    <nav class="navbar navbar-expand-lg navbar-toggleable-lg navbar-light bg-white border-bottom box-shadow mb-3">
+       fitting alongside the BookTracker brand on a Bootstrap container.
+       navbar-dark gives the parchment-on-espresso colour scheme and the
+       white toggler-icon SVG for free; navbar-themed (in site.css) layers
+       the leather/brass palette on top to match BookTrackerTheme. *@
+    <nav class="navbar navbar-expand-lg navbar-toggleable-lg navbar-dark navbar-themed mb-3">
         <div class="container">
             <a class="navbar-brand" href="/">BookTracker</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
@@ -28,37 +31,37 @@
             <div class="navbar-collapse collapse d-lg-inline-flex justify-content-between">
                 <ul class="navbar-nav flex-grow-1">
                     <li class="nav-item">
-                        <NavLink class="nav-link text-dark" href="" Match="NavLinkMatch.All">Home</NavLink>
+                        <NavLink class="nav-link" href="" Match="NavLinkMatch.All">Home</NavLink>
                     </li>
                     <li class="nav-item">
-                        <NavLink class="nav-link text-dark" href="books">Library</NavLink>
+                        <NavLink class="nav-link" href="books">Library</NavLink>
                     </li>
                     <li class="nav-item">
-                        <NavLink class="nav-link text-dark" href="books/add">Add book</NavLink>
+                        <NavLink class="nav-link" href="books/add">Add book</NavLink>
                     </li>
                     <li class="nav-item">
-                        <NavLink class="nav-link text-dark" href="books/bulk-add">Bulk add</NavLink>
+                        <NavLink class="nav-link" href="books/bulk-add">Bulk add</NavLink>
                     </li>
                     <li class="nav-item">
-                        <NavLink class="nav-link text-dark" href="series">Series</NavLink>
+                        <NavLink class="nav-link" href="series">Series</NavLink>
                     </li>
                     <li class="nav-item">
-                        <NavLink class="nav-link text-dark" href="authors">Authors</NavLink>
+                        <NavLink class="nav-link" href="authors">Authors</NavLink>
                     </li>
                     <li class="nav-item">
-                        <NavLink class="nav-link text-dark" href="publishers">Publishers</NavLink>
+                        <NavLink class="nav-link" href="publishers">Publishers</NavLink>
                     </li>
                     <li class="nav-item">
-                        <NavLink class="nav-link text-dark" href="shopping">Shopping</NavLink>
+                        <NavLink class="nav-link" href="shopping">Shopping</NavLink>
                     </li>
                     <li class="nav-item">
-                        <NavLink class="nav-link text-dark" href="assistant">AI Assistant</NavLink>
+                        <NavLink class="nav-link" href="assistant">AI Assistant</NavLink>
                     </li>
                     <li class="nav-item">
-                        <NavLink class="nav-link text-dark" href="duplicates">Duplicates</NavLink>
+                        <NavLink class="nav-link" href="duplicates">Duplicates</NavLink>
                     </li>
                     <li class="nav-item">
-                        <NavLink class="nav-link text-dark" href="privacy">Privacy</NavLink>
+                        <NavLink class="nav-link" href="privacy">Privacy</NavLink>
                     </li>
                 </ul>
             </div>

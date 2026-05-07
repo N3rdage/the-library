@@ -57,7 +57,12 @@
     }
     else if (VM.Authors.Count == 0)
     {
-        <MudText Color="Color.Secondary">No authors yet — add a book to seed the list.</MudText>
+        <MudStack AlignItems="AlignItems.Center" Class="py-5">
+            <MudText Color="Color.Secondary" Class="mb-2">No authors yet — add a book to seed the list.</MudText>
+            <MudButton Href="/books/add" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small">
+                Add a book
+            </MudButton>
+        </MudStack>
     }
     else
     {
