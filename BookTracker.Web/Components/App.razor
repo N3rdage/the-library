@@ -1,4 +1,5 @@
 @* Root HTML document for the Blazor Web App. *@
+@inject IWebHostEnvironment Env
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -26,10 +27,18 @@
        SECURITY-AUDIT.md § Deferred items. img-src allows any HTTPS source
        because cover art comes from many external providers (Open Library,
        Google Books, etc.) and locking to specific hosts would break the
-       lookup pipeline. Frame-ancestors / X-Frame-Options / X-Content-Type-Options /
-       Referrer-Policy are emitted as response headers from Program.cs
-       (meta-tag CSP can't express frame-ancestors). *@
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss:; media-src 'self' blob:; base-uri 'self'; form-action 'self';" />
+       lookup pipeline. In Development we additionally allow the Azurite
+       blob endpoint over HTTP — local-only, prod CSP is unchanged. Frame-
+       ancestors / X-Frame-Options / X-Content-Type-Options / Referrer-Policy
+       are emitted as response headers from Program.cs (meta-tag CSP can't
+       express frame-ancestors). *@
+    @{
+        // Mirrored covers in dev land at http://localhost:10000 (Azurite). In
+        // prod the same blob URLs are HTTPS and covered by `img-src https:`.
+        var devImgSources = Env.IsDevelopment() ? " http://localhost:10000" : "";
+        var csp = $"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:{devImgSources}; connect-src 'self' ws: wss:; media-src 'self' blob:; base-uri 'self'; form-action 'self';";
+    }
+    <meta http-equiv="Content-Security-Policy" content="@csp" />
 
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
     <link rel="stylesheet" href="@Assets["css/site.css"]" />
