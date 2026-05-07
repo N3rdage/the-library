@@ -4,10 +4,10 @@ description: One-time mine of all retros + patterns.md as of 2026-04-28. Each en
 type: project
 originSessionId: 21e97fa1-cba4-4b67-9d43-dc109098d6b2
 ---
-## Status as of 2026-05-06
+## Status as of 2026-05-07
 
 - **7 posts shipped** (covered).
-- **7 strong catch-up candidates** (clear angle, durable lesson, transferable beyond this stack).
+- **8 strong catch-up candidates** (clear angle, durable lesson, transferable beyond this stack).
 - **6 possible catch-up candidates** (could be a post or could fold into another — TBD when picked up).
 - **15+ retros with no obvious blog hook on their own** (specific, dated, or already covered — listed at the bottom for the definitive count).
 
@@ -40,6 +40,8 @@ Concrete angle, durable lesson, transferable beyond BookTracker's stack. Order i
 - **"Auto-fill-empties beat strict-replace"** — `retro_edition_merge_and_enrichment.md`. The first version was strict-replace; failed the first time it was used. Pivoted to auto-fill-empties + retrofit existing records. The lesson is bigger than dedup: "designed-with-no-data" defaults often pick the wrong semantics. Audience: data-modelling, dedup-curious.
 
 - **"Lookup data is messier than your tests"** — `patterns.md §10`, anchored by `retro_genre_matcher.md` (the bidirectional `Contains()` bug), `retro_format_detection.md`, `retro_imprecise_dates.md`, `retro_trove_fallback.md`. Real-surface examples from Open Library + Google Books + Trove. Budget for "lookup data quality" as ongoing, not one-time. Audience: anyone integrating external metadata APIs.
+
+- **"Bugs only the human can make"** — cover-storage PR1 debugging arc (2026-05-07). Drew copy-pasted the new `CoverStorage` config block into `appsettings.Development.json` but landed it nested inside `Logging` rather than as a sibling. Symptom: options blank in constructor. My diagnostic was "paste me the JSON" rather than guessing — Drew spotted it instantly the moment he looked at it. The point: some bug classes are uniquely human-shaped (literal-text manipulation, where-the-cursor-was), counterpart to the AI-shaped failures in #6 (chip-picker) and #7 (sledgehammer). The asks-instead-of-guesses move keeps the loop cheap on the symmetric case — same human-in-the-loop discipline, different direction. Drew flagged it as blog material in-chat ("file away for a blog coming soon") with a self-aimed rejoinder *"And that is why you can't have shiny toys Drew"* that gives the post its hook. Closes the symmetry trio: #6 names the gap, #7 names the response when the gap bites mid-fix from the AI side, this one names what cheap-loop looks like when the gap bites from the human side. Audience: AI-collaboration readers (the blog's core).
 
 ## Possible catch-up candidates
 
