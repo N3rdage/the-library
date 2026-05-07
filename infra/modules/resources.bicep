@@ -226,7 +226,10 @@ module appConfig './app-config.bicep' = {
     keyVaultName: keyVaultName
     aiAzureOpenAIEndpoint: ai.outputs.openAIEndpoint
     aiAzureOpenAIDeployment: ai.outputs.openAIDeploymentName
-    coverStoragePublicBaseUrl: coverStorage.outputs.publicContainerUrl
+    coverStorageProdContainerName: coverStorage.outputs.prodContainerName
+    coverStorageStagingContainerName: coverStorage.outputs.stagingContainerName
+    coverStorageProdPublicBaseUrl: coverStorage.outputs.prodPublicContainerUrl
+    coverStorageStagingPublicBaseUrl: coverStorage.outputs.stagingPublicContainerUrl
   }
   // Wait for KV (so KV refs resolve). Storage is implicit via the
   // `coverStoragePublicBaseUrl` output reference above.
