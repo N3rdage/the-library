@@ -204,6 +204,59 @@ public class BookListViewModelTests
     }
 
     [Fact]
+    public async Task ToggleGroupAsync_MultiWorkBook_SuppressesSubtitleAndReportsWorkCount()
+    {
+        // For collections (Book.Works.Count > 1), the subtitle of an arbitrary
+        // inner Work is data noise — list view shows "N works" instead.
+        var factory = new TestDbContextFactory();
+        using (var db = factory.CreateDbContext())
+        {
+            var king = new Author { Name = "Stephen King" };
+            db.Authors.Add(king);
+
+            db.Books.AddRange(
+                new Book
+                {
+                    // Single-work book — its Work subtitle should surface.
+                    Title = "The Shining",
+                    Works = [new Work
+                    {
+                        Title = "The Shining",
+                        Subtitle = "A Novel",
+                        WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }]
+                    }]
+                },
+                new Book
+                {
+                    // Multi-work collection — even though Work[0] has a subtitle,
+                    // the list should suppress it and report WorkCount=3.
+                    Title = "The Bachman Books",
+                    Works =
+                    [
+                        new Work { Title = "Rage", Subtitle = "Subtitle from a single story", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] },
+                        new Work { Title = "The Long Walk", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] },
+                        new Work { Title = "Roadwork", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] },
+                    ]
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var vm = new BookListViewModel(factory) { SelectedGroupBy = LibraryGroupBy.Author };
+        await vm.InitializeAsync();
+        var kingGroup = vm.Groups.First(g => g.Label == "Stephen King");
+        await vm.ToggleGroupAsync(kingGroup.Key);
+
+        var loaded = vm.LoadedGroups[kingGroup.Key].Books;
+        var single = loaded.Single(b => b.Title == "The Shining");
+        var collection = loaded.Single(b => b.Title == "The Bachman Books");
+
+        Assert.Equal("A Novel", single.Subtitle);
+        Assert.Equal(1, single.WorkCount);
+        Assert.Null(collection.Subtitle);
+        Assert.Equal(3, collection.WorkCount);
+    }
+
+    [Fact]
     public async Task GroupByGenre_GenreFilterReducesGroupsAndCounts()
     {
         var factory = new TestDbContextFactory();

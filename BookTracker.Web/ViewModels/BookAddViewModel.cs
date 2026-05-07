@@ -26,6 +26,25 @@ public class BookAddViewModel(
     // title/author search that returns work-level candidates from Open
     // Library; selecting one prefills the form like an ISBN lookup would.
     public bool NoIsbnMode { get; set; }
+
+    // Collection mode (web-prioritised): a single Book containing multiple
+    // Works (e.g. "The Bachman Books", anthologies). Toggling on swaps the
+    // single WorkForm for a repeatable Works builder; lookup fills only the
+    // collection's Book.Title + cover and skips the work-specific fields.
+    // Genres and series suggestions are deferred to per-work editing on
+    // /books/{id}/edit — applying them to all works at save time would be
+    // wrong (each work has its own).
+    public bool IsCollection { get; set; }
+    public List<WorkFormViewModel.WorkFormInput> CollectionWorks { get; set; } = [new(), new()];
+
+    public void AddCollectionWorkRow() => CollectionWorks.Add(new());
+
+    public void RemoveCollectionWorkRow(int index)
+    {
+        if (index < 0 || index >= CollectionWorks.Count) return;
+        CollectionWorks.RemoveAt(index);
+        if (CollectionWorks.Count == 0) CollectionWorks.Add(new());
+    }
     public string? SearchTitle { get; set; }
     public string? SearchAuthor { get; set; }
     public IReadOnlyList<BookSearchCandidate> SearchCandidates { get; private set; } = [];
@@ -78,7 +97,7 @@ public class BookAddViewModel(
     public ExistingBookMatch? ExistingBook { get; private set; }
     public bool AddingCopy { get; private set; }
 
-    public async Task LookupAsync(GenrePickerViewModel genrePicker)
+    public async Task LookupAsync(GenrePickerViewModel? genrePicker)
     {
         LookupMessage = null;
         ExistingBook = null;
@@ -128,17 +147,22 @@ public class BookAddViewModel(
 
             // The Add page creates a Book with one Work. Lookup result
             // populates both: Book.Title mirrors the Work title, plus
-            // cover; Work gets title/subtitle/author/genres.
+            // cover; Work gets title/subtitle/author/genres. In Collection
+            // mode the work-specific fields are skipped because the lookup
+            // result describes the *collection*, not its constituent works.
             if (string.IsNullOrWhiteSpace(BookInput.Title)) BookInput.Title = result.Title ?? "";
             if (string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl)) BookInput.DefaultCoverArtUrl = result.CoverUrl;
-            if (string.IsNullOrWhiteSpace(WorkInput.Title)) WorkInput.Title = result.Title ?? "";
-            if (string.IsNullOrWhiteSpace(WorkInput.Subtitle)) WorkInput.Subtitle = result.Subtitle;
-            // Lookup gives a single author string — seed the chip list with it
-            // when empty. User can add additional co-authors via the picker
-            // before saving.
-            if (WorkInput.Authors.Count == 0 && !string.IsNullOrWhiteSpace(result.Author))
+            if (!IsCollection)
             {
-                WorkInput.Authors = [result.Author];
+                if (string.IsNullOrWhiteSpace(WorkInput.Title)) WorkInput.Title = result.Title ?? "";
+                if (string.IsNullOrWhiteSpace(WorkInput.Subtitle)) WorkInput.Subtitle = result.Subtitle;
+                // Lookup gives a single author string — seed the chip list with it
+                // when empty. User can add additional co-authors via the picker
+                // before saving.
+                if (WorkInput.Authors.Count == 0 && !string.IsNullOrWhiteSpace(result.Author))
+                {
+                    WorkInput.Authors = [result.Author];
+                }
             }
             if (string.IsNullOrWhiteSpace(EditionInput.Isbn)) EditionInput.Isbn = result.Isbn;
             if (string.IsNullOrWhiteSpace(EditionInput.Publisher)) EditionInput.Publisher = result.Publisher;
@@ -147,19 +171,34 @@ public class BookAddViewModel(
                 EditionInput.DatePrinted = PartialDateParser.Format(d, result.DatePrintedPrecision);
             }
 
-            LookupCandidates = result.GenreCandidates.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            genrePicker.LookupCandidates = LookupCandidates;
-            genrePicker.ApplyLookupCandidates(LookupCandidates);
+            // Genre candidates and series suggestions are work-level; not
+            // meaningful in Collection mode where each work has its own.
+            if (!IsCollection)
+            {
+                LookupCandidates = result.GenreCandidates.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (genrePicker is not null)
+                {
+                    genrePicker.LookupCandidates = LookupCandidates;
+                    genrePicker.ApplyLookupCandidates(LookupCandidates);
+                }
+
+                SeriesSuggestion = await seriesMatch.FindMatchAsync(result);
+                SeriesSuggestionDismissed = false;
+                // Fresh lookup → clear any acceptance carried over from a prior
+                // ISBN attempt in this session (e.g. user typed wrong ISBN,
+                // accepted a Discworld suggestion, then corrected to a non-series
+                // book — the prior accept must not silently apply).
+                UndoSeriesSuggestionAccept();
+            }
+            else
+            {
+                LookupCandidates = [];
+                SeriesSuggestion = null;
+                SeriesSuggestionDismissed = false;
+                UndoSeriesSuggestionAccept();
+            }
 
             LookupMessage = $"Prefilled from {result.Source}. Edit anything before saving.";
-
-            SeriesSuggestion = await seriesMatch.FindMatchAsync(result);
-            SeriesSuggestionDismissed = false;
-            // Fresh lookup → clear any acceptance carried over from a prior
-            // ISBN attempt in this session (e.g. user typed wrong ISBN,
-            // accepted a Discworld suggestion, then corrected to a non-series
-            // book — the prior accept must not silently apply).
-            UndoSeriesSuggestionAccept();
         }
         finally
         {
@@ -197,7 +236,7 @@ public class BookAddViewModel(
     }
 
     /// <summary>Resets all input state so the page is ready for the next book.</summary>
-    public void Reset(GenrePickerViewModel genrePicker)
+    public void Reset(GenrePickerViewModel? genrePicker)
     {
         BookInput = new();
         WorkInput = new();
@@ -215,8 +254,13 @@ public class BookAddViewModel(
         SearchCandidates = [];
         SearchMessage = null;
         NoIsbnMode = false;
-        genrePicker.SelectedGenreIds = [];
-        genrePicker.LookupCandidates = [];
+        IsCollection = false;
+        CollectionWorks = [new(), new()];
+        if (genrePicker is not null)
+        {
+            genrePicker.SelectedGenreIds = [];
+            genrePicker.LookupCandidates = [];
+        }
     }
 
     public record ExistingBookMatch(int BookId, int EditionId, string Title, string Author, int CopyCount);
@@ -249,7 +293,7 @@ public class BookAddViewModel(
         }
     }
 
-    public async Task ApplyCandidateAsync(BookSearchCandidate candidate, GenrePickerViewModel genrePicker)
+    public async Task ApplyCandidateAsync(BookSearchCandidate candidate, GenrePickerViewModel? genrePicker)
     {
         if (string.IsNullOrWhiteSpace(BookInput.Title)) BookInput.Title = candidate.Title ?? "";
         if (string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl)) BookInput.DefaultCoverArtUrl = candidate.CoverUrl;
@@ -300,51 +344,105 @@ public class BookAddViewModel(
                 }
             }
 
-            var authors = await AuthorResolver.FindOrCreateAllAsync(WorkInput.Authors, db);
-            if (authors.Count == 0)
+            List<Work> works;
+            if (IsCollection)
             {
-                throw new InvalidOperationException("At least one author is required to save a Work.");
-            }
-            var firstPub = PartialDateParser.TryParse(WorkInput.FirstPublishedDate) ?? PartialDate.Empty;
-            var work = new Work
-            {
-                Title = (WorkInput.Title ?? BookInput.Title)!.Trim(),
-                Subtitle = string.IsNullOrWhiteSpace(WorkInput.Subtitle) ? null : WorkInput.Subtitle!.Trim(),
-                FirstPublishedDate = firstPub.Date,
-                FirstPublishedDatePrecision = firstPub.Precision,
-                Genres = selectedGenres,
-            };
-            // Dual-write: Work.Author = lead chip (legacy FK compat); Work.WorkAuthors
-            // = all chips with Order ascending. PR2 will drop Author/AuthorId and
-            // switch reads to the join.
-            AuthorResolver.AssignAuthors(work, authors);
+                // Collection mode: build N Works, one per row. Genres and series
+                // suggestions are deferred to per-work editing on /books/{id}/edit
+                // — the lookup flow can't pick them per-work, and applying to all
+                // would be wrong (each Work has its own).
+                var rows = CollectionWorks
+                    .Where(w => !string.IsNullOrWhiteSpace(w.Title) && w.Authors.Count > 0)
+                    .ToList();
+                if (rows.Count == 0)
+                {
+                    throw new InvalidOperationException("A collection must contain at least one work with a title and an author.");
+                }
+                // Resolve the union of distinct author names across all rows
+                // in one pass — calling FindOrCreate per row would create
+                // duplicate Author entities when the same name appears in
+                // multiple stories (the existence check queries the committed
+                // DB, missing pending entities in the change tracker).
+                var allNames = rows.SelectMany(r => r.Authors);
+                var allAuthors = await AuthorResolver.FindOrCreateAllAsync(allNames, db);
+                var byName = allAuthors.ToDictionary(a => a.Name, StringComparer.OrdinalIgnoreCase);
 
-            // Attach to the accepted series, if any. AcceptedSeriesId points at
-            // an existing local Series row; AcceptedSeriesName (without an Id)
-            // means the upstream API named a series we don't have yet — find-
-            // or-create it by name. Default new series to SeriesType.Series
-            // (numbered) per the Q1/Q2 defaults — user can flip to Collection
-            // on /series/{id} later if wrong.
-            if (SeriesSuggestionAccepted)
-            {
-                if (AcceptedSeriesId is int existingId)
+                works = new List<Work>(rows.Count);
+                foreach (var row in rows)
                 {
-                    work.SeriesId = existingId;
-                    work.SeriesOrder = AcceptedSeriesOrder;
-                }
-                else if (!string.IsNullOrWhiteSpace(AcceptedSeriesName))
-                {
-                    var seriesName = AcceptedSeriesName.Trim();
-                    var series = await db.Series
-                        .FirstOrDefaultAsync(s => s.Name.ToLower() == seriesName.ToLower());
-                    if (series is null)
+                    var rowAuthors = row.Authors
+                        .Select(n => n?.Trim())
+                        .Where(n => !string.IsNullOrEmpty(n))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Select(n => byName[n!])
+                        .ToList();
+                    if (rowAuthors.Count == 0)
                     {
-                        series = new Series { Name = seriesName, Type = SeriesType.Series };
-                        db.Series.Add(series);
+                        throw new InvalidOperationException($"Each work in the collection needs at least one author (work \"{row.Title}\" had none).");
                     }
-                    work.Series = series;
-                    work.SeriesOrder = AcceptedSeriesOrder;
+                    var rowFirstPub = PartialDateParser.TryParse(row.FirstPublishedDate) ?? PartialDate.Empty;
+                    var w = new Work
+                    {
+                        Title = row.Title!.Trim(),
+                        Subtitle = string.IsNullOrWhiteSpace(row.Subtitle) ? null : row.Subtitle!.Trim(),
+                        FirstPublishedDate = rowFirstPub.Date,
+                        FirstPublishedDatePrecision = rowFirstPub.Precision,
+                        Genres = [],
+                    };
+                    AuthorResolver.AssignAuthors(w, rowAuthors);
+                    works.Add(w);
                 }
+            }
+            else
+            {
+                var authors = await AuthorResolver.FindOrCreateAllAsync(WorkInput.Authors, db);
+                if (authors.Count == 0)
+                {
+                    throw new InvalidOperationException("At least one author is required to save a Work.");
+                }
+                var firstPub = PartialDateParser.TryParse(WorkInput.FirstPublishedDate) ?? PartialDate.Empty;
+                var work = new Work
+                {
+                    Title = (WorkInput.Title ?? BookInput.Title)!.Trim(),
+                    Subtitle = string.IsNullOrWhiteSpace(WorkInput.Subtitle) ? null : WorkInput.Subtitle!.Trim(),
+                    FirstPublishedDate = firstPub.Date,
+                    FirstPublishedDatePrecision = firstPub.Precision,
+                    Genres = selectedGenres,
+                };
+                // Dual-write: Work.Author = lead chip (legacy FK compat); Work.WorkAuthors
+                // = all chips with Order ascending. PR2 will drop Author/AuthorId and
+                // switch reads to the join.
+                AuthorResolver.AssignAuthors(work, authors);
+
+                // Attach to the accepted series, if any. AcceptedSeriesId points at
+                // an existing local Series row; AcceptedSeriesName (without an Id)
+                // means the upstream API named a series we don't have yet — find-
+                // or-create it by name. Default new series to SeriesType.Series
+                // (numbered) per the Q1/Q2 defaults — user can flip to Collection
+                // on /series/{id} later if wrong.
+                if (SeriesSuggestionAccepted)
+                {
+                    if (AcceptedSeriesId is int existingId)
+                    {
+                        work.SeriesId = existingId;
+                        work.SeriesOrder = AcceptedSeriesOrder;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(AcceptedSeriesName))
+                    {
+                        var seriesName = AcceptedSeriesName.Trim();
+                        var series = await db.Series
+                            .FirstOrDefaultAsync(s => s.Name.ToLower() == seriesName.ToLower());
+                        if (series is null)
+                        {
+                            series = new Series { Name = seriesName, Type = SeriesType.Series };
+                            db.Series.Add(series);
+                        }
+                        work.Series = series;
+                        work.SeriesOrder = AcceptedSeriesOrder;
+                    }
+                }
+
+                works = [work];
             }
 
             var datePrinted = PartialDateParser.TryParse(EditionInput.DatePrinted) ?? PartialDate.Empty;
@@ -356,7 +454,7 @@ public class BookAddViewModel(
                 Status = BookInput.Status,
                 Rating = BookInput.Rating,
                 DefaultCoverArtUrl = string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl) ? null : BookInput.DefaultCoverArtUrl.Trim(),
-                Works = [work],
+                Works = works,
                 Editions =
                 [
                     new Edition

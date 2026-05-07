@@ -346,6 +346,10 @@
                         {
                             <MudText Typo="Typo.body2" Color="Color.Secondary">@context.Subtitle</MudText>
                         }
+                        else if (context.WorkCount > 1)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@context.WorkCount works</MudText>
+                        }
                     </MudTd>
                     <MudTd>@context.Author</MudTd>
                     <MudTd>
@@ -388,6 +392,10 @@
                     <div class="flex-grow-1 min-width-0">
                         <MudText Style="font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">@book.Title</MudText>
                         <MudText Typo="Typo.body2" Color="Color.Secondary">@book.Author</MudText>
+                        @if (book.WorkCount > 1)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@book.WorkCount works</MudText>
+                        }
                         <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mt-1" Wrap="Wrap.Wrap">
                             <MudChip T="string" Size="Size.Small" Color="@StatusColor(book.Status)">@book.Status.ToString()</MudChip>
                             <MudRating ReadOnly="true" SelectedValue="@book.Rating" MaxValue="5" Size="Size.Small" />

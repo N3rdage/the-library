@@ -373,6 +373,104 @@ public class BookAddViewModelTests
     }
 
     [Fact]
+    public async Task SaveAsync_CollectionMode_CreatesBookWithMultipleWorks()
+    {
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        vm.BookInput.Title = "The Bachman Books";
+        vm.EditionInput.Isbn = "9780451178121";
+        vm.CollectionWorks =
+        [
+            new() { Title = "Rage", Authors = ["Richard Bachman"] },
+            new() { Title = "The Long Walk", Authors = ["Richard Bachman"] },
+            new() { Title = "Roadwork", Authors = ["Richard Bachman"], FirstPublishedDate = "1981" },
+        ];
+
+        var ok = await vm.SaveAsync(new List<int>());
+
+        Assert.NotNull(ok);
+        using var db = _factory.CreateDbContext();
+        var book = db.Books
+            .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
+            .Single();
+        Assert.Equal("The Bachman Books", book.Title);
+        Assert.Equal(3, book.Works.Count);
+        // Each row's authors land in WorkAuthors. No designated "primary" Work.
+        var rage = book.Works.Single(w => w.Title == "Rage");
+        Assert.Equal("Richard Bachman", rage.WorkAuthors.Single().Author.Name);
+        var roadwork = book.Works.Single(w => w.Title == "Roadwork");
+        Assert.Equal(new DateOnly(1981, 1, 1), roadwork.FirstPublishedDate);
+        Assert.Equal(DatePrecision.Year, roadwork.FirstPublishedDatePrecision);
+    }
+
+    [Fact]
+    public async Task SaveAsync_CollectionMode_SkipsEmptyRows()
+    {
+        // The Add page seeds two empty rows by default; users may add more
+        // and never fill them. Empty rows (no title or no authors) should be
+        // dropped silently rather than throwing.
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        vm.BookInput.Title = "Two Stories";
+        vm.CollectionWorks =
+        [
+            new() { Title = "First Story", Authors = ["Author A"] },
+            new() { Title = "", Authors = ["Author B"] },
+            new() { Title = "Second Story", Authors = ["Author B"] },
+            new() { Title = "Third Story", Authors = [] },
+        ];
+
+        await vm.SaveAsync(new List<int>());
+
+        using var db = _factory.CreateDbContext();
+        var book = db.Books.Include(b => b.Works).Single();
+        Assert.Equal(2, book.Works.Count);
+        Assert.Contains(book.Works, w => w.Title == "First Story");
+        Assert.Contains(book.Works, w => w.Title == "Second Story");
+    }
+
+    [Fact]
+    public async Task SaveAsync_CollectionMode_AllRowsEmpty_Throws()
+    {
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        vm.BookInput.Title = "Empty Collection";
+        vm.CollectionWorks = [new(), new()];
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => vm.SaveAsync(new List<int>()));
+    }
+
+    [Fact]
+    public async Task LookupAsync_CollectionMode_FillsBookOnlyAndSkipsWorkFields()
+    {
+        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: "9780451178121", Title: "The Bachman Books", Subtitle: "Four Early Novels",
+                Author: "Richard Bachman", Publisher: "NAL",
+                GenreCandidates: ["Horror"], DatePrinted: null, CoverUrl: "https://example.invalid/cover.jpg",
+                Source: "Open Library",
+                Series: null, SeriesNumber: null, SeriesNumberRaw: null));
+
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        vm.LookupIsbn = "9780451178121";
+
+        await vm.LookupAsync(CreateGenrePicker());
+
+        // Book-level fields prefilled (the Book represents the collection).
+        Assert.Equal("The Bachman Books", vm.BookInput.Title);
+        Assert.Equal("https://example.invalid/cover.jpg", vm.BookInput.DefaultCoverArtUrl);
+        Assert.Equal("9780451178121", vm.EditionInput.Isbn);
+        // Work-level fields untouched — the lookup describes the collection,
+        // not its constituent works.
+        Assert.Null(vm.WorkInput.Title);
+        Assert.Empty(vm.WorkInput.Authors);
+        // Genre candidates and series suggestion suppressed in collection mode.
+        Assert.Empty(vm.LookupCandidates);
+        Assert.Null(vm.SeriesSuggestion);
+    }
+
+    [Fact]
     public async Task AcceptSeriesSuggestion_OnLocalFallbackReason_IsNoOp()
     {
         // Seed: an author with 2+ ungrouped works → MatchReason.AuthorHasMultipleBooks
