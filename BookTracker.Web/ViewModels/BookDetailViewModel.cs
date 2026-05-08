@@ -49,6 +49,7 @@ public class BookDetailViewModel(
         await using var db = await dbFactory.CreateDbContextAsync();
 
         var book = await db.Books
+            .AsNoTracking()
             .Include(b => b.Tags)
             .Include(b => b.Editions)
                 .ThenInclude(e => e.Copies)
@@ -294,6 +295,7 @@ public class BookDetailViewModel(
         var q = (query ?? "").Trim().ToLowerInvariant();
 
         var names = await db.Tags
+            .AsNoTracking()
             .Where(t => string.IsNullOrEmpty(q) || t.Name.Contains(q))
             .OrderBy(t => t.Name)
             .Select(t => t.Name)
