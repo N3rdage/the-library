@@ -228,6 +228,10 @@ Test helper: `TestDbContextFactory` creates isolated in-memory databases per tes
 
 CI runs `dotnet test` on all PRs to main.
 
+## Audit skills
+
+A family of read-only Claude Code skills that flag patterns of interest in specific domains (`security-audit`, `scale-audit`, with `a11y-audit` + `codehealth-audit` planned). Each one is **static-pattern analysis, not runtime measurement** — for runtime metrics see the App Insights queries in [the May 8 perf blog post](blog/2026-05-08-01-i-blamed-the-cold-start-the-trace-disagreed.md). The audit catches "this pattern *might* bite at scale"; App Insights catches "this pattern *is* biting now." Full doc + skill list + pilot history: [`docs/audit-skills.md`](docs/audit-skills.md). Project-level rule overrides live at `audit-rules/<name>.md`; per-run reports land in `audits/` (gitignored).
+
 ## Configuration
 
 | Setting | Source | Purpose |
