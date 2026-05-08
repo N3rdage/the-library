@@ -209,16 +209,23 @@ The whole investigation pointed at three changes, each at the layer where the bu
 
 The whole [PR](https://github.com/N3rdage/the-library/pull/191) was three files, 45 lines added, 15 removed.
 
-After the deploy:
+After the deploy, the headline result from re-running Query 1: **`InternalOpenAsync` is gone from the top 20.** The smoking-gun row from before — 2 calls, p50=8,600ms, p95=27,587ms — doesn't appear in the post-fix sample at all. The warm pool is amortising the AAD-token handshake across many requests instead of paying it on every cold gap.
 
-![Query 1 re-run, post-fix. InternalOpenAsync p95 drops from 27.5s to single-digit seconds.](images/perf-investigation/post-q1-connection-open.png)
-*(post-fix screenshot — to be captured 24h after deploy)*
+| | Pre-fix (24h) | Post-fix (post-swap) |
+|---|---|---|
+| `InternalOpenAsync` in Q1 top-20? | **yes — p95 27,587 ms** | **no — gone entirely** |
+| Normal queries p50 | 7 ms | 18 ms |
+| Normal queries p95 | 57 ms | 314 ms |
 
-![Query 5 re-run, post-fix. Sawtooth flattens out.](images/perf-investigation/post-q5-flat.png)
-*(post-fix screenshot — to be captured 24h after deploy)*
+The slight uptick in normal-query percentiles isn't real degradation — it's sample-mix difference. The pre-fix window had 10,150 calls over 24h of natural use; the post-fix window has 830 calls over a few hours of *deliberate testing*, which over-samples the first-of-session cold queries you get when a worker's been idle. The p50 of 18ms is healthy. The same `GET /` page across the post-fix window swings from 2,405ms total SQL on cold-pool requests to 38ms once warm — a 60× gap, exactly the warm-pool effect.
 
-![Memory working set during a Publishers page visit, post-fix. Flat instead of spike.](images/perf-investigation/post-memory-flat.png)
-*(post-fix screenshot — to be captured after the next Publishers visit)*
+![Query 5 re-run with a window that spans pre- and post-deploy. Pre-fix sawtooth on the left, deploy incident as the rightmost spike, flatter steady-state in between.](images/perf-investigation/post-q5-pre-and-post.png)
+*Query 5 with a window that spans both sides of the deploy. The sawtooth on the left is the pre-fix p95 swinging between sub-second and 43 seconds. The 80-second spike on the right is one worker-recycle event during post-fix testing — Q3.x trace breakdowns showed the SQL portion of those requests was fine; the time was spent in pre-SQL worker warmup. Outside that recycle, post-fix p95 settles back into the low single-digit-second range.*
+
+![App Service memory working set zoomed on the incident window. The 720MB spike at 4 AM is the wedge that started everything; memory decays over hours, drops to zero when the SQL-database restart finally killed the wedged worker, and rebuilds to a stable 200-400MB on the new bits.](images/perf-investigation/post-memory-zoomed.png)
+*Working-set memory, zoomed on the incident window. The 720MB spike at 4 AM AEST is the original Publishers-page visit on old bits that wedged the workers and triggered the morning's debugging arc. Memory then decays for hours (workers limping, GC unable to release), drops to zero at 12:53 PM AEST when the SQL-database restart finally killed the wedged worker, and rebuilds cleanly to a 200-400MB steady state on the new bits. No more 700MB spikes — the Razor render-tree fix is doing its job.*
+
+A separately notable result, even though it wasn't the headline change: `/icons/icon.svg` p95 went from **2,484ms to 380ms** — an 84% reduction. That was the worker-thread-starvation symptom showing up on a static SVG. Request threads had been piling up waiting for cold AAD handshakes, leaving none free to serve static files. Fixing connection-pool warmth fixed the unrelated-looking static asset latency too.
 
 ## What I'd want a reader to take away
 
