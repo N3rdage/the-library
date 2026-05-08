@@ -17,8 +17,8 @@ All tagged with `Client = Drew` and `Environment = Production`.
 | Staging slot | `staging` on the App Service | `australiaeast` | own system-assigned identity; CI deploys here, `swap.yml` promotes |
 | System-assigned managed identities | on prod + staging slots | — | granted SQL DB roles + Key Vault Secrets User + Cognitive Services User on OpenAI |
 | Azure SQL logical server | `booktracker-sql-<hash>` | `australiaeast` | **AAD-only auth**; `publicNetworkAccess = Disabled` by default |
-| Azure SQL database (prod) | `booktracker` | `australiaeast` | Basic tier, 5 DTU; reached by the prod slot only |
-| Azure SQL database (staging) | `booktracker-staging` | `australiaeast` | Basic tier, 5 DTU; reached by the staging slot only. Empty on first deploy — migrate-on-startup creates the schema. |
+| Azure SQL database (prod) | `booktracker` | `australiaeast` | Standard S0, 10 DTU; reached by the prod slot only |
+| Azure SQL database (staging) | `booktracker-staging` | `australiaeast` | Standard S0, 10 DTU; reached by the staging slot only. Empty on first deploy — migrate-on-startup creates the schema. |
 | Azure SQL Private Endpoint | `booktracker-sql-<hash>-pe` | `australiaeast` | in primary `private-endpoints` subnet; serves both DBs |
 | Key Vault | `booktracker-kv-<hash>` | `australiaeast` | Standard, RBAC auth, `defaultAction = Deny`; holds AuthClientSecret + AI keys |
 | Key Vault Private Endpoint | `booktracker-kv-<hash>-pe` | `australiaeast` | in primary `private-endpoints` subnet |
