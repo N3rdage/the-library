@@ -236,6 +236,36 @@ A connection pool that re-handshakes on every cold gap multiplies handshakes by 
 
 ## What we did about it
 
-The PR shipped to prod. Drew is testing the fix in the live environment and the post-deploy charts above will replace the placeholders once 24 hours of telemetry have accumulated. The remaining items — bumping SQL from Basic to Standard S0, batching the 7 sequential `DbContext` opens on `/books/{id}`, and a wider rethink of how Blazor Server's render-tree size scales with list pages — are tracked in [TODO.md](https://github.com/N3rdage/the-library/blob/main/TODO.md) but explicitly *not* in this PR. Once `Min Pool Size` lands, the cost-benefit on each of those changes shifts; we'll know whether they're still worth doing.
+The PR shipped to prod. The remaining items — bumping SQL from Basic to Standard S0, batching the 7 sequential `DbContext` opens on `/books/{id}`, and a wider rethink of how Blazor Server's render-tree size scales with list pages — are tracked in [TODO.md](https://github.com/N3rdage/the-library/blob/main/TODO.md) but explicitly *not* in this PR. Once `Min Pool Size` lands, the cost-benefit on each of those changes shifts; we'll know whether they're still worth doing.
 
 The investigation itself, including the wrong initial hypothesis, took about thirty minutes from "the app feels slow" to "PR merged." The thing that kept the loop short was that the corrective signal was a single Logs query away. Without that, I'd have spent the morning being confidently wrong, and the fix would have been a different fix to a different problem.
+
+## Postscript: the deploy itself was the incident
+
+The deploy didn't go cleanly. Drew pushed the merge to prod; the GitHub Actions slot-swap step hung, then failed; both slots reported `Running` while neither served traffic; `curl https://books.silly.ninja` completed the TLS handshake and then sat for ten seconds receiving zero bytes. Stop+Start of both slots — the recovery move from [the April outage](https://github.com/N3rdage/the-library/blob/main/blog/2026-04-27-01-empty-staging-catches-schema-not-data.md) — didn't fix it.
+
+What did fix it: Drew restarted the SQL database (a recently-added preview feature in the portal). Worker memory dropped from 148MB to 0, the worker process actually died for the first time, and a fresh one came up clean. That pointed at the underlying mechanic: the workers had threads blocked on SQL operations that weren't returning, App Service's graceful-shutdown was waiting for those threads, and the fresh worker spawned by `Start` was inheriting the same wedge because the SQL-side connection state outlived the worker. Restarting SQL killed every server-side connection, the wedged threads got fast errors instead of indefinite hangs, and the worker could finally exit and re-spawn cleanly.
+
+Most likely trigger for the wedge: someone (Drew) had been testing a Publishers page visit on the *old* bits before the deploy, which hit either the UI render-tree cartesian or the EF multi-collection cartesian — the very bugs the deploy was trying to fix. The bug being deployed caused the incident that obstructed the deployment of its own fix. There's a kind of poetry to that.
+
+After the SQL restart, prod was back on old bits but the swap still wasn't completing. Container logs showed the second issue: a startup-time race. App Service's warmup probe gives the container 230 seconds to come up before declaring failure. BookTracker's cold start adds up to ~250s on a slow day:
+
+- Platform `update-ca-certificates` (5-80s — variable, sometimes very slow)
+- Dotnet bootstrap (~15s)
+- First SQL connection with AAD-only auth on Basic tier (~30-40s — the 27-second connection open from this very investigation)
+- EF migration applock + history check (~10s)
+- App initialisation (~30-40s)
+
+Once the container crosses the 230s threshold, the platform kills it and starts another one. Each restart adds another full bootstrap to the queue, which makes the *next* attempt slower because the cert update and AAD calls and SQL handshakes are all happening across more concurrent containers. The restart loop reinforces itself.
+
+Fix: an app setting, `WEBSITES_CONTAINER_START_TIME_LIMIT=600`. Default is 230 seconds, max is 1800. Setting it to 600 gives the container ten minutes to come up, which is enough headroom for any plausible cold-start without letting genuinely broken bits hide forever. Drew applied it via `az webapp config appsettings set` during the incident; a follow-up PR bakes it into the Bicep so the next deploy survives.
+
+## The meta-lesson
+
+The investigation taught us about AAD-token churn and connection-pool warmth. The deploy taught us about three platform behaviours that stack: SqlClient pool zombies that outlive worker processes, slow ca-cert updates on Linux App Service, and a warmup-probe timeout tight enough that AAD-authed startups can trip over it on a bad day. None of those were in the original blast radius. They were exposed by the very fix that was meant to address the original symptom.
+
+This is the second time in two months that a routine BookTracker deploy has produced a non-trivial production incident — the first was [the staging-DB-sep deploy in April](https://github.com/N3rdage/the-library/blob/main/blog/2026-04-27-01-empty-staging-catches-schema-not-data.md) that knocked both sites down for six minutes. There's a pattern here. ARM redeploys on Azure App Service are not the calm idempotent affairs the documentation implies. They cascade through worker recycles, cert updates, AAD token refreshes, and connection-pool resets, and the platform's idea of "healthy" is different from the application's. Each individual interaction is benign. The combinatorics of three or four happening together within a 30-second window are not.
+
+The fixed lesson from the April incident was *Stop+Start, not Restart, when AAD-token cache lag wedges the slots*. The fixed lesson from today is *if Stop+Start doesn't help and the workers report Running but won't serve, restart the SQL database to break SqlClient connection-pool zombies* and *bump `WEBSITES_CONTAINER_START_TIME_LIMIT` so cold-start variance doesn't trip the warmup probe*. Both of these are now in the runbook. Neither is the kind of thing you can derive from reading the code.
+
+The blog format for the original investigation works: queries verbatim, traces verbatim, hypotheses corrected by data. The deploy-as-incident is a different shape and probably wants its own post — a runbook-style retro that names the recovery moves explicitly and links back to here for the original bug context. I'll write that as a follow-up; this one stays focused on the App Insights diagnosis arc that motivated it.
