@@ -38,15 +38,21 @@ resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = {
   }
 }
 
+// Standard S0 (10 DTU). Bumped from Basic (5 DTU) after the May 2026 perf
+// investigation: AAD-authed handshake on Basic was running 8-27s on cold
+// connections and contributing to deploy-time wedges. S0 has materially
+// better connection-acquisition latency and double the DTU headroom for
+// query throughput. maxSizeBytes stays at 2GB — Drew's library is well
+// under that.
 resource sqlDb 'Microsoft.Sql/servers/databases@2023-08-01-preview' = {
   parent: sqlServer
   name: sqlDatabaseName
   location: location
   tags: tags
   sku: {
-    name: 'Basic'
-    tier: 'Basic'
-    capacity: 5
+    name: 'S0'
+    tier: 'Standard'
+    capacity: 10
   }
   properties: {
     collation: 'SQL_Latin1_General_CP1_CI_AS'
@@ -57,7 +63,7 @@ resource sqlDb 'Microsoft.Sql/servers/databases@2023-08-01-preview' = {
 // Separate database for the staging slot so deploys against staging can't
 // touch prod data (a destructive migration would otherwise take prod down
 // before any swap, and slot swap-back would give old binaries against the
-// new schema). Same Basic SKU as prod for symmetric provisioning shape;
+// new schema). Same S0 SKU as prod for symmetric provisioning shape;
 // AAD-only auth and Private Endpoint are inherited from the parent server.
 // First deploy lands an empty DB — migrate-on-startup creates the schema
 // against it on the next app start. See infra/README.md for ordering.
@@ -67,9 +73,9 @@ resource sqlStagingDb 'Microsoft.Sql/servers/databases@2023-08-01-preview' = {
   location: location
   tags: tags
   sku: {
-    name: 'Basic'
-    tier: 'Basic'
-    capacity: 5
+    name: 'S0'
+    tier: 'Standard'
+    capacity: 10
   }
   properties: {
     collation: 'SQL_Latin1_General_CP1_CI_AS'
