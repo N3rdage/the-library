@@ -25,7 +25,7 @@ public class BookEditViewModel(
     // TODO.md.
     public List<WorkSummary> OtherWorks { get; private set; } = [];
     public string? NewWorkTitle { get; set; }
-    public string? NewWorkAuthor { get; set; }
+    public List<string> NewWorkAuthors { get; set; } = [];
 
     // "Attach existing Work" typeahead state — lets the user find an
     // existing Work (e.g. a story from another compendium) and add it to
@@ -395,24 +395,30 @@ public class BookEditViewModel(
 
     public async Task AddOtherWorkAsync(int bookId)
     {
-        if (string.IsNullOrWhiteSpace(NewWorkTitle) || string.IsNullOrWhiteSpace(NewWorkAuthor)) return;
+        if (string.IsNullOrWhiteSpace(NewWorkTitle) || NewWorkAuthors.Count == 0) return;
 
         await using var db = await dbFactory.CreateDbContextAsync();
         var book = await db.Books.Include(b => b.Works).FirstOrDefaultAsync(b => b.Id == bookId);
         if (book is null) return;
 
-        var author = await AuthorResolver.FindOrCreateAsync(NewWorkAuthor, db);
+        var authors = await AuthorResolver.FindOrCreateAllAsync(NewWorkAuthors, db);
+        if (authors.Count == 0) return;
+
         var work = new Work
         {
             Title = NewWorkTitle.Trim(),
         };
-        AuthorResolver.AssignAuthors(work, [author]);
+        AuthorResolver.AssignAuthors(work, authors);
         book.Works.Add(work);
         await db.SaveChangesAsync();
 
-        OtherWorks.Add(new WorkSummary(work.Id, work.Title, author.Name, 0));
+        OtherWorks.Add(new WorkSummary(
+            work.Id,
+            work.Title,
+            WorkAuthorshipFormatter.Display(authors.Select(a => a.Name)),
+            0));
         NewWorkTitle = null;
-        NewWorkAuthor = null;
+        NewWorkAuthors = [];
     }
 
     public async Task SearchWorksToAttachAsync(int bookId)
