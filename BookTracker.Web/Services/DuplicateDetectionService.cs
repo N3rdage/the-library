@@ -214,7 +214,13 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
         // count) bucket together for duplicate detection. Single-author works
         // get a single-id fingerprint; "Preston, Child" works share a
         // fingerprint distinct from a "Preston" solo work.
+        //
+        // AsSplitQuery: the projection traverses two collection navigations
+        // (WorkAuthors twice, Books). Without splitting, EF emits a single
+        // query with multi-LEFT-JOIN cartesian — slow plus the row count
+        // multiplies materialisation memory.
         var works = (await db.Works
+            .AsSplitQuery()
             .Select(w => new
             {
                 w.Id,
@@ -264,7 +270,13 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
         CancellationToken ct)
     {
         // Project once; re-use for both detection strategies.
+        //
+        // AsSplitQuery: the projection touches Editions, Editions.Copies,
+        // Works, and Works.WorkAuthors — four collection navigations. Without
+        // splitting, EF SingleQuery cartesian-joins them and the row count
+        // explodes (the warning logged in App Insights trace 3.a).
         var books = await db.Books
+            .AsSplitQuery()
             .Select(b => new
             {
                 b.Id,

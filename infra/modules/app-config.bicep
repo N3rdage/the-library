@@ -164,7 +164,11 @@ resource connStrings 'Microsoft.Web/sites/config@2023-12-01' = {
   name: 'connectionstrings'
   properties: {
     DefaultConnection: {
-      value: 'Server=tcp:${sqlServerFqdn},1433;Database=${sqlDatabaseName};Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False;'
+      // Min Pool Size=3 keeps a small warm pool so AAD-token + TLS handshake
+      // costs don't recur on every idle gap. Without it, sporadic mobile
+      // traffic was paying 8-27s connection-open latency (App Insights
+      // `InternalOpenAsync` p95) for every fresh physical connection.
+      value: 'Server=tcp:${sqlServerFqdn},1433;Database=${sqlDatabaseName};Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False;Min Pool Size=3;'
       type: 'SQLAzure'
     }
   }
@@ -225,7 +229,7 @@ resource stagingConnStrings 'Microsoft.Web/sites/slots/config@2023-12-01' = {
   name: 'connectionstrings'
   properties: {
     DefaultConnection: {
-      value: 'Server=tcp:${sqlServerFqdn},1433;Database=${stagingSqlDatabaseName};Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False;'
+      value: 'Server=tcp:${sqlServerFqdn},1433;Database=${stagingSqlDatabaseName};Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False;Min Pool Size=3;'
       type: 'SQLAzure'
     }
   }

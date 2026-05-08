@@ -95,19 +95,23 @@
                                 <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Edit"
                                            OnClick="@(() => StartRename(publisher))">Rename</MudButton>
 
-                                <MudSelect T="int?"
-                                           Value="null"
-                                           ValueChanged="@((int? id) => { if (id is int tid) StartMerge(publisher.Id, tid); })"
-                                           Label="Merge into…"
-                                           Variant="Variant.Outlined"
-                                           Margin="Margin.Dense"
-                                           Dense="true"
-                                           Style="max-width: 260px;">
-                                    @foreach (var other in VM.Publishers.Where(p => p.Id != publisher.Id))
-                                    {
-                                        <MudSelectItem T="int?" Value="@((int?)other.Id)">@other.Name</MudSelectItem>
-                                    }
-                                </MudSelect>
+                                @* Lazy autocomplete instead of MudSelect: every row used to render
+                                   one MudSelectItem per other publisher (N rows × N-1 items = O(N²)
+                                   render-tree blow-up that spiked working set to 700MB+ at ~200
+                                   publishers). Autocomplete only materialises items when the user
+                                   types, so per-row cost drops to O(1). *@
+                                <MudAutocomplete T="PublisherListViewModel.PublisherRow"
+                                                 Value="null"
+                                                 ValueChanged="@((PublisherListViewModel.PublisherRow? other) => { if (other is not null) StartMerge(publisher.Id, other.Id); })"
+                                                 SearchFunc="@((string? value, CancellationToken _) => Task.FromResult(SearchMergeTargets(publisher.Id, value)))"
+                                                 ToStringFunc="@(p => p?.Name ?? string.Empty)"
+                                                 Label="Merge into…"
+                                                 Variant="Variant.Outlined"
+                                                 Margin="Margin.Dense"
+                                                 Dense="true"
+                                                 Clearable="true"
+                                                 ResetValueOnEmptyText="true"
+                                                 Style="max-width: 260px;" />
 
                                 @if (publisher.EditionCount == 0)
                                 {
@@ -219,5 +223,15 @@
     {
         await VM.MergeAsync(sourceId, targetId);
         ClearPendingMerge();
+    }
+
+    private IEnumerable<PublisherListViewModel.PublisherRow> SearchMergeTargets(int sourceId, string? term)
+    {
+        IEnumerable<PublisherListViewModel.PublisherRow> q = VM.Publishers.Where(p => p.Id != sourceId);
+        if (!string.IsNullOrWhiteSpace(term))
+        {
+            q = q.Where(p => p.Name.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
+        return q.Take(20);
     }
 }
