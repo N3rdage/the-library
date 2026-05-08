@@ -63,6 +63,15 @@ var coverStorageConnRef = '@Microsoft.KeyVault(SecretUri=${kvBase}/CoverStorageC
 var commonAppSettings = {
   ASPNETCORE_ENVIRONMENT: 'Production'
   APPLICATIONINSIGHTS_CONNECTION_STRING: appInsightsConnectionString
+  // App Service Linux warmup probe gives the container 230s by default
+  // before declaring failure and entering a kill-and-restart loop.
+  // BookTracker's startup adds up to ~250s under realistic conditions:
+  // platform `update-ca-certificates` (5-80s, regional), dotnet bootstrap
+  // (~15s), first SQL connection with AAD-only auth on Basic tier
+  // (~30-40s), EF migration applock + history check (~10s), then app
+  // initialisation. 600s gives generous headroom for slow days without
+  // letting genuinely broken bits hide forever.
+  WEBSITES_CONTAINER_START_TIME_LIMIT: '600'
   MICROSOFT_PROVIDER_AUTHENTICATION_SECRET: authClientSecretRef
   AI__DefaultProvider: aiDefaultProvider
   AI__AzureOpenAI__Endpoint: aiAzureOpenAIEndpoint
