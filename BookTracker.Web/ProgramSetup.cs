@@ -61,6 +61,18 @@ public static class ProgramSetup
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
 
+        // Minimal API JSON: serialize enums as strings, not their
+        // underlying integers. Bookshop mode surfaces BookStatus
+        // (Unread / Reading / Read) on result cards via the
+        // /api/catalog-snapshot endpoint, and the default int
+        // serialization rendered every "Read" book as the badge "2".
+        // Sets the convention for all future *Endpoints.cs files.
+        builder.Services.ConfigureHttpJsonOptions(options =>
+        {
+            options.SerializerOptions.Converters.Add(
+                new System.Text.Json.Serialization.JsonStringEnumConverter());
+        });
+
         // MudBlazor — pilot on Home + MergeBook pages. Coexists with Bootstrap
         // (both stylesheets loaded in App.razor) for the duration of the pilot.
         builder.Services.AddMudServices();
