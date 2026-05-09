@@ -1,6 +1,8 @@
 using BookTracker.Data;
+using BookTracker.Web.Api;
 using BookTracker.Web.Components;
 using BookTracker.Web.Services;
+using BookTracker.Web.Services.Catalog;
 using BookTracker.Web.Services.Covers;
 using BookTracker.Web.Telemetry;
 using BookTracker.Web.ViewModels;
@@ -90,6 +92,7 @@ public static class ProgramSetup
 
         builder.Services.AddTransient<SeriesMatchService>();
 
+        builder.Services.AddScoped<ICatalogSnapshotService, CatalogSnapshotService>();
         builder.Services.AddScoped<IDuplicateDetectionService, DuplicateDetectionService>();
         builder.Services.AddScoped<IAuthorMergeService, AuthorMergeService>();
         builder.Services.AddScoped<IWorkMergeService, WorkMergeService>();
@@ -207,5 +210,10 @@ public static class ProgramSetup
 
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode();
+
+        // API endpoints (Minimal API). First family is the bookshop catalog
+        // snapshot; future API surfaces add their own *Endpoints.cs class
+        // and Map* call here.
+        app.MapCatalogEndpoints();
     }
 }
