@@ -202,7 +202,7 @@
                                 <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap">
                                     @if (!string.IsNullOrEmpty(b.CoverUrl))
                                     {
-                                        <MudImage Src="@b.CoverUrl" Alt="@b.Title" Width="36" Height="52" Style="object-fit: cover; border-radius: 2px; flex: 0 0 auto;" />
+                                        <MudImage Src="@b.CoverUrl" Alt="@b.Title" Width="36" Height="52" loading="lazy" decoding="async" Style="object-fit: cover; border-radius: 2px; flex: 0 0 auto;" />
                                     }
                                     else
                                     {
