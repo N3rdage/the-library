@@ -24,6 +24,14 @@
     <h1 class="h4 mb-3 mt-2">Bookshop mode</h1>
     <p class="text-muted small mb-3">Look up books from your library — works offline.</p>
 
+    @* Offline banner — JS reveals when navigator.onLine === false.
+       Stays visible the whole time the user is offline so they
+       know lookups are coming from cache. Updates on online /
+       offline / visibilitychange events. *@
+    <div id="bookshop-offline-banner" class="alert alert-secondary py-2 small d-none" role="status">
+        📵 Offline — showing cached data. Lookups still work; refresh and "Open in app" need a connection.
+    </div>
+
     @* Mode toggle. JS swaps btn-primary / btn-outline-primary on
        click and shows the matching #bookshop-mode-* container. *@
     <div class="btn-group w-100 mb-3" role="group" aria-label="Bookshop mode">
@@ -87,6 +95,15 @@
 
     <div id="bookshop-footer" class="text-center text-muted small mt-4 mb-3">
         <div id="bookshop-meta">Loading catalog…</div>
+
+        @* Stale-cache warning — JS reveals when syncedAt is older
+           than 7 days. Lenient threshold per design doc: most "do I
+           have this?" answers are correct against a week-old
+           snapshot, but past that the user should know to refresh. *@
+        <div id="bookshop-stale-warning" class="alert alert-warning py-2 mt-2 mb-0 small d-none" role="status">
+            ⚠ Catalog last synced <span id="bookshop-stale-days"></span> days ago. Refresh when online to be sure.
+        </div>
+
         <button id="bookshop-refresh" type="button" class="btn btn-outline-secondary btn-sm mt-2">
             <span data-state="idle">Refresh</span>
             <span data-state="busy" class="d-none">
@@ -94,8 +111,29 @@
                 Refreshing…
             </span>
         </button>
+
+        @* Auth-expired prompt — surfaced when /api/catalog-snapshot
+           returns 401 or redirects through /.auth/, which happens
+           when the Easy Auth session has expired (typically after
+           the user has been offline for a while). The link kicks
+           off the AAD sign-in flow with a post-login bounce back
+           to /bookshop. *@
+        <div id="bookshop-auth-prompt" class="alert alert-info mt-2 mb-0 py-2 small d-none" role="alert">
+            Your sign-in expired.
+            <a href="/.auth/login/aad?post_login_redirect_uri=/bookshop">Sign in again</a>
+            to refresh.
+        </div>
     </div>
 </div>
+
+@* Toast host — fixed-position stack of transient messages
+   (refresh success / error). JS appends/removes toast divs;
+   pointer-events: none on the host so toasts don't block taps
+   beneath when the screen is busy. *@
+<div id="bookshop-toast-host"
+     class="position-fixed bottom-0 start-50 translate-middle-x pb-3 d-flex flex-column align-items-center"
+     style="z-index: 1080; pointer-events: none;"
+     aria-live="polite"></div>
 
 @code {
     protected override async Task OnAfterRenderAsync(bool firstRender)
