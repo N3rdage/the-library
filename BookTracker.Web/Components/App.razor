@@ -62,6 +62,10 @@
        window.catalogCache; no init runs at script load — pages call
        catalogCache.init() explicitly when they need the cache populated. *@
     <script src="@Assets["js/catalog-cache.js"]"></script>
+    @* Bookshop page glue — DOM event wiring + result rendering for
+       /bookshop. Self-gates on path so the load cost on other pages
+       is just the script download. *@
+    <script src="@Assets["js/bookshop-page.js"]"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="@Assets["service-worker-register.js"]"></script>
 </body>
