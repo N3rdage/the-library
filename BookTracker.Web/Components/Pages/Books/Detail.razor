@@ -44,6 +44,8 @@
                         <MudImage Src="@book.CoverUrl"
                                   Alt="@($"Cover of {book.Title}")"
                                   Width="120"
+                                  loading="lazy"
+                                  decoding="async"
                                   Style="max-width: 120px; width: 100%; height: auto; border-radius: 4px; flex: 0 0 auto;" />
                     }
                     else
@@ -318,7 +320,7 @@
                                         @if (!string.IsNullOrEmpty(edition.CoverUrl))
                                         {
                                             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                                                <MudImage Src="@edition.CoverUrl" Alt="" Width="48" Height="68" ObjectFit="ObjectFit.Cover" Style="border-radius: 4px;" />
+                                                <MudImage Src="@edition.CoverUrl" Alt="" Width="48" Height="68" ObjectFit="ObjectFit.Cover" loading="lazy" decoding="async" Style="border-radius: 4px;" />
                                                 @if (edition.IsUserSupplied)
                                                 {
                                                     <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">your photo</MudChip>

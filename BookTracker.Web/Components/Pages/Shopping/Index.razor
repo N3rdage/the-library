@@ -88,7 +88,7 @@
                     <div class="d-flex gap-3 align-items-center py-2 border-bottom" role="button" style="cursor: pointer;" @onclick="() => VM.SelectBookAsync(item.Id)">
                         @if (!string.IsNullOrWhiteSpace(item.CoverUrl))
                         {
-                            <img src="@item.CoverUrl" alt="" class="rounded flex-shrink-0" style="width: 40px; height: 56px; object-fit: cover;" />
+                            <img src="@item.CoverUrl" alt="" loading="lazy" decoding="async" class="rounded flex-shrink-0" style="width: 40px; height: 56px; object-fit: cover;" />
                         }
                         else
                         {
@@ -109,7 +109,7 @@
                 <div class="d-flex gap-3 align-items-start">
                     @if (!string.IsNullOrWhiteSpace(VM.Result.CoverUrl))
                     {
-                        <img src="@VM.Result.CoverUrl" alt="" class="rounded flex-shrink-0" style="width: 60px; height: 84px; object-fit: cover;" />
+                        <img src="@VM.Result.CoverUrl" alt="" loading="lazy" decoding="async" class="rounded flex-shrink-0" style="width: 60px; height: 84px; object-fit: cover;" />
                     }
                     <div class="flex-grow-1">
                         <div class="d-flex align-items-center gap-2 mb-1">

@@ -68,7 +68,7 @@
                                         <div class="card-body py-2 d-flex align-items-center gap-3">
                                             @if (!string.IsNullOrEmpty(candidate.CoverUrl))
                                             {
-                                                <img src="@candidate.CoverUrl" alt="" style="width: 48px; height: 72px; object-fit: cover;" />
+                                                <img src="@candidate.CoverUrl" alt="" loading="lazy" decoding="async" style="width: 48px; height: 72px; object-fit: cover;" />
                                             }
                                             else
                                             {
