@@ -56,5 +56,52 @@ window.BarcodeScanner = {
             try { await scanner.stop(); } catch { }
             scanner = null;
         }
+    },
+
+    // JS-callback variant of start() — used by pages without an active
+    // Blazor circuit (e.g. /bookshop offline mode). Same scanning
+    // behaviour as start(), but invokes the supplied JS functions
+    // instead of crossing the Blazor JS interop boundary.
+    startJs: async function (elementId, onScan, onError) {
+        if (scanner) {
+            try { await scanner.stop(); } catch { }
+            scanner = null;
+        }
+
+        lastScannedCode = null;
+        lastScannedTime = 0;
+
+        scanner = new Html5Qrcode(elementId);
+
+        const config = {
+            fps: 10,
+            qrbox: { width: 280, height: 80 },
+            aspectRatio: 2.0,
+            formatsToSupport: [
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8
+            ]
+        };
+
+        try {
+            await scanner.start(
+                { facingMode: "environment" },
+                config,
+                (decodedText) => {
+                    const now = Date.now();
+                    if (decodedText === lastScannedCode && (now - lastScannedTime) < DEBOUNCE_MS) {
+                        return;
+                    }
+                    lastScannedCode = decodedText;
+                    lastScannedTime = now;
+                    if (typeof onScan === 'function') onScan(decodedText);
+                },
+                (_errorMessage) => {
+                    // Per-frame scan failures are normal; ignore.
+                }
+            );
+        } catch (err) {
+            if (typeof onError === 'function') onError(err.toString());
+        }
     }
 };

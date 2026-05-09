@@ -93,7 +93,15 @@
     }
 
     async function refresh() {
-        const response = await fetch(SNAPSHOT_URL, { credentials: 'same-origin' });
+        // X-Catalog-Refresh: 1 tells the service worker to bypass the
+        // cache-first SWR pattern and go network-first (overwriting
+        // the cache). Without it, this fetch would return SW-cached
+        // bytes — meaning a user-triggered refresh would just rewrite
+        // IndexedDB with the same stale snapshot.
+        const response = await fetch(SNAPSHOT_URL, {
+            credentials: 'same-origin',
+            headers: { 'X-Catalog-Refresh': '1' },
+        });
         if (!response.ok) {
             throw new Error(`Catalog snapshot fetch failed: ${response.status} ${response.statusText}`);
         }
