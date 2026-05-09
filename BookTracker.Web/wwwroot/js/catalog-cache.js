@@ -102,8 +102,31 @@
             credentials: 'same-origin',
             headers: { 'X-Catalog-Refresh': '1' },
         });
+
+        // Auth-expired detection. Easy Auth's default behaviour for
+        // unauthenticated requests is configurable: 401 for API
+        // shapes, 302 → /.auth/login for browser-shaped requests.
+        // fetch() follows redirects by default so a 302 lands us on
+        // the login page (200 + text/html), which is why we also
+        // sniff the final URL and content-type. Throw a typed error
+        // so the caller can surface the sign-in CTA rather than a
+        // generic "Refresh failed" message.
+        if (response.status === 401
+            || (response.url && response.url.includes('/.auth/'))) {
+            const err = new Error('Authentication expired');
+            err.code = 'auth-expired';
+            throw err;
+        }
         if (!response.ok) {
             throw new Error(`Catalog snapshot fetch failed: ${response.status} ${response.statusText}`);
+        }
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.toLowerCase().includes('application/json')) {
+            // Non-JSON 200 is almost always an HTML login page that
+            // followed a redirect we didn't catch by URL alone.
+            const err = new Error('Authentication expired (non-JSON response)');
+            err.code = 'auth-expired';
+            throw err;
         }
         const snapshot = await response.json();
         await populate(snapshot);

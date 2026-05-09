@@ -363,21 +363,86 @@
         return `${days}d ago`;
     }
 
+    const STALE_DAYS_THRESHOLD = 7;
+
+    function daysSince(iso) {
+        if (!iso) return null;
+        const then = new Date(iso).getTime();
+        if (isNaN(then)) return null;
+        return Math.floor((Date.now() - then) / (24 * 60 * 60 * 1000));
+    }
+
+    function isOffline() {
+        return (typeof navigator !== 'undefined' && navigator.onLine === false);
+    }
+
+    function setOfflineBanner(visible) {
+        const banner = $('bookshop-offline-banner');
+        if (!banner) return;
+        if (visible) banner.classList.remove('d-none');
+        else banner.classList.add('d-none');
+    }
+
+    function setStaleWarning(days) {
+        const warn = $('bookshop-stale-warning');
+        const span = $('bookshop-stale-days');
+        if (!warn) return;
+        if (days != null && days >= STALE_DAYS_THRESHOLD) {
+            if (span) span.textContent = String(days);
+            warn.classList.remove('d-none');
+        } else {
+            warn.classList.add('d-none');
+        }
+    }
+
+    function setAuthPrompt(visible) {
+        const el = $('bookshop-auth-prompt');
+        if (!el) return;
+        if (visible) el.classList.remove('d-none');
+        else el.classList.add('d-none');
+    }
+
+    // Transient toast — appended to the fixed host, auto-dismissed
+    // after 3s with a fade-out. Plain DOM rather than a Bootstrap
+    // toast instance because the page deliberately avoids depending
+    // on Bootstrap JS APIs (the page must keep working when offline,
+    // and Bootstrap.Toast.dispose has bitten the project before).
+    function showToast(message, kind) {
+        const host = $('bookshop-toast-host');
+        if (!host) return;
+        const colorClass = kind === 'success' ? 'bg-success'
+            : kind === 'error' ? 'bg-danger'
+            : 'bg-secondary';
+        const toast = document.createElement('div');
+        toast.className = `${colorClass} text-white px-3 py-2 rounded shadow-sm mb-2`;
+        toast.style.maxWidth = '90vw';
+        toast.style.pointerEvents = 'auto';
+        toast.style.transition = 'opacity 300ms';
+        toast.textContent = message;
+        host.appendChild(toast);
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 320);
+        }, 2700);
+    }
+
     async function refreshFooter() {
         const meta = $('bookshop-meta');
         if (!meta) return;
+        setOfflineBanner(isOffline());
         try {
             const m = await window.catalogCache.getMeta();
             if (!m || !m.syncedAt) {
                 meta.textContent = 'Catalog not synced yet — connect online to sync.';
+                setStaleWarning(null);
                 return;
             }
-            const offline = (typeof navigator !== 'undefined' && navigator.onLine === false);
             const syncStr = formatRelative(m.syncedAt);
-            const statePrefix = offline ? '📵 Offline · ' : '';
-            meta.textContent = `${statePrefix}Catalog: ${m.bookCount || 0} books · synced ${syncStr}`;
+            meta.textContent = `Catalog: ${m.bookCount || 0} books · synced ${syncStr}`;
+            setStaleWarning(daysSince(m.syncedAt));
         } catch (err) {
             meta.textContent = 'Catalog status unavailable.';
+            setStaleWarning(null);
         }
     }
 
@@ -475,12 +540,19 @@
         const back = $('bookshop-author-back');
         if (back) back.addEventListener('click', backToAuthorList);
 
-        // Online/offline transitions update the footer label so the
-        // user sees the state change live. Doesn't trigger a refresh
-        // by itself — that's PR 5 polish. Bound to window once;
-        // subsequent inits skip via the sentinel guard above.
+        // Online/offline transitions update the footer label, the
+        // offline banner, and (via refreshFooter) the relative-time
+        // string + stale warning. Bound to window once; subsequent
+        // inits skip via the sentinel guard above. visibilitychange
+        // catches the case where the tab was hidden during a
+        // network state change — without it, returning to the tab
+        // shows yesterday's online/offline state until the next
+        // user interaction.
         window.addEventListener('online', refreshFooter);
         window.addEventListener('offline', refreshFooter);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) refreshFooter();
+        });
     }
 
     async function doRefresh(btn) {
@@ -494,14 +566,24 @@
         const busy = btn.querySelector('[data-state="busy"]');
         if (idle) idle.classList.add('d-none');
         if (busy) busy.classList.remove('d-none');
+        setAuthPrompt(false);
         try {
             await window.catalogCache.refresh();
             await refreshFooter();
+            showToast('Catalog refreshed', 'success');
         } catch (err) {
-            const meta = $('bookshop-meta');
-            if (meta) {
-                meta.textContent = 'Refresh failed: '
-                    + (err && err.message ? err.message : String(err));
+            if (err && err.code === 'auth-expired') {
+                // Show the inline sign-in CTA instead of a toast
+                // shouting an opaque error. Footer stays on its
+                // last-known state so the user keeps seeing the
+                // info they had.
+                setAuthPrompt(true);
+                showToast('Sign-in expired', 'error');
+            } else if (isOffline()) {
+                showToast('Offline — can\'t refresh', 'error');
+            } else {
+                const msg = err && err.message ? err.message : String(err);
+                showToast('Refresh failed: ' + msg, 'error');
             }
         } finally {
             btn.disabled = false;
