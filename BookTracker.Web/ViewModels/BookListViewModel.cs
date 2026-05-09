@@ -227,10 +227,26 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
 
     private async Task<List<GroupRow>> GroupByAuthorAsync(BookTrackerDbContext db, IQueryable<Book> filtered)
     {
-        // Roll up by canonical author id (CanonicalAuthorId ?? Id) so a
-        // Bachman title appears under King. Co-authored works expand into
-        // one row per credited author — Preston + Child appears under both
-        // canonicals (post-PR2 behaviour change vs the lead-only legacy).
+        // Filter-aware grouping. When the user has explicitly narrowed the
+        // result set, the default fan-out across every credited author of
+        // every matched book becomes confusing — filtering for "Asimov" on a
+        // library with an Asimov-contributed compendium would surface every
+        // co-author of that compendium (King, Bradbury, …) as separate group
+        // rows. Same shape happens with a book-title search hitting a
+        // compendium. Two narrowed paths, one default fan-out:
+        if (!string.IsNullOrWhiteSpace(SelectedAuthor))
+        {
+            return await SingleAuthorGroupAsync(db, filtered, SelectedAuthor.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(SearchTerm))
+        {
+            return await PrimaryAuthorGroupAsync(db, filtered);
+        }
+
+        // Default: fan out across all credited authors, rolling aliases up
+        // to canonicals. A Bachman title appears under King; a Preston +
+        // Child co-authored work appears under BOTH (post-PR2 behaviour).
         var raw = await filtered
             .SelectMany(b => b.Works.SelectMany(w => w.Authors.Select(a => new
             {
@@ -241,6 +257,73 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             .GroupBy(x => x.CanonicalId)
             .Select(g => new { CanonicalId = g.Key, Count = g.Count() })
             .ToListAsync();
+
+        var canonicalIds = raw.Select(r => r.CanonicalId).ToList();
+        var names = await db.Authors
+            .Where(a => canonicalIds.Contains(a.Id))
+            .Select(a => new { a.Id, a.Name })
+            .ToDictionaryAsync(x => x.Id, x => x.Name);
+
+        return raw
+            .Select(r => new GroupRow(
+                Key: r.CanonicalId.ToString(),
+                Label: names.GetValueOrDefault(r.CanonicalId) ?? "(unknown)",
+                Count: r.Count))
+            .OrderBy(g => g.Label)
+            .ToList();
+    }
+
+    private async Task<List<GroupRow>> SingleAuthorGroupAsync(BookTrackerDbContext db, IQueryable<Book> filtered, string selectedName)
+    {
+        // Resolve the typed name to its canonical author. The name might be
+        // an alias (e.g. "Richard Bachman"); the group should still be keyed
+        // and labelled by the canonical (King), matching the rollup behaviour
+        // of the unfiltered fan-out path.
+        var matched = await db.Authors
+            .Where(a => a.Name == selectedName)
+            .Select(a => new
+            {
+                CanonicalId = a.CanonicalAuthorId ?? a.Id,
+                CanonicalName = a.CanonicalAuthor != null ? a.CanonicalAuthor.Name : a.Name,
+            })
+            .FirstOrDefaultAsync();
+
+        if (matched is null) return [];
+
+        var count = await filtered.CountAsync();
+        return count == 0
+            ? []
+            : [new GroupRow(matched.CanonicalId.ToString(), matched.CanonicalName, count)];
+    }
+
+    private async Task<List<GroupRow>> PrimaryAuthorGroupAsync(BookTrackerDbContext db, IQueryable<Book> filtered)
+    {
+        // For each matched book, attribute it to its primary author —
+        // the lowest-Order WorkAuthor of the first Work (by Work.Id). For
+        // single-Work books this is unambiguous; for compendiums it's the
+        // primary of whichever Work sorts first, which avoids the M-author
+        // fan-out at the cost of a small simplification (other Works'
+        // primaries don't get separate group rows). The book itself still
+        // renders its full author list inside the group (via ToBookListItem).
+        var rawAuthors = await filtered
+            .SelectMany(b => b.Works.SelectMany(w => w.WorkAuthors.Select(wa => new
+            {
+                BookId = b.Id,
+                CanonicalId = wa.Author.CanonicalAuthorId ?? wa.AuthorId,
+                WorkId = w.Id,
+                wa.Order,
+            })))
+            .ToListAsync();
+
+        // Pick the primary (smallest WorkId, then smallest Order) per book
+        // in-memory. Bounded by matched-books × authors-per-book; fine at the
+        // 3000+ books target since search narrows the set first.
+        var raw = rawAuthors
+            .GroupBy(x => x.BookId)
+            .Select(g => g.OrderBy(x => x.WorkId).ThenBy(x => x.Order).First())
+            .GroupBy(x => x.CanonicalId)
+            .Select(g => new { CanonicalId = g.Key, Count = g.Count() })
+            .ToList();
 
         var canonicalIds = raw.Select(r => r.CanonicalId).ToList();
         var names = await db.Authors
