@@ -56,6 +56,12 @@
     <script src="@Assets["js/navbar-collapse.js"]"></script>
     <script src="@Assets["js/scroll-to.js"]"></script>
     <script src="@Assets["js/chip-picker-keys.js"]"></script>
+    @* Bookshop offline cache — pure-JS IndexedDB module. Loaded on every
+       page so it's available from the DevTools console for testing while
+       the /bookshop UI (PR 3) is still in flight. Self-attaches to
+       window.catalogCache; no init runs at script load — pages call
+       catalogCache.init() explicitly when they need the cache populated. *@
+    <script src="@Assets["js/catalog-cache.js"]"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="@Assets["service-worker-register.js"]"></script>
 </body>
