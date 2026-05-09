@@ -257,6 +257,153 @@ public class BookListViewModelTests
     }
 
     [Fact]
+    public async Task GroupByAuthor_AuthorFilter_ShowsOnlySelectedAuthorEvenWithCompendiumCoauthors()
+    {
+        // Repro of the Asimov case: filtering by a single author with grouping
+        // by Author should NOT fan out across co-authors of compendiums the
+        // selected author contributed to. One filter, one group.
+        var factory = new TestDbContextFactory();
+        using (var db = factory.CreateDbContext())
+        {
+            var asimov = new Author { Name = "Isaac Asimov" };
+            var king = new Author { Name = "Stephen King" };
+            var bradbury = new Author { Name = "Ray Bradbury" };
+            db.Authors.AddRange(asimov, king, bradbury);
+            await db.SaveChangesAsync();
+
+            db.Books.AddRange(
+                new Book
+                {
+                    Title = "Foundation",
+                    Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]
+                },
+                // Compendium with Asimov + co-authors. Pre-fix this would surface
+                // King and Bradbury as separate group rows when filtering for Asimov.
+                new Book
+                {
+                    Title = "The Funhouse",
+                    Works =
+                    [
+                        new Work { Title = "Asimov story", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] },
+                        new Work { Title = "King story", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] },
+                        new Work { Title = "Bradbury story", WorkAuthors = [new WorkAuthor { Author = bradbury, Order = 0 }] },
+                    ]
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var vm = new BookListViewModel(factory)
+        {
+            SelectedGroupBy = LibraryGroupBy.Author,
+            SelectedAuthor = "Isaac Asimov",
+        };
+        await vm.InitializeAsync();
+
+        Assert.Single(vm.Groups);
+        Assert.Equal("Isaac Asimov", vm.Groups[0].Label);
+        Assert.Equal(2, vm.Groups[0].Count); // Foundation + The Funhouse.
+    }
+
+    [Fact]
+    public async Task GroupByAuthor_AuthorFilterByAlias_ResolvesGroupToCanonical()
+    {
+        // Filtering by an alias name should produce the canonical's group row,
+        // matching the rollup behaviour the unfiltered path asserts.
+        var factory = new TestDbContextFactory();
+        await SeedSampleLibraryAsync(factory);
+
+        var vm = new BookListViewModel(factory)
+        {
+            SelectedGroupBy = LibraryGroupBy.Author,
+            SelectedAuthor = "Richard Bachman",
+        };
+        await vm.InitializeAsync();
+
+        Assert.Single(vm.Groups);
+        Assert.Equal("Stephen King", vm.Groups[0].Label);
+        // Only "The Long Walk" matches the alias filter — Carrie's author is
+        // King, whose Name is "Stephen King" (not the alias) and whose
+        // CanonicalAuthor is null.
+        Assert.Equal(1, vm.Groups[0].Count);
+    }
+
+    [Fact]
+    public async Task GroupByAuthor_BookSearchOnCompendium_GroupsByPrimaryAuthor()
+    {
+        // Searching for a book title shouldn't fan out the result book's
+        // co-authors as separate group rows. Group by the primary
+        // (lowest-Order, first-Work) author of each matched book.
+        var factory = new TestDbContextFactory();
+        using (var db = factory.CreateDbContext())
+        {
+            var asimov = new Author { Name = "Isaac Asimov" };
+            var king = new Author { Name = "Stephen King" };
+            var bradbury = new Author { Name = "Ray Bradbury" };
+            db.Authors.AddRange(asimov, king, bradbury);
+            await db.SaveChangesAsync();
+
+            db.Books.Add(new Book
+            {
+                Title = "The Funhouse",
+                Works =
+                [
+                    new Work { Title = "Asimov story", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] },
+                    new Work { Title = "King story", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] },
+                    new Work { Title = "Bradbury story", WorkAuthors = [new WorkAuthor { Author = bradbury, Order = 0 }] },
+                ]
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var vm = new BookListViewModel(factory)
+        {
+            SelectedGroupBy = LibraryGroupBy.Author,
+            SearchTerm = "Funhouse",
+        };
+        await vm.InitializeAsync();
+
+        Assert.Single(vm.Groups);
+        // Primary attribution = Asimov (first Work, lowest Order WorkAuthor).
+        Assert.Equal("Isaac Asimov", vm.Groups[0].Label);
+        Assert.Equal(1, vm.Groups[0].Count);
+    }
+
+    [Fact]
+    public async Task GroupByAuthor_NoFilter_KeepsFanOutBehaviour()
+    {
+        // Regression guard: the unfiltered path keeps the post-PR2 fan-out
+        // (compendiums + co-authored works appear under each canonical). The
+        // narrowed paths above are the only ones that collapse.
+        var factory = new TestDbContextFactory();
+        using (var db = factory.CreateDbContext())
+        {
+            var asimov = new Author { Name = "Isaac Asimov" };
+            var king = new Author { Name = "Stephen King" };
+            db.Authors.AddRange(asimov, king);
+            await db.SaveChangesAsync();
+
+            db.Books.Add(new Book
+            {
+                Title = "The Funhouse",
+                Works =
+                [
+                    new Work { Title = "Asimov story", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] },
+                    new Work { Title = "King story", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] },
+                ]
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var vm = new BookListViewModel(factory) { SelectedGroupBy = LibraryGroupBy.Author };
+        await vm.InitializeAsync();
+
+        // Both authors should have a group row (the deliberate fan-out).
+        Assert.Equal(2, vm.Groups.Count);
+        Assert.Contains(vm.Groups, g => g.Label == "Isaac Asimov" && g.Count == 1);
+        Assert.Contains(vm.Groups, g => g.Label == "Stephen King" && g.Count == 1);
+    }
+
+    [Fact]
     public async Task GroupByGenre_GenreFilterReducesGroupsAndCounts()
     {
         var factory = new TestDbContextFactory();
