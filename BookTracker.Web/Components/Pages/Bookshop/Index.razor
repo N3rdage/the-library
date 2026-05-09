@@ -55,7 +55,14 @@
     <div id="bookshop-result" class="mb-3" aria-live="polite"></div>
 
     <div id="bookshop-footer" class="text-center text-muted small mt-4 mb-3">
-        <span id="bookshop-meta">Loading catalog…</span>
+        <div id="bookshop-meta">Loading catalog…</div>
+        <button id="bookshop-refresh" type="button" class="btn btn-outline-secondary btn-sm mt-2">
+            <span data-state="idle">Refresh</span>
+            <span data-state="busy" class="d-none">
+                <span class="spinner-border spinner-border-sm" role="status"></span>
+                Refreshing…
+            </span>
+        </button>
     </div>
 </div>
 

@@ -51,15 +51,24 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // /api/catalog-snapshot — cache-first with stale-while-revalidate.
-    // Returns cached bytes immediately when available; kicks off a
-    // background refresh that updates the cache for next time. When
-    // offline and uncached, surfaces the fetch error to the caller
-    // (catalog-cache.js init() catches and degrades).
+    // /api/catalog-snapshot — cache-first with stale-while-revalidate
+    // for the implicit page-load fetch (caller doesn't need fresh data
+    // right now; it'll get fresher data next time). For an explicit
+    // user-triggered refresh, catalog-cache.js's refresh() sends the
+    // X-Catalog-Refresh: 1 header — that branch is network-first and
+    // overwrites the cache with the fresh response, so the same trip
+    // returns new data to the caller AND the next page load is current.
+    // Without this distinction, a user adding a book would have to
+    // F5 twice to see the new count: once to trigger the SWR background
+    // fetch, again to read the now-updated cache.
     if (request.method === 'GET'
         && url.origin === location.origin
         && url.pathname === '/api/catalog-snapshot') {
-        event.respondWith(cacheFirstWithStaleWhileRevalidate(request, CATALOG_CACHE));
+        if (request.headers.get('X-Catalog-Refresh') === '1') {
+            event.respondWith(networkFirstUpdateCache(request, CATALOG_CACHE));
+        } else {
+            event.respondWith(cacheFirstWithStaleWhileRevalidate(request, CATALOG_CACHE));
+        }
         return;
     }
 
@@ -118,6 +127,26 @@ async function cacheFirstWithStaleWhileRevalidate(request, cacheName) {
         }
         return response;
     } catch (err) {
+        throw new Error(`Fetch failed and no cached response for ${request.url}`);
+    }
+}
+
+// Network-first that *updates* the named cache on success. Used by
+// the X-Catalog-Refresh: 1 path — explicit refresh wants both the
+// fresh response AND the cache replaced so the next page load is
+// current too. Falls back to cached on network failure (offline mid-
+// refresh) so the user sees something rather than a thrown error.
+async function networkFirstUpdateCache(request, cacheName) {
+    const cache = await caches.open(cacheName);
+    try {
+        const response = await fetch(request);
+        if (response.ok) {
+            cache.put(request, response.clone());
+        }
+        return response;
+    } catch (err) {
+        const cached = await cache.match(request);
+        if (cached) return cached;
         throw new Error(`Fetch failed and no cached response for ${request.url}`);
     }
 }

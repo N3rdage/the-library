@@ -289,12 +289,44 @@
             });
         }
 
+        const refreshBtn = $('bookshop-refresh');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => doRefresh(refreshBtn));
+        }
+
         // Online/offline transitions update the footer label so the
         // user sees the state change live. Doesn't trigger a refresh
         // by itself — that's PR 5 polish. Bound to window once;
         // subsequent inits skip via the sentinel guard above.
         window.addEventListener('online', refreshFooter);
         window.addEventListener('offline', refreshFooter);
+    }
+
+    async function doRefresh(btn) {
+        // The fetch path through catalog-cache.refresh() bypasses the
+        // SW's stale-while-revalidate via the X-Catalog-Refresh header
+        // — so this trip both updates the SW cache and repopulates
+        // IndexedDB on the same call. Footer reflects new data
+        // immediately on success.
+        btn.disabled = true;
+        const idle = btn.querySelector('[data-state="idle"]');
+        const busy = btn.querySelector('[data-state="busy"]');
+        if (idle) idle.classList.add('d-none');
+        if (busy) busy.classList.remove('d-none');
+        try {
+            await window.catalogCache.refresh();
+            await refreshFooter();
+        } catch (err) {
+            const meta = $('bookshop-meta');
+            if (meta) {
+                meta.textContent = 'Refresh failed: '
+                    + (err && err.message ? err.message : String(err));
+            }
+        } finally {
+            btn.disabled = false;
+            if (idle) idle.classList.remove('d-none');
+            if (busy) busy.classList.add('d-none');
+        }
     }
 
     // Self-init. Loaded globally from App.razor; on non-/bookshop
