@@ -15,10 +15,19 @@
                 Upload a photo of this edition's cover. Mobile users get the rear camera by default. Max @(BookDetailViewModel.MaxUploadBytes / 1024 / 1024) MB.
             </MudText>
 
+            @* capture="environment" hints to mobile browsers that the rear
+               camera should be the default (vs. gallery picker). Without it,
+               some Android browsers don't surface the camera option at all
+               for accept="image/*" alone — they fall back to the file picker.
+               iOS Safari respects the hint by pre-selecting "Take Photo or
+               Video" in the action sheet but still allows gallery via the
+               same sheet. Forwarded through MudFileUpload's InputAttributes
+               which propagate to the underlying <input type="file">. *@
             <MudFileUpload T="IBrowserFile"
                            FilesChanged="OnFileChanged"
                            Accept="image/*"
-                           MaximumFileCount="1">
+                           MaximumFileCount="1"
+                           InputAttributes="@(new Dictionary<string, object?> { ["capture"] = "environment" })">
                 <ActivatorContent>
                     <MudButton Variant="Variant.Outlined"
                                StartIcon="@Icons.Material.Filled.CameraAlt"
