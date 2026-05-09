@@ -237,6 +237,23 @@
     async function init() {
         if (!isBookshopPage()) return;
 
+        // Idempotent guard. init() can fire from two sources — the
+        // module's DOMContentLoaded handler (cold direct-URL load,
+        // SW-served offline HTML) AND from the page's
+        // OnAfterRenderAsync (Blazor-SPA navigation patches the DOM
+        // without firing DOMContentLoaded). We don't want to attach
+        // event listeners twice; the sentinel attribute on the toggle
+        // is a stable proxy for "this DOM has already been wired."
+        // Note: Blazor in-app nav replaces the DOM, so the sentinel
+        // disappears when leaving and reappearing — re-init is correct.
+        const toggle = $('bookshop-scan-toggle');
+        if (toggle && toggle.dataset.bookshopInitialized === '1') {
+            // Already wired this DOM. Just refresh the footer in case
+            // syncedAt has moved on.
+            await refreshFooter();
+            return;
+        }
+
         // Init the cache. If offline + first-ever visit this throws
         // internally and surfaces empty results — the user sees the
         // "not synced yet" footer message and can't look anything up,
@@ -249,7 +266,6 @@
 
         await refreshFooter();
 
-        const toggle = $('bookshop-scan-toggle');
         if (toggle) {
             toggle.addEventListener('click', async () => {
                 if (scannerActive) {
@@ -258,6 +274,7 @@
                     await startScanner();
                 }
             });
+            toggle.dataset.bookshopInitialized = '1';
         }
 
         const lookup = $('bookshop-isbn-lookup');
@@ -274,7 +291,8 @@
 
         // Online/offline transitions update the footer label so the
         // user sees the state change live. Doesn't trigger a refresh
-        // by itself — that's PR 5 polish.
+        // by itself — that's PR 5 polish. Bound to window once;
+        // subsequent inits skip via the sentinel guard above.
         window.addEventListener('online', refreshFooter);
         window.addEventListener('offline', refreshFooter);
     }

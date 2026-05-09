@@ -1,13 +1,22 @@
 @* Bookshop mode — offline-capable mobile lookup surface. See
    docs/bookshop-mode-design.md.
 
-   Pure HTML markup intentionally: no @onclick / @bind / @code. All
-   interactivity flows through wwwroot/js/bookshop-page.js, which
-   reads/writes IndexedDB via wwwroot/js/catalog-cache.js. The page
-   inherits the project's global InteractiveServer rendermode but
-   doesn't use the Blazor circuit — when offline, the SW serves the
-   cached HTML and the JS layer keeps working unaided. *@
+   Markup-only by intent: no @onclick / @bind. All UX flows through
+   wwwroot/js/bookshop-page.js, which reads IndexedDB via
+   wwwroot/js/catalog-cache.js. The page inherits the project's
+   global InteractiveServer rendermode but doesn't *use* the Blazor
+   circuit for any interaction — when offline, the SW serves the
+   cached HTML and the JS layer keeps working unaided.
+
+   The single @code below is just the first-render JS kick: because
+   the project uses InteractiveServer globally, in-app navigation
+   patches the DOM via SignalR rather than full-page-loading, so
+   DOMContentLoaded never fires for the new page DOM. We poke the
+   JS module from OnAfterRenderAsync(firstRender) instead. The
+   module's own DOMContentLoaded path still covers the cold-load
+   case (direct URL, SW-served offline HTML). *@
 @page "/bookshop"
+@inject IJSRuntime JS
 
 <PageTitle>Bookshop - BookTracker</PageTitle>
 
@@ -49,3 +58,18 @@
         <span id="bookshop-meta">Loading catalog…</span>
     </div>
 </div>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Trigger the JS module to wire DOM events + load the
+            // catalog footer. The module is idempotent — its
+            // DOMContentLoaded path may have already fired in some
+            // load cases, and re-calling init() is a no-op in that
+            // event.
+            await JS.InvokeVoidAsync("BookshopPage.init");
+        }
+    }
+}
