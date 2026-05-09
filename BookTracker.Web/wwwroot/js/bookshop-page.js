@@ -67,6 +67,50 @@
     }
 
     let scannerActive = false;
+    let currentMode = 'scan'; // 'scan' | 'author'
+
+    // Debounce factory — used by the author search input so the
+    // IndexedDB lookup only fires after typing pauses. 250ms feels
+    // responsive; the author store walk is sub-millisecond at the
+    // 3000-books target so the bound is purely keystroke-rate.
+    function debounce(fn, ms) {
+        let t;
+        return function (...args) {
+            clearTimeout(t);
+            t = setTimeout(() => fn.apply(this, args), ms);
+        };
+    }
+
+    function setMode(mode) {
+        if (mode === currentMode) return;
+        currentMode = mode;
+
+        const tabScan = $('bookshop-tab-scan');
+        const tabAuthor = $('bookshop-tab-author');
+        const paneScan = $('bookshop-mode-scan');
+        const paneAuthor = $('bookshop-mode-author');
+        if (!tabScan || !tabAuthor || !paneScan || !paneAuthor) return;
+
+        if (mode === 'scan') {
+            tabScan.classList.remove('btn-outline-primary'); tabScan.classList.add('btn-primary');
+            tabAuthor.classList.remove('btn-primary'); tabAuthor.classList.add('btn-outline-primary');
+            paneScan.classList.remove('d-none');
+            paneAuthor.classList.add('d-none');
+        } else {
+            tabAuthor.classList.remove('btn-outline-primary'); tabAuthor.classList.add('btn-primary');
+            tabScan.classList.remove('btn-primary'); tabScan.classList.add('btn-outline-primary');
+            paneAuthor.classList.remove('d-none');
+            paneScan.classList.add('d-none');
+
+            // Switching off Scan mid-scan would otherwise leave the
+            // camera running invisibly behind the Author pane. Stop
+            // the scanner explicitly; the user can re-open it on
+            // returning to Scan mode.
+            if (scannerActive) {
+                stopScanner();
+            }
+        }
+    }
 
     async function startScanner() {
         clearError();
@@ -202,6 +246,109 @@
             </div>`;
     }
 
+    // -- Author mode -----------------------------------------------
+
+    async function runAuthorSearch(query) {
+        const container = $('bookshop-author-results');
+        if (!container) return;
+
+        const trimmed = (query || '').trim();
+        if (trimmed.length < 2) {
+            // Avoid surfacing a 20-row alphabetised dump on single
+            // keystrokes; the catalog has hundreds of authors.
+            container.innerHTML = `<div class="text-muted small px-2">Type 2+ characters to search.</div>`;
+            return;
+        }
+
+        let rows;
+        try {
+            rows = await window.catalogCache.searchAuthors(trimmed, 20);
+        } catch (err) {
+            container.innerHTML = `
+                <div class="alert alert-warning py-2 small mb-0">
+                    Search failed: ${esc(err && err.message ? err.message : String(err))}
+                </div>`;
+            return;
+        }
+
+        if (!rows || rows.length === 0) {
+            container.innerHTML = `<div class="text-muted small px-2">No authors match "${esc(trimmed)}".</div>`;
+            return;
+        }
+
+        const items = rows.map(a => `
+            <button type="button"
+                    class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                    data-canonical-id="${esc(a.canonicalId)}"
+                    data-author-name="${esc(a.name)}">
+                <span>${esc(a.name)}</span>
+                <span class="badge bg-secondary rounded-pill">${esc(a.bookCount)}</span>
+            </button>`).join('');
+        container.innerHTML = `<div class="list-group">${items}</div>`;
+    }
+
+    async function showBooksForAuthor(canonicalId, authorName) {
+        const wrap = $('bookshop-author-books-wrap');
+        const title = $('bookshop-author-books-title');
+        const list = $('bookshop-author-books');
+        const searchCard = $('bookshop-author-search-card');
+        const results = $('bookshop-author-results');
+        if (!wrap || !title || !list) return;
+
+        title.textContent = authorName || '(unknown)';
+        list.innerHTML = `<div class="text-muted small px-2">Loading…</div>`;
+
+        // Hide the search card + results while the books pane is
+        // open. They stay in the DOM so Back can restore them
+        // without re-running the search.
+        if (searchCard) searchCard.classList.add('d-none');
+        if (results) results.classList.add('d-none');
+        wrap.classList.remove('d-none');
+
+        let books;
+        try {
+            books = await window.catalogCache.lookupByAuthor(canonicalId);
+        } catch (err) {
+            list.innerHTML = `
+                <div class="alert alert-warning py-2 small mb-0">
+                    Lookup failed: ${esc(err && err.message ? err.message : String(err))}
+                </div>`;
+            return;
+        }
+
+        if (!books || books.length === 0) {
+            list.innerHTML = `<div class="text-muted small px-2">No books credited to this author in the cache.</div>`;
+            return;
+        }
+
+        const cards = books.map(b => {
+            const status = b.status != null ? String(b.status) : '';
+            const ratingHtml = renderStarRow(b.rating);
+            const statusBadge = status ? `<span class="badge bg-light text-dark border ms-1">${esc(status)}</span>` : '';
+            return `
+                <div class="card mb-2">
+                    <div class="card-body py-2">
+                        <div class="fw-semibold">${esc(b.title || '(untitled)')}</div>
+                        <div class="small mt-1">${ratingHtml}${statusBadge}</div>
+                        <a href="/books/${encodeURIComponent(b.id)}"
+                           class="btn btn-outline-primary btn-sm mt-2">Open in app →</a>
+                    </div>
+                </div>`;
+        }).join('');
+        list.innerHTML = cards;
+    }
+
+    function backToAuthorList() {
+        const wrap = $('bookshop-author-books-wrap');
+        const searchCard = $('bookshop-author-search-card');
+        const results = $('bookshop-author-results');
+        if (wrap) wrap.classList.add('d-none');
+        if (searchCard) searchCard.classList.remove('d-none');
+        if (results) results.classList.remove('d-none');
+        const input = $('bookshop-author-search');
+        if (input) input.focus();
+    }
+
     function formatRelative(iso) {
         if (!iso) return 'never';
         const then = new Date(iso).getTime();
@@ -293,6 +440,40 @@
         if (refreshBtn) {
             refreshBtn.addEventListener('click', () => doRefresh(refreshBtn));
         }
+
+        // Mode tabs.
+        const tabScan = $('bookshop-tab-scan');
+        const tabAuthor = $('bookshop-tab-author');
+        if (tabScan) tabScan.addEventListener('click', () => setMode('scan'));
+        if (tabAuthor) tabAuthor.addEventListener('click', () => setMode('author'));
+
+        // Author search — debounced. The wrapper is created once per
+        // init so each call resets its own timer.
+        const authorInput = $('bookshop-author-search');
+        if (authorInput) {
+            const debounced = debounce((q) => runAuthorSearch(q), 250);
+            authorInput.addEventListener('input', (e) => debounced(e.target.value));
+            authorInput.addEventListener('keyup', (e) => {
+                if (e.key === 'Enter') runAuthorSearch(authorInput.value);
+            });
+        }
+
+        // Author result delegation — clicking a row drills into that
+        // canonical's books. Read canonicalId + name from data
+        // attributes so the renderer doesn't need to re-pass state.
+        const authorResults = $('bookshop-author-results');
+        if (authorResults) {
+            authorResults.addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-canonical-id]');
+                if (!btn) return;
+                const id = parseInt(btn.dataset.canonicalId, 10);
+                const name = btn.dataset.authorName || '';
+                if (!isNaN(id)) showBooksForAuthor(id, name);
+            });
+        }
+
+        const back = $('bookshop-author-back');
+        if (back) back.addEventListener('click', backToAuthorList);
 
         // Online/offline transitions update the footer label so the
         // user sees the state change live. Doesn't trigger a refresh

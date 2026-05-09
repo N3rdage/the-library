@@ -24,35 +24,66 @@
     <h1 class="h4 mb-3 mt-2">Bookshop mode</h1>
     <p class="text-muted small mb-3">Look up books from your library — works offline.</p>
 
-    <div class="card mb-3">
-        <div class="card-body">
-            <button id="bookshop-scan-toggle" type="button" class="btn btn-primary w-100">
-                <span data-state="idle">📷 Scan ISBN</span>
-                <span data-state="active" class="d-none">Stop scanner</span>
-            </button>
-            <div id="bookshop-scanner-error" class="alert alert-warning mt-2 mb-0 py-2 small d-none"></div>
-        </div>
+    @* Mode toggle. JS swaps btn-primary / btn-outline-primary on
+       click and shows the matching #bookshop-mode-* container. *@
+    <div class="btn-group w-100 mb-3" role="group" aria-label="Bookshop mode">
+        <button id="bookshop-tab-scan" type="button" class="btn btn-primary">Scan ISBN</button>
+        <button id="bookshop-tab-author" type="button" class="btn btn-outline-primary">Author lookup</button>
     </div>
 
-    <div id="bookshop-scanner-panel" class="card mb-3 d-none">
-        <div class="card-body text-center">
-            <div id="bookshop-barcode-reader" class="scanner-container"></div>
-            <div class="form-text mt-2">Point your camera at the ISBN barcode.</div>
-        </div>
-    </div>
-
-    <div class="card mb-3">
-        <div class="card-body">
-            <label for="bookshop-isbn-input" class="form-label small mb-1">Or enter ISBN manually:</label>
-            <div class="input-group">
-                <input id="bookshop-isbn-input" type="text" inputmode="numeric"
-                       class="form-control" placeholder="9780553287899" autocomplete="off" />
-                <button id="bookshop-isbn-lookup" type="button" class="btn btn-outline-primary">Lookup</button>
+    <div id="bookshop-mode-scan">
+        <div class="card mb-3">
+            <div class="card-body">
+                <button id="bookshop-scan-toggle" type="button" class="btn btn-primary w-100">
+                    <span data-state="idle">📷 Scan ISBN</span>
+                    <span data-state="active" class="d-none">Stop scanner</span>
+                </button>
+                <div id="bookshop-scanner-error" class="alert alert-warning mt-2 mb-0 py-2 small d-none"></div>
             </div>
         </div>
+
+        <div id="bookshop-scanner-panel" class="card mb-3 d-none">
+            <div class="card-body text-center">
+                <div id="bookshop-barcode-reader" class="scanner-container"></div>
+                <div class="form-text mt-2">Point your camera at the ISBN barcode.</div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <label for="bookshop-isbn-input" class="form-label small mb-1">Or enter ISBN manually:</label>
+                <div class="input-group">
+                    <input id="bookshop-isbn-input" type="text" inputmode="numeric"
+                           class="form-control" placeholder="9780553287899" autocomplete="off" />
+                    <button id="bookshop-isbn-lookup" type="button" class="btn btn-outline-primary">Lookup</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="bookshop-result" class="mb-3" aria-live="polite"></div>
     </div>
 
-    <div id="bookshop-result" class="mb-3" aria-live="polite"></div>
+    <div id="bookshop-mode-author" class="d-none">
+        @* Author search → results list. Tap an author swaps to the
+           books-for-author sub-view; the Back button restores the
+           list (preserved in the DOM, no re-search needed). *@
+        <div id="bookshop-author-search-card" class="card mb-3">
+            <div class="card-body">
+                <label for="bookshop-author-search" class="form-label small mb-1">Search authors:</label>
+                <input id="bookshop-author-search" type="text" class="form-control"
+                       placeholder="Asimov, Pratchett, Bachman…" autocomplete="off" />
+                <div class="form-text">Aliases work — typing "Bachman" finds King.</div>
+            </div>
+        </div>
+
+        <div id="bookshop-author-results" class="mb-3" aria-live="polite"></div>
+
+        <div id="bookshop-author-books-wrap" class="d-none mb-3">
+            <button id="bookshop-author-back" type="button" class="btn btn-link p-0 mb-2">← Back to authors</button>
+            <h2 id="bookshop-author-books-title" class="h5 mb-2"></h2>
+            <div id="bookshop-author-books"></div>
+        </div>
+    </div>
 
     <div id="bookshop-footer" class="text-center text-muted small mt-4 mb-3">
         <div id="bookshop-meta">Loading catalog…</div>
