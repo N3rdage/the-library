@@ -295,6 +295,7 @@ Azure Portal → Microsoft Entra ID → App registrations → `Library-Patrons` 
    - User consent description: `Allows the BookTracker mobile app to call the BookTracker API as you.`
    - State: **Enabled**
 3. Save. Full scope identifier becomes `api://<authClientId>/access_as_user` — record this; MAUI will request it.
+4. **Verify** before moving on: refresh the Expose an API page; the scope should appear in the **Scopes defined by this API** table with state `Enabled`. If it doesn't, the modal may have closed without saving — re-add it. (Step 3 below depends on this scope being live.)
 
 ### Step 2 — Register the mobile native-client app
 
@@ -308,7 +309,13 @@ After creation, record the **Application (client) ID** — this is the `mobileCl
 
 ### Step 3 — Grant API permission
 
-Still on the new `BookTracker Mobile` app reg, **API permissions** → **Add a permission** → **My APIs** → `Library-Patrons` → **Delegated permissions** → tick `access_as_user` → **Add permissions**.
+Still on the new `BookTracker Mobile` app reg, **API permissions** → **Add a permission** → **APIs my organization uses** → search by the Library-Patrons clientId GUID (the value used for `-authClientId` in `deploy.ps1`) → select it → **Delegated permissions** → tick `access_as_user` → **Add permissions**.
+
+(Searching by clientId hits more reliably than searching by display name — some portal builds don't index display names on this tab.)
+
+(The **My APIs** tab only shows apps the signed-in user *owns* — if you didn't run `deploy.ps1` from the same identity, `Library-Patrons` won't appear there. **APIs my organization uses** lists every API visible in the tenant regardless of ownership, and is the right tab for this step.)
+
+If `Library-Patrons` doesn't appear under **APIs my organization uses** either, the scope from Step 1 didn't fully save — go back and verify (Step 1.4 above).
 
 If your tenant requires admin consent for delegated scopes, click **Grant admin consent for `<tenant>`**.
 
@@ -335,3 +342,8 @@ curl -H "Authorization: Bearer $token" `
 ```
 
 A 401 means the token's `aud` doesn't match `validation.allowedAudiences` — confirm step 1's Application ID URI matches `api://<authClientId>`. A 200 with valid JSON means the Easy Auth path is ready for MAUI.
+
+**If `az account get-access-token` fails with `AADSTS65001: consent_required`** — expected, az CLI hasn't been pre-authorized to call this custom API. Two paths:
+
+- **Pre-authorize az CLI** (one portal click, makes the smoke work ever after). Library-Patrons → Expose an API → **Authorized client applications** → **Add a client application** → Client ID `04b07795-8ddb-461a-bbee-02f9e1bf7b46` (Microsoft Azure CLI) → tick `access_as_user` → Save. Re-run the `az account get-access-token` command.
+- **Skip step 5 entirely.** The real smoke is PR 3's first `MSAL.AcquireTokenInteractive(...)` call — if MAUI sign-in works, the auth chain is correct end-to-end. CLI smoke is a nice-to-have, not a gate.
