@@ -56,12 +56,17 @@ API stays put. The mobile app is a pure consumer.
 
 ## Authentication
 
-App Service Easy Auth currently runs in cookie mode (browser flow, redirect to `/.auth/login/aad`). For the mobile client, switch the relevant API endpoints to **token-audience acceptance** so a bearer token from MSAL works:
+App Service Easy Auth runs in v2 mode and already accepts both browser cookie flows AND bearer-token API calls — the existing `validation.allowedAudiences` array (`['api://${authClientId}', authClientId]` in `infra/modules/app-config.bicep`) is what gates token validation. When MAUI's MSAL acquires a token for scope `api://<authClientId>/access_as_user`, the token's `aud` claim is `api://<authClientId>` — already in the allowed list. **No Bicep change is needed**, despite the original design's claim that `aadAcceptedTokenAudiences` had to be wired up — the existing config covers the mobile flow.
 
-1. **Register a new AAD app** for the mobile client (native / public client type) in the same tenant. Custom URI scheme redirect (`msauth.com.thelibrary.mobile://auth`) for iOS / Android.
-2. **Expose an API audience** on the existing BookTracker.Web AAD app registration (e.g. `api://<web-app-client-id>/access_as_user`).
-3. **Wire `aadAcceptedTokenAudiences`** in App Service Auth config so the API endpoints accept tokens issued for that audience.
-4. **MAUI uses MSAL.NET** (`Microsoft.Identity.Client` + `Microsoft.Maui.Authentication`) to do the interactive sign-in once, refresh-token from then on. Token cached in `SecureStorage` (Keychain / Keystore).
+What IS needed is one-time AAD-side setup (manual Azure Portal click-ops; runbook in [`infra/README.md`](../infra/README.md) under "Mobile companion — AAD setup"):
+
+1. **Expose the API scope** on the existing `Library-Patrons` Web app registration: Expose an API → confirm Application ID URI = `api://<authClientId>` → Add scope `access_as_user`.
+2. **Register a new AAD app** for the mobile client (Mobile and desktop applications, public client / native) in the same tenant. Redirect URI uses Android's custom URI scheme `msauth://com.thelibrary.mobile/<base64-signature-hash>` (signature hash is derived during PR 3 from the dev keystore).
+3. **Grant the mobile app reg API permission** to the Web app's `access_as_user` scope (delegated, with admin consent if the tenant requires it).
+
+Then in MAUI (PR 3+):
+
+4. **MSAL.NET** (`Microsoft.Identity.Client` + `Microsoft.Maui.Authentication`) does the interactive sign-in once via Chrome Custom Tabs, refresh-token from then on. Token cached in `SecureStorage` (Keystore on Android).
 5. **HttpClient** attaches `Authorization: Bearer <token>` per request; intercept 401 and re-trigger interactive sign-in.
 
 The browser flow on `/bookshop` keeps working through the same cookie-mode Easy Auth until that route is retired.
@@ -112,12 +117,12 @@ Sized for the work, not the calendar. Ship-as-you-go.
 - **Web-only PR.** No MAUI yet. The DTOs become the contract the mobile app codes against.
 - Size: M.
 
-### PR 2 — Easy Auth token-audience mode + AAD app reg for mobile
-- Bicep change to add `aadAcceptedTokenAudiences` for the mobile audience.
-- New AAD native-client app registration (manual one-time setup, document in `infra/README.md`).
-- Validate end-to-end: get a token via `az account get-access-token --resource <audience>` on the dev box, hit the API with it, see the response.
-- **Web-only PR.** No MAUI yet.
-- Size: S.
+### PR 2 — AAD setup runbook for the mobile client
+- Documentation-only PR. The Bicep work originally listed turned out to be unnecessary: the existing `validation.allowedAudiences` in `app-config.bicep` already accepts the audience MSAL produces for the API scope.
+- New "Mobile companion — AAD setup" section in `infra/README.md`: expose `access_as_user` scope on the Web app reg; register a new mobile-native-client app reg; wire delegated API permission; record the resulting clientIds.
+- Validate end-to-end: get a token via `az account get-access-token --resource api://<authClientId>` on the dev box, hit `/api/catalog-snapshot` with it, see the response.
+- **Web-only PR.** No MAUI, no infra change.
+- Size: XS (was S — scope shrank when the Bicep claim was disproven).
 
 ### PR 3 — `BookTracker.Mobile` MAUI project skeleton + auth flow
 - New project at repo root, **`net10.0-android` target only** (iOS deferred until / unless an Apple Developer account materialises).
