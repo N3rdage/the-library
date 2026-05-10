@@ -21,17 +21,17 @@ public record DuplicateReport(
 
 public record DismissalInfo(int IgnoredDuplicateId, DateTime DismissedAt, string? Note);
 
-public record AuthorSnapshot(int Id, string Name, int WorkCount, int? CanonicalAuthorId, string? CanonicalName);
-public record AuthorDuplicatePair(AuthorSnapshot Lower, AuthorSnapshot Higher, DismissalInfo? Dismissed, string MatchReason);
+public record DuplicateAuthorView(int Id, string Name, int WorkCount, int? CanonicalAuthorId, string? CanonicalName);
+public record AuthorDuplicatePair(DuplicateAuthorView Lower, DuplicateAuthorView Higher, DismissalInfo? Dismissed, string MatchReason);
 
-public record WorkSnapshot(int Id, string Title, string? Subtitle, string AuthorName, int BookCount, int? FirstPublishedYear);
-public record WorkDuplicatePair(WorkSnapshot Lower, WorkSnapshot Higher, DismissalInfo? Dismissed, string MatchReason);
+public record DuplicateWorkView(int Id, string Title, string? Subtitle, string AuthorName, int BookCount, int? FirstPublishedYear);
+public record WorkDuplicatePair(DuplicateWorkView Lower, DuplicateWorkView Higher, DismissalInfo? Dismissed, string MatchReason);
 
-public record BookSnapshot(int Id, string Title, string? AuthorName, int EditionCount, int CopyCount, DateTime DateAdded);
-public record BookDuplicatePair(BookSnapshot Lower, BookSnapshot Higher, DismissalInfo? Dismissed, string MatchReason);
+public record DuplicateBookView(int Id, string Title, string? AuthorName, int EditionCount, int CopyCount, DateTime DateAdded);
+public record BookDuplicatePair(DuplicateBookView Lower, DuplicateBookView Higher, DismissalInfo? Dismissed, string MatchReason);
 
-public record EditionSnapshot(int Id, string? Isbn, BookFormat Format, string? PublisherName, DateOnly? DatePrinted, int CopyCount, int BookId, string BookTitle);
-public record EditionDuplicatePair(EditionSnapshot Lower, EditionSnapshot Higher, DismissalInfo? Dismissed, string MatchReason);
+public record DuplicateEditionView(int Id, string? Isbn, BookFormat Format, string? PublisherName, DateOnly? DatePrinted, int CopyCount, int BookId, string BookTitle);
+public record EditionDuplicatePair(DuplicateEditionView Lower, DuplicateEditionView Higher, DismissalInfo? Dismissed, string MatchReason);
 
 public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> dbFactory) : IDuplicateDetectionService
 {
@@ -156,8 +156,8 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
             var lower = key.Item1 == a.Id ? a : b;
             var higher = key.Item1 == a.Id ? b : a;
             pairs.Add(new AuthorDuplicatePair(
-                Lower: new AuthorSnapshot(lower.Id, lower.Name, lower.WorkCount, lower.CanonicalAuthorId, lower.CanonicalName),
-                Higher: new AuthorSnapshot(higher.Id, higher.Name, higher.WorkCount, higher.CanonicalAuthorId, higher.CanonicalName),
+                Lower: new DuplicateAuthorView(lower.Id, lower.Name, lower.WorkCount, lower.CanonicalAuthorId, lower.CanonicalName),
+                Higher: new DuplicateAuthorView(higher.Id, higher.Name, higher.WorkCount, higher.CanonicalAuthorId, higher.CanonicalName),
                 Dismissed: LookupDismissal(ignored, key.Item1, key.Item2),
                 MatchReason: reason));
         }
@@ -251,8 +251,8 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
                 {
                     var a = members[i];
                     var b = members[j];
-                    var snapA = new WorkSnapshot(a.Id, a.Title, a.Subtitle, a.AuthorNames, a.BookCount, a.FirstPublishedYear);
-                    var snapB = new WorkSnapshot(b.Id, b.Title, b.Subtitle, b.AuthorNames, b.BookCount, b.FirstPublishedYear);
+                    var snapA = new DuplicateWorkView(a.Id, a.Title, a.Subtitle, a.AuthorNames, a.BookCount, a.FirstPublishedYear);
+                    var snapB = new DuplicateWorkView(b.Id, b.Title, b.Subtitle, b.AuthorNames, b.BookCount, b.FirstPublishedYear);
                     pairs.Add(new WorkDuplicatePair(
                         Lower: snapA,
                         Higher: snapB,
@@ -303,8 +303,8 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
             if (!seen.Add((lowerId, higherId))) return;
             var l = get(lowerId);
             var h = get(higherId);
-            var snapL = new BookSnapshot(l.Item1, l.Item2, l.Item3, l.Item4, l.Item5, l.Item6);
-            var snapH = new BookSnapshot(h.Item1, h.Item2, h.Item3, h.Item4, h.Item5, h.Item6);
+            var snapL = new DuplicateBookView(l.Item1, l.Item2, l.Item3, l.Item4, l.Item5, l.Item6);
+            var snapH = new DuplicateBookView(h.Item1, h.Item2, h.Item3, h.Item4, h.Item5, h.Item6);
             pairs.Add(new BookDuplicatePair(snapL, snapH, LookupDismissal(ignored, lowerId, higherId), reason));
         }
 
@@ -417,7 +417,7 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
             }
         }
 
-        static EditionSnapshot ToSnapshot(EditionProjection e) => new(
+        static DuplicateEditionView ToSnapshot(EditionProjection e) => new(
             e.Id, e.Isbn, e.Format, e.PublisherName, e.DatePrinted, e.CopyCount, e.BookId, e.BookTitle);
     }
 

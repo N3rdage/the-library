@@ -4,6 +4,7 @@ using BookTracker.Web.Components;
 using BookTracker.Web.Services;
 using BookTracker.Web.Services.Catalog;
 using BookTracker.Web.Services.Covers;
+using BookTracker.Web.Services.Wishlist;
 using BookTracker.Web.Telemetry;
 using BookTracker.Web.ViewModels;
 using Microsoft.ApplicationInsights.Extensibility;
@@ -105,6 +106,7 @@ public static class ProgramSetup
         builder.Services.AddTransient<SeriesMatchService>();
 
         builder.Services.AddScoped<ICatalogSnapshotService, CatalogSnapshotService>();
+        builder.Services.AddScoped<IWishlistSnapshotService, WishlistSnapshotService>();
         builder.Services.AddScoped<IDuplicateDetectionService, DuplicateDetectionService>();
         builder.Services.AddScoped<IAuthorMergeService, AuthorMergeService>();
         builder.Services.AddScoped<IWorkMergeService, WorkMergeService>();
@@ -223,9 +225,11 @@ public static class ProgramSetup
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode();
 
-        // API endpoints (Minimal API). First family is the bookshop catalog
-        // snapshot; future API surfaces add their own *Endpoints.cs class
-        // and Map* call here.
+        // API endpoints (Minimal API). Each domain gets its own
+        // *Endpoints.cs class + Map* call here. Both endpoints are
+        // gated by Easy Auth at the platform layer (SECURITY-AUDIT.md
+        // §SEC-006).
         app.MapCatalogEndpoints();
+        app.MapWishlistEndpoints();
     }
 }

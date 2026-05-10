@@ -1,4 +1,5 @@
 using BookTracker.Data.Models;
+using BookTracker.Shared.Catalog;
 using BookTracker.Web.Services.Catalog;
 
 namespace BookTracker.Tests.Services;
@@ -202,7 +203,97 @@ public class CatalogSnapshotServiceTests
         var snapshot = await CreateService().GetSnapshotAsync();
         var book = Assert.Single(snapshot.Books);
 
-        Assert.Equal(BookStatus.Read, book.Status);
+        // Status is serialised as the enum's string name, not its
+        // underlying int — the BookTracker.Shared DTOs are wire
+        // contracts and stay free of the BookTracker.Data dependency.
+        Assert.Equal("Read", book.Status);
         Assert.Equal(5, book.Rating);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_BookSeriesIdAndOrderProjectedFromFirstWork()
+    {
+        // Single-Work book in a numbered series: seriesId + seriesOrder
+        // come from that Work. Multi-Work compendium takes the first
+        // Work by Work.Id, matching the PrimaryAuthor convention.
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = new Author { Name = "Isaac Asimov" };
+            db.Authors.Add(asimov);
+            var foundationSeries = new Series { Name = "Foundation", Type = SeriesType.Series, ExpectedCount = 7 };
+            db.Series.Add(foundationSeries);
+            await db.SaveChangesAsync();
+
+            db.Books.Add(new Book
+            {
+                Title = "Foundation",
+                Works =
+                [
+                    new Work
+                    {
+                        Title = "Foundation",
+                        SeriesId = foundationSeries.Id,
+                        SeriesOrder = 1,
+                        WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }],
+                    },
+                ],
+            });
+            // Standalone book — no series.
+            db.Books.Add(new Book
+            {
+                Title = "Nightfall",
+                Works = [new Work { Title = "Nightfall", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }],
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var snapshot = await CreateService().GetSnapshotAsync();
+
+        var foundation = snapshot.Books.Single(b => b.Title == "Foundation");
+        Assert.NotNull(foundation.SeriesId);
+        Assert.Equal(1, foundation.SeriesOrder);
+
+        var nightfall = snapshot.Books.Single(b => b.Title == "Nightfall");
+        Assert.Null(nightfall.SeriesId);
+        Assert.Null(nightfall.SeriesOrder);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_SeriesListIncludesOnlySeriesWithBooksInCatalog()
+    {
+        // Series referenced by at least one Work that's in at least one
+        // Book ships in CatalogSnapshot.Series. An empty series (e.g.
+        // user creates "Wheel of Time" in advance, no books yet)
+        // doesn't — it's not useful for the bookshop "missing books"
+        // view client-side.
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = new Author { Name = "Isaac Asimov" };
+            db.Authors.Add(asimov);
+            var foundation = new Series { Name = "Foundation", Type = SeriesType.Series, ExpectedCount = 7 };
+            var emptySeries = new Series { Name = "Empire of Light", Type = SeriesType.Series, ExpectedCount = 3 };
+            db.Series.AddRange(foundation, emptySeries);
+            await db.SaveChangesAsync();
+
+            db.Books.Add(new Book
+            {
+                Title = "Foundation",
+                Works = [new Work
+                {
+                    Title = "Foundation",
+                    SeriesId = foundation.Id,
+                    SeriesOrder = 1,
+                    WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }],
+                }],
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var snapshot = await CreateService().GetSnapshotAsync();
+
+        var series = Assert.Single(snapshot.Series);
+        Assert.Equal("Foundation", series.Name);
+        Assert.Equal("Series", series.Type);
+        Assert.Equal(7, series.ExpectedCount);
     }
 }

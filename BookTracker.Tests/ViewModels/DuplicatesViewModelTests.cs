@@ -13,13 +13,13 @@ public class DuplicatesViewModelTests
     private DuplicatesViewModel CreateVm() => new(_detector);
 
     private static AuthorDuplicatePair ActiveAuthorPair(int a, int b) =>
-        new(new AuthorSnapshot(a, $"Author {a}", 0, null, null),
-            new AuthorSnapshot(b, $"Author {b}", 0, null, null),
+        new(new DuplicateAuthorView(a, $"Author {a}", 0, null, null),
+            new DuplicateAuthorView(b, $"Author {b}", 0, null, null),
             null, "test");
 
     private static AuthorDuplicatePair DismissedAuthorPair(int a, int b, int ignoredId) =>
-        new(new AuthorSnapshot(a, $"Author {a}", 0, null, null),
-            new AuthorSnapshot(b, $"Author {b}", 0, null, null),
+        new(new DuplicateAuthorView(a, $"Author {a}", 0, null, null),
+            new DuplicateAuthorView(b, $"Author {b}", 0, null, null),
             new DismissalInfo(ignoredId, DateTime.UtcNow, null),
             "test");
 
