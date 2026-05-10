@@ -272,3 +272,66 @@ Not provisioned. See "Why eastus2" above and `TODO.md`.
 ### Local development
 
 For local dev, copy `appsettings.Example.json` → `appsettings.Development.json` and fill in the `AI:` section with the providers you want to test (using `:` instead of `__` as the separator). Local dev hits the Azure resources only if you supply real endpoints/keys; otherwise stub or skip.
+
+## Mobile companion — AAD setup
+
+Required before the BookTracker.Mobile (.NET MAUI) app can sign users in and call the API. See [`docs/mobile-app-design.md`](../docs/mobile-app-design.md) for the bigger picture; this section is the click-ops runbook.
+
+**Why this isn't fully automated by `deploy.ps1`:** native / public client app registrations have a couple of properties (the redirect URI scheme, the API permission grant) that need values which only exist later in the build pipeline — the Android signing-key SHA-1 hash for the `msauth://` redirect URI is derived from the dev keystore, which doesn't exist yet at infra-deploy time. Could automate the *initial* app reg, but you'd still come back to the portal once for the redirect URI. One trip is fine.
+
+**Note on Bicep:** the existing `validation.allowedAudiences` in `app-config.bicep` (`['api://${authClientId}', authClientId]`) already accepts the audience MSAL produces when acquiring tokens for the API scope below. No infra change is needed for this PR.
+
+### Step 1 — Expose the API scope on the existing `Library-Patrons` app reg
+
+Azure Portal → Microsoft Entra ID → App registrations → `Library-Patrons` → **Expose an API**:
+
+1. Confirm the **Application ID URI** is set to `api://<authClientId>` (where `<authClientId>` is the same App (client) ID used for `-authClientId` in `deploy.ps1`). It usually is — `validation.allowedAudiences` references this exact form.
+2. **Add a scope:**
+   - Scope name: `access_as_user`
+   - Who can consent: **Admins and users**
+   - Admin consent display name: `Access BookTracker as the signed-in user`
+   - Admin consent description: `Allows the mobile companion app to call the BookTracker API on behalf of the signed-in user.`
+   - User consent display name: `Access BookTracker on your behalf`
+   - User consent description: `Allows the BookTracker mobile app to call the BookTracker API as you.`
+   - State: **Enabled**
+3. Save. Full scope identifier becomes `api://<authClientId>/access_as_user` — record this; MAUI will request it.
+
+### Step 2 — Register the mobile native-client app
+
+Azure Portal → Microsoft Entra ID → App registrations → **New registration**:
+
+- Name: `BookTracker Mobile`
+- Supported account types: **Single tenant** (matches `Library-Patrons`)
+- Redirect URI: leave blank for now — set it in step 4 once the Android signing-key hash is known.
+
+After creation, record the **Application (client) ID** — this is the `mobileClientId` MAUI's `PublicClientApplicationBuilder.Create(...)` will use.
+
+### Step 3 — Grant API permission
+
+Still on the new `BookTracker Mobile` app reg, **API permissions** → **Add a permission** → **My APIs** → `Library-Patrons` → **Delegated permissions** → tick `access_as_user` → **Add permissions**.
+
+If your tenant requires admin consent for delegated scopes, click **Grant admin consent for `<tenant>`**.
+
+### Step 4 — Redirect URI (deferred to PR 3)
+
+The native redirect URI is `msauth://com.thelibrary.mobile/<base64-signature-hash>`. The signature hash is computed from the Android keystore used to sign the APK during `dotnet build -t:Run -f net10.0-android`, which doesn't exist yet. PR 3 generates the keystore, prints the hash, and Drew adds the URI to the mobile app reg's **Authentication** → **Mobile and desktop applications** platform.
+
+### Step 5 — Validate end-to-end (smoke test)
+
+Once steps 1–3 are done, you can verify the API accepts a bearer token from a non-browser caller without writing any MAUI code yet:
+
+```powershell
+# Acquire an access token for the API scope. The first run prompts
+# for sign-in via az's interactive flow; later runs use cached creds.
+$token = az account get-access-token `
+    --resource "api://<authClientId>" `
+    --query accessToken -o tsv
+
+# Call the API. Easy Auth validates the bearer; if everything is
+# wired correctly you get the JSON snapshot.
+curl -H "Authorization: Bearer $token" `
+    https://<app>.azurewebsites.net/api/catalog-snapshot | ConvertFrom-Json `
+    | Select-Object Version, SyncedAt, @{n='Books';e={$_.Books.Count}}
+```
+
+A 401 means the token's `aud` doesn't match `validation.allowedAudiences` — confirm step 1's Application ID URI matches `api://<authClientId>`. A 200 with valid JSON means the Easy Auth path is ready for MAUI.
