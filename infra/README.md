@@ -309,7 +309,9 @@ After creation, record the **Application (client) ID** — this is the `mobileCl
 
 ### Step 3 — Grant API permission
 
-Still on the new `BookTracker Mobile` app reg, **API permissions** → **Add a permission** → **APIs my organization uses** → search for `Library-Patrons` → select it → **Delegated permissions** → tick `access_as_user` → **Add permissions**.
+Still on the new `BookTracker Mobile` app reg, **API permissions** → **Add a permission** → **APIs my organization uses** → search by the Library-Patrons clientId GUID (the value used for `-authClientId` in `deploy.ps1`) → select it → **Delegated permissions** → tick `access_as_user` → **Add permissions**.
+
+(Searching by clientId hits more reliably than searching by display name — some portal builds don't index display names on this tab.)
 
 (The **My APIs** tab only shows apps the signed-in user *owns* — if you didn't run `deploy.ps1` from the same identity, `Library-Patrons` won't appear there. **APIs my organization uses** lists every API visible in the tenant regardless of ownership, and is the right tab for this step.)
 
