@@ -342,3 +342,8 @@ curl -H "Authorization: Bearer $token" `
 ```
 
 A 401 means the token's `aud` doesn't match `validation.allowedAudiences` — confirm step 1's Application ID URI matches `api://<authClientId>`. A 200 with valid JSON means the Easy Auth path is ready for MAUI.
+
+**If `az account get-access-token` fails with `AADSTS65001: consent_required`** — expected, az CLI hasn't been pre-authorized to call this custom API. Two paths:
+
+- **Pre-authorize az CLI** (one portal click, makes the smoke work ever after). Library-Patrons → Expose an API → **Authorized client applications** → **Add a client application** → Client ID `04b07795-8ddb-461a-bbee-02f9e1bf7b46` (Microsoft Azure CLI) → tick `access_as_user` → Save. Re-run the `az account get-access-token` command.
+- **Skip step 5 entirely.** The real smoke is PR 3's first `MSAL.AcquireTokenInteractive(...)` call — if MAUI sign-in works, the auth chain is correct end-to-end. CLI smoke is a nice-to-have, not a gate.
