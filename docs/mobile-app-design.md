@@ -39,7 +39,8 @@ Acknowledged costs: Apple Developer account ($99/yr) + a Mac in the build path f
 ```
 ┌─────────────────────────────────────┐    ┌──────────────────────────────┐
 │  BookTracker.Mobile (MAUI)          │    │  BookTracker.Web (existing)  │
-│  iOS + Android                      │    │  Blazor Server, Azure        │
+│  Android v1 (iOS deferred)          │    │  Blazor Server, Azure        │
+│  net10.0-android target             │    │  net10.0                     │
 │                                     │    │                              │
 │  • MSAL (AAD interactive sign-in)   │───▶│  • /api/catalog-snapshot     │
 │  • HttpClient + bearer token        │    │  • /api/wishlist-snapshot    │
@@ -119,11 +120,11 @@ Sized for the work, not the calendar. Ship-as-you-go.
 - Size: S.
 
 ### PR 3 — `BookTracker.Mobile` MAUI project skeleton + auth flow
-- New project under repo root. iOS + Android targets.
-- MSAL.NET interactive sign-in → token cached in `SecureStorage`.
+- New project at repo root, **`net10.0-android` target only** (iOS deferred until / unless an Apple Developer account materialises).
+- MSAL.NET interactive sign-in via `Microsoft.Maui.Authentication.WebAuthenticator` → token cached in `SecureStorage`. AndroidManifest entry for the redirect URI scheme; Chrome Custom Tabs handles the browser hop.
 - Single "Hello, signed-in user" page that calls `GET /api/catalog-snapshot` and dumps the response count.
-- Build pipeline: side-load APK on Android via `dotnet build -t:Run -f net10.0-android`. iOS deferred until Apple dev account is in place.
-- Size: M (lots of first-time setup).
+- Dev workflow: Drew connects his phone via USB with developer mode enabled, runs `dotnet build -t:Run -f net10.0-android` from the repo, MAUI deploys + launches via ADB. No store, no APK file shuffling. Same loop as `dotnet watch` for the Web app, just on a phone.
+- Size: M (lots of first-time setup — AAD app reg, redirect URI plumbing, MSAL config).
 
 ### PR 4 — Local SQLite cache (mirrors PWA's IndexedDB)
 - `sqlite-net-pcl` for storage. Schema: books / authors / series / wishlist / meta. Mirrors the IndexedDB schema decisions from `catalog-cache.js`.
@@ -149,17 +150,17 @@ Sized for the work, not the calendar. Ship-as-you-go.
 ### PR 8 — Polish + packaging
 - Stale-cache warnings, offline indicator, refresh UX, settings screen (sign out, force refresh).
 - App icon, splash screen.
-- Build pipeline: GH Actions workflow for Android APK build artifact (so Drew can pull a built APK without needing the dev box).
-- Size: M.
+- **Optional**: GH Actions workflow that builds an unsigned debug APK on push and uploads as a workflow artifact. Useful only when Drew can't or doesn't want to build locally — the `dotnet build -t:Run` dev loop from PR 3 covers normal use. Defer until the friction surfaces.
+- Size: M (S without the GH Actions workflow).
 
 **Total: 8 PRs, sized M heavy.** Real calendar effort probably 10-15 sessions for a v1 the user can install and use daily.
 
-## Open questions to resolve before PR 1
+## Decisions
 
-- **Repo shape:** add `BookTracker.Mobile` as a project alongside the existing two, or split into a sibling repo (`the-library-mobile`)? Recommendation: same repo. Coupled lifecycle (mobile follows API contract changes), shared GH Actions workflows for Android builds, single source of truth for issues and PRs. Splitting later is easy if the coupling becomes painful; merging later is harder.
-- **Apple developer account:** required only for iOS. Android-only v1 is a perfectly valid first cut and probably the right way to ship. iOS as a follow-on once the shape stabilises.
-- **`BookTracker.Shared` scope:** ship just the API DTOs first. Resist the urge to share business logic between Web and Mobile — drift is fine, divergence in display logic is *expected* (a desktop card and a mobile screen don't share rendering code).
-- **MAUI version target:** .NET 10 if MAUI's .NET 10 release is out by the time PR 3 starts; .NET 9 LTS otherwise. The Web app is on net10.0; same target keeps the toolchain uniform but isn't required.
+- **Repo shape: same repo.** `BookTracker.Mobile` lives alongside `BookTracker.Web`, `BookTracker.Data`, `BookTracker.Tests`. Coupled lifecycle with API changes, single source of truth for issues, shared CI surface. Splitting into a sibling repo later is easy if coupling becomes painful; merging later is harder.
+- **Platform: Android only for v1.** No Apple Developer account, no Mac in the build path, no App Store / TestFlight overhead. iOS becomes a follow-on if and when the use case warrants it; the design above is platform-agnostic enough that adding iOS later doesn't require restructuring.
+- **`BookTracker.Shared` scope: API DTOs only.** No shared business logic between Web and Mobile. The DTOs are the contract; everything else is allowed to diverge. Resist the urge to share rendering or service code — a desktop Razor card and a mobile XAML screen don't share view logic, and pretending they do creates friction without saving anything.
+- **Target framework: .NET 10.** Same as `BookTracker.Web`. Toolchain uniform, no version-gap papercuts. `net10.0-android` for the MAUI project.
 
 ## What this is explicitly NOT
 
@@ -174,5 +175,5 @@ Sized for the work, not the calendar. Ship-as-you-go.
 - Scan an ISBN with the device camera → answer in <200ms, regardless of network state.
 - Author search returns matches as fast as the PWA does today.
 - Wishlist + missing-books-in-series views render from cache, refresh on demand.
-- Side-loadable APK on Android via GH Actions artifact.
+- Installable on Drew's Android phone via `dotnet build -t:Run -f net10.0-android` over USB. (GH Actions APK artifact is optional; only ships if the local-build loop turns out to be friction.)
 - `/bookshop` route in BookTracker.Web stays available throughout the arc; gets retired only after MAUI v1 has been Drew's daily mobile driver for a few weeks without regret.
