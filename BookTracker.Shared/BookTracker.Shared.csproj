@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Wire-format DTOs shared between BookTracker.Web (server) and the
+    future BookTracker.Mobile (.NET MAUI client). Deliberately no
+    references to BookTracker.Data — pulling EF Core into Shared
+    would bleed it into the mobile app, which only needs the
+    contract shapes. Enum fields use `string` rather than the
+    server-side enum types so this project stays free of model
+    coupling; the JsonStringEnumConverter on the Web side already
+    serialises that way.
+
+    See docs/mobile-app-design.md.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
