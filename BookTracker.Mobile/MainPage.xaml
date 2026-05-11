@@ -2,63 +2,152 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="BookTracker.Mobile.MainPage"
-             Title="BookTracker">
+             NavigationPage.HasNavigationBar="False"
+             BackgroundColor="#FAF6EC">
 
-    <!-- PR 3 minimal proof-of-life UI: sign in, call the API, render
-         the result. Subsequent PRs swap this for the real Scan +
-         Author lookup pages. -->
-    <ScrollView>
-        <VerticalStackLayout Padding="30,30" Spacing="20">
+    <!-- BookTracker library palette — mirrored from
+         BookTracker.Web/Theme/BookTrackerTheme.cs so the mobile companion
+         reads as the same product as the Web app.
 
-            <Label
-                Text="BookTracker mobile"
-                Style="{StaticResource Headline}"
-                HorizontalOptions="Center" />
+           leather   #6B2737  primary actions
+           brass     #A67B3A  accent borders + primary in-bookshop CTA
+           parchment #FAF6EC  page background
+           surface   #F2EADB  card / panel background
+           espresso  #3E2723  header banner
+           ink       #2C2416  primary text
+           faded ink #6B5D4A  secondary text
 
-            <Label
-                Text="Offline-capable companion app"
-                Style="{StaticResource SubHeadline}"
-                HorizontalOptions="Center" />
+         Root page hides the system nav bar (NavigationPage.HasNavigationBar)
+         because this is the entry surface — nothing to navigate back from.
+         ScanPage keeps its nav bar so the back button is visible there. -->
 
-            <Button
-                x:Name="SignInButton"
-                Text="Sign in"
-                Clicked="OnSignInClicked"
-                HorizontalOptions="Fill" />
+    <Grid RowDefinitions="Auto,*">
 
-            <Button
-                x:Name="LoadCatalogButton"
-                Text="Load catalog snapshot"
-                Clicked="OnLoadCatalogClicked"
-                HorizontalOptions="Fill"
-                IsEnabled="False" />
-
-            <Button
-                x:Name="ScanButton"
-                Text="📷 Scan ISBN"
-                Clicked="OnScanClicked"
-                HorizontalOptions="Fill"
-                IsEnabled="False" />
-
-            <ActivityIndicator
-                x:Name="Busy"
-                IsRunning="False"
-                HorizontalOptions="Center" />
-
-            <Label
-                x:Name="StatusLabel"
-                Text="Not signed in."
-                HorizontalOptions="Center"
-                LineBreakMode="WordWrap" />
-
-            <Button
-                x:Name="SignOutButton"
-                Text="Sign out"
-                Clicked="OnSignOutClicked"
-                HorizontalOptions="Fill"
-                IsEnabled="False" />
-
+        <!-- Espresso header banner. Replaces the previous in-content
+             Headline/SubHeadline pair so the brand chrome is anchored to
+             a fixed bar rather than flowing inside the scroll view. -->
+        <VerticalStackLayout Grid.Row="0"
+                             BackgroundColor="#3E2723"
+                             Padding="24,20,24,18"
+                             Spacing="2">
+            <Label Text="BookTracker"
+                   FontSize="24"
+                   FontAttributes="Bold"
+                   TextColor="#F2EADB" />
+            <Label Text="Offline-capable companion"
+                   FontSize="13"
+                   TextColor="#A67B3A" />
         </VerticalStackLayout>
-    </ScrollView>
+
+        <ScrollView Grid.Row="1">
+            <VerticalStackLayout Padding="20,24" Spacing="14">
+
+                <!-- Sign in — primary CTA when signed out. -->
+                <Button x:Name="SignInButton"
+                        Text="Sign in"
+                        Clicked="OnSignInClicked"
+                        HeightRequest="56"
+                        BackgroundColor="#6B2737"
+                        TextColor="#FAF6EC"
+                        FontSize="16"
+                        FontAttributes="Bold"
+                        CornerRadius="8"
+                        HorizontalOptions="Fill" />
+
+                <!-- Load / refresh catalog snapshot. Visible only when
+                     signed in; doubles as Refresh once the cache is
+                     populated. -->
+                <Button x:Name="LoadCatalogButton"
+                        Text="📚  Load catalog snapshot"
+                        Clicked="OnLoadCatalogClicked"
+                        HeightRequest="56"
+                        BackgroundColor="#6B2737"
+                        TextColor="#FAF6EC"
+                        FontSize="16"
+                        CornerRadius="8"
+                        HorizontalOptions="Fill"
+                        IsVisible="False" />
+
+                <!-- Scan ISBN — the in-bookshop killer action. Brass
+                     accent + slightly larger height makes it stand out
+                     over the leather-coloured CTAs above. -->
+                <Button x:Name="ScanButton"
+                        Text="📷  Scan ISBN"
+                        Clicked="OnScanClicked"
+                        HeightRequest="64"
+                        BackgroundColor="#A67B3A"
+                        TextColor="#2C2416"
+                        FontSize="18"
+                        FontAttributes="Bold"
+                        CornerRadius="8"
+                        HorizontalOptions="Fill"
+                        IsVisible="False" />
+
+                <!-- Cache stats panel — passive info card that surfaces
+                     "what's stashed locally" so it isn't buried in
+                     StatusLabel text. Brass border on aged-parchment
+                     surface mirrors the Library list card treatment on
+                     Web. Visible whenever the cache has data, even
+                     when signed out (data persists across sign-out). -->
+                <Border x:Name="CacheStatsPanel"
+                        IsVisible="False"
+                        Stroke="#A67B3A"
+                        StrokeThickness="1"
+                        BackgroundColor="#F2EADB"
+                        Padding="16,12">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="8" />
+                    </Border.StrokeShape>
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="Cached catalog"
+                               FontSize="12"
+                               FontAttributes="Bold"
+                               TextColor="#6B2737" />
+                        <Label x:Name="CacheStatsLabel"
+                               FontSize="15"
+                               TextColor="#2C2416" />
+                        <Label x:Name="CacheSyncedAtLabel"
+                               FontSize="12"
+                               TextColor="#6B5D4A" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <ActivityIndicator x:Name="Busy"
+                                   IsRunning="False"
+                                   Color="#6B2737"
+                                   HorizontalOptions="Center"
+                                   Margin="0,4,0,0" />
+
+                <!-- Status / error label. Centred, faded-ink for low
+                     emphasis; the panel above carries the real
+                     "what's true" info. -->
+                <Label x:Name="StatusLabel"
+                       Text="Not signed in. Tap Sign in to begin."
+                       FontSize="14"
+                       TextColor="#6B5D4A"
+                       HorizontalTextAlignment="Center"
+                       LineBreakMode="WordWrap" />
+
+                <!-- Sign out — outlined low-emphasis. Pushed down with
+                     margin so it's visually separated from primary
+                     actions. -->
+                <Button x:Name="SignOutButton"
+                        Text="Sign out"
+                        Clicked="OnSignOutClicked"
+                        HeightRequest="44"
+                        BackgroundColor="Transparent"
+                        TextColor="#6B5D4A"
+                        BorderColor="#A67B3A"
+                        BorderWidth="1"
+                        FontSize="14"
+                        CornerRadius="8"
+                        HorizontalOptions="Center"
+                        WidthRequest="160"
+                        Margin="0,32,0,0"
+                        IsVisible="False" />
+
+            </VerticalStackLayout>
+        </ScrollView>
+    </Grid>
 
 </ContentPage>
