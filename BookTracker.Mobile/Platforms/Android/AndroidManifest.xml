@@ -39,9 +39,13 @@
 				<action android:name="android.intent.action.VIEW" />
 				<category android:name="android.intent.category.DEFAULT" />
 				<category android:name="android.intent.category.BROWSABLE" />
+				<!-- Path is RAW base64 (literal + and =), not URL-
+				     encoded. Android URL-decodes intent-data paths
+				     before matching against android:path values, so
+				     the decoded form is what we need to match. -->
 				<data android:scheme="msauth"
 				      android:host="com.thelibrary.mobile"
-				      android:path="/dMdWTcw8hf5TVPEfRB%2Bm0JPyUDs%3D" />
+				      android:path="/dMdWTcw8hf5TVPEfRB+m0JPyUDs=" />
 			</intent-filter>
 		</activity>
 

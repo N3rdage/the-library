@@ -321,7 +321,9 @@ If your tenant requires admin consent for delegated scopes, click **Grant admin 
 
 ### Step 4 — Redirect URI
 
-The native redirect URI is `msauth://com.thelibrary.mobile/<url-encoded-base64-sha1-of-keystore>`. The signature hash is per-keystore — each developer's debug keystore generates a different value, and the eventual release-signing keystore will differ again. Recompute whenever you change machines or signing keys.
+The native redirect URI is `msauth://com.thelibrary.mobile/<raw-base64-sha1-of-keystore>`. The signature hash is per-keystore — each developer's debug keystore generates a different value, and the eventual release-signing keystore will differ again. Recompute whenever you change machines or signing keys.
+
+**Use the raw base64 form (literal `+` and `=`), NOT URL-encoded** — this matches Microsoft's official Xamarin Android sample, and Android's intent-filter path-matching URL-decodes the incoming intent data before comparing against `android:path`, so the raw form is what actually matches at runtime. AAD's portal also accepts the literal `+` / `=` characters in registered redirect URIs.
 
 **To compute the hash for the current build's keystore:**
 
@@ -334,7 +336,7 @@ $apk = ".\BookTracker.Mobile\bin\Debug\net10.0-android\com.thelibrary.mobile-Sig
     Select-String 'SHA1' |
     ForEach-Object { ($_ -split ':\s+')[1] }
 
-# 2. Convert the colon-separated hex to URL-encoded base64.
+# 2. Convert the colon-separated hex to raw base64.
 # Replace $hex below with the value printed above (no colons).
 $hex = '74C7564DCC3C85FE5354F11F441FA6D093F2503B'  # example only
 $bytes = [byte[]]::new($hex.Length / 2)
@@ -342,8 +344,7 @@ for ($i = 0; $i -lt $hex.Length; $i += 2) {
     $bytes[$i/2] = [Convert]::ToByte($hex.Substring($i, 2), 16)
 }
 $b64 = [Convert]::ToBase64String($bytes)
-$urlEncoded = [Uri]::EscapeDataString($b64)
-Write-Output "msauth://com.thelibrary.mobile/$urlEncoded"
+Write-Output "msauth://com.thelibrary.mobile/$b64"
 ```
 
 **Then update three places to match:**

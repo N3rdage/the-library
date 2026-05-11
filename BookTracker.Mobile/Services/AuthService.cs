@@ -23,17 +23,25 @@ public class AuthService : IAuthService
             // MAUI-supported way to get it from any thread.
             .WithParentActivityOrWindow(() =>
                 Microsoft.Maui.ApplicationModel.Platform.CurrentActivity)
-            // Signature hash is the URL-encoded base64 SHA-1 of the
-            // debug keystore (Drew's machine, 2026-05-11). When the
-            // keystore changes — different dev machine, release-signed
-            // build, CI signing — recompute via:
+            // Disable broker (Microsoft Authenticator). If installed,
+            // it would try to handle the auth flow itself — different
+            // redirect URI requirements + a separate broker-redirect
+            // registration in AAD. For PR 3 we stick to the
+            // Chrome-Custom-Tab path which is simpler to debug.
+            .WithBroker(false)
+            // Redirect URI is the RAW base64 SHA-1 of the keystore —
+            // no URL encoding. Microsoft's official Xamarin Android
+            // sample uses this form, and Android's intent-filter
+            // path-matching decodes %XX before matching, so the raw
+            // form is what actually matches at runtime. Same value
+            // must appear (raw) in:
+            //   - android:path on the BrowserTabActivity in
+            //     Platforms/Android/AndroidManifest.xml
+            //   - BookTracker Mobile AAD app reg's redirect URIs
+            // To recompute when the keystore changes:
             //   keytool -printcert -jarfile <signed.apk>
-            // then base64-encode the raw SHA-1 bytes + URL-encode.
-            // The same value must be registered as a redirect URI on
-            // the BookTracker Mobile AAD app reg, and the
-            // android:path on the BrowserTabActivity in
-            // Platforms/Android/AndroidManifest.xml.
-            .WithRedirectUri($"msauth://{AppConfig.AndroidPackageName}/dMdWTcw8hf5TVPEfRB%2Bm0JPyUDs%3D")
+            // then base64-encode the raw SHA-1 bytes (no URL encoding).
+            .WithRedirectUri($"msauth://{AppConfig.AndroidPackageName}/dMdWTcw8hf5TVPEfRB+m0JPyUDs=")
             .Build();
     }
 
