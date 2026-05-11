@@ -76,13 +76,20 @@ public partial class MainPage : ContentPage
             // real device. The cache populate is atomic so a partial
             // populate can't leave the DB half-shrunken.
             await _cache.PopulateAsync(snapshot);
+
+            // ?? 0 on each Count — a server that hasn't been redeployed
+            // since Mobile PR 1 merged won't include the `series` array
+            // in the response, so snapshot.Series deserialises as null
+            // (which was the original NRE). Once prod catches up these
+            // all stay non-null.
             return
                 $"Catalog loaded + cached ✓\n" +
-                $"Version: {snapshot.Version}\n" +
+                $"Version: {snapshot.Version ?? "(none)"}\n" +
                 $"Synced at: {snapshot.SyncedAt:u}\n" +
-                $"Books: {snapshot.Books.Count}\n" +
-                $"Authors: {snapshot.Authors.Count}\n" +
-                $"Series: {snapshot.Series.Count}";
+                $"Books: {snapshot.Books?.Count ?? 0}\n" +
+                $"Authors: {snapshot.Authors?.Count ?? 0}\n" +
+                $"Series: {snapshot.Series?.Count ?? 0}" +
+                (snapshot.Series is null ? " (server lacks /series field — redeploy Web)" : "");
         });
     }
 
