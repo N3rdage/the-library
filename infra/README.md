@@ -277,6 +277,14 @@ For local dev, copy `appsettings.Example.json` → `appsettings.Development.json
 
 Required before the BookTracker.Mobile (.NET MAUI) app can sign users in and call the API. See [`docs/mobile-app-design.md`](../docs/mobile-app-design.md) for the bigger picture; this section is the click-ops runbook.
 
+**Step 0 (on a fresh clone): copy the per-environment config template.**
+
+```powershell
+Copy-Item .\BookTracker.Mobile\AppConfig.cs.example .\BookTracker.Mobile\AppConfig.cs
+```
+
+Then edit `BookTracker.Mobile/AppConfig.cs` with the real `TenantId`, `MobileClientId`, and `ApiScope` values (you'll get those from steps 1–3 below). `AppConfig.cs` is gitignored — same pattern as `appsettings.json`. Values aren't strictly secrets (public AAD facts) but the .example pattern keeps the repo clean and dodges gitleaks false positives.
+
 **Why this isn't fully automated by `deploy.ps1`:** native / public client app registrations have a couple of properties (the redirect URI scheme, the API permission grant) that need values which only exist later in the build pipeline — the Android signing-key SHA-1 hash for the `msauth://` redirect URI is derived from the dev keystore, which doesn't exist yet at infra-deploy time. Could automate the *initial* app reg, but you'd still come back to the portal once for the redirect URI. One trip is fine.
 
 **Note on Bicep:** the existing `validation.allowedAudiences` in `app-config.bicep` (`['api://${authClientId}', authClientId]`) already accepts the audience MSAL produces when acquiring tokens for the API scope below. No infra change is needed for this PR.
@@ -319,9 +327,46 @@ If `Library-Patrons` doesn't appear under **APIs my organization uses** either, 
 
 If your tenant requires admin consent for delegated scopes, click **Grant admin consent for `<tenant>`**.
 
-### Step 4 — Redirect URI (deferred to PR 3)
+### Step 4 — Redirect URI
 
-The native redirect URI is `msauth://com.thelibrary.mobile/<base64-signature-hash>`. The signature hash is computed from the Android keystore used to sign the APK during `dotnet build -t:Run -f net10.0-android`, which doesn't exist yet. PR 3 generates the keystore, prints the hash, and Drew adds the URI to the mobile app reg's **Authentication** → **Mobile and desktop applications** platform.
+The native redirect URI is `msauth://com.thelibrary.mobile/<raw-base64-sha1-of-keystore>`. The signature hash is per-keystore — each developer's debug keystore generates a different value, and the eventual release-signing keystore will differ again. Recompute whenever you change machines or signing keys.
+
+**Use the raw base64 form (literal `+` and `=`), NOT URL-encoded** — this matches Microsoft's official Xamarin Android sample, and Android's intent-filter path-matching URL-decodes the incoming intent data before comparing against `android:path`, so the raw form is what actually matches at runtime. AAD's portal also accepts the literal `+` / `=` characters in registered redirect URIs.
+
+**To compute the hash for the current build's keystore:**
+
+```powershell
+$jdk = (Get-ChildItem "$env:ProgramFiles\Microsoft\jdk-*" -Directory | Select-Object -First 1).FullName
+$apk = ".\BookTracker.Mobile\bin\Debug\net10.0-android\com.thelibrary.mobile-Signed.apk"
+
+# 1. Extract the SHA-1 fingerprint of the cert that signed the APK.
+& "$jdk\bin\keytool.exe" -printcert -jarfile $apk |
+    Select-String 'SHA1' |
+    ForEach-Object { ($_ -split ':\s+')[1] }
+
+# 2. Convert the colon-separated hex to raw base64.
+# Replace $hex below with the value printed above (no colons).
+$hex = '74C7564DCC3C85FE5354F11F441FA6D093F2503B'  # example only
+$bytes = [byte[]]::new($hex.Length / 2)
+for ($i = 0; $i -lt $hex.Length; $i += 2) {
+    $bytes[$i/2] = [Convert]::ToByte($hex.Substring($i, 2), 16)
+}
+$b64 = [Convert]::ToBase64String($bytes)
+Write-Output "msauth://com.thelibrary.mobile/$b64"
+```
+
+**Then update three places to match:**
+
+1. **BookTracker Mobile AAD app reg** → Authentication → Add a platform. The portal has two tiles that both work but differ in UX:
+   - **Android (dedicated)** — recommended on the current portal. Asks for **Package name** (`com.thelibrary.mobile`) and **Signature hash** (the raw base64 from the recipe above, e.g. `dMdWTcw8hf5TVPEfRB+m0JPyUDs=`) as separate fields. AAD constructs the `msauth://...` URI for you. Cleaner — no room for typos in the URI itself.
+   - **Mobile and desktop applications (generic)** — older path. Custom redirect URIs → paste the full `msauth://com.thelibrary.mobile/<raw-base64-hash>` value.
+   - Note on the new portal: if you later go back to **Edit** the URI you added via either path, the editor now shows it broken down into Package name + Signature hash rather than the original URI string. Same URL underneath; only the editor changed (Microsoft rolled this out around 2026-05).
+2. **`BookTracker.Mobile/Platforms/Android/AndroidManifest.xml`** — the `android:path` value on the `BrowserTabActivity` intent-filter (raw base64, no URL encoding).
+3. **`BookTracker.Mobile/Services/AuthService.cs`** — the `WithRedirectUri` call (same raw form).
+
+If any of the three diverge, sign-in fails with `redirect_uri_mismatch` from AAD or hangs on the "Are you trying to sign in to BookTracker Mobile?" prompt with no return to the app (intent-filter doesn't match). The symptom tells you which one's out of sync.
+
+When swapping dev machines or moving to a CI/release keystore, repeat this step. The hash currently in `AndroidManifest.xml` and `AuthService.cs` is for Drew's dev-machine debug keystore as of 2026-05-11.
 
 ### Step 5 — Validate end-to-end (smoke test)
 
