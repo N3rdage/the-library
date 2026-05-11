@@ -1,13 +1,19 @@
+// On a fresh clone, copy this file to AppConfig.cs (same directory)
+// and fill in the tenant-specific values. AppConfig.cs is gitignored,
+// matching the project's appsettings.Example.json pattern.
+//
+// Strictly speaking, none of these values are SECRETS — tenant IDs
+// and AAD client IDs are public AAD facts, and the keystore SHA hash
+// is the SHA of a public certificate. But they're per-environment,
+// so the .example + gitignored-real pattern keeps the repo clean
+// across dev / CI / future-deploy environments and avoids gitleaks
+// false positives on long random-looking strings.
+//
+// See infra/README.md > "Mobile companion — AAD setup" for where
+// each value comes from.
+
 namespace BookTracker.Mobile;
 
-// AAD / API configuration. These are NOT secrets — tenant IDs and
-// client IDs are discoverable from any token AAD issues — but they're
-// project-specific so leave them committed in the repo and update when
-// the underlying app registrations change.
-//
-// Drew fills these in before the first build. See
-// infra/README.md > "Mobile companion — AAD setup" for where each
-// value comes from.
 public static class AppConfig
 {
     /// <summary>Entra tenant ID (GUID). Same value used for `-TenantId`

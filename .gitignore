@@ -59,6 +59,13 @@ appsettings.*.json
 !appsettings.Example.json
 !appsettings.*.Example.json
 
+# Mobile app per-environment config (AAD tenant + client IDs, API base URL).
+# Not actually secrets — public AAD facts — but kept out of the public repo
+# for project-pattern consistency with appsettings*.json and to avoid
+# gitleaks false positives on long random-looking strings. Committed only
+# as AppConfig.cs.example.
+BookTracker.Mobile/AppConfig.cs
+
 # Bicep build output (ARM JSON is generated from .bicep on the fly)
 infra/**/*.json
 !infra/**/*.bicepparam

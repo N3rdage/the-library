@@ -277,6 +277,14 @@ For local dev, copy `appsettings.Example.json` → `appsettings.Development.json
 
 Required before the BookTracker.Mobile (.NET MAUI) app can sign users in and call the API. See [`docs/mobile-app-design.md`](../docs/mobile-app-design.md) for the bigger picture; this section is the click-ops runbook.
 
+**Step 0 (on a fresh clone): copy the per-environment config template.**
+
+```powershell
+Copy-Item .\BookTracker.Mobile\AppConfig.cs.example .\BookTracker.Mobile\AppConfig.cs
+```
+
+Then edit `BookTracker.Mobile/AppConfig.cs` with the real `TenantId`, `MobileClientId`, and `ApiScope` values (you'll get those from steps 1–3 below). `AppConfig.cs` is gitignored — same pattern as `appsettings.json`. Values aren't strictly secrets (public AAD facts) but the .example pattern keeps the repo clean and dodges gitleaks false positives.
+
 **Why this isn't fully automated by `deploy.ps1`:** native / public client app registrations have a couple of properties (the redirect URI scheme, the API permission grant) that need values which only exist later in the build pipeline — the Android signing-key SHA-1 hash for the `msauth://` redirect URI is derived from the dev keystore, which doesn't exist yet at infra-deploy time. Could automate the *initial* app reg, but you'd still come back to the portal once for the redirect URI. One trip is fine.
 
 **Note on Bicep:** the existing `validation.allowedAudiences` in `app-config.bicep` (`['api://${authClientId}', authClientId]`) already accepts the audience MSAL produces when acquiring tokens for the API scope below. No infra change is needed for this PR.
