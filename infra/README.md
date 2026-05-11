@@ -349,11 +349,14 @@ Write-Output "msauth://com.thelibrary.mobile/$b64"
 
 **Then update three places to match:**
 
-1. **BookTracker Mobile AAD app reg** → Authentication → Add a platform → **Mobile and desktop applications** → Custom redirect URIs → add the full `msauth://...` value (URL-encoded form is what MSAL sends).
-2. **`BookTracker.Mobile/Platforms/Android/AndroidManifest.xml`** — the `android:path` value on the `BrowserTabActivity` intent-filter.
-3. **`BookTracker.Mobile/Services/AuthService.cs`** — the `WithRedirectUri` call.
+1. **BookTracker Mobile AAD app reg** → Authentication → Add a platform. The portal has two tiles that both work but differ in UX:
+   - **Android (dedicated)** — recommended on the current portal. Asks for **Package name** (`com.thelibrary.mobile`) and **Signature hash** (the raw base64 from the recipe above, e.g. `dMdWTcw8hf5TVPEfRB+m0JPyUDs=`) as separate fields. AAD constructs the `msauth://...` URI for you. Cleaner — no room for typos in the URI itself.
+   - **Mobile and desktop applications (generic)** — older path. Custom redirect URIs → paste the full `msauth://com.thelibrary.mobile/<raw-base64-hash>` value.
+   - Note on the new portal: if you later go back to **Edit** the URI you added via either path, the editor now shows it broken down into Package name + Signature hash rather than the original URI string. Same URL underneath; only the editor changed (Microsoft rolled this out around 2026-05).
+2. **`BookTracker.Mobile/Platforms/Android/AndroidManifest.xml`** — the `android:path` value on the `BrowserTabActivity` intent-filter (raw base64, no URL encoding).
+3. **`BookTracker.Mobile/Services/AuthService.cs`** — the `WithRedirectUri` call (same raw form).
 
-If any of the three diverge, sign-in fails with `redirect_uri_mismatch` from AAD or "no compatible activity to handle the intent" from Android — the symptom tells you which one's out of sync.
+If any of the three diverge, sign-in fails with `redirect_uri_mismatch` from AAD or hangs on the "Are you trying to sign in to BookTracker Mobile?" prompt with no return to the app (intent-filter doesn't match). The symptom tells you which one's out of sync.
 
 When swapping dev machines or moving to a CI/release keystore, repeat this step. The hash currently in `AndroidManifest.xml` and `AuthService.cs` is for Drew's dev-machine debug keystore as of 2026-05-11.
 
