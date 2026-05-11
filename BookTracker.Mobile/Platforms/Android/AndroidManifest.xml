@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+	<application android:allowBackup="true" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true">
+
+		<!--
+		  MSAL.NET browser-tab callback activity. After the user signs
+		  in via Chrome Custom Tabs, AAD redirects to
+		  msauth://com.thelibrary.mobile/<keystore-hash> and Android
+		  routes that intent here so MSAL can complete the flow.
+
+		  The android:path value below is a PLACEHOLDER. Before the
+		  first signed-in build:
+		    1. Run `dotnet build` once to generate the debug keystore
+		       (~/.android/debug.keystore on Windows lives at
+		       %USERPROFILE%\.android\debug.keystore).
+		    2. Compute the URL-encoded base64 SHA-1 hash:
+		       keytool -exportcert -alias androiddebugkey `
+		           -keystore $env:USERPROFILE\.android\debug.keystore `
+		           -storepass android -keypass android `
+		         | & "$env:JAVA_HOME\bin\openssl" sha1 -binary `
+		         | & "$env:JAVA_HOME\bin\openssl" base64
+		       (Or use the Java-built-in keytool + a separate openssl /
+		       PowerShell SHA1 + base64 + URL-encode if openssl isn't
+		       on PATH. Microsoft's docs at aka.ms/msal-android-signature
+		       has alternative recipes.)
+		    3. URL-encode the result. + → %2B, / → %2F, = → %3D.
+		    4. Replace dMdWTcw8hf5TVPEfRB%2Bm0JPyUDs%3D below.
+		    5. Mirror the SAME value into the BookTracker Mobile AAD
+		       app reg's redirect URI:
+		       Authentication → Add a platform → Mobile and desktop
+		       applications → Custom redirect URI:
+		       msauth://com.thelibrary.mobile/<the-same-hash>
+		    6. Mirror it into AuthService.cs's WithRedirectUri call
+		       (same constant: AppConfig.AndroidPackageName +
+		       "dMdWTcw8hf5TVPEfRB%2Bm0JPyUDs%3D").
+		-->
+		<activity android:name="microsoft.identity.client.BrowserTabActivity" android:exported="true">
+			<intent-filter>
+				<action android:name="android.intent.action.VIEW" />
+				<category android:name="android.intent.category.DEFAULT" />
+				<category android:name="android.intent.category.BROWSABLE" />
+				<data android:scheme="msauth"
+				      android:host="com.thelibrary.mobile"
+				      android:path="/dMdWTcw8hf5TVPEfRB%2Bm0JPyUDs%3D" />
+			</intent-filter>
+		</activity>
+
+	</application>
+	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+	<uses-permission android:name="android.permission.INTERNET" />
+</manifest>

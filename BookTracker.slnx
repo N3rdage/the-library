@@ -1,4 +1,14 @@
 <Solution>
+  <!--
+    BookTracker.Mobile is deliberately NOT in this solution file.
+    CI runs `dotnet build BookTracker.slnx`; adding Mobile would
+    require installing the maui-android workload on every CI run
+    (~1-2min/build) for a project the Web CI doesn't depend on.
+    Build Mobile locally via:
+      dotnet build .\BookTracker.Mobile\BookTracker.Mobile.csproj -f net10.0-android
+    A future PR can wire a separate mobile-build workflow once the
+    project warrants its own CI surface (e.g. APK artifacts).
+  -->
   <Project Path="BookTracker.Data/BookTracker.Data.csproj" />
   <Project Path="BookTracker.Shared/BookTracker.Shared.csproj" />
   <Project Path="BookTracker.Tests/BookTracker.Tests.csproj" />

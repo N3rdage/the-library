@@ -319,9 +319,42 @@ If `Library-Patrons` doesn't appear under **APIs my organization uses** either, 
 
 If your tenant requires admin consent for delegated scopes, click **Grant admin consent for `<tenant>`**.
 
-### Step 4 — Redirect URI (deferred to PR 3)
+### Step 4 — Redirect URI
 
-The native redirect URI is `msauth://com.thelibrary.mobile/<base64-signature-hash>`. The signature hash is computed from the Android keystore used to sign the APK during `dotnet build -t:Run -f net10.0-android`, which doesn't exist yet. PR 3 generates the keystore, prints the hash, and Drew adds the URI to the mobile app reg's **Authentication** → **Mobile and desktop applications** platform.
+The native redirect URI is `msauth://com.thelibrary.mobile/<url-encoded-base64-sha1-of-keystore>`. The signature hash is per-keystore — each developer's debug keystore generates a different value, and the eventual release-signing keystore will differ again. Recompute whenever you change machines or signing keys.
+
+**To compute the hash for the current build's keystore:**
+
+```powershell
+$jdk = (Get-ChildItem "$env:ProgramFiles\Microsoft\jdk-*" -Directory | Select-Object -First 1).FullName
+$apk = ".\BookTracker.Mobile\bin\Debug\net10.0-android\com.thelibrary.mobile-Signed.apk"
+
+# 1. Extract the SHA-1 fingerprint of the cert that signed the APK.
+& "$jdk\bin\keytool.exe" -printcert -jarfile $apk |
+    Select-String 'SHA1' |
+    ForEach-Object { ($_ -split ':\s+')[1] }
+
+# 2. Convert the colon-separated hex to URL-encoded base64.
+# Replace $hex below with the value printed above (no colons).
+$hex = '74C7564DCC3C85FE5354F11F441FA6D093F2503B'  # example only
+$bytes = [byte[]]::new($hex.Length / 2)
+for ($i = 0; $i -lt $hex.Length; $i += 2) {
+    $bytes[$i/2] = [Convert]::ToByte($hex.Substring($i, 2), 16)
+}
+$b64 = [Convert]::ToBase64String($bytes)
+$urlEncoded = [Uri]::EscapeDataString($b64)
+Write-Output "msauth://com.thelibrary.mobile/$urlEncoded"
+```
+
+**Then update three places to match:**
+
+1. **BookTracker Mobile AAD app reg** → Authentication → Add a platform → **Mobile and desktop applications** → Custom redirect URIs → add the full `msauth://...` value (URL-encoded form is what MSAL sends).
+2. **`BookTracker.Mobile/Platforms/Android/AndroidManifest.xml`** — the `android:path` value on the `BrowserTabActivity` intent-filter.
+3. **`BookTracker.Mobile/Services/AuthService.cs`** — the `WithRedirectUri` call.
+
+If any of the three diverge, sign-in fails with `redirect_uri_mismatch` from AAD or "no compatible activity to handle the intent" from Android — the symptom tells you which one's out of sync.
+
+When swapping dev machines or moving to a CI/release keystore, repeat this step. The hash currently in `AndroidManifest.xml` and `AuthService.cs` is for Drew's dev-machine debug keystore as of 2026-05-11.
 
 ### Step 5 — Validate end-to-end (smoke test)
 
