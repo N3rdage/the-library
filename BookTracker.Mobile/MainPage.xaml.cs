@@ -1,4 +1,5 @@
 using BookTracker.Mobile.Cache;
+using BookTracker.Mobile.Pages;
 using BookTracker.Mobile.Services;
 
 namespace BookTracker.Mobile;
@@ -137,11 +138,30 @@ public partial class MainPage : ContentPage
         }
     }
 
+    private async void OnScanClicked(object? sender, EventArgs e)
+    {
+        // Resolve the page from DI so it gets ICatalogCache injected.
+        // Transient registration in MauiProgram — each navigation
+        // gets a fresh CameraBarcodeReaderView, no held-camera between
+        // visits.
+        var services = Microsoft.Maui.Controls.Application.Current?.Handler?.MauiContext?.Services
+            ?? throw new InvalidOperationException("ServiceProvider not available.");
+        var page = services.GetService(typeof(ScanPage)) as ScanPage
+            ?? throw new InvalidOperationException("ScanPage not registered.");
+        await Navigation.PushAsync(page);
+    }
+
     private void RefreshUi()
     {
         Busy.IsRunning = _busy;
         SignInButton.IsEnabled = !_busy && !_signedIn;
         LoadCatalogButton.IsEnabled = !_busy && _signedIn;
         SignOutButton.IsEnabled = !_busy && _signedIn;
+        // Scan only makes sense when the cache has been populated —
+        // gate on the cache having a syncedAt rather than signed-in
+        // alone. For PR 5 simplicity we use signed-in as a proxy;
+        // if the cache is empty the scan page will just say
+        // "Not in your library" for everything, which is correct.
+        ScanButton.IsEnabled = !_busy && _signedIn;
     }
 }
