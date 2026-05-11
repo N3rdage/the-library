@@ -98,8 +98,8 @@ public partial class MainPage : ContentPage
 
     // Runs an async action with the spinner up + buttons disabled,
     // then renders the returned status string. Catches + surfaces
-    // any exception as the new status so a stack trace doesn't dump
-    // to the user.
+    // any exception with enough breadcrumbs to diagnose without
+    // dumping the full stack trace to the UI.
     private async Task RunBusyAsync(string busyStatus, Func<Task<string>> action)
     {
         _busy = true;
@@ -112,7 +112,16 @@ public partial class MainPage : ContentPage
         }
         catch (Exception ex)
         {
-            StatusLabel.Text = $"Failed: {ex.Message}";
+            // For NullReferenceException the canonical message is
+            // useless ("Object reference not set..."). Capture the
+            // exception type + the first stack frame so we can see
+            // where the throw originated. Limit to ~2-3 lines so
+            // the label stays readable on a phone.
+            var topFrame = ex.StackTrace?
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault()?.Trim() ?? "(no stack)";
+            StatusLabel.Text =
+                $"Failed: {ex.GetType().Name}\n{ex.Message}\n→ {topFrame}";
         }
         finally
         {

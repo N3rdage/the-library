@@ -44,12 +44,19 @@ public class CatalogCache : ICatalogCache
 
     public async Task PopulateAsync(CatalogSnapshot snapshot)
     {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
         // Wipe + rewrite in one transaction so a partial populate
         // can't leave us with stale meta over fresh rows (or vice
         // versa). Same atomicity guarantee as the IndexedDB readwrite
         // transaction in catalog-cache.js's populate().
-        var conn = Db.GetConnection();
-        await Task.Run(() => conn.RunInTransaction(() =>
+        //
+        // Null-coalesces on the collections + strings even though the
+        // server-side projection always ToList()'s. Defensive against
+        // an older server that didn't ship the new fields (e.g. mobile
+        // running ahead of a yet-to-deploy Web change), or a malformed
+        // JSON response that left properties null after deserialisation.
+        await Db.RunInTransactionAsync(conn =>
         {
             conn.DeleteAll<CachedBook>();
             conn.DeleteAll<CachedBookIsbn>();
@@ -57,20 +64,21 @@ public class CatalogCache : ICatalogCache
             conn.DeleteAll<CachedSeries>();
             conn.DeleteAll<CachedMeta>();
 
-            foreach (var book in snapshot.Books)
+            var books = snapshot.Books ?? [];
+            foreach (var book in books)
             {
                 conn.Insert(new CachedBook
                 {
                     Id = book.Id,
-                    Title = book.Title,
-                    PrimaryAuthor = book.PrimaryAuthor,
-                    AllAuthorsJson = JsonSerializer.Serialize(book.AllAuthors),
-                    Status = book.Status,
+                    Title = book.Title ?? "",
+                    PrimaryAuthor = book.PrimaryAuthor ?? "",
+                    AllAuthorsJson = JsonSerializer.Serialize(book.AllAuthors ?? []),
+                    Status = book.Status ?? "",
                     Rating = book.Rating,
                     SeriesId = book.SeriesId,
                     SeriesOrder = book.SeriesOrder,
                 });
-                foreach (var isbn in book.Isbns)
+                foreach (var isbn in book.Isbns ?? [])
                 {
                     if (!string.IsNullOrWhiteSpace(isbn))
                     {
@@ -83,34 +91,36 @@ public class CatalogCache : ICatalogCache
                 }
             }
 
-            foreach (var author in snapshot.Authors)
+            var authors = snapshot.Authors ?? [];
+            foreach (var author in authors)
             {
+                var name = author.Name ?? "";
                 conn.Insert(new CachedAuthor
                 {
                     Id = author.Id,
-                    Name = author.Name,
-                    NameLower = author.Name.ToLowerInvariant(),
+                    Name = name,
+                    NameLower = name.ToLowerInvariant(),
                     CanonicalId = author.CanonicalId,
                     BookCount = author.BookCount,
                 });
             }
 
-            foreach (var s in snapshot.Series)
+            foreach (var s in snapshot.Series ?? [])
             {
                 conn.Insert(new CachedSeries
                 {
                     Id = s.Id,
-                    Name = s.Name,
-                    Type = s.Type,
+                    Name = s.Name ?? "",
+                    Type = s.Type ?? "",
                     ExpectedCount = s.ExpectedCount,
                 });
             }
 
-            conn.Insert(new CachedMeta { Key = MetaKeyVersion, Value = snapshot.Version });
+            conn.Insert(new CachedMeta { Key = MetaKeyVersion, Value = snapshot.Version ?? "" });
             conn.Insert(new CachedMeta { Key = MetaKeySyncedAt, Value = snapshot.SyncedAt.ToString("O") });
-            conn.Insert(new CachedMeta { Key = MetaKeyBookCount, Value = snapshot.Books.Count.ToString() });
-            conn.Insert(new CachedMeta { Key = MetaKeyAuthorCount, Value = snapshot.Authors.Count.ToString() });
-        }));
+            conn.Insert(new CachedMeta { Key = MetaKeyBookCount, Value = books.Count.ToString() });
+            conn.Insert(new CachedMeta { Key = MetaKeyAuthorCount, Value = authors.Count.ToString() });
+        });
     }
 
     public async Task<BookSnapshot?> LookupByIsbnAsync(string isbn)
