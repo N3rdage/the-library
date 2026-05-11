@@ -17,6 +17,36 @@
             IsDetecting="True"
             IsTorchOn="False" />
 
+        <!-- Letterbox + green scan-target overlay. Layered into the same
+             Grid.Row="0" so it covers only the viewfinder, not the
+             result panel below. InputTransparent so it can't intercept
+             any camera-handler taps. Mirrors the Web /bookshop qrbox
+             aspect (~3.5:1 — book barcode shape) via star sizing so it
+             scales across screen sizes. -->
+        <Grid Grid.Row="0"
+              InputTransparent="True"
+              RowDefinitions="1.5*,*,1.5*"
+              ColumnDefinitions="*,6*,*">
+            <!-- Four dark BoxViews forming the letterbox around the
+                 scan window. Document order = z-order; these paint
+                 before the green border. -->
+            <BoxView Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" Color="#B3000000" />
+            <BoxView Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Color="#B3000000" />
+            <BoxView Grid.Row="1" Grid.Column="0" Color="#B3000000" />
+            <BoxView Grid.Row="1" Grid.Column="2" Color="#B3000000" />
+            <!-- Scan target: transparent fill so the camera shows
+                 through, green Stroke as the "centre the barcode here"
+                 cue. -->
+            <Border Grid.Row="1" Grid.Column="1"
+                    BackgroundColor="Transparent"
+                    Stroke="#4CAF50"
+                    StrokeThickness="3">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="4" />
+                </Border.StrokeShape>
+            </Border>
+        </Grid>
+
         <!-- Result panel — populated by code-behind after a detect or
              manual entry. Two states (in-cache / not-in-cache) are
              swapped by visibility. ManualEntry stays visible for users
