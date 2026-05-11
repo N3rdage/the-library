@@ -8,8 +8,15 @@
       dotnet build .\BookTracker.Mobile\BookTracker.Mobile.csproj -f net10.0-android
     A future PR can wire a separate mobile-build workflow once the
     project warrants its own CI surface (e.g. APK artifacts).
+
+    BookTracker.Mobile.Cache (the pure-.NET SQLite layer) and its
+    test project DO sit in the solution — they target plain net10.0,
+    no MAUI workload required, so they build + test on standard CI
+    runners.
   -->
   <Project Path="BookTracker.Data/BookTracker.Data.csproj" />
+  <Project Path="BookTracker.Mobile.Cache/BookTracker.Mobile.Cache.csproj" />
+  <Project Path="BookTracker.Mobile.Cache.Tests/BookTracker.Mobile.Cache.Tests.csproj" />
   <Project Path="BookTracker.Shared/BookTracker.Shared.csproj" />
   <Project Path="BookTracker.Tests/BookTracker.Tests.csproj" />
   <Project Path="BookTracker.Web/BookTracker.Web.csproj" />
