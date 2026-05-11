@@ -16,5 +16,7 @@
 - [Keep ARCHITECTURE.md updated](feedback_architecture_doc.md) — update when structural changes are made (entities, pages, services, patterns).
 - [Blog post backlog](blog_post_backlog.md) — corpus-derived candidate posts mineable from existing retros + `patterns.md`. 7 shipped + 7 strong / 6 possible candidates remaining from the 2026-04-28 catch-up mine.
 - [Security-audit skill chassis pilot](retros/retro_security_audit_skill_poc.md) — two-stack validation worked; three durable lessons (relocate audit-rules/ out of `.claude/`, add Blazor JS interop rule, formalise "no applicable surface yet" as a pass-with-evidence shape).
+- [Mobile companion arc retro](retros/retro_mobile_companion_arc.md) — six PRs / ~20 hours; speed came from the Web having paid every design tax already (DTOs, debounce, AAD, alias rollup, JSON conventions).
+- [Parallelise docs during CI waits](feedback_parallel_docs.md) — branch off main for retros/blog/TODO work while a code PR waits on CI; non-conflicting docs and code don't collide.
 - [Runbook: SQL DB restart for SqlClient pool zombies](runbook_sqlclient_pool_zombies.md) — when both slots Running but won't serve and Stop+Start doesn't help, restart the SQL DB to break stuck connection state.
 - [Runbook: container warmup timeout calibration](runbook_container_warmup_calibration.md) — Linux App Service default 230s probe is too tight under AAD-auth + cold cert update; `WEBSITES_CONTAINER_START_TIME_LIMIT=600` now in Bicep.
