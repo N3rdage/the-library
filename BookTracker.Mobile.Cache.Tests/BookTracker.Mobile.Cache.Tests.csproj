@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    xUnit tests for BookTracker.Mobile.Cache. Runs against in-memory
+    SQLite (":memory:") so each test gets a clean database with no
+    file-system side effects. Lives at net10.0 (not net10.0-android)
+    so it runs in standard CI without the MAUI workload.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- Same SQLitePCLRaw alpine-RID noise as the Cache project. -->
+    <NoWarn>$(NoWarn);NETSDK1206</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.5.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BookTracker.Mobile.Cache\BookTracker.Mobile.Cache.csproj" />
+  </ItemGroup>
+
+</Project>

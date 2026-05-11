@@ -55,6 +55,9 @@
 		<!-- Wire-format DTOs (BookSnapshot etc.). DTO-only — no EF / Web
 		     dependency follows through, per docs/mobile-app-design.md. -->
 		<ProjectReference Include="..\BookTracker.Shared\BookTracker.Shared.csproj" />
+		<!-- Pure-.NET SQLite catalog cache. Unit-testable in isolation
+		     (BookTracker.Mobile.Cache.Tests). -->
+		<ProjectReference Include="..\BookTracker.Mobile.Cache\BookTracker.Mobile.Cache.csproj" />
 	</ItemGroup>
 
 </Project>

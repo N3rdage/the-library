@@ -1,3 +1,4 @@
+using BookTracker.Mobile.Cache;
 using BookTracker.Mobile.Services;
 
 namespace BookTracker.Mobile;
@@ -6,28 +7,51 @@ public partial class MainPage : ContentPage
 {
     private readonly IAuthService _auth;
     private readonly IApiClient _api;
+    private readonly ICatalogCache _cache;
 
     private bool _signedIn;
     private bool _busy;
 
-    public MainPage(IAuthService auth, IApiClient api)
+    public MainPage(IAuthService auth, IApiClient api, ICatalogCache cache)
     {
         InitializeComponent();
         _auth = auth;
         _api = api;
+        _cache = cache;
         RefreshUi();
     }
 
     protected override async void OnAppearing()
     {
         base.OnAppearing();
+
+        // Open the SQLite cache for the lifetime of the app process.
+        // InitAsync is idempotent so calling on every appearing is
+        // fine — second-and-later calls return immediately.
+        var dbPath = Path.Combine(FileSystem.AppDataDirectory, "catalog.db");
+        try
+        {
+            await _cache.InitAsync(dbPath);
+        }
+        catch (Exception ex)
+        {
+            // Cache failure shouldn't block the sign-in UX; surface
+            // it as status text but let the user still try to
+            // sign in + load (the no-cache path).
+            StatusLabel.Text = $"Cache init failed: {ex.Message}";
+        }
+
         // If a cached account already exists, surface the signed-in
         // state on first render so the user doesn't have to tap
-        // Sign in just to find out they're already signed in.
+        // Sign in just to find out they're already signed in. If
+        // we have catalog meta from a previous run, surface that too.
         if (await _auth.IsSignedInAsync())
         {
             _signedIn = true;
-            StatusLabel.Text = "Signed in. Tap to load the catalog.";
+            var meta = await _cache.GetMetaAsync();
+            StatusLabel.Text = meta is null
+                ? "Signed in. Tap to load the catalog."
+                : $"Signed in. Cached catalog: {meta.BookCount} books, {meta.AuthorCount} authors (synced {meta.SyncedAt:u}).";
             RefreshUi();
         }
     }
@@ -47,8 +71,13 @@ public partial class MainPage : ContentPage
         await RunBusyAsync("Loading catalog…", async () =>
         {
             var snapshot = await _api.GetCatalogSnapshotAsync();
+            // Fetch + populate the SQLite cache in the same tap so we
+            // can confirm the cache plumbing works end-to-end on a
+            // real device. The cache populate is atomic so a partial
+            // populate can't leave the DB half-shrunken.
+            await _cache.PopulateAsync(snapshot);
             return
-                $"Catalog loaded ✓\n" +
+                $"Catalog loaded + cached ✓\n" +
                 $"Version: {snapshot.Version}\n" +
                 $"Synced at: {snapshot.SyncedAt:u}\n" +
                 $"Books: {snapshot.Books.Count}\n" +

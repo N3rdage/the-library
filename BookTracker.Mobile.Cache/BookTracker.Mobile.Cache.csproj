@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Pure-.NET data layer for BookTracker.Mobile's offline lookup
+    cache. Mirrors the IndexedDB schema in
+    BookTracker.Web/wwwroot/js/catalog-cache.js (which the /bookshop
+    PWA uses today). Deliberately net10.0, NOT net10.0-android — keeps
+    the cache testable from a plain xUnit project against in-memory
+    SQLite, and free of MAUI runtime coupling.
+    See docs/mobile-app-design.md > Architecture for the bigger
+    picture.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- NETSDK1206 fires on alpine-* RIDs that sqlite-net-pcl's
+         transitive SQLitePCLRaw native bundle still ships. .NET 8+
+         doesn't auto-resolve these legacy distribution-specific RIDs,
+         which is fine for us — we target Android + standard CI
+         runners, never alpine. Suppressing rather than carrying the
+         noise on every build. -->
+    <NoWarn>$(NoWarn);NETSDK1206</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- sqlite-net-pcl: ORM-lite over SQLite. Bundles a managed +
+         native SQLite via SQLitePCLRaw; works on Android, iOS, and
+         desktop with no manual native-library hookup. -->
+    <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Wire-format DTOs (CatalogSnapshot, BookSnapshot, etc.). The
+         cache populates from a snapshot and returns the same DTO
+         shapes back to callers. -->
+    <ProjectReference Include="..\BookTracker.Shared\BookTracker.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

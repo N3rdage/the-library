@@ -1,3 +1,4 @@
+using BookTracker.Mobile.Cache;
 using BookTracker.Mobile.Services;
 using Microsoft.Extensions.Logging;
 
@@ -26,6 +27,13 @@ public static class MauiProgram
         {
             c.BaseAddress = new Uri(AppConfig.ApiBaseUrl);
         });
+
+        // Offline catalog cache. Singleton because the SQLite
+        // connection is per-DB-file and we want one open handle for
+        // the lifetime of the app process. Init is idempotent + lazy
+        // — callers (currently MainPage.OnAppearing) call InitAsync
+        // before any other method on first use.
+        builder.Services.AddSingleton<ICatalogCache, CatalogCache>();
 
         builder.Services.AddSingleton<MainPage>();
 
