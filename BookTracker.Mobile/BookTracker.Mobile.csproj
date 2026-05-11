@@ -49,6 +49,11 @@
 		<!-- MSAL.NET — AAD interactive sign-in via Chrome Custom Tabs, token
 		     cached in SecureStorage (Keystore-backed). -->
 		<PackageReference Include="Microsoft.Identity.Client" Version="4.66.2" />
+		<!-- Barcode scanner control + camera plumbing. ZXing.Net.MAUI
+		     wraps the platform camera APIs and exposes a
+		     CameraBarcodeReaderView control with a BarcodesDetected
+		     event. Configured for EAN-13/EAN-8 only (book barcodes). -->
+		<PackageReference Include="ZXing.Net.MAUI.Controls" Version="0.4.0" />
 	</ItemGroup>
 
 	<ItemGroup>

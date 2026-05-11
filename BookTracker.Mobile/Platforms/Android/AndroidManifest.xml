@@ -52,4 +52,11 @@
 	</application>
 	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 	<uses-permission android:name="android.permission.INTERNET" />
+	<!-- Barcode scanning needs the camera. android.hardware.camera is
+	     marked required=false so the app still installs on a
+	     phone-without-camera (rare, but it's the recommended manifest
+	     shape per Android docs — the runtime CAMERA permission is the
+	     real gate). -->
+	<uses-permission android:name="android.permission.CAMERA" />
+	<uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>

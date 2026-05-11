@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:zxing="clr-namespace:ZXing.Net.Maui.Controls;assembly=ZXing.Net.MAUI.Controls"
+             x:Class="BookTracker.Mobile.Pages.ScanPage"
+             Title="Scan ISBN">
+
+    <Grid RowDefinitions="*,Auto" Padding="0">
+
+        <!-- Camera viewfinder. Constrained to a 4:3 aspect-ish region
+             at the top; ZXing autodetects EAN-13/EAN-8 from the
+             configured BarcodeReaderOptions below. -->
+        <zxing:CameraBarcodeReaderView
+            x:Name="Reader"
+            Grid.Row="0"
+            BarcodesDetected="OnBarcodesDetected"
+            IsDetecting="True"
+            IsTorchOn="False" />
+
+        <!-- Result panel — populated by code-behind after a detect or
+             manual entry. Two states (in-cache / not-in-cache) are
+             swapped by visibility. ManualEntry stays visible for users
+             scanning a hard-to-read barcode. -->
+        <ScrollView Grid.Row="1" BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#1E1E1E}">
+            <VerticalStackLayout Padding="20" Spacing="12">
+
+                <Label
+                    x:Name="StatusLabel"
+                    Text="Point the camera at a book's barcode."
+                    HorizontalOptions="Center"
+                    HorizontalTextAlignment="Center"
+                    LineBreakMode="WordWrap" />
+
+                <!-- In-cache result. Border (replaces obsolete Frame in
+                     .NET 9+) — needs an explicit StrokeShape for the
+                     corner-radius effect. -->
+                <Border
+                    x:Name="FoundFrame"
+                    IsVisible="False"
+                    Stroke="{AppThemeBinding Light=#A3D9A5, Dark=#356735}"
+                    BackgroundColor="{AppThemeBinding Light=#E8F5E9, Dark=#1B3320}"
+                    Padding="12">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="8" />
+                    </Border.StrokeShape>
+                    <VerticalStackLayout Spacing="6">
+                        <Label x:Name="FoundTitle" FontAttributes="Bold" FontSize="18" />
+                        <Label x:Name="FoundAuthors" FontSize="14" TextColor="{AppThemeBinding Light=#555, Dark=#BBB}" />
+                        <Label x:Name="FoundStatusRating" FontSize="13" />
+                        <Label x:Name="FoundIsbn" FontSize="12" FontFamily="Courier New" TextColor="{AppThemeBinding Light=#555, Dark=#BBB}" />
+                        <Button x:Name="OpenInAppButton" Text="Open in app →" Clicked="OnOpenInAppClicked" HorizontalOptions="Start" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Not-in-cache result -->
+                <Border
+                    x:Name="MissingFrame"
+                    IsVisible="False"
+                    Stroke="{AppThemeBinding Light=#DDD, Dark=#555}"
+                    BackgroundColor="{AppThemeBinding Light=#FAFAFA, Dark=#252525}"
+                    Padding="12">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="8" />
+                    </Border.StrokeShape>
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="Not in your library." FontAttributes="Bold" />
+                        <Label x:Name="MissingIsbn" FontSize="12" FontFamily="Courier New" TextColor="{AppThemeBinding Light=#555, Dark=#BBB}" />
+                        <Button x:Name="AddToLibraryButton" Text="Add in app →" Clicked="OnAddToLibraryClicked" HorizontalOptions="Start" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Manual ISBN entry — for damaged barcodes or hand
+                     typing from a back cover. -->
+                <BoxView HeightRequest="1" Color="{AppThemeBinding Light=#EEE, Dark=#333}" />
+                <Label Text="Or enter ISBN manually:" FontSize="13" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <Entry
+                        x:Name="ManualEntry"
+                        Grid.Column="0"
+                        Keyboard="Numeric"
+                        Placeholder="9780553287899"
+                        ReturnType="Search"
+                        Completed="OnManualLookupClicked" />
+                    <Button
+                        Grid.Column="1"
+                        Text="Lookup"
+                        Clicked="OnManualLookupClicked" />
+                </Grid>
+            </VerticalStackLayout>
+        </ScrollView>
+    </Grid>
+</ContentPage>

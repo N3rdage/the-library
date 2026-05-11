@@ -33,6 +33,13 @@
                 HorizontalOptions="Fill"
                 IsEnabled="False" />
 
+            <Button
+                x:Name="ScanButton"
+                Text="📷 Scan ISBN"
+                Clicked="OnScanClicked"
+                HorizontalOptions="Fill"
+                IsEnabled="False" />
+
             <ActivityIndicator
                 x:Name="Busy"
                 IsRunning="False"

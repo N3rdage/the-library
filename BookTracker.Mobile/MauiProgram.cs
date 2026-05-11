@@ -1,6 +1,8 @@
 using BookTracker.Mobile.Cache;
+using BookTracker.Mobile.Pages;
 using BookTracker.Mobile.Services;
 using Microsoft.Extensions.Logging;
+using ZXing.Net.Maui.Controls;
 
 namespace BookTracker.Mobile;
 
@@ -11,6 +13,9 @@ public static class MauiProgram
         var builder = MauiApp.CreateBuilder();
         builder
             .UseMauiApp<App>()
+            // ZXing.Net.MAUI handler — registers the CameraBarcodeReaderView
+            // control so the XAML namespace lights up at runtime.
+            .UseBarcodeReader()
             .ConfigureFonts(fonts =>
             {
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
@@ -36,6 +41,10 @@ public static class MauiProgram
         builder.Services.AddSingleton<ICatalogCache, CatalogCache>();
 
         builder.Services.AddSingleton<MainPage>();
+        // Scan page is transient — every navigation gets a fresh
+        // CameraBarcodeReaderView so we don't hold the camera open
+        // when the page isn't visible.
+        builder.Services.AddTransient<ScanPage>();
 
 #if DEBUG
         builder.Logging.AddDebug();
