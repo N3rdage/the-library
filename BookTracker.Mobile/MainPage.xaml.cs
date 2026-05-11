@@ -12,6 +12,11 @@ public partial class MainPage : ContentPage
 
     private bool _signedIn;
     private bool _busy;
+    // Last-known cache metadata. Refreshed on app appearing, after
+    // sign-in, and after Load catalog. RefreshUi() reads from this
+    // (sync) rather than touching the cache directly so the render
+    // path stays cheap.
+    private CacheMeta? _meta;
 
     public MainPage(IAuthService auth, IApiClient api, ICatalogCache cache)
     {
@@ -42,19 +47,20 @@ public partial class MainPage : ContentPage
             StatusLabel.Text = $"Cache init failed: {ex.Message}";
         }
 
-        // If a cached account already exists, surface the signed-in
-        // state on first render so the user doesn't have to tap
-        // Sign in just to find out they're already signed in. If
-        // we have catalog meta from a previous run, surface that too.
+        // Refresh the meta panel regardless of sign-in state — cached
+        // catalog data outlives sign-out, so the panel should show what
+        // we actually have locally.
+        await RefreshMetaAsync();
+
         if (await _auth.IsSignedInAsync())
         {
             _signedIn = true;
-            var meta = await _cache.GetMetaAsync();
-            StatusLabel.Text = meta is null
-                ? "Signed in. Tap to load the catalog."
-                : $"Signed in. Cached catalog: {meta.BookCount} books, {meta.AuthorCount} authors (synced {meta.SyncedAt:u}).";
-            RefreshUi();
+            StatusLabel.Text = _meta is null
+                ? "Signed in. Tap Load catalog snapshot to begin."
+                : "Signed in.";
         }
+
+        RefreshUi();
     }
 
     private async void OnSignInClicked(object? sender, EventArgs e)
@@ -63,7 +69,10 @@ public partial class MainPage : ContentPage
         {
             await _auth.SignInAsync();
             _signedIn = true;
-            return "Signed in. Tap to load the catalog.";
+            await RefreshMetaAsync();
+            return _meta is null
+                ? "Signed in. Tap Load catalog snapshot to begin."
+                : "Signed in.";
         });
     }
 
@@ -72,25 +81,19 @@ public partial class MainPage : ContentPage
         await RunBusyAsync("Loading catalog…", async () =>
         {
             var snapshot = await _api.GetCatalogSnapshotAsync();
-            // Fetch + populate the SQLite cache in the same tap so we
-            // can confirm the cache plumbing works end-to-end on a
-            // real device. The cache populate is atomic so a partial
-            // populate can't leave the DB half-shrunken.
+            // Atomic populate — a partial fill can't leave the DB
+            // half-shrunken. PR 4's defensive null coalesces inside
+            // PopulateAsync mean a server that hasn't shipped /series
+            // yet still hydrates Books + Authors without throwing.
             await _cache.PopulateAsync(snapshot);
+            await RefreshMetaAsync();
 
-            // ?? 0 on each Count — a server that hasn't been redeployed
-            // since Mobile PR 1 merged won't include the `series` array
-            // in the response, so snapshot.Series deserialises as null
-            // (which was the original NRE). Once prod catches up these
-            // all stay non-null.
-            return
-                $"Catalog loaded + cached ✓\n" +
-                $"Version: {snapshot.Version ?? "(none)"}\n" +
-                $"Synced at: {snapshot.SyncedAt:u}\n" +
-                $"Books: {snapshot.Books?.Count ?? 0}\n" +
-                $"Authors: {snapshot.Authors?.Count ?? 0}\n" +
-                $"Series: {snapshot.Series?.Count ?? 0}" +
-                (snapshot.Series is null ? " (server lacks /series field — redeploy Web)" : "");
+            // Surface the redeploy hint only when the server is
+            // genuinely lagging on the /series field — the original
+            // PR 4 NRE diagnostic kept around as a passive warning.
+            return snapshot.Series is null
+                ? "Catalog loaded ✓ (server lacks /series field — redeploy Web)"
+                : "Catalog loaded ✓";
         });
     }
 
@@ -100,6 +103,8 @@ public partial class MainPage : ContentPage
         {
             await _auth.SignOutAsync();
             _signedIn = false;
+            // Note: cache data is intentionally not wiped on sign-out.
+            // The stats panel keeps showing what's locally stashed.
             return "Signed out.";
         });
     }
@@ -151,17 +156,67 @@ public partial class MainPage : ContentPage
         await Navigation.PushAsync(page);
     }
 
+    private async Task RefreshMetaAsync()
+    {
+        try
+        {
+            _meta = await _cache.GetMetaAsync();
+        }
+        catch
+        {
+            // GetMetaAsync only throws if the cache file is corrupt
+            // or InitAsync wasn't called — both already surfaced
+            // upstream. Treat as "no cache" here so RefreshUi keeps
+            // rendering something sensible.
+            _meta = null;
+        }
+    }
+
     private void RefreshUi()
     {
         Busy.IsRunning = _busy;
+        var hasCache = _meta is not null;
+
+        // Signed-out flow: only Sign in is visible / enabled.
+        SignInButton.IsVisible = !_signedIn;
         SignInButton.IsEnabled = !_busy && !_signedIn;
+
+        // Signed-in flow: Load catalog + Scan visible. Load stays
+        // visible after first load so the user can tap to refresh.
+        // Scan needs both signed-in AND cached data (otherwise every
+        // scan would say "not in your library").
+        LoadCatalogButton.IsVisible = _signedIn;
         LoadCatalogButton.IsEnabled = !_busy && _signedIn;
+        ScanButton.IsVisible = _signedIn;
+        ScanButton.IsEnabled = !_busy && _signedIn && hasCache;
+
+        // Cache stats panel: passive info, only when we have data.
+        // Renders independently of signed-in state — cached data
+        // outlives sign-out.
+        CacheStatsPanel.IsVisible = hasCache;
+        if (hasCache && _meta is not null)
+        {
+            CacheStatsLabel.Text =
+                $"{_meta.BookCount:N0} books · {_meta.AuthorCount:N0} authors";
+            CacheSyncedAtLabel.Text = _meta.SyncedAt is { } syncedAt
+                ? $"Last synced {FormatSyncedAt(syncedAt)}"
+                : "Last synced (unknown)";
+        }
+
+        SignOutButton.IsVisible = _signedIn;
         SignOutButton.IsEnabled = !_busy && _signedIn;
-        // Scan only makes sense when the cache has been populated —
-        // gate on the cache having a syncedAt rather than signed-in
-        // alone. For PR 5 simplicity we use signed-in as a proxy;
-        // if the cache is empty the scan page will just say
-        // "Not in your library" for everything, which is correct.
-        ScanButton.IsEnabled = !_busy && _signedIn;
+    }
+
+    // Relative-time formatter for the cache stats panel.
+    // "just now / 5m ago / 2h ago / 2026-05-12 14:23". Kept inline
+    // because it's UI-only with a single use site — promoting it to
+    // a helper class would be over-engineered for one Label binding.
+    private static string FormatSyncedAt(DateTime syncedUtc)
+    {
+        var ago = DateTime.UtcNow - syncedUtc;
+        if (ago.TotalMinutes < 1) return "just now";
+        if (ago.TotalMinutes < 60) return $"{(int)ago.TotalMinutes}m ago";
+        if (ago.TotalHours < 24) return $"{(int)ago.TotalHours}h ago";
+        return syncedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
     }
 }
