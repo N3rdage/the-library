@@ -12,7 +12,6 @@
    happened (the parent uses this to decide whether to surface a
    "saved" snackbar / re-render). *@
 
-@inject BookDetailViewModel VM
 @inject ISnackbar Snackbar
 
 <MudDialog>
@@ -93,6 +92,13 @@
 
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    // BookDetailViewModel is registered Transient, so @inject would hand
+    // the dialog a *fresh* VM whose .Book is null — VM.SearchAttachableWorksAsync
+    // would short-circuit to an empty list and attaches would no-op. Same
+    // shape as the EditionCoverUploadDialog wiring: the page passes its
+    // already-initialised VM down via DialogParameters.
+    [Parameter, EditorRequired] public BookDetailViewModel VM { get; set; } = default!;
 
     private string? query;
     private IReadOnlyList<WorkSearchResult> results = [];

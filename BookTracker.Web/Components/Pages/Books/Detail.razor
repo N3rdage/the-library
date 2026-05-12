@@ -691,8 +691,15 @@
     private Task OpenAddExistingWorkDialog() => OpenDialogGuardedAsync(async () =>
     {
         if (VM.Book is null) return;
+        // Pass our initialised VM through. BookDetailViewModel is Transient
+        // so @inject inside the dialog would hand it a fresh instance whose
+        // .Book is null — same wiring as EditionCoverUploadDialog above.
+        var parameters = new DialogParameters<AddExistingWorkDialog>
+        {
+            { x => x.VM, VM },
+        };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
-        var dialog = await DialogService.ShowAsync<AddExistingWorkDialog>("Add existing work", options);
+        var dialog = await DialogService.ShowAsync<AddExistingWorkDialog>("Add existing work", parameters, options);
         var result = await dialog.Result;
         // Dialog refreshes VM.Book inline on each successful attach (via
         // AttachExistingWorkAsync → InitializeAsync), so the page state is
