@@ -91,6 +91,22 @@ public partial class ScanPage : ContentPage
         await MainThread.InvokeOnMainThreadAsync(() => LookupAsync(isbn));
     }
 
+    private void OnAppendXClicked(object? sender, EventArgs e)
+    {
+        // Append the ISBN-10 check digit. Numeric keyboard stays as
+        // default so the 99% case (typing 10-13 digits) keeps its big
+        // keys; this button is the alternate path for the ~1% case
+        // where the check digit is X. OnManualLookupClicked already
+        // permits X / x in its cleanup pass, so no validation change.
+        var current = ManualEntry.Text ?? "";
+        ManualEntry.Text = current + "X";
+        // Re-focus so the keyboard stays up — users typically follow
+        // up immediately (tap Lookup, or backspace the X if it was a
+        // misfire). Cursor goes to the end so further typing appends.
+        ManualEntry.Focus();
+        ManualEntry.CursorPosition = ManualEntry.Text.Length;
+    }
+
     private async void OnManualLookupClicked(object? sender, EventArgs e)
     {
         var raw = (ManualEntry.Text ?? "").Trim();
