@@ -27,5 +27,11 @@ public class WorkFormViewModel
         // "1973-10", "1973-10-12". Parsed into Work.FirstPublishedDate +
         // Work.FirstPublishedDatePrecision at save time.
         public string? FirstPublishedDate { get; set; }
+
+        // Per-Work genre selection — used by the collection-mode "Single-Genre
+        // off" path so each row can carry its own genre chips. Single-Work
+        // captures still route genre selection through the page's own
+        // selectedGenreIds field rather than this list.
+        public List<int> GenreIds { get; set; } = [];
     }
 }

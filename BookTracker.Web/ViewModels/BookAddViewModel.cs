@@ -31,9 +31,10 @@ public class BookAddViewModel(
     // Works (e.g. "The Bachman Books", anthologies). Toggling on swaps the
     // single WorkForm for a repeatable Works builder; lookup fills only the
     // collection's Book.Title + cover and skips the work-specific fields.
-    // Genres and series suggestions are deferred to per-work editing on
-    // /books/{id}/edit — applying them to all works at save time would be
-    // wrong (each work has its own).
+    // Authors and genres are captured at save time via the SingleAuthor /
+    // SingleGenre shared-mode toggles or per-row entry; series suggestions
+    // stay deferred to per-work editing on /books/{id}/edit because the
+    // lookup flow describes the collection, not its constituent works.
     public bool IsCollection { get; set; }
     // Default to a single starter row. The Enter-on-Title affordance
     // grows the list as the user types; pre-seeding a second empty row
@@ -54,6 +55,16 @@ public class BookAddViewModel(
     public bool SingleAuthor { get; set; }
     public List<string> SharedAuthors { get; set; } = [];
 
+    // "Same genre(s) for all works" mode — same shape as SingleAuthor but
+    // for genres. Drew's order-of-magnitude case: a 20-work collection
+    // where 19 share a single genre (e.g. SF) and one differs. On-mode
+    // applies SharedGenreIds to every Work at save time; off-mode reads
+    // each row's own GenreIds. New rows in off-mode inherit genres from
+    // the most recent populated row (same as authors) so a "mostly SF"
+    // anthology only needs the genre picked once.
+    public bool SingleGenre { get; set; }
+    public List<int> SharedGenreIds { get; set; } = [];
+
     public void AddCollectionWorkRow()
     {
         // Inherit authors from the most recent row that has authors so
@@ -61,13 +72,23 @@ public class BookAddViewModel(
         // Seasons", Christie collections) only need authors entered once.
         // User can clear / replace per row. If no row has authors yet —
         // including the first-time case before anything is typed — the
-        // new row starts empty as before.
+        // new row starts empty as before. Genres inherit the same way so
+        // a "mostly SF" anthology only needs the genre picked on row 1.
         var seedAuthors = CollectionWorks
             .AsEnumerable()
             .Reverse()
             .FirstOrDefault(w => w.Authors.Count > 0)?.Authors
             .ToList() ?? [];
-        CollectionWorks.Add(new WorkFormViewModel.WorkFormInput { Authors = seedAuthors });
+        var seedGenres = CollectionWorks
+            .AsEnumerable()
+            .Reverse()
+            .FirstOrDefault(w => w.GenreIds.Count > 0)?.GenreIds
+            .ToList() ?? [];
+        CollectionWorks.Add(new WorkFormViewModel.WorkFormInput
+        {
+            Authors = seedAuthors,
+            GenreIds = seedGenres,
+        });
     }
 
     public void RemoveCollectionWorkRow(int index)
@@ -289,6 +310,8 @@ public class BookAddViewModel(
         CollectionWorks = [new()];
         SingleAuthor = false;
         SharedAuthors = [];
+        SingleGenre = false;
+        SharedGenreIds = [];
         // Picker state clears via parameter binding when the page resets
         // its selectedGenreIds + this VM's LookupCandidates above. No
         // direct picker poke needed.
@@ -377,17 +400,21 @@ public class BookAddViewModel(
             List<Work> works;
             if (IsCollection)
             {
-                // Collection mode: build N Works, one per row. Genres and series
-                // suggestions are deferred to per-work editing on /books/{id}/edit
-                // — the lookup flow can't pick them per-work, and applying to all
-                // would be wrong (each Work has its own).
+                // Collection mode: build N Works, one per row. Series
+                // suggestions are still deferred to per-work editing on
+                // /books/{id}/edit (the lookup flow can't pick per-work, and
+                // applying to all would be wrong). Genres now ride with the
+                // capture flow: shared list when SingleGenre is on, per-row
+                // GenreIds otherwise.
                 //
                 // Author source depends on SingleAuthor mode: when on, the
                 // shared SharedAuthors chip-list applies to every row; when
                 // off, each row carries its own Authors list. Effective list
-                // is selected per row via the local helper.
+                // is selected per row via the local helpers.
                 List<string> AuthorsFor(WorkFormViewModel.WorkFormInput row) =>
                     SingleAuthor ? SharedAuthors : row.Authors;
+                List<int> GenresFor(WorkFormViewModel.WorkFormInput row) =>
+                    SingleGenre ? SharedGenreIds : row.GenreIds;
 
                 var rows = CollectionWorks
                     .Where(w => !string.IsNullOrWhiteSpace(w.Title) && AuthorsFor(w).Count > 0)
@@ -407,6 +434,19 @@ public class BookAddViewModel(
                 var allAuthors = await AuthorResolver.FindOrCreateAllAsync(allNames, db);
                 var byName = allAuthors.ToDictionary(a => a.Name, StringComparer.OrdinalIgnoreCase);
 
+                // Resolve the union of distinct genre ids across all rows in
+                // one query — same reason as authors above, and a single
+                // round-trip beats N row-by-row Genres lookups.
+                var allGenreIds = (SingleGenre
+                    ? SharedGenreIds
+                    : rows.SelectMany(r => r.GenreIds))
+                    .Distinct()
+                    .ToList();
+                var collectionGenres = allGenreIds.Count == 0
+                    ? new List<Genre>()
+                    : await db.Genres.Where(g => allGenreIds.Contains(g.Id)).ToListAsync();
+                var genresById = collectionGenres.ToDictionary(g => g.Id);
+
                 works = new List<Work>(rows.Count);
                 foreach (var row in rows)
                 {
@@ -420,6 +460,11 @@ public class BookAddViewModel(
                     {
                         throw new InvalidOperationException($"Each work in the collection needs at least one author (work \"{row.Title}\" had none).");
                     }
+                    var rowGenres = GenresFor(row)
+                        .Distinct()
+                        .Where(genresById.ContainsKey)
+                        .Select(id => genresById[id])
+                        .ToList();
                     var rowFirstPub = PartialDateParser.TryParse(row.FirstPublishedDate) ?? PartialDate.Empty;
                     var w = new Work
                     {
@@ -427,7 +472,7 @@ public class BookAddViewModel(
                         Subtitle = string.IsNullOrWhiteSpace(row.Subtitle) ? null : row.Subtitle!.Trim(),
                         FirstPublishedDate = rowFirstPub.Date,
                         FirstPublishedDatePrecision = rowFirstPub.Precision,
-                        Genres = [],
+                        Genres = rowGenres,
                     };
                     AuthorResolver.AssignAuthors(w, rowAuthors);
                     works.Add(w);

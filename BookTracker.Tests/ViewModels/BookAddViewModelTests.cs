@@ -142,6 +142,161 @@ public class BookAddViewModelTests
     }
 
     [Fact]
+    public void AddCollectionWorkRow_InheritsGenresFromMostRecentPopulatedRow()
+    {
+        // Same shape as the author inheritance, but for genres: typing a
+        // genre on row 1 (SF say) propagates to subsequently-added rows so
+        // a 20-work "mostly SF" anthology only needs the genre picked once.
+        // The one outlier row can clear / replace per row.
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        vm.CollectionWorks[0].GenreIds = new List<int> { 7 };
+
+        vm.AddCollectionWorkRow();
+
+        Assert.Equal(new[] { 7 }, vm.CollectionWorks[1].GenreIds);
+    }
+
+    [Fact]
+    public void AddCollectionWorkRow_GenreInheritanceIsACopyNotAReference()
+    {
+        // Each row owns its genre list — editing one row's GenreIds must
+        // not mutate another row's list (same hazard as authors when the
+        // bound list is mutated by the picker).
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        vm.CollectionWorks[0].GenreIds = new List<int> { 7 };
+
+        vm.AddCollectionWorkRow();
+
+        var newRow = vm.CollectionWorks[^1];
+        newRow.GenreIds.Add(9);
+
+        Assert.Single(vm.CollectionWorks[0].GenreIds);
+        Assert.Equal(7, vm.CollectionWorks[0].GenreIds[0]);
+    }
+
+    [Fact]
+    public async Task SaveAsync_SingleGenreMode_AppliesSharedGenresToEveryWork()
+    {
+        // Single-Genre mode is Drew's order-of-magnitude case — pick the
+        // genre once at the top; save applies it to every Work row.
+        int sfId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var sf = new Genre { Name = "Science Fiction" };
+            db.Genres.Add(sf);
+            await db.SaveChangesAsync();
+            sfId = sf.Id;
+        }
+
+        var vm = CreateVm();
+        vm.BookInput.Title = "The Mammoth Book of SF";
+        vm.EditionInput.Format = BookFormat.TradePaperback;
+        vm.IsCollection = true;
+        vm.SingleAuthor = true;
+        vm.SharedAuthors = new List<string> { "Various" };
+        vm.SingleGenre = true;
+        vm.SharedGenreIds = new List<int> { sfId };
+        vm.CollectionWorks =
+        [
+            new() { Title = "Story A" },
+            new() { Title = "Story B" },
+            new() { Title = "Story C" },
+        ];
+
+        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+
+        Assert.NotNull(bookId);
+        await using var db2 = _factory.CreateDbContext();
+        var saved = await db2.Books
+            .Include(b => b.Works).ThenInclude(w => w.Genres)
+            .FirstAsync(b => b.Id == bookId);
+
+        Assert.Equal(3, saved.Works.Count);
+        Assert.All(saved.Works, w =>
+        {
+            var genre = Assert.Single(w.Genres);
+            Assert.Equal(sfId, genre.Id);
+        });
+    }
+
+    [Fact]
+    public async Task SaveAsync_PerRowGenres_AttachesEachWorksOwnList()
+    {
+        // Single-Genre OFF: each row carries its own GenreIds. The save
+        // path applies them per Work. This is the "mostly SF + one
+        // outlier" shape after the user has overridden the inherited
+        // genre on the odd row.
+        int sfId, horrorId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var sf = new Genre { Name = "Science Fiction" };
+            var horror = new Genre { Name = "Horror" };
+            db.Genres.AddRange(sf, horror);
+            await db.SaveChangesAsync();
+            sfId = sf.Id;
+            horrorId = horror.Id;
+        }
+
+        var vm = CreateVm();
+        vm.BookInput.Title = "Mostly SF, One Horror";
+        vm.EditionInput.Format = BookFormat.TradePaperback;
+        vm.IsCollection = true;
+        vm.SingleGenre = false;
+        vm.CollectionWorks =
+        [
+            new() { Title = "SF One", Authors = ["Author A"], GenreIds = [sfId] },
+            new() { Title = "SF Two", Authors = ["Author A"], GenreIds = [sfId] },
+            new() { Title = "Horror One", Authors = ["Author A"], GenreIds = [horrorId] },
+        ];
+
+        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+
+        Assert.NotNull(bookId);
+        await using var db2 = _factory.CreateDbContext();
+        var saved = await db2.Books
+            .Include(b => b.Works).ThenInclude(w => w.Genres)
+            .FirstAsync(b => b.Id == bookId);
+
+        Assert.Equal(3, saved.Works.Count);
+        var sfOne = saved.Works.Single(w => w.Title == "SF One");
+        Assert.Equal(sfId, Assert.Single(sfOne.Genres).Id);
+        var horrorOne = saved.Works.Single(w => w.Title == "Horror One");
+        Assert.Equal(horrorId, Assert.Single(horrorOne.Genres).Id);
+    }
+
+    [Fact]
+    public async Task SaveAsync_SingleGenreMode_EmptySharedList_LeavesWorksGenreless()
+    {
+        // Single-Genre on but nothing picked — collection still saves; the
+        // works just land with no genres (same shape as a non-collection
+        // save with selectedGenreIds=[]). User can tag genres later.
+        var vm = CreateVm();
+        vm.BookInput.Title = "Untagged Collection";
+        vm.EditionInput.Format = BookFormat.TradePaperback;
+        vm.IsCollection = true;
+        vm.SingleAuthor = true;
+        vm.SharedAuthors = new List<string> { "Various" };
+        vm.SingleGenre = true;
+        vm.SharedGenreIds = [];
+        vm.CollectionWorks =
+        [
+            new() { Title = "Story A" },
+            new() { Title = "Story B" },
+        ];
+
+        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+
+        Assert.NotNull(bookId);
+        await using var db = _factory.CreateDbContext();
+        var saved = await db.Books
+            .Include(b => b.Works).ThenInclude(w => w.Genres)
+            .FirstAsync(b => b.Id == bookId);
+        Assert.All(saved.Works, w => Assert.Empty(w.Genres));
+    }
+
+    [Fact]
     public async Task SearchAsync_EmptyInputs_ReportsMessageAndDoesNotCallLookup()
     {
         var vm = CreateVm();
