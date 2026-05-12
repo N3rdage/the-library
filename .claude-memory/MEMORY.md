@@ -22,3 +22,7 @@
 - [Runbook: SQL DB restart for SqlClient pool zombies](runbook_sqlclient_pool_zombies.md) — when both slots Running but won't serve and Stop+Start doesn't help, restart the SQL DB to break stuck connection state.
 - [Runbook: container warmup timeout calibration](runbook_container_warmup_calibration.md) — Linux App Service default 230s probe is too tight under AAD-auth + cold cert update; `WEBSITES_CONTAINER_START_TIME_LIMIT=600` now in Bicep.
 - [Blazor dialog VM lifetime trap](feedback_dialog_vm_lifetime.md) — `@inject` inside a MudDialog hands a fresh Transient VM, not the page's; pass the page's VM via `DialogParameters` when shared state matters.
+- ["Add, but allow existing" UX pattern](feedback_add_with_optional_existing.md) — single typeahead entry point with free-text fall-through; never two buttons or a mode toggle.
+- [MudAutocomplete capture-phase JS recipe](feedback_mudautocomplete_capture_phase.md) — block MudBlazor's auto-pick of the first-highlighted match without breaking the navigated-pick path; reusable across any inline-search-with-new-fallback.
+- [Close TODOs in same PR](feedback_close_todos_in_same_pr.md) — when a PR delivers a TODO row, move Open→Shipped in the same commit.
+- [Add/View/Edit polish arc retro](retros/retro_add_view_edit_polish_arc.md) — six PRs decommissioning `/edit`; three durable patterns + one accepted papercut (MudAutocomplete portaled popover stays open after free-text Enter, Esc dismisses).
