@@ -2,7 +2,7 @@
 
 <div>
     <div class="fw-semibold mb-1">
-        <a href="@($"/books/{Snap.Id}/edit")" target="_blank" rel="noopener">@Snap.Title</a>
+        <a href="@($"/books/{Snap.Id}")" target="_blank" rel="noopener">@Snap.Title</a>
     </div>
     @if (!string.IsNullOrWhiteSpace(Snap.AuthorName))
     {

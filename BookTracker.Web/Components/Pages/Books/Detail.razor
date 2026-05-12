@@ -118,20 +118,21 @@
                             Edit work
                         </MudButton>
                     }
-                    <MudButton OnClick="OpenAddExistingWorkDialog"
+                    <MudButton OnClick="OpenAddWorkDialog"
                                Disabled="@dialogOpening"
                                Variant="Variant.Outlined"
                                Color="Color.Primary"
                                StartIcon="@Icons.Material.Filled.PostAdd"
                                Size="Size.Small">
-                        Add existing work
+                        Add work
                     </MudButton>
-                    <MudButton Href="@($"/books/{book.Id}/edit")"
+                    <MudButton OnClick="ConfirmDeleteBookAsync"
+                               Disabled="@dialogOpening"
                                Variant="Variant.Text"
-                               Color="Color.Default"
-                               StartIcon="@Icons.Material.Filled.OpenInNew"
+                               Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.DeleteOutline"
                                Size="Size.Small">
-                        Full edit page
+                        Delete book
                     </MudButton>
                     @if (primary?.Series is not null)
                     {
@@ -267,7 +268,7 @@
                                                         }
                                                     </MudStack>
                                                 }
-                                                <div class="mt-1">
+                                                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" Class="mt-1">
                                                     <MudButton OnClick="@(() => OpenWorkEditDialog(w.Id))"
                                                                Disabled="@dialogOpening"
                                                                Variant="Variant.Outlined"
@@ -276,7 +277,22 @@
                                                                Size="Size.Small">
                                                         Edit work
                                                     </MudButton>
-                                                </div>
+                                                    @* Remove-from-book only when there's more than one Work — pulling
+                                                       the only Work off a Book leaves it without a creative unit, which
+                                                       is broken model state. If the user wants that, they should delete
+                                                       the Book itself. *@
+                                                    @if (book.Works.Count > 1)
+                                                    {
+                                                        <MudButton OnClick="@(() => ConfirmRemoveWorkAsync(w.Id, w.Title))"
+                                                                   Disabled="@dialogOpening"
+                                                                   Variant="Variant.Text"
+                                                                   Color="Color.Error"
+                                                                   StartIcon="@Icons.Material.Filled.LinkOff"
+                                                                   Size="Size.Small">
+                                                            Remove from book
+                                                        </MudButton>
+                                                    }
+                                                </MudStack>
                                             </MudStack>
                                         </div>
                                     }
@@ -688,26 +704,81 @@
         }
     });
 
-    private Task OpenAddExistingWorkDialog() => OpenDialogGuardedAsync(async () =>
+    private Task OpenAddWorkDialog() => OpenDialogGuardedAsync(async () =>
     {
         if (VM.Book is null) return;
-        // Pass our initialised VM through. BookDetailViewModel is Transient
-        // so @inject inside the dialog would hand it a fresh instance whose
-        // .Book is null — same wiring as EditionCoverUploadDialog above.
-        var parameters = new DialogParameters<AddExistingWorkDialog>
+        // Pass our initialised VM through (Transient lifetime trap —
+        // memory: feedback_dialog_vm_lifetime). Dialog handles both
+        // attach-existing and create-new branches: AttachExistingWorkAsync
+        // and CreateAndAttachWorkAsync both call InitializeAsync internally
+        // so the page snapshot is fresh by the time the dialog closes.
+        var parameters = new DialogParameters<AddWorkDialog>
         {
             { x => x.VM, VM },
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
-        var dialog = await DialogService.ShowAsync<AddExistingWorkDialog>("Add existing work", parameters, options);
-        var result = await dialog.Result;
-        // Dialog refreshes VM.Book inline on each successful attach (via
-        // AttachExistingWorkAsync → InitializeAsync), so the page state is
-        // already current. The result payload carries the count, used here
-        // only to decide whether to show a closing summary snackbar.
-        if (result is not null && !result.Canceled && result.Data is int count && count > 0)
+        var dialog = await DialogService.ShowAsync<AddWorkDialog>("Add work", parameters, options);
+        await dialog.Result;
+    });
+
+    private Task ConfirmRemoveWorkAsync(int workId, string workTitle) => OpenDialogGuardedAsync(async () =>
+    {
+        if (VM.Book is null) return;
+        // The dialog wording shifts whether this is a detach (Work lives on
+        // elsewhere) or an outright delete. We don't know which until the
+        // VM runs the query, so phrase the prompt for the worst case —
+        // delete — and the VM does the right thing under the hood.
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Remove this work?",
+            $"\"{workTitle}\" will be detached from this book. If it's not attached to any other book, it'll be deleted.",
+            yesText: "Remove",
+            cancelText: "Cancel");
+        if (confirmed != true) return;
+
+        try
         {
-            Snackbar.Add($"Added {count} work{(count == 1 ? "" : "s")} to this book.", Severity.Success);
+            var removed = await VM.RemoveWorkFromBookAsync(workId);
+            if (removed is not null)
+            {
+                Snackbar.Add($"Removed \"{removed}\".", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Couldn't remove the work.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Couldn't remove the work: {ex.Message}", Severity.Error);
+        }
+    });
+
+    private Task ConfirmDeleteBookAsync() => OpenDialogGuardedAsync(async () =>
+    {
+        if (VM.Book is null) return;
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Delete this book?",
+            $"\"{VM.Book.Title}\" and all its editions, copies, and exclusive works will be removed. This can't be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+        if (confirmed != true) return;
+
+        try
+        {
+            var ok = await VM.DeleteBookAsync();
+            if (ok)
+            {
+                Snackbar.Add("Book deleted.", Severity.Success);
+                Nav.NavigateTo("/books");
+            }
+            else
+            {
+                Snackbar.Add("Couldn't delete the book.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Couldn't delete the book: {ex.Message}", Severity.Error);
         }
     });
 

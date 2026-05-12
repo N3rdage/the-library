@@ -1,0 +1,202 @@
+@* "Add work" — single entry point that handles both the attach-existing
+   and create-new flows. As the user types the title, matching existing
+   Works appear in the dropdown:
+     - Down arrow + Enter (or click) on a suggestion → attaches the
+       existing Work to this Book and closes the dialog.
+     - Free-text Enter / never-arrowed Enter → does nothing (the user
+       fills the rest of the form and clicks Save to create a new Work).
+     - The "Save (create new)" button is the explicit create commit.
+
+   Same Drew-driven keyboard pattern as the Add Book collection rows:
+   typing what's already on the shelf surfaces it; typing what isn't
+   captures it as new. Replaces the older AddExistingWorkDialog (which
+   was attach-only — superseded by this combined shape). *@
+
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width: 320px;">
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Start typing a title — if it's already on the shelf, pick it from the dropdown to attach.
+                Otherwise fill in the rest below and Save to capture as new.
+            </MudText>
+
+            @* The title autocomplete carries the same data-collection-work-title
+               wrapper attribute the JS interop layer looks for — collection-works.js
+               (PR 5) already runs at the capture phase and suppresses Enter-on-not-
+               navigated. With data-collection-work-title="-1" it'\''ll route Enter to
+               OnCollectionTitleEnter on the *page*, which won't recognise our index
+               and no-op — exactly the behaviour we want (block the auto-pick of the
+               first highlighted suggestion, do nothing else). The dialog '\''s own
+               ValueChanged handler still fires when the user explicitly arrow-keys
+               + Enters (navigated path defers to MudAutocomplete). *@
+            <div data-collection-work-title="-1">
+                <MudAutocomplete T="WorkSearchResult"
+                                 Value="null"
+                                 ValueChanged="OnExistingWorkPickedAsync"
+                                 Text="@title"
+                                 TextChanged="@(t => title = t ?? string.Empty)"
+                                 SearchFunc="@SearchAsync"
+                                 ToStringFunc="@(r => r?.Title ?? string.Empty)"
+                                 Label="Title"
+                                 Placeholder="Type to search existing or capture new..."
+                                 Variant="Variant.Outlined"
+                                 Margin="Margin.Dense"
+                                 MinCharacters="2"
+                                 DebounceInterval="250"
+                                 CoerceValue="false"
+                                 CoerceText="false"
+                                 ResetValueOnEmptyText="false"
+                                 ShowProgressIndicator="true">
+                    <ItemTemplate Context="r">
+                        <MudStack Spacing="0" Style="min-width: 0;">
+                            <MudText Typo="Typo.body2" Style="word-break: break-word;">
+                                @r.Title@(r.FirstPublishedYear is int y ? $" ({y})" : "")
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @r.AuthorName · in @r.BookCount @(r.BookCount == 1 ? "book" : "books")
+                            </MudText>
+                        </MudStack>
+                    </ItemTemplate>
+                </MudAutocomplete>
+            </div>
+
+            <div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Author(s)</MudText>
+                <MudAuthorPicker Authors="authors"
+                                 AuthorsChanged="list => authors = list"
+                                 Label="Add author" />
+            </div>
+
+            <MudTextField T="string"
+                          @bind-Value="subtitle"
+                          Label="Subtitle (optional)"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense" />
+
+            <MudTextField T="string"
+                          @bind-Value="firstPublishedDate"
+                          Label="First published (optional)"
+                          Placeholder="e.g. 1934, Jan 1934, 6 Jan 1934"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense" />
+
+            <div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Genre(s)</MudText>
+                <MudGenrePicker SelectedGenreIds="selectedGenreIds"
+                                SelectedGenreIdsChanged="ids => selectedGenreIds = ids" />
+            </div>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Disabled="@(saving || string.IsNullOrWhiteSpace(title) || authors.Count == 0)"
+                   OnClick="SaveNewAsync">
+            @(saving ? "Saving..." : "Save (create new)")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    // BookDetailViewModel is registered Transient — passing the page'\''s
+    // already-initialised VM avoids the fresh-instance trap (memory:
+    // Blazor dialog VM lifetime). Same wiring as EditionCoverUploadDialog
+    // and AddExistingWorkDialog before it.
+    [Parameter, EditorRequired] public BookDetailViewModel VM { get; set; } = default!;
+
+    private string? title;
+    private List<string> authors = [];
+    private string? subtitle;
+    private string? firstPublishedDate;
+    private List<int> selectedGenreIds = [];
+    private bool saving;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Re-bind the page-level keydown listener so the data-collection-
+            // work-title wrapper inside this dialog is handled the same way
+            // the Add Book rows are: capture-phase listener tracks navigation,
+            // suppresses MudAutocomplete'\''s auto-pick on non-navigated Enter.
+            // _pageRef is the parent page'\''s ref — passing null is fine here;
+            // the listener tolerates absence (it'\''ll still preventDefault Enter
+            // and stopImmediatePropagation, just won'\''t invoke OnCollectionTitleEnter).
+            await JS.InvokeVoidAsync("collectionWorks.bindEnterSuppression", (object?)null);
+        }
+    }
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+    private Task<IEnumerable<WorkSearchResult>> SearchAsync(string? query, CancellationToken ct) =>
+        WrapSearchAsync(query, ct);
+
+    private async Task<IEnumerable<WorkSearchResult>> WrapSearchAsync(string? query, CancellationToken ct)
+    {
+        try { return await VM.SearchAttachableWorksAsync(query ?? "", ct); }
+        catch { return []; }
+    }
+
+    private async Task OnExistingWorkPickedAsync(WorkSearchResult? picked)
+    {
+        if (picked is null) return;
+
+        saving = true;
+        try
+        {
+            var attachedTitle = await VM.AttachExistingWorkAsync(picked.Id);
+            if (attachedTitle is not null)
+            {
+                Snackbar.Add($"Attached \"{attachedTitle}\".", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                Snackbar.Add("Couldn't attach that work — it may already be on this book.", Severity.Warning);
+            }
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task SaveNewAsync()
+    {
+        if (string.IsNullOrWhiteSpace(title) || authors.Count == 0) return;
+
+        saving = true;
+        try
+        {
+            var workId = await VM.CreateAndAttachWorkAsync(
+                title!,
+                authors,
+                subtitle,
+                firstPublishedDate,
+                selectedGenreIds);
+
+            if (workId is int)
+            {
+                Snackbar.Add($"Added \"{title!.Trim()}\".", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                Snackbar.Add("Couldn't save the work — check that you provided a title and at least one author.", Severity.Warning);
+            }
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

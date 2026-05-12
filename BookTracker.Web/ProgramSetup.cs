@@ -156,7 +156,6 @@ public static class ProgramSetup
         builder.Services.AddTransient<MudGenrePickerViewModel>();
         builder.Services.AddTransient<BookListViewModel>();
         builder.Services.AddTransient<BookAddViewModel>();
-        builder.Services.AddTransient<BookEditViewModel>();
         builder.Services.AddTransient<BookDetailViewModel>();
         builder.Services.AddTransient<BookEditDialogViewModel>();
         builder.Services.AddTransient<WorkEditDialogViewModel>();

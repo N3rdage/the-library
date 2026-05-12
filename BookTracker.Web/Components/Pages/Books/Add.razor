@@ -127,7 +127,7 @@
                                     }
                                     Add another copy
                                 </button>
-                                <a class="btn btn-outline-primary btn-sm" href="@($"/books/{VM.ExistingBook.BookId}/edit")">Edit existing book</a>
+                                <a class="btn btn-outline-primary btn-sm" href="@($"/books/{VM.ExistingBook.BookId}")">View existing book</a>
                             </div>
                         </div>
                     }
@@ -578,7 +578,7 @@
         }
         else
         {
-            Nav.NavigateTo($"/books/{bookId}/edit");
+            Nav.NavigateTo($"/books/{bookId}");
         }
     }
 
