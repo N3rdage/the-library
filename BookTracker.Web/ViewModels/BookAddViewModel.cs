@@ -8,8 +8,17 @@ namespace BookTracker.Web.ViewModels;
 public class BookAddViewModel(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
     IBookLookupService lookup,
-    SeriesMatchService seriesMatch)
+    SeriesMatchService seriesMatch,
+    IWorkSearchService workSearch)
 {
+    /// <summary>Search existing Works for the collection-row autocomplete.
+    /// Returns matches as the user types so they can attach an already-
+    /// captured Work rather than re-typing it. excludeBookId is null —
+    /// the Book is brand-new so there's nothing to exclude.</summary>
+    public Task<IReadOnlyList<WorkSearchResult>> SearchExistingWorksAsync(string query, CancellationToken ct)
+        => workSearch.SearchAsync(query, excludeBookId: null, ct: ct);
+
+
     public BookFormViewModel.BookFormInput BookInput { get; set; } = new();
     public WorkFormViewModel.WorkFormInput WorkInput { get; set; } = new();
     public EditionFormViewModel.EditionFormInput EditionInput { get; set; } = new();
@@ -146,6 +155,38 @@ public class BookAddViewModel(
         if (index < 0 || index >= CollectionWorks.Count) return;
         CollectionWorks.RemoveAt(index);
         if (CollectionWorks.Count == 0) CollectionWorks.Add(new());
+    }
+
+    /// <summary>True if any collection row is in attach-existing mode —
+    /// used by the page to decide whether to surface a confirm dialog
+    /// when the user flicks IsCollection back off (existing-work
+    /// attachments would be silently discarded otherwise).</summary>
+    public bool HasAttachedWorkRows => CollectionWorks.Any(r => r.AttachedWorkId is not null);
+
+    /// <summary>Marks a collection row as "attach this existing Work to
+    /// the new Book" instead of creating a new one. The row's editable
+    /// fields are kept (so reverting is non-destructive) but ignored at
+    /// save time; the UI hides them in favour of a compact summary.</summary>
+    public void AttachExistingToRow(int rowIndex, WorkSearchResult picked)
+    {
+        if (rowIndex < 0 || rowIndex >= CollectionWorks.Count) return;
+        var row = CollectionWorks[rowIndex];
+        row.AttachedWorkId = picked.Id;
+        row.AttachedWorkAuthor = picked.AuthorName;
+        // Mirror the existing Work's title into the row's title so subsequent
+        // re-opens of the page or save-then-edit flows render the right
+        // string. Title still flows through `row.Title` either way.
+        row.Title = picked.Title;
+    }
+
+    /// <summary>Undo an existing-work attach on a row — clears the
+    /// AttachedWorkId so the row returns to editable new-work mode.
+    /// Preserves whatever title the user had typed before picking.</summary>
+    public void DetachRow(int rowIndex)
+    {
+        if (rowIndex < 0 || rowIndex >= CollectionWorks.Count) return;
+        CollectionWorks[rowIndex].AttachedWorkId = null;
+        CollectionWorks[rowIndex].AttachedWorkAuthor = null;
     }
     public string? SearchTitle { get; set; }
     public string? SearchAuthor { get; set; }
@@ -454,46 +495,61 @@ public class BookAddViewModel(
             List<Work> works;
             if (IsCollection)
             {
-                // Collection mode: build N Works, one per row. Series
-                // suggestions are still deferred to per-work editing on
-                // /books/{id}/edit (the lookup flow can't pick per-work, and
-                // applying to all would be wrong). Genres now ride with the
-                // capture flow: shared list when SingleGenre is on, per-row
-                // GenreIds otherwise.
+                // Collection mode: build N Works, one per row. Rows split
+                // into two flavours:
+                //   - attach-existing rows (AttachedWorkId set): load the
+                //     existing Work from the DB and attach it; the inline
+                //     edit fields are not used.
+                //   - new-work rows (AttachedWorkId null): create a Work
+                //     from the row fields (title, authors, subtitle,
+                //     first-published, per-row or shared genres).
                 //
-                // Author source depends on SingleAuthor mode: when on, the
-                // shared SharedAuthors chip-list applies to every row; when
-                // off, each row carries its own Authors list. Effective list
-                // is selected per row via the local helpers.
+                // Series suggestions stay deferred to per-work editing on
+                // /books/{id}/edit (the lookup flow can't pick per-work, and
+                // applying to all would be wrong). Author source depends on
+                // SingleAuthor mode; genre source on SingleGenre — both
+                // apply only to new-work rows (existing Works bring their
+                // own).
                 List<string> AuthorsFor(WorkFormViewModel.WorkFormInput row) =>
                     SingleAuthor ? SharedAuthors : row.Authors;
                 List<int> GenresFor(WorkFormViewModel.WorkFormInput row) =>
                     SingleGenre ? SharedGenreIds : row.GenreIds;
 
-                var rows = CollectionWorks
-                    .Where(w => !string.IsNullOrWhiteSpace(w.Title) && AuthorsFor(w).Count > 0)
+                // Preserve the user-entered order across both row flavours so
+                // the saved Book.Works reflects the order on screen.
+                var orderedRows = CollectionWorks
+                    .Where(w => w.AttachedWorkId is not null
+                                || (!string.IsNullOrWhiteSpace(w.Title) && AuthorsFor(w).Count > 0))
                     .ToList();
-                if (rows.Count == 0)
+                if (orderedRows.Count == 0)
                 {
                     throw new InvalidOperationException(SingleAuthor
-                        ? "A collection in Single-Author mode needs at least one work with a title, plus at least one shared author."
-                        : "A collection must contain at least one work with a title and an author.");
+                        ? "A collection in Single-Author mode needs at least one work with a title, plus at least one shared author. (Or attach an existing work.)"
+                        : "A collection must contain at least one work with a title and an author. (Or attach an existing work.)");
                 }
-                // Resolve the union of distinct author names across all rows
-                // in one pass — calling FindOrCreate per row would create
-                // duplicate Author entities when the same name appears in
-                // multiple stories (the existence check queries the committed
-                // DB, missing pending entities in the change tracker).
-                var allNames = SingleAuthor ? SharedAuthors : rows.SelectMany(r => r.Authors);
+
+                var newRows = orderedRows.Where(r => r.AttachedWorkId is null).ToList();
+                var attachIds = orderedRows
+                    .Where(r => r.AttachedWorkId is int)
+                    .Select(r => r.AttachedWorkId!.Value)
+                    .Distinct()
+                    .ToList();
+
+                // Resolve the union of distinct author names across new-work
+                // rows in one pass — calling FindOrCreate per row would
+                // create duplicate Author entities when the same name
+                // appears in multiple stories (the existence check queries
+                // the committed DB, missing pending entities in the change
+                // tracker).
+                var allNames = SingleAuthor ? SharedAuthors : newRows.SelectMany(r => r.Authors);
                 var allAuthors = await AuthorResolver.FindOrCreateAllAsync(allNames, db);
                 var byName = allAuthors.ToDictionary(a => a.Name, StringComparer.OrdinalIgnoreCase);
 
-                // Resolve the union of distinct genre ids across all rows in
-                // one query — same reason as authors above, and a single
-                // round-trip beats N row-by-row Genres lookups.
+                // Resolve the union of distinct genre ids across new-work
+                // rows in one query.
                 var allGenreIds = (SingleGenre
                     ? SharedGenreIds
-                    : rows.SelectMany(r => r.GenreIds))
+                    : newRows.SelectMany(r => r.GenreIds))
                     .Distinct()
                     .ToList();
                 var collectionGenres = allGenreIds.Count == 0
@@ -501,9 +557,27 @@ public class BookAddViewModel(
                     : await db.Genres.Where(g => allGenreIds.Contains(g.Id)).ToListAsync();
                 var genresById = collectionGenres.ToDictionary(g => g.Id);
 
-                works = new List<Work>(rows.Count);
-                foreach (var row in rows)
+                // Load the attach-existing Works in one query. Missing ids
+                // are silently dropped — they can only happen if the Work
+                // was deleted between picking it in the dialog and saving;
+                // failing the whole save over that would be unhelpful.
+                var attachedWorks = attachIds.Count == 0
+                    ? new List<Work>()
+                    : await db.Works.Where(w => attachIds.Contains(w.Id)).ToListAsync();
+                var attachedById = attachedWorks.ToDictionary(w => w.Id);
+
+                works = new List<Work>(orderedRows.Count);
+                foreach (var row in orderedRows)
                 {
+                    if (row.AttachedWorkId is int existingId)
+                    {
+                        if (attachedById.TryGetValue(existingId, out var existing))
+                        {
+                            works.Add(existing);
+                        }
+                        continue;
+                    }
+
                     var rowAuthors = AuthorsFor(row)
                         .Select(n => n?.Trim())
                         .Where(n => !string.IsNullOrEmpty(n))

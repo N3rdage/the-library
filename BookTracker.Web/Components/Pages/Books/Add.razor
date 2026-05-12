@@ -1,7 +1,9 @@
 @page "/books/add"
+@implements IAsyncDisposable
 @inject BookAddViewModel VM
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject IDialogService DialogService
 
 <PageTitle>Add a book - BookTracker</PageTitle>
 
@@ -19,7 +21,11 @@
                         <label for="noIsbnToggle" class="form-check-label">No ISBN (pre-1974 book)</label>
                     </div>
                     <div class="form-check form-switch mb-3">
-                        <input type="checkbox" id="collectionToggle" class="form-check-input" @bind="VM.IsCollection" />
+                        @* Custom @onchange instead of @bind because flipping the toggle OFF when
+                           any row is an attach-existing reference would silently discard those
+                           attachments — confirm first so a fat-finger flick is recoverable. *@
+                        <input type="checkbox" id="collectionToggle" class="form-check-input"
+                               checked="@VM.IsCollection" @onchange="OnCollectionToggleChangedAsync" />
                         <label for="collectionToggle" class="form-check-label">This is a collection (multiple works in one book)</label>
                     </div>
 
@@ -259,66 +265,117 @@
                         {
                             var index = i;
                             var work = VM.CollectionWorks[i];
-                            <div class="border rounded p-3 mb-3">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <strong>Work @(index + 1)</strong>
-                                    @if (VM.CollectionWorks.Count > 1)
-                                    {
-                                        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => VM.RemoveCollectionWorkRow(index)">Remove</button>
-                                    }
-                                </div>
-                                <div class="row g-2">
-                                    <div class="col-md-@(VM.SingleAuthor ? 12 : 7)">
-                                        <label class="form-label small">Title</label>
-                                        @* Enter on these title inputs is handled in two layers:
-                                           collection-works.js installs a document-level keydown
-                                           listener that preventDefaults Enter on any element marked
-                                           with data-collection-work-title (stops the surrounding
-                                           form submitting); Blazor's @onkeydown still fires and
-                                           routes to OnCollectionTitleKeyDownAsync — Enter on the
-                                           last row adds a new row (inheriting authors from the
-                                           most recent populated row) and focuses its Title; Enter
-                                           on a non-last row jumps focus to the next row's Title.
-                                           Razor compiler rejects both inline onkeydown + Blazor's
-                                           @onkeydown on the same element (duplicate parameter name),
-                                           so the suppression lives in JS — same shape as the
-                                           chip-picker arc. *@
-                                        <InputText @bind-Value="work.Title"
-                                                   class="form-control"
-                                                   id="@($"collection-work-title-{index}")"
-                                                   data-collection-work-title=""
-                                                   @onkeydown="@(e => OnCollectionTitleKeyDownAsync(e, index))" />
+                            @if (work.AttachedWorkId is int)
+                            {
+                                @* Attach-existing summary card. Editable fields hidden; the existing Work
+                                   carries its own authors / subtitle / first-published / genres. "Edit as new"
+                                   reverts to the new-work shape preserving whatever title was typed. *@
+                                <div class="border rounded p-3 mb-3 bg-body-tertiary">
+                                    <div class="d-flex justify-content-between align-items-start gap-2">
+                                        <div class="flex-grow-1" style="min-width: 0;">
+                                            <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                                                <span class="badge bg-secondary">Existing work</span>
+                                                <strong style="word-break: break-word;">@work.Title</strong>
+                                            </div>
+                                            @if (!string.IsNullOrEmpty(work.AttachedWorkAuthor))
+                                            {
+                                                <div class="small text-muted">@work.AttachedWorkAuthor</div>
+                                            }
+                                        </div>
+                                        <div class="d-flex gap-1 flex-shrink-0">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => VM.DetachRow(index)">Edit as new</button>
+                                            @if (VM.CollectionWorks.Count > 1)
+                                            {
+                                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => VM.RemoveCollectionWorkRow(index)">Remove</button>
+                                            }
+                                        </div>
                                     </div>
-                                    @if (!VM.SingleAuthor)
-                                    {
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="border rounded p-3 mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <strong>Work @(index + 1)</strong>
+                                        @if (VM.CollectionWorks.Count > 1)
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => VM.RemoveCollectionWorkRow(index)">Remove</button>
+                                        }
+                                    </div>
+                                    <div class="row g-2">
+                                        <div class="col-md-@(VM.SingleAuthor ? 12 : 7)">
+                                            <label class="form-label small">Title</label>
+                                            @* MudAutocomplete<WorkSearchResult> — as the user types, existing
+                                               Works appear in the dropdown. Picking one fires ValueChanged →
+                                               OnExistingWorkPickedAsync, flipping the row to attach-existing
+                                               mode. Free-text Enter (no dropdown highlight) falls through to
+                                               collection-works.js → page [JSInvokable] OnCollectionTitleEnter,
+                                               which adds a new row / focuses next. The wrapper div carries
+                                               data-collection-work-title="@index" so the JS doc-level keydown
+                                               listener can route the event correctly — MudAutocomplete renders
+                                               its <input> deep inside, so we can't put the data-attribute
+                                               directly on the input. *@
+                                            <div data-collection-work-title="@index">
+                                                <MudAutocomplete T="WorkSearchResult"
+                                                                 Value="null"
+                                                                 ValueChanged="@(picked => OnExistingWorkPickedAsync(picked, index))"
+                                                                 Text="@work.Title"
+                                                                 TextChanged="@(t => work.Title = t ?? string.Empty)"
+                                                                 SearchFunc="@(async (q, ct) => await SearchExistingWorksAsync(q, ct))"
+                                                                 ToStringFunc="@(r => r?.Title ?? string.Empty)"
+                                                                 Placeholder="Type to search existing or capture new..."
+                                                                 Variant="Variant.Outlined"
+                                                                 Margin="Margin.Dense"
+                                                                 MinCharacters="2"
+                                                                 DebounceInterval="250"
+                                                                 CoerceValue="false"
+                                                                 CoerceText="true"
+                                                                 ResetValueOnEmptyText="false"
+                                                                 ShowProgressIndicator="true">
+                                                    <ItemTemplate Context="r">
+                                                        <MudStack Spacing="0" Style="min-width: 0;">
+                                                            <MudText Typo="Typo.body2" Style="word-break: break-word;">
+                                                                @r.Title@(r.FirstPublishedYear is int y ? $" ({y})" : "")
+                                                            </MudText>
+                                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                                @r.AuthorName · in @r.BookCount @(r.BookCount == 1 ? "book" : "books")
+                                                            </MudText>
+                                                        </MudStack>
+                                                    </ItemTemplate>
+                                                </MudAutocomplete>
+                                            </div>
+                                        </div>
+                                        @if (!VM.SingleAuthor)
+                                        {
+                                            <div class="col-md-5">
+                                                <label class="form-label small">Author(s)</label>
+                                                <MudAuthorPicker Authors="work.Authors"
+                                                                 AuthorsChanged="list => work.Authors = list"
+                                                                 Label="Add author" />
+                                            </div>
+                                        }
+                                        <div class="col-md-7">
+                                            <label class="form-label small">Subtitle <span class="text-muted">(optional)</span></label>
+                                            <InputText @bind-Value="work.Subtitle" class="form-control" />
+                                        </div>
                                         <div class="col-md-5">
-                                            <label class="form-label small">Author(s)</label>
-                                            <MudAuthorPicker Authors="work.Authors"
-                                                             AuthorsChanged="list => work.Authors = list"
-                                                             Label="Add author" />
+                                            <label class="form-label small">First published <span class="text-muted">(optional)</span></label>
+                                            <InputText @bind-Value="work.FirstPublishedDate" class="form-control" placeholder="e.g. 1934" />
                                         </div>
-                                    }
-                                    <div class="col-md-7">
-                                        <label class="form-label small">Subtitle <span class="text-muted">(optional)</span></label>
-                                        <InputText @bind-Value="work.Subtitle" class="form-control" />
+                                        @if (!VM.SingleGenre)
+                                        {
+                                            <div class="col-12">
+                                                <label class="form-label small">Genre(s)</label>
+                                                <MudGenrePicker SelectedGenreIds="work.GenreIds"
+                                                                SelectedGenreIdsChanged="ids => work.GenreIds = ids" />
+                                            </div>
+                                        }
                                     </div>
-                                    <div class="col-md-5">
-                                        <label class="form-label small">First published <span class="text-muted">(optional)</span></label>
-                                        <InputText @bind-Value="work.FirstPublishedDate" class="form-control" placeholder="e.g. 1934" />
-                                    </div>
-                                    @if (!VM.SingleGenre)
-                                    {
-                                        <div class="col-12">
-                                            <label class="form-label small">Genre(s)</label>
-                                            <MudGenrePicker SelectedGenreIds="work.GenreIds"
-                                                            SelectedGenreIdsChanged="ids => work.GenreIds = ids" />
-                                        </div>
-                                    }
                                 </div>
-                            </div>
+                            }
                         }
                         <button type="button" class="btn btn-outline-primary btn-sm" @onclick="VM.AddCollectionWorkRow">+ Add another work</button>
-                        <div class="form-text mt-2">Series suggestions are set per-work after saving — open each work from the book detail page to tag.</div>
+                        <div class="form-text mt-2">Start typing a title and any matching existing Works appear — Enter on a highlighted match attaches it; press Enter on free text to add the next new row.</div>
                     </div>
                 </div>
             </div>
@@ -350,20 +407,26 @@
     private MudGenrePicker? genrePicker;
     private bool addAnother;
 
-    // After OnCollectionTitleKeyDownAsync grows the CollectionWorks list,
-    // the new row's DOM element only exists post-render. Stash the index
-    // here and apply focus in OnAfterRenderAsync so the JS focus call
-    // hits an element that actually exists.
+    // After Enter on a title grows the CollectionWorks list (or an
+    // existing-Work pick advances to the next row), the new row's DOM
+    // element only exists post-render. Stash the index here and apply
+    // focus in OnAfterRenderAsync so the JS focus call hits an element
+    // that actually exists.
     private int? _pendingCollectionFocusIndex;
+
+    // DotNetObjectReference handed to collection-works.js so the JS
+    // keydown listener can call back into Blazor with the row index
+    // when Enter fires on a non-highlighted Title (the "add new row /
+    // focus next" path). Disposed on circuit teardown so the listener
+    // can't call a dead managed object.
+    private DotNetObjectReference<Add>? _pageRef;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            // Install the Enter-suppression keydown listener once per
-            // SPA session. Idempotent on the JS side; firstRender
-            // gating here keeps the call count to one per page-load.
-            await JS.InvokeVoidAsync("collectionWorks.bindEnterSuppression");
+            _pageRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("collectionWorks.bindEnterSuppression", _pageRef);
         }
 
         if (_pendingCollectionFocusIndex is int idx)
@@ -373,27 +436,90 @@
         }
     }
 
-    private async Task OnCollectionTitleKeyDownAsync(KeyboardEventArgs e, int index)
+    public ValueTask DisposeAsync()
     {
-        if (e.Key != "Enter") return;
+        _pageRef?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>Invoked by collection-works.js when Enter fires on a
+    /// title input AND no autocomplete suggestion is highlighted —
+    /// equivalent to the old @onkeydown handler's last-row vs mid-list
+    /// behaviour. Existing-Work rows have no input (they render as a
+    /// summary), so the JS listener never targets them.</summary>
+    [JSInvokable]
+    public async Task OnCollectionTitleEnter(int index)
+    {
         if (!VM.IsCollection) return;
         if (index < 0 || index >= VM.CollectionWorks.Count) return;
 
         if (index == VM.CollectionWorks.Count - 1)
         {
-            // Last row: add a new row (inheriting authors per
-            // BookAddViewModel.AddCollectionWorkRow) and queue focus
-            // on it for after the re-render.
             VM.AddCollectionWorkRow();
             _pendingCollectionFocusIndex = VM.CollectionWorks.Count - 1;
+            await InvokeAsync(StateHasChanged);
         }
         else
         {
-            // Mid-list Enter: jump focus to the next row's Title field.
-            // Tab-like behaviour for the typing flow without touching
-            // the surrounding form's tab order.
             await JS.InvokeVoidAsync("collectionWorks.focusTitle", index + 1);
         }
+    }
+
+    /// <summary>Fired when the user picks a suggestion from the row's
+    /// title autocomplete (Enter on a highlighted item, or click).
+    /// Flips the row to attach-existing mode and advances focus to
+    /// the next row's title — same continuation as Enter-on-free-text,
+    /// so the keyboard flow doesn't break stride after a pick.</summary>
+    private async Task OnExistingWorkPickedAsync(WorkSearchResult? picked, int index)
+    {
+        if (picked is null) return;
+        if (!VM.IsCollection) return;
+        if (index < 0 || index >= VM.CollectionWorks.Count) return;
+
+        VM.AttachExistingToRow(index, picked);
+
+        if (index == VM.CollectionWorks.Count - 1)
+        {
+            VM.AddCollectionWorkRow();
+        }
+        _pendingCollectionFocusIndex = index + 1;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task<IEnumerable<WorkSearchResult>> SearchExistingWorksAsync(string? query, CancellationToken ct)
+    {
+        try { return await VM.SearchExistingWorksAsync(query ?? "", ct); }
+        catch { return []; }
+    }
+
+    /// <summary>Custom toggle handler for the collection switch — confirms
+    /// before flipping OFF when there are existing-Work attachments on
+    /// rows (a fat-finger flick would otherwise silently drop them, since
+    /// the single-Work form has nowhere to put attachments).</summary>
+    private async Task OnCollectionToggleChangedAsync(ChangeEventArgs e)
+    {
+        var newValue = e.Value is bool b && b;
+        if (newValue == VM.IsCollection) return;
+
+        if (!newValue && VM.HasAttachedWorkRows)
+        {
+            var attachedCount = VM.CollectionWorks.Count(r => r.AttachedWorkId is not null);
+            var confirmed = await DialogService.ShowMessageBoxAsync(
+                "Discard attached works?",
+                $"Switching off collection mode will discard {attachedCount} existing-work attachment{(attachedCount == 1 ? "" : "s")}. Continue?",
+                yesText: "Discard",
+                cancelText: "Keep collection mode");
+            if (confirmed != true)
+            {
+                // Confirm cancelled — re-render so the checkbox snaps back
+                // to ON (the DOM updated optimistically when the user clicked).
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+        }
+
+        VM.IsCollection = newValue;
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task LookupAsync()

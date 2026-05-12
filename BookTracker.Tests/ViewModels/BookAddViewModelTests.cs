@@ -13,7 +13,7 @@ public class BookAddViewModelTests
     private readonly IBookLookupService _lookup = Substitute.For<IBookLookupService>();
 
     private BookAddViewModel CreateVm() =>
-        new(_factory, _lookup, new SeriesMatchService(_factory));
+        new(_factory, _lookup, new SeriesMatchService(_factory), new WorkSearchService(_factory));
 
     [Fact]
     public void AddCollectionWorkRow_InheritsAuthorsFromMostRecentPopulatedRow()
@@ -782,6 +782,135 @@ public class BookAddViewModelTests
         var work = db.Works.Single();
         Assert.Null(work.SeriesId);
         Assert.Null(work.SeriesOrder);
+    }
+
+    [Fact]
+    public async Task SaveAsync_CollectionMode_MixedNewAndAttachedRows_AttachesExistingAndCreatesNew()
+    {
+        // Drew's Lovecraft "complete works" case during initial capture: a
+        // brand-new anthology where some stories are new and some are
+        // already in the library from previous anthologies. Save creates
+        // the new Works and attaches the existing ones to the same Book,
+        // preserving the user-entered row order.
+        var factory = new TestDbContextFactory();
+        int existingId;
+        using (var db = factory.CreateDbContext())
+        {
+            var author = new Author { Name = "H.P. Lovecraft" };
+            var existing = new Work
+            {
+                Title = "The Call of Cthulhu",
+                WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
+            };
+            db.Books.Add(new Book { Title = "Other Anthology", Works = [existing] });
+            await db.SaveChangesAsync();
+            existingId = existing.Id;
+        }
+
+        var vm = new BookAddViewModel(factory, _lookup, new SeriesMatchService(factory), new WorkSearchService(factory));
+        vm.BookInput.Title = "Mixed Anthology";
+        vm.EditionInput.Format = BookFormat.TradePaperback;
+        vm.IsCollection = true;
+        vm.CollectionWorks =
+        [
+            new() { Title = "New Story A", Authors = ["H.P. Lovecraft"] },
+            new() { AttachedWorkId = existingId, Title = "The Call of Cthulhu" },
+            new() { Title = "New Story B", Authors = ["H.P. Lovecraft"] },
+        ];
+
+        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+
+        Assert.NotNull(bookId);
+        await using var db2 = factory.CreateDbContext();
+        var book = await db2.Books
+            .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
+            .FirstAsync(b => b.Id == bookId);
+
+        Assert.Equal(3, book.Works.Count);
+        Assert.Contains(book.Works, w => w.Id == existingId);
+        Assert.Contains(book.Works, w => w.Title == "New Story A");
+        Assert.Contains(book.Works, w => w.Title == "New Story B");
+        // Existing Work still has its original anthology attached too — N:N preserved.
+        var cthulhu = await db2.Works.Include(w => w.Books).FirstAsync(w => w.Id == existingId);
+        Assert.Equal(2, cthulhu.Books.Count);
+    }
+
+    [Fact]
+    public async Task SaveAsync_CollectionMode_AttachOnlyRow_DoesNotRequireTitleOrAuthorOnThatRow()
+    {
+        // An attach-existing row carries no editable fields; validation
+        // must skip the "title + at least one author" check for it. A
+        // collection with a single attach-only row should save cleanly.
+        var factory = new TestDbContextFactory();
+        int existingId;
+        using (var db = factory.CreateDbContext())
+        {
+            var author = new Author { Name = "Author" };
+            var existing = new Work
+            {
+                Title = "Existing",
+                WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
+            };
+            db.Books.Add(new Book { Title = "Other", Works = [existing] });
+            await db.SaveChangesAsync();
+            existingId = existing.Id;
+        }
+
+        var vm = new BookAddViewModel(factory, _lookup, new SeriesMatchService(factory), new WorkSearchService(factory));
+        vm.BookInput.Title = "Attach-only book";
+        vm.EditionInput.Format = BookFormat.TradePaperback;
+        vm.IsCollection = true;
+        vm.CollectionWorks =
+        [
+            new() { AttachedWorkId = existingId, Title = "Existing" },
+        ];
+
+        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+
+        Assert.NotNull(bookId);
+        using var db2 = factory.CreateDbContext();
+        var book = db2.Books.Include(b => b.Works).Single(b => b.Id == bookId);
+        Assert.Single(book.Works);
+        Assert.Equal(existingId, book.Works[0].Id);
+    }
+
+    [Fact]
+    public void AttachExistingToRow_FlipsRowToAttachMode_AndStashesDisplayFields()
+    {
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        vm.CollectionWorks = [new() { Title = "user-typed" }];
+        var picked = new WorkSearchResult(
+            Id: 42, Title: "The Call of Cthulhu", Subtitle: null,
+            AuthorName: "H.P. Lovecraft", FirstPublishedYear: 1928, BookCount: 3);
+
+        vm.AttachExistingToRow(0, picked);
+
+        Assert.Equal(42, vm.CollectionWorks[0].AttachedWorkId);
+        Assert.Equal("H.P. Lovecraft", vm.CollectionWorks[0].AttachedWorkAuthor);
+        // Title mirrors the existing Work's title so the summary card
+        // and any subsequent save-then-edit round trip render it.
+        Assert.Equal("The Call of Cthulhu", vm.CollectionWorks[0].Title);
+        Assert.True(vm.HasAttachedWorkRows);
+    }
+
+    [Fact]
+    public void DetachRow_ClearsAttachedFields_AndPreservesUserTitle()
+    {
+        // "Edit as new" affordance — user changes their mind after picking.
+        // AttachedWorkId clears so the row returns to editable mode; the
+        // title stays as whatever was last on the row (the picked Work's
+        // title, which the user can edit / replace).
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        vm.CollectionWorks = [new() { Title = "Existing", AttachedWorkId = 42, AttachedWorkAuthor = "Author" }];
+
+        vm.DetachRow(0);
+
+        Assert.Null(vm.CollectionWorks[0].AttachedWorkId);
+        Assert.Null(vm.CollectionWorks[0].AttachedWorkAuthor);
+        Assert.Equal("Existing", vm.CollectionWorks[0].Title);
+        Assert.False(vm.HasAttachedWorkRows);
     }
 
     [Fact]

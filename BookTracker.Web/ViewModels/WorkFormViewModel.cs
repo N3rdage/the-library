@@ -33,5 +33,16 @@ public class WorkFormViewModel
         // captures still route genre selection through the page's own
         // selectedGenreIds field rather than this list.
         public List<int> GenreIds { get; set; } = [];
+
+        // Attach-existing mode (collection rows only). When AttachedWorkId is
+        // set the row represents "attach this already-saved Work to the new
+        // Book" rather than "create a new Work with the fields above" —
+        // save-time skips the create branch for that row, validation skips
+        // the title/author requirement, and the UI hides the editable fields
+        // in favour of a compact summary card. AttachedWorkAuthor is the
+        // lead-author display string captured at pick time so the summary
+        // can render without re-querying.
+        public int? AttachedWorkId { get; set; }
+        public string? AttachedWorkAuthor { get; set; }
     }
 }
