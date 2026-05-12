@@ -18,6 +18,132 @@ public class BookAddViewModelTests
     private GenrePickerViewModel CreateGenrePicker() => new(_factory);
 
     [Fact]
+    public void AddCollectionWorkRow_InheritsAuthorsFromMostRecentPopulatedRow()
+    {
+        // Single-author compendium case (King's Different Seasons, Christie
+        // collections): typing the author once on row 1 should propagate to
+        // subsequently-added rows so the 13-works capture flow doesn't need
+        // 13 author chip entries.
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        // Default constructor seeds 1 empty starter row.
+        vm.CollectionWorks[0].Authors = new List<string> { "Stephen King" };
+
+        vm.AddCollectionWorkRow();
+
+        // The newly-added row inherits row 0's authors — the most recent
+        // populated row walking backwards.
+        Assert.Equal(new[] { "Stephen King" }, vm.CollectionWorks[1].Authors);
+    }
+
+    [Fact]
+    public void AddCollectionWorkRow_AuthorInheritanceIsACopyNotAReference()
+    {
+        // Each row owns its author list — editing one row's authors must
+        // not mutate another row's list (would otherwise corrupt the
+        // capture state when MudAuthorPicker mutates the bound list).
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        vm.CollectionWorks[0].Authors = new List<string> { "Stephen King" };
+
+        vm.AddCollectionWorkRow();
+
+        var newRow = vm.CollectionWorks[^1];
+        newRow.Authors.Add("Richard Bachman");
+
+        Assert.Single(vm.CollectionWorks[0].Authors);
+        Assert.Equal("Stephen King", vm.CollectionWorks[0].Authors[0]);
+    }
+
+    [Fact]
+    public void AddCollectionWorkRow_NoPopulatedRows_StartsEmpty()
+    {
+        // First time the + button is tapped, before any author has been
+        // typed, the new row must start with an empty Authors list (not
+        // null, not throw).
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        // Default 1 empty starter row.
+
+        vm.AddCollectionWorkRow();
+
+        Assert.Equal(2, vm.CollectionWorks.Count);
+        Assert.Empty(vm.CollectionWorks[1].Authors);
+    }
+
+    [Fact]
+    public void DefaultCollectionState_StartsWithOneEmptyRow()
+    {
+        // The capture flow grows the row list via Enter-on-Title; pre-
+        // seeding multiple rows forced users to manually re-enter authors
+        // on row 2 (the row already existed before any author was typed,
+        // so the new-row inheritance didn't help). Verify the default
+        // shape stays single-row.
+        var vm = CreateVm();
+
+        Assert.Single(vm.CollectionWorks);
+        Assert.False(vm.SingleAuthor);
+        Assert.Empty(vm.SharedAuthors);
+    }
+
+    [Fact]
+    public async Task SaveAsync_SingleAuthorMode_AppliesSharedAuthorsToEveryWork()
+    {
+        // Single-Author mode is the "King's Different Seasons" shape —
+        // user enters the author once at the top; save applies it to
+        // every Work row.
+        var vm = CreateVm();
+        vm.BookInput.Title = "Different Seasons";
+        vm.EditionInput.Format = BookFormat.TradePaperback;
+        vm.IsCollection = true;
+        vm.SingleAuthor = true;
+        vm.SharedAuthors = new List<string> { "Stephen King" };
+        vm.CollectionWorks =
+        [
+            new() { Title = "Rita Hayworth and Shawshank Redemption" },
+            new() { Title = "Apt Pupil" },
+            new() { Title = "The Body" },
+            new() { Title = "The Breathing Method" },
+        ];
+
+        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+
+        Assert.NotNull(bookId);
+        await using var db = _factory.CreateDbContext();
+        var saved = await db.Books
+            .Include(b => b.Works)
+                .ThenInclude(w => w.WorkAuthors)
+                .ThenInclude(wa => wa.Author)
+            .FirstAsync(b => b.Id == bookId);
+
+        Assert.Equal(4, saved.Works.Count);
+        Assert.All(saved.Works, w =>
+        {
+            Assert.Single(w.WorkAuthors);
+            Assert.Equal("Stephen King", w.WorkAuthors[0].Author.Name);
+        });
+    }
+
+    [Fact]
+    public async Task SaveAsync_SingleAuthorMode_NoSharedAuthors_Throws()
+    {
+        // Save in Single-Author mode with no shared authors set should
+        // fail with a clear message rather than silently produce zero
+        // works.
+        var vm = CreateVm();
+        vm.BookInput.Title = "Untitled Collection";
+        vm.EditionInput.Format = BookFormat.TradePaperback;
+        vm.IsCollection = true;
+        vm.SingleAuthor = true;
+        vm.SharedAuthors = [];
+        vm.CollectionWorks = [new() { Title = "Story A" }];
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => vm.SaveAsync(selectedGenreIds: []));
+        Assert.Contains("Single-Author", ex.Message);
+    }
+
+    [Fact]
     public async Task SearchAsync_EmptyInputs_ReportsMessageAndDoesNotCallLookup()
     {
         var vm = CreateVm();

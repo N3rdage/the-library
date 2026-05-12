@@ -35,9 +35,40 @@ public class BookAddViewModel(
     // /books/{id}/edit — applying them to all works at save time would be
     // wrong (each work has its own).
     public bool IsCollection { get; set; }
-    public List<WorkFormViewModel.WorkFormInput> CollectionWorks { get; set; } = [new(), new()];
+    // Default to a single starter row. The Enter-on-Title affordance
+    // grows the list as the user types; pre-seeding a second empty row
+    // forced the user to manually re-enter authors there (the row
+    // already existed before any author was typed, so the new-row
+    // author inheritance didn't help). Start small, let typing grow it.
+    public List<WorkFormViewModel.WorkFormInput> CollectionWorks { get; set; } = [new()];
 
-    public void AddCollectionWorkRow() => CollectionWorks.Add(new());
+    // "Same author(s) for all works" mode — when on, a single shared
+    // author chip-list at the top of the collection block applies to
+    // every Work at save time and the per-row author pickers are
+    // hidden. Common case (Drew's ~50% estimate) is a single-author
+    // compendium (King's Different Seasons, Christie crime collections);
+    // this mode avoids both per-row chip-entry friction and the new-row
+    // inheritance race when the first row hasn't been populated yet.
+    // Off (default) keeps the per-row author UI for genuinely mixed-
+    // author anthologies (Dozois year's best, etc.).
+    public bool SingleAuthor { get; set; }
+    public List<string> SharedAuthors { get; set; } = [];
+
+    public void AddCollectionWorkRow()
+    {
+        // Inherit authors from the most recent row that has authors so
+        // repetitive single-author compendiums (e.g. King's "Different
+        // Seasons", Christie collections) only need authors entered once.
+        // User can clear / replace per row. If no row has authors yet —
+        // including the first-time case before anything is typed — the
+        // new row starts empty as before.
+        var seedAuthors = CollectionWorks
+            .AsEnumerable()
+            .Reverse()
+            .FirstOrDefault(w => w.Authors.Count > 0)?.Authors
+            .ToList() ?? [];
+        CollectionWorks.Add(new WorkFormViewModel.WorkFormInput { Authors = seedAuthors });
+    }
 
     public void RemoveCollectionWorkRow(int index)
     {
@@ -255,7 +286,9 @@ public class BookAddViewModel(
         SearchMessage = null;
         NoIsbnMode = false;
         IsCollection = false;
-        CollectionWorks = [new(), new()];
+        CollectionWorks = [new()];
+        SingleAuthor = false;
+        SharedAuthors = [];
         if (genrePicker is not null)
         {
             genrePicker.SelectedGenreIds = [];
@@ -351,26 +384,36 @@ public class BookAddViewModel(
                 // suggestions are deferred to per-work editing on /books/{id}/edit
                 // — the lookup flow can't pick them per-work, and applying to all
                 // would be wrong (each Work has its own).
+                //
+                // Author source depends on SingleAuthor mode: when on, the
+                // shared SharedAuthors chip-list applies to every row; when
+                // off, each row carries its own Authors list. Effective list
+                // is selected per row via the local helper.
+                List<string> AuthorsFor(WorkFormViewModel.WorkFormInput row) =>
+                    SingleAuthor ? SharedAuthors : row.Authors;
+
                 var rows = CollectionWorks
-                    .Where(w => !string.IsNullOrWhiteSpace(w.Title) && w.Authors.Count > 0)
+                    .Where(w => !string.IsNullOrWhiteSpace(w.Title) && AuthorsFor(w).Count > 0)
                     .ToList();
                 if (rows.Count == 0)
                 {
-                    throw new InvalidOperationException("A collection must contain at least one work with a title and an author.");
+                    throw new InvalidOperationException(SingleAuthor
+                        ? "A collection in Single-Author mode needs at least one work with a title, plus at least one shared author."
+                        : "A collection must contain at least one work with a title and an author.");
                 }
                 // Resolve the union of distinct author names across all rows
                 // in one pass — calling FindOrCreate per row would create
                 // duplicate Author entities when the same name appears in
                 // multiple stories (the existence check queries the committed
                 // DB, missing pending entities in the change tracker).
-                var allNames = rows.SelectMany(r => r.Authors);
+                var allNames = SingleAuthor ? SharedAuthors : rows.SelectMany(r => r.Authors);
                 var allAuthors = await AuthorResolver.FindOrCreateAllAsync(allNames, db);
                 var byName = allAuthors.ToDictionary(a => a.Name, StringComparer.OrdinalIgnoreCase);
 
                 works = new List<Work>(rows.Count);
                 foreach (var row in rows)
                 {
-                    var rowAuthors = row.Authors
+                    var rowAuthors = AuthorsFor(row)
                         .Select(n => n?.Trim())
                         .Where(n => !string.IsNullOrEmpty(n))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
