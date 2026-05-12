@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="BookTracker.Mobile.Pages.AuthorSearchPage"
+             Title="Find by author"
+             BackgroundColor="#FAF6EC">
+
+    <!-- "Find by author" — mirror of the Web /bookshop Author lookup
+         mode. Debounced substring search (250ms, min 2 chars) over
+         the offline catalog cache; aliases roll up to canonical
+         authors via the cache's SearchAuthorsAsync. Tap a result to
+         push the AuthorBooksPage with the books credited to that
+         canonical (and all its aliases).
+
+         Child page — keeps the system nav bar so the back button is
+         visible. No in-content header banner needed. -->
+
+    <Grid RowDefinitions="Auto,Auto,*" Padding="20,16,20,0">
+
+        <!-- Search Entry. Auto-focused on appearance so the keyboard
+             pops without an extra tap. Default keyboard so users can
+             type any author name (no numeric constraint). -->
+        <Entry x:Name="SearchEntry"
+               Grid.Row="0"
+               Placeholder="Search author by name…"
+               PlaceholderColor="#6B5D4A"
+               TextColor="#2C2416"
+               BackgroundColor="#F2EADB"
+               FontSize="16"
+               Keyboard="Default"
+               ReturnType="Search"
+               TextChanged="OnSearchTextChanged" />
+
+        <!-- Hint line visible while the query is too short. Aliases
+             rolling up to canonical is a feature worth surfacing so
+             users aren't confused when typing 'Bachman' returns
+             'Stephen King'. -->
+        <Label x:Name="HintLabel"
+               Grid.Row="1"
+               Text="Start typing — at least 2 characters. Aliases (e.g. Bachman) roll up to the canonical author."
+               FontSize="13"
+               TextColor="#6B5D4A"
+               LineBreakMode="WordWrap"
+               Margin="0,12,0,0" />
+
+        <!-- Results list. Cards are added in code-behind so the
+             cache result count can vary without XAML gymnastics. -->
+        <ScrollView Grid.Row="2" Margin="0,12,0,0">
+            <VerticalStackLayout x:Name="ResultsLayout"
+                                 Spacing="8"
+                                 Padding="0,0,0,20" />
+        </ScrollView>
+    </Grid>
+</ContentPage>

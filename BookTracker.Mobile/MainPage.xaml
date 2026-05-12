@@ -83,6 +83,21 @@
                         HorizontalOptions="Fill"
                         IsVisible="False" />
 
+                <!-- Find by author — the at-home killer action.
+                     Same height as Sign in / Load catalog (56dp);
+                     leather treatment because it's a navigation
+                     action, not an in-bookshop CTA. -->
+                <Button x:Name="FindByAuthorButton"
+                        Text="👤  Find by author"
+                        Clicked="OnFindByAuthorClicked"
+                        HeightRequest="56"
+                        BackgroundColor="#6B2737"
+                        TextColor="#FAF6EC"
+                        FontSize="16"
+                        CornerRadius="8"
+                        HorizontalOptions="Fill"
+                        IsVisible="False" />
+
                 <!-- Cache stats panel — passive info card that surfaces
                      "what's stashed locally" so it isn't buried in
                      StatusLabel text. Brass border on aged-parchment

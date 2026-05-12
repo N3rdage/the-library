@@ -45,6 +45,11 @@ public static class MauiProgram
         // CameraBarcodeReaderView so we don't hold the camera open
         // when the page isn't visible.
         builder.Services.AddTransient<ScanPage>();
+        // Author search page is transient so each navigation gets a
+        // fresh debounce state + result list. AuthorBooksPage isn't
+        // registered — it's constructed inline because it needs a
+        // runtime-chosen AuthorSnapshot that DI can't supply.
+        builder.Services.AddTransient<AuthorSearchPage>();
 
 #if DEBUG
         builder.Logging.AddDebug();

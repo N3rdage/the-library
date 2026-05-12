@@ -100,10 +100,18 @@
                 </Border>
 
                 <!-- Manual ISBN entry — for damaged barcodes or hand
-                     typing from a back cover. -->
+                     typing from a back cover. Numeric keyboard is the
+                     default because the 99% case is typing 10-13
+                     digits (the on-screen numeric keypad has big keys;
+                     a default keyboard's number row is cramped). The
+                     +X button alongside is the alternate path for the
+                     ~1% case: ISBN-10 ending in the X check digit,
+                     which the numeric keypad can't produce. The
+                     cleanup in OnManualLookupClicked already permits
+                     X / x so no validation change is needed. -->
                 <BoxView HeightRequest="1" Color="{AppThemeBinding Light=#EEE, Dark=#333}" />
                 <Label Text="Or enter ISBN manually:" FontSize="13" />
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                     <Entry
                         x:Name="ManualEntry"
                         Grid.Column="0"
@@ -113,6 +121,17 @@
                         Completed="OnManualLookupClicked" />
                     <Button
                         Grid.Column="1"
+                        Text="+X"
+                        Clicked="OnAppendXClicked"
+                        WidthRequest="48"
+                        BackgroundColor="#F2EADB"
+                        TextColor="#2C2416"
+                        BorderColor="#A67B3A"
+                        BorderWidth="1"
+                        FontSize="16"
+                        CornerRadius="6" />
+                    <Button
+                        Grid.Column="2"
                         Text="Lookup"
                         Clicked="OnManualLookupClicked" />
                 </Grid>
