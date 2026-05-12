@@ -15,8 +15,6 @@ public class BookAddViewModelTests
     private BookAddViewModel CreateVm() =>
         new(_factory, _lookup, new SeriesMatchService(_factory));
 
-    private GenrePickerViewModel CreateGenrePicker() => new(_factory);
-
     [Fact]
     public void AddCollectionWorkRow_InheritsAuthorsFromMostRecentPopulatedRow()
     {
@@ -210,7 +208,7 @@ public class BookAddViewModelTests
             CoverUrl: "https://example.invalid/cover.jpg",
             OpenLibraryUrl: null);
 
-        await vm.ApplyCandidateAsync(candidate, CreateGenrePicker());
+        await vm.ApplyCandidateAsync(candidate);
 
         // Author and title flow into both BookInput (for the Book record) and
         // WorkInput (for the auto-created primary Work).
@@ -240,7 +238,7 @@ public class BookAddViewModelTests
             CoverUrl: null,
             OpenLibraryUrl: null);
 
-        await vm.ApplyCandidateAsync(candidate, CreateGenrePicker());
+        await vm.ApplyCandidateAsync(candidate);
 
         Assert.Equal("User typed this", vm.BookInput.Title);
         Assert.Equal(new[] { "User author" }, vm.WorkInput.Authors);
@@ -304,7 +302,7 @@ public class BookAddViewModelTests
         var vm = CreateVm();
         vm.LookupIsbn = "9780345391803";
 
-        await vm.LookupAsync(CreateGenrePicker());
+        await vm.LookupAsync();
 
         Assert.NotNull(vm.ExistingBook);
         Assert.Equal("The Hobbit", vm.ExistingBook!.Title);
@@ -336,7 +334,7 @@ public class BookAddViewModelTests
 
         var vm = CreateVm();
         vm.LookupIsbn = "9780345391803";
-        await vm.LookupAsync(CreateGenrePicker());
+        await vm.LookupAsync();
 
         var bookId = await vm.AddCopyToExistingAsync();
 
@@ -420,7 +418,7 @@ public class BookAddViewModelTests
 
         var vm = CreateVm();
         vm.LookupIsbn = "9780552134613";
-        await vm.LookupAsync(CreateGenrePicker());
+        await vm.LookupAsync();
 
         // Sanity: suggestion should be the existing-series flavour.
         Assert.NotNull(vm.SeriesSuggestion);
@@ -453,7 +451,7 @@ public class BookAddViewModelTests
 
         var vm = CreateVm();
         vm.LookupIsbn = "9780765326355";
-        await vm.LookupAsync(CreateGenrePicker());
+        await vm.LookupAsync();
 
         Assert.Equal(MatchReason.ApiMatchNewSeries, vm.SeriesSuggestion!.Reason);
         vm.AcceptSeriesSuggestion();
@@ -486,7 +484,7 @@ public class BookAddViewModelTests
 
         var vm = CreateVm();
         vm.LookupIsbn = "9780765326355";
-        await vm.LookupAsync(CreateGenrePicker());
+        await vm.LookupAsync();
 
         // No Accept call.
         await vm.SaveAsync(new List<int>());
@@ -581,7 +579,7 @@ public class BookAddViewModelTests
         vm.IsCollection = true;
         vm.LookupIsbn = "9780451178121";
 
-        await vm.LookupAsync(CreateGenrePicker());
+        await vm.LookupAsync();
 
         // Book-level fields prefilled (the Book represents the collection).
         Assert.Equal("The Bachman Books", vm.BookInput.Title);
@@ -621,7 +619,7 @@ public class BookAddViewModelTests
 
         var vm = CreateVm();
         vm.LookupIsbn = "9780000000000";
-        await vm.LookupAsync(CreateGenrePicker());
+        await vm.LookupAsync();
 
         Assert.Equal(MatchReason.AuthorHasMultipleBooks, vm.SeriesSuggestion!.Reason);
 

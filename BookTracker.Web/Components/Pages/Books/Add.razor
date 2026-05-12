@@ -192,10 +192,16 @@
             </div>
 
             <div class="col-12">
-                <GenrePicker @ref="genrePicker"
-                             SelectedGenreIds="selectedGenreIds"
-                             SelectedGenreIdsChanged="ids => selectedGenreIds = ids"
-                             LookupCandidates="VM.LookupCandidates" />
+                <div class="card">
+                    <div class="card-header bg-white"><h2 class="h5 mb-0">Genres</h2></div>
+                    <div class="card-body">
+                        <div class="form-text mb-2">Genres apply to the work above.</div>
+                        <MudGenrePicker @ref="genrePicker"
+                                        SelectedGenreIds="selectedGenreIds"
+                                        SelectedGenreIdsChanged="ids => selectedGenreIds = ids"
+                                        LookupCandidates="VM.LookupCandidates" />
+                    </div>
+                </div>
             </div>
         }
         else
@@ -313,7 +319,7 @@
 
 @code {
     private List<int> selectedGenreIds = [];
-    private GenrePicker? genrePicker;
+    private MudGenrePicker? genrePicker;
     private bool addAnother;
 
     // After OnCollectionTitleKeyDownAsync grows the CollectionWorks list,
@@ -364,7 +370,15 @@
 
     private async Task LookupAsync()
     {
-        await VM.LookupAsync(genrePicker?.ViewModel);
+        await VM.LookupAsync();
+        // After the VM updates LookupCandidates, the picker's parameter
+        // binding pushes the new list in. ApplyCandidatesAsync then
+        // fuzzy-matches + auto-selects matches. Explicit call so manual
+        // genre removals after this stick (re-renders don't re-apply).
+        if (genrePicker is not null)
+        {
+            await genrePicker.ApplyCandidatesAsync(VM.LookupCandidates);
+        }
     }
 
     private async Task SearchAsync()
@@ -374,7 +388,7 @@
 
     private async Task ApplyCandidateAsync(BookSearchCandidate candidate)
     {
-        await VM.ApplyCandidateAsync(candidate, genrePicker?.ViewModel);
+        await VM.ApplyCandidateAsync(candidate);
     }
 
     private async Task SaveAsync()
@@ -409,8 +423,10 @@
 
     private void ResetForNextBook()
     {
-        VM.Reset(genrePicker?.ViewModel);
+        VM.Reset();
         selectedGenreIds = [];
+        // Picker re-renders via parameter binding when selectedGenreIds
+        // + VM.LookupCandidates reset above. No direct picker poke needed.
         StateHasChanged();
     }
 }

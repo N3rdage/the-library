@@ -1,10 +1,18 @@
-@* MudBlazor genre picker. Three surfaces over a single SelectedGenreIds
+@* MudBlazor genre picker. Two surfaces over a single SelectedGenreIds
    source of truth:
      1. Chips band — closeable chips per selected genre.
      2. MudAutocomplete input — type to search (substring, case-insensitive).
-     3. Collapsible MudTreeView — browse-all tree with parent/child checkboxes.
-   All three read from / write to the same parameter list. Picking a sub-
-   genre auto-includes its parent, matching the existing Bootstrap picker. *@
+   All read from / write to the same parameter list. Picking a sub-genre
+   auto-includes its parent so a "Dictionaries" selection implies
+   "Reference" too.
+
+   Optional LookupCandidates — informational badges shown below the
+   autocomplete listing the raw upstream subjects from an ISBN lookup.
+   Parent calls ApplyCandidatesAsync() to fuzzy-match those candidates
+   against the preset catalogue and auto-select matches; the explicit
+   call (rather than auto-apply on parameter change) keeps the user's
+   manual edits sticky — removing a fuzzy match doesn't get undone by
+   a downstream re-render. *@
 
 @inject MudGenrePickerViewModel VM
 
@@ -41,54 +49,40 @@
                      Adornment="Adornment.Start"
                      AdornmentIcon="@Icons.Material.Filled.Add" />
 
-    @* Browse-all tree, collapsed by default. *@
-    <div>
-        <MudButton OnClick="@(() => browseOpen = !browseOpen)"
-                   Variant="Variant.Text"
-                   Size="Size.Small"
-                   StartIcon="@(browseOpen ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)">
-            @(browseOpen ? "Hide browse" : "Browse all genres")
-        </MudButton>
-        @if (browseOpen)
-        {
-            <MudPaper Elevation="0" Class="mt-1 pa-2" Style="max-height: 320px; overflow-y: auto; border: 1px solid var(--mud-palette-divider);">
-                <MudTreeView T="int"
-                             Items="@treeItems"
-                             SelectionMode="SelectionMode.MultiSelection"
-                             SelectedValues="@selectedSet"
-                             SelectedValuesChanged="OnTreeSelectionChanged"
-                             AutoExpand="true"
-                             Hover="true"
-                             Dense="true" />
-            </MudPaper>
-        }
-    </div>
+    @* Lookup candidate badges — informational. The matched ones are
+       auto-selected via ApplyCandidatesAsync; the rest are shown as
+       "the lookup also returned these subjects" hints so the user can
+       decide whether to add them manually via the typeahead. *@
+    @if (LookupCandidates.Count > 0)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            Lookup returned (fuzzy-matched against the preset list):
+        </MudText>
+        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+            @foreach (var c in LookupCandidates)
+            {
+                <MudChip T="string"
+                         Size="Size.Small"
+                         Variant="Variant.Text"
+                         Color="Color.Default">@c</MudChip>
+            }
+        </MudStack>
+    }
 </MudStack>
 
 @code {
     [Parameter, EditorRequired] public List<int> SelectedGenreIds { get; set; } = [];
     [Parameter] public EventCallback<List<int>> SelectedGenreIdsChanged { get; set; }
 
-    private bool browseOpen;
-    private List<TreeItemData<int>> treeItems = [];
-    private IReadOnlyCollection<int> selectedSet = [];
+    /// <summary>Informational badges from an ISBN lookup. Use
+    /// <see cref="ApplyCandidatesAsync"/> to actually fuzzy-match
+    /// and auto-select; the parameter alone just renders the chip
+    /// row.</summary>
+    [Parameter] public List<string> LookupCandidates { get; set; } = [];
 
     protected override async Task OnInitializedAsync()
     {
         await VM.InitializeAsync();
-        RebuildTree();
-    }
-
-    protected override void OnParametersSet()
-    {
-        // Keep the tree binding in sync when the parent updates SelectedGenreIds.
-        selectedSet = SelectedGenreIds.ToList();
-        RebuildTree();
-    }
-
-    private void RebuildTree()
-    {
-        treeItems = VM.BuildTreeItems(SelectedGenreIds);
     }
 
     private Task<IEnumerable<MudGenrePickerViewModel.GenreRow>> SearchAsync(string query, CancellationToken ct)
@@ -107,26 +101,25 @@
         await CommitAsync(next);
     }
 
-    private async Task OnTreeSelectionChanged(IReadOnlyCollection<int> values)
+    /// <summary>Parent calls this after an ISBN lookup populates
+    /// <see cref="LookupCandidates"/>: fuzzy-match each candidate
+    /// against the preset list and add matches to the current
+    /// selection. Idempotent on the AddGenre side (already-selected
+    /// ids stay); manual removals after this call stick because the
+    /// caller decides when to re-apply.</summary>
+    public async Task ApplyCandidatesAsync(IReadOnlyList<string> candidates)
     {
-        // Tree fires on every tick/untick. Reconcile against current selection,
-        // then run additions through AddGenre so parent auto-selection applies.
-        var current = SelectedGenreIds.ToHashSet();
-        var incoming = values.ToHashSet();
-
-        var next = current.Intersect(incoming).ToList(); // keep still-selected
-        foreach (var newId in incoming.Except(current))
+        if (candidates is null || candidates.Count == 0) return;
+        var next = VM.ApplyLookupCandidates(candidates, SelectedGenreIds);
+        if (!next.SequenceEqual(SelectedGenreIds))
         {
-            next = VM.AddGenre(newId, next);
+            await CommitAsync(next);
         }
-        await CommitAsync(next);
     }
 
     private async Task CommitAsync(List<int> next)
     {
         SelectedGenreIds = next;
-        selectedSet = next.ToList();
-        RebuildTree();
         await SelectedGenreIdsChanged.InvokeAsync(next);
     }
 }
