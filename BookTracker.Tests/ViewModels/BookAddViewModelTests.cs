@@ -85,6 +85,139 @@ public class BookAddViewModelTests
     }
 
     [Fact]
+    public void SingleAuthorToggle_On_SeedsSharedAuthorsFromUnionOfRows()
+    {
+        // OFF → ON: the user has been entering per-row authors, then
+        // decides "actually let's set a default". Shared should capture
+        // the union of what was already on the rows so toggling isn't
+        // destructive.
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        vm.CollectionWorks =
+        [
+            new() { Authors = ["Stephen King"] },
+            new() { Authors = ["Stephen King", "Peter Straub"] },
+            new() { Authors = [] },
+        ];
+
+        vm.SingleAuthor = true;
+
+        Assert.Equal(new[] { "Stephen King", "Peter Straub" }, vm.SharedAuthors);
+    }
+
+    [Fact]
+    public void SingleAuthorToggle_Off_BroadcastsSharedToEveryRow()
+    {
+        // ON → OFF: the user picked a default in shared mode and now wants
+        // to tweak one row. Each row should start with the shared list as
+        // its starting point so the user only edits the outlier rows.
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        vm.CollectionWorks =
+        [
+            new() { Title = "A" },
+            new() { Title = "B" },
+            new() { Title = "C" },
+        ];
+        vm.SingleAuthor = true;
+        vm.SharedAuthors = ["Stephen King"];
+
+        vm.SingleAuthor = false;
+
+        Assert.All(vm.CollectionWorks, w => Assert.Equal(new[] { "Stephen King" }, w.Authors));
+    }
+
+    [Fact]
+    public void SingleAuthorToggle_Off_GivesEachRowAnIndependentList()
+    {
+        // The broadcast must copy the list, not share a reference — picker
+        // mutations on one row would otherwise leak into every other row.
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        vm.CollectionWorks = [new() { Title = "A" }, new() { Title = "B" }];
+        vm.SingleAuthor = true;
+        vm.SharedAuthors = ["Stephen King"];
+
+        vm.SingleAuthor = false;
+
+        vm.CollectionWorks[0].Authors.Add("Co-author");
+        Assert.Single(vm.CollectionWorks[1].Authors);
+        Assert.Equal("Stephen King", vm.CollectionWorks[1].Authors[0]);
+    }
+
+    [Fact]
+    public void SingleGenreToggle_On_SeedsSharedGenresFromUnionOfRows()
+    {
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        vm.CollectionWorks =
+        [
+            new() { GenreIds = [1, 2] },
+            new() { GenreIds = [2, 3] },
+            new() { GenreIds = [] },
+        ];
+
+        vm.SingleGenre = true;
+
+        Assert.Equal(new[] { 1, 2, 3 }, vm.SharedGenreIds);
+    }
+
+    [Fact]
+    public void SingleGenreToggle_Off_BroadcastsSharedToEveryRow()
+    {
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        vm.CollectionWorks = [new() { Title = "A" }, new() { Title = "B" }, new() { Title = "C" }];
+        vm.SingleGenre = true;
+        vm.SharedGenreIds = [7];
+
+        vm.SingleGenre = false;
+
+        Assert.All(vm.CollectionWorks, w => Assert.Equal(new[] { 7 }, w.GenreIds));
+    }
+
+    [Fact]
+    public void SingleGenreToggle_Off_GivesEachRowAnIndependentList()
+    {
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        vm.CollectionWorks = [new() { Title = "A" }, new() { Title = "B" }];
+        vm.SingleGenre = true;
+        vm.SharedGenreIds = [7];
+
+        vm.SingleGenre = false;
+
+        vm.CollectionWorks[0].GenreIds.Add(9);
+        Assert.Single(vm.CollectionWorks[1].GenreIds);
+        Assert.Equal(7, vm.CollectionWorks[1].GenreIds[0]);
+    }
+
+    [Fact]
+    public void Reset_DoesNotBroadcastStaleSharedStateToFreshRow()
+    {
+        // Regression: Reset() flips SingleAuthor / SingleGenre back to false.
+        // If those setters propagated, the freshly-rebuilt empty starter
+        // row would be re-populated with whatever shared state the previous
+        // capture had.
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        vm.SingleAuthor = true;
+        vm.SharedAuthors = ["Stephen King"];
+        vm.SingleGenre = true;
+        vm.SharedGenreIds = [7];
+
+        vm.Reset();
+
+        Assert.False(vm.SingleAuthor);
+        Assert.False(vm.SingleGenre);
+        Assert.Empty(vm.SharedAuthors);
+        Assert.Empty(vm.SharedGenreIds);
+        Assert.Single(vm.CollectionWorks);
+        Assert.Empty(vm.CollectionWorks[0].Authors);
+        Assert.Empty(vm.CollectionWorks[0].GenreIds);
+    }
+
+    [Fact]
     public async Task SaveAsync_SingleAuthorMode_AppliesSharedAuthorsToEveryWork()
     {
         // Single-Author mode is the "King's Different Seasons" shape —

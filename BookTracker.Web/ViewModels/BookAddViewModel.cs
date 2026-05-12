@@ -43,26 +43,76 @@ public class BookAddViewModel(
     // author inheritance didn't help). Start small, let typing grow it.
     public List<WorkFormViewModel.WorkFormInput> CollectionWorks { get; set; } = [new()];
 
-    // "Same author(s) for all works" mode — when on, a single shared
-    // author chip-list at the top of the collection block applies to
-    // every Work at save time and the per-row author pickers are
-    // hidden. Common case (Drew's ~50% estimate) is a single-author
-    // compendium (King's Different Seasons, Christie crime collections);
-    // this mode avoids both per-row chip-entry friction and the new-row
-    // inheritance race when the first row hasn't been populated yet.
-    // Off (default) keeps the per-row author UI for genuinely mixed-
-    // author anthologies (Dozois year's best, etc.).
-    public bool SingleAuthor { get; set; }
+    // "Same author(s) / genre(s) for all works" modes — when on, a single
+    // shared chip-list at the top of the collection block applies to every
+    // Work at save time and the per-row pickers are hidden. Common cases:
+    //   - Author: single-author compendium (King's Different Seasons,
+    //     Christie crime collections).
+    //   - Genre: Drew's order-of-magnitude case — a 20-work anthology
+    //     where 19 share a single genre and one differs.
+    //
+    // Toggle flips propagate data both ways so the user's picks survive
+    // (no "where did my genres go" moment):
+    //   - OFF → ON: shared = union of every row's per-row list (lossless
+    //     capture; user can prune if the union has stragglers).
+    //   - ON → OFF: every row's list := shared (broadcast; gives the user
+    //     a pre-populated starting point on each row so they only need
+    //     to edit the outliers — the order-of-magnitude flow).
+    // Reset() bypasses these setters and clears via the backing fields so
+    // it can't accidentally re-populate a fresh CollectionWorks row.
+    private bool _singleAuthor;
+    public bool SingleAuthor
+    {
+        get => _singleAuthor;
+        set
+        {
+            if (_singleAuthor == value) return;
+            if (value)
+            {
+                SharedAuthors = CollectionWorks
+                    .SelectMany(r => r.Authors)
+                    .Where(a => !string.IsNullOrWhiteSpace(a))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+            else
+            {
+                // Fresh copy per row so picker mutations on one row don't
+                // leak into another via shared list reference.
+                foreach (var row in CollectionWorks)
+                {
+                    row.Authors = SharedAuthors.ToList();
+                }
+            }
+            _singleAuthor = value;
+        }
+    }
     public List<string> SharedAuthors { get; set; } = [];
 
-    // "Same genre(s) for all works" mode — same shape as SingleAuthor but
-    // for genres. Drew's order-of-magnitude case: a 20-work collection
-    // where 19 share a single genre (e.g. SF) and one differs. On-mode
-    // applies SharedGenreIds to every Work at save time; off-mode reads
-    // each row's own GenreIds. New rows in off-mode inherit genres from
-    // the most recent populated row (same as authors) so a "mostly SF"
-    // anthology only needs the genre picked once.
-    public bool SingleGenre { get; set; }
+    private bool _singleGenre;
+    public bool SingleGenre
+    {
+        get => _singleGenre;
+        set
+        {
+            if (_singleGenre == value) return;
+            if (value)
+            {
+                SharedGenreIds = CollectionWorks
+                    .SelectMany(r => r.GenreIds)
+                    .Distinct()
+                    .ToList();
+            }
+            else
+            {
+                foreach (var row in CollectionWorks)
+                {
+                    row.GenreIds = SharedGenreIds.ToList();
+                }
+            }
+            _singleGenre = value;
+        }
+    }
     public List<int> SharedGenreIds { get; set; } = [];
 
     public void AddCollectionWorkRow()
@@ -308,9 +358,13 @@ public class BookAddViewModel(
         NoIsbnMode = false;
         IsCollection = false;
         CollectionWorks = [new()];
-        SingleAuthor = false;
+        // Bypass the SingleAuthor / SingleGenre setters here — they
+        // propagate shared list state to CollectionWorks rows on flip,
+        // which would re-populate the just-replaced empty starter row
+        // with whatever the previous capture had in shared mode.
+        _singleAuthor = false;
         SharedAuthors = [];
-        SingleGenre = false;
+        _singleGenre = false;
         SharedGenreIds = [];
         // Picker state clears via parameter binding when the page resets
         // its selectedGenreIds + this VM's LookupCandidates above. No
