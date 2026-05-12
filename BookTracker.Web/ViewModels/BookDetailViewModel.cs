@@ -324,6 +324,68 @@ public class BookDetailViewModel(
         return attachedTitle;
     }
 
+    /// <summary>Create a new Work (with the supplied fields) and attach it
+    /// to this Book — used by AddWorkDialog when the user typed a title
+    /// that didn't match any existing Work and filled out the form. Returns
+    /// the new Work id, or null when the input is invalid (no Book,
+    /// missing title, no authors). Refreshes the snapshot so the page
+    /// shows the new Work without a hard reload.</summary>
+    public async Task<int?> CreateAndAttachWorkAsync(
+        string title,
+        IReadOnlyList<string> authorNames,
+        string? subtitle,
+        string? firstPublishedDate,
+        IReadOnlyList<int> genreIds)
+    {
+        if (Book is null) return null;
+        if (string.IsNullOrWhiteSpace(title)) return null;
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var book = await db.Books.Include(b => b.Works).FirstOrDefaultAsync(b => b.Id == Book.Id);
+        if (book is null) return null;
+
+        var authors = await AuthorResolver.FindOrCreateAllAsync(authorNames, db);
+        if (authors.Count == 0) return null;
+
+        var firstPub = PartialDateParser.TryParse(firstPublishedDate) ?? PartialDate.Empty;
+
+        var genres = genreIds.Count == 0
+            ? new List<Genre>()
+            : await db.Genres.Where(g => genreIds.Contains(g.Id)).ToListAsync();
+
+        var work = new Work
+        {
+            Title = title.Trim(),
+            Subtitle = string.IsNullOrWhiteSpace(subtitle) ? null : subtitle.Trim(),
+            FirstPublishedDate = firstPub.Date,
+            FirstPublishedDatePrecision = firstPub.Precision,
+            Genres = genres,
+        };
+        AuthorResolver.AssignAuthors(work, authors);
+
+        book.Works.Add(work);
+        await db.SaveChangesAsync();
+
+        await InitializeAsync(Book.Id);
+        return work.Id;
+    }
+
+    /// <summary>Delete this Book. EF cascades remove the Editions / Copies
+    /// (PK cascade); Works are detached from the join — if a Work was
+    /// only on this Book it becomes orphan-removable and EF cleans it up.
+    /// Returns true on success so the caller can navigate away.</summary>
+    public async Task<bool> DeleteBookAsync()
+    {
+        if (Book is null) return false;
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var book = await db.Books.FindAsync(Book.Id);
+        if (book is null) return false;
+        db.Books.Remove(book);
+        await db.SaveChangesAsync();
+        return true;
+    }
+
     /// <summary>Tag autocomplete — returns existing tags not already assigned, filtered by substring.</summary>
     public async Task<IEnumerable<string>> SearchTagsAsync(string query, CancellationToken ct)
     {

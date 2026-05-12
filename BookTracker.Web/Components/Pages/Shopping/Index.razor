@@ -150,7 +150,7 @@
                         }
 
                         <div class="mt-2">
-                            <a href="@($"/books/{VM.Result.BookId}/edit")" class="btn btn-outline-primary btn-sm">View book</a>
+                            <a href="@($"/books/{VM.Result.BookId}")" class="btn btn-outline-primary btn-sm">View book</a>
                         </div>
                     </div>
                 </div>
@@ -225,7 +225,7 @@
                                     {
                                         <span class="text-muted">#@book.SeriesOrder</span>
                                     }
-                                    <a href="@($"/books/{book.Id}/edit")" class="text-decoration-none">@book.Title</a>
+                                    <a href="@($"/books/{book.Id}")" class="text-decoration-none">@book.Title</a>
                                 </li>
                             }
                         </ul>
@@ -368,7 +368,7 @@
         var bookId = await VM.MarkAsBoughtAsync(item);
         if (bookId.HasValue)
         {
-            Nav.NavigateTo($"/books/{bookId}/edit");
+            Nav.NavigateTo($"/books/{bookId}");
         }
     }
 

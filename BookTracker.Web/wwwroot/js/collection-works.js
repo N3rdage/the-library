@@ -48,7 +48,14 @@ window.collectionWorks = (function () {
     }
 
     function bindEnterSuppression(dotnetRef) {
-        pageDotnetRef = dotnetRef;
+        // Only update the page ref when a real one is passed. The
+        // AddWorkDialog on the View page reuses this listener for its
+        // single title autocomplete (wrapper with data-collection-work-title="-1")
+        // and calls bindEnterSuppression(null) — we want the suppression
+        // behaviour without clobbering Add Book's real ref if it has
+        // already registered, and without invoking anything when there's
+        // no row-add semantics to fire.
+        if (dotnetRef) pageDotnetRef = dotnetRef;
         if (listenerBound) return;
         listenerBound = true;
 
@@ -120,10 +127,20 @@ window.collectionWorks = (function () {
 
             const indexStr = wrapper.getAttribute('data-collection-work-title');
             const index = parseInt(indexStr, 10);
-            if (isNaN(index)) return;
+            if (isNaN(index) || index < 0) {
+                // Negative index = dialog usage (AddWorkDialog) where there'\''s
+                // no row-add semantics to fire — suppression alone is enough.
+                return;
+            }
 
             if (pageDotnetRef) {
-                await pageDotnetRef.invokeMethodAsync('OnCollectionTitleEnter', index);
+                try {
+                    await pageDotnetRef.invokeMethodAsync('OnCollectionTitleEnter', index);
+                } catch (err) {
+                    // pageDotnetRef may be a disposed Add Book page (user
+                    // navigated away). Silently ignore — the suppression
+                    // itself already did its job.
+                }
             }
         }, true /* capture phase — fire BEFORE input-level listeners */);
     }

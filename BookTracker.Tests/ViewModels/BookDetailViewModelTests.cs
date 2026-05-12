@@ -702,6 +702,133 @@ public class BookDetailViewModelTests
     }
 
     [Fact]
+    public async Task CreateAndAttachWorkAsync_AddsNewWorkToBookWithSuppliedFields()
+    {
+        // PR 6 — the AddWorkDialog's "Save (create new)" path lands here.
+        // Verifies the new Work is wired into Book.Works with the typed
+        // fields and a freshly-created Author row.
+        var factory = new TestDbContextFactory();
+        int bookId, fantasyId;
+        using (var db = factory.CreateDbContext())
+        {
+            var author = new Author { Name = "Existing Author" };
+            var fantasy = new Genre { Name = "Fantasy" };
+            db.Books.Add(new Book
+            {
+                Title = "Compendium",
+                Works = [new Work
+                {
+                    Title = "First story",
+                    WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
+                }]
+            });
+            db.Genres.Add(fantasy);
+            await db.SaveChangesAsync();
+            bookId = db.Books.Single().Id;
+            fantasyId = fantasy.Id;
+        }
+
+        var vm = CreateVm(factory);
+        await vm.InitializeAsync(bookId);
+
+        var workId = await vm.CreateAndAttachWorkAsync(
+            title: "Newly captured story",
+            authorNames: ["Newly Captured Author"],
+            subtitle: "A subtitle",
+            firstPublishedDate: "1934",
+            genreIds: [fantasyId]);
+
+        Assert.NotNull(workId);
+        // Snapshot refreshed inline → page sees both works.
+        Assert.Equal(2, vm.Book!.Works.Count);
+
+        using var verify = factory.CreateDbContext();
+        var work = await verify.Works
+            .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
+            .Include(w => w.Genres)
+            .FirstAsync(w => w.Id == workId);
+        Assert.Equal("Newly captured story", work.Title);
+        Assert.Equal("A subtitle", work.Subtitle);
+        Assert.Equal(new DateOnly(1934, 1, 1), work.FirstPublishedDate);
+        Assert.Equal(DatePrecision.Year, work.FirstPublishedDatePrecision);
+        Assert.Equal("Newly Captured Author", work.WorkAuthors.Single().Author.Name);
+        Assert.Contains(work.Genres, g => g.Id == fantasyId);
+    }
+
+    [Fact]
+    public async Task CreateAndAttachWorkAsync_NoAuthors_ReturnsNullWithoutSaving()
+    {
+        // Defensive guard — the dialog'\''s Save button is disabled while
+        // authors.Count == 0, but the VM enforces it independently.
+        var factory = new TestDbContextFactory();
+        int bookId;
+        using (var db = factory.CreateDbContext())
+        {
+            var author = new Author { Name = "Author" };
+            db.Books.Add(new Book
+            {
+                Title = "Book",
+                Works = [new Work { Title = "Work", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]
+            });
+            await db.SaveChangesAsync();
+            bookId = db.Books.Single().Id;
+        }
+
+        var vm = CreateVm(factory);
+        await vm.InitializeAsync(bookId);
+
+        var workId = await vm.CreateAndAttachWorkAsync(
+            title: "Title only",
+            authorNames: [],
+            subtitle: null,
+            firstPublishedDate: null,
+            genreIds: []);
+
+        Assert.Null(workId);
+        Assert.Single(vm.Book!.Works);
+    }
+
+    [Fact]
+    public async Task DeleteBookAsync_RemovesBookAndCascadesEditionsCopies()
+    {
+        // PR 6 — replaces /edit'\''s Delete affordance with a View-page
+        // confirm dialog. Verifies the cascade rules (book → editions →
+        // copies) still hold via EF.
+        var factory = new TestDbContextFactory();
+        int bookId;
+        using (var db = factory.CreateDbContext())
+        {
+            var author = new Author { Name = "Author" };
+            db.Books.Add(new Book
+            {
+                Title = "Doomed",
+                Works = [new Work { Title = "Work", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+                Editions =
+                [
+                    new Edition
+                    {
+                        Isbn = "9780000000001",
+                        Copies = [new Copy { Condition = BookCondition.Good }, new Copy { Condition = BookCondition.AsNew }],
+                    }
+                ]
+            });
+            await db.SaveChangesAsync();
+            bookId = db.Books.Single().Id;
+        }
+
+        var vm = CreateVm(factory);
+        await vm.InitializeAsync(bookId);
+
+        var ok = await vm.DeleteBookAsync();
+
+        Assert.True(ok);
+        using var verify = factory.CreateDbContext();
+        Assert.Empty(verify.Books);
+        Assert.Empty(verify.Editions);
+        Assert.Empty(verify.Copies);
+    }
+
+    [Fact]
     public async Task AttachExistingWorkAsync_AlreadyAttached_ReturnsNullAndDoesNotDoubleAdd()
     {
         // Defensive guard against stale dialog state (search filter normally

@@ -42,7 +42,7 @@ public class BookAddViewModel(
     // collection's Book.Title + cover and skips the work-specific fields.
     // Authors and genres are captured at save time via the SingleAuthor /
     // SingleGenre shared-mode toggles or per-row entry; series suggestions
-    // stay deferred to per-work editing on /books/{id}/edit because the
+    // stay deferred to per-work editing on /books/{id} because the
     // lookup flow describes the collection, not its constituent works.
     public bool IsCollection { get; set; }
     // Default to a single starter row. The Enter-on-Title affordance
@@ -505,7 +505,7 @@ public class BookAddViewModel(
                 //     first-published, per-row or shared genres).
                 //
                 // Series suggestions stay deferred to per-work editing on
-                // /books/{id}/edit (the lookup flow can't pick per-work, and
+                // /books/{id} (the lookup flow can't pick per-work, and
                 // applying to all would be wrong). Author source depends on
                 // SingleAuthor mode; genre source on SingleGenre — both
                 // apply only to new-work rows (existing Works bring their
