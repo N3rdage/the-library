@@ -21,3 +21,4 @@
 - [Optimise for the common path, not the visible edge](feedback_common_path_over_visible_edge.md) — when fixing a reported edge-case, name what the fix changes for the silent majority before applying; reflex fixes often satisfy the visible bug at the cost of the unmeasured everyday flow.
 - [Runbook: SQL DB restart for SqlClient pool zombies](runbook_sqlclient_pool_zombies.md) — when both slots Running but won't serve and Stop+Start doesn't help, restart the SQL DB to break stuck connection state.
 - [Runbook: container warmup timeout calibration](runbook_container_warmup_calibration.md) — Linux App Service default 230s probe is too tight under AAD-auth + cold cert update; `WEBSITES_CONTAINER_START_TIME_LIMIT=600` now in Bicep.
+- [Blazor dialog VM lifetime trap](feedback_dialog_vm_lifetime.md) — `@inject` inside a MudDialog hands a fresh Transient VM, not the page's; pass the page's VM via `DialogParameters` when shared state matters.
