@@ -316,6 +316,13 @@
                                                its <input> deep inside, so we can't put the data-attribute
                                                directly on the input. *@
                                             <div data-collection-work-title="@index">
+                                                @* CoerceText="false" so Esc / un-picked dropdown close doesn'\''t
+                                                   revert work.Title to the (null) Value's display string —
+                                                   the typed text needs to survive for the "captured as new"
+                                                   flow. Paired with the collection-works.js capture-phase
+                                                   listener that tracks user navigation (Down/Up) per input
+                                                   and only defers to MudAutocomplete's auto-pick when the
+                                                   user has explicitly arrow-keyed. *@
                                                 <MudAutocomplete T="WorkSearchResult"
                                                                  Value="null"
                                                                  ValueChanged="@(picked => OnExistingWorkPickedAsync(picked, index))"
@@ -329,7 +336,7 @@
                                                                  MinCharacters="2"
                                                                  DebounceInterval="250"
                                                                  CoerceValue="false"
-                                                                 CoerceText="true"
+                                                                 CoerceText="false"
                                                                  ResetValueOnEmptyText="false"
                                                                  ShowProgressIndicator="true">
                                                     <ItemTemplate Context="r">
