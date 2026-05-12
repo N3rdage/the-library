@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using BookTracker.Data;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor;
@@ -96,6 +97,51 @@ public class MudGenrePickerViewModel(IDbContextFactory<BookTrackerDbContext> dbF
     public List<int> RemoveGenre(int genreId, IReadOnlyCollection<int> current)
     {
         return current.Where(id => id != genreId).ToList();
+    }
+
+    /// <summary>Walks the ISBN-lookup genre candidates (e.g. Open Library
+    /// subjects like "Detective and mystery stories, English"), fuzzy-
+    /// matches each against the preset genre catalogue, and returns the
+    /// updated selection list with matches added. Idempotent — already-
+    /// selected matches stay; user can manually remove a fuzzy pick after
+    /// the apply and it won't re-add on subsequent renders because the
+    /// component tracks the last-applied candidate list.</summary>
+    public List<int> ApplyLookupCandidates(IReadOnlyList<string> candidates, IReadOnlyCollection<int> current)
+    {
+        var next = current.ToList();
+        foreach (var candidate in candidates)
+        {
+            var match = AllGenres.FirstOrDefault(g => FuzzyGenreMatch(candidate, g.Name));
+            if (match is not null)
+            {
+                next = AddGenre(match.Id, next);
+            }
+        }
+        return next;
+    }
+
+    /// <summary>Match a free-form upstream subject string ("Detective and
+    /// mystery stories, English") against one of our preset genre names
+    /// ("Mystery"). The preset must appear inside the candidate as a
+    /// contiguous, word-bounded phrase. Word-boundary regex protects
+    /// against substring-only matches ("Science" → "Science Fiction" or
+    /// "Romance" → "Romanticism").
+    /// Static so non-picker callers (BulkAddViewModel's per-row genre
+    /// hint) can reuse the same matcher.</summary>
+    public static bool FuzzyGenreMatch(string candidate, string preset)
+    {
+        if (string.IsNullOrWhiteSpace(candidate) || string.IsNullOrWhiteSpace(preset)) return false;
+
+        var c = candidate.Trim().ToLowerInvariant();
+        var p = preset.Trim().ToLowerInvariant();
+
+        if (c == p) return true;
+
+        // \b matches a transition between word / non-word characters, so
+        // multi-word presets ("Science Fiction") only fire when the whole
+        // phrase appears in the candidate.
+        var pattern = $@"\b{Regex.Escape(p)}\b";
+        return Regex.IsMatch(c, pattern);
     }
 
     public record GenreRow(int Id, string Name, int? ParentGenreId, string? ParentName);

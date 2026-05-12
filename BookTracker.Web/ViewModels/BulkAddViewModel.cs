@@ -248,7 +248,7 @@ public class BulkAddViewModel(
             var matched = new HashSet<int>();
             foreach (var candidate in row.GenreCandidates)
             {
-                var genre = allGenres.FirstOrDefault(g => GenrePickerViewModel.FuzzyGenreMatch(candidate, g.Name));
+                var genre = allGenres.FirstOrDefault(g => MudGenrePickerViewModel.FuzzyGenreMatch(candidate, g.Name));
                 if (genre is not null && matched.Add(genre.Id))
                 {
                     work.Genres.Add(genre);

@@ -6,6 +6,33 @@ namespace BookTracker.Tests.ViewModels;
 [Trait("Category", TestCategories.Integration)]
 public class MudGenrePickerViewModelTests
 {
+    [Theory]
+    // Whole-word matches inside a longer candidate.
+    [InlineData("Fantasy fiction", "Fantasy", true)]
+    [InlineData("Epic fantasy", "Fantasy", true)]
+    [InlineData("Detective and mystery stories", "Mystery", true)]
+    [InlineData("Detective and mystery stories, English", "Mystery", true)]
+    // Multi-word presets match only when the whole phrase appears.
+    [InlineData("Science fiction novels", "Science Fiction", true)]
+    [InlineData("Science", "Science Fiction", false)]
+    // Word-boundary protection — substring-only matches no longer fire.
+    [InlineData("Romanticism", "Romance", false)]
+    // Candidate-vs-preset mismatch.
+    [InlineData("Romance", "Fantasy", false)]
+    // Exact match (case-insensitive).
+    [InlineData("MYSTERY", "Mystery", true)]
+    // Empty inputs fail closed.
+    [InlineData("", "Fantasy", false)]
+    [InlineData("Fantasy", "", false)]
+    public void FuzzyGenreMatch_MatchesCorrectly(string candidate, string preset, bool expected)
+    {
+        // Ported from the deleted GenrePickerViewModelTests when the
+        // Bootstrap-era picker was retired — the static matcher lives on
+        // MudGenrePickerViewModel now and is shared by BulkAddViewModel's
+        // per-row genre hint.
+        Assert.Equal(expected, MudGenrePickerViewModel.FuzzyGenreMatch(candidate, preset));
+    }
+
     [Fact]
     public async Task InitializeAsync_LoadsFlatGenresWithParentNames()
     {

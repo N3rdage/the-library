@@ -128,7 +128,7 @@ public class BookAddViewModel(
     public ExistingBookMatch? ExistingBook { get; private set; }
     public bool AddingCopy { get; private set; }
 
-    public async Task LookupAsync(GenrePickerViewModel? genrePicker)
+    public async Task LookupAsync()
     {
         LookupMessage = null;
         ExistingBook = null;
@@ -207,11 +207,11 @@ public class BookAddViewModel(
             if (!IsCollection)
             {
                 LookupCandidates = result.GenreCandidates.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                if (genrePicker is not null)
-                {
-                    genrePicker.LookupCandidates = LookupCandidates;
-                    genrePicker.ApplyLookupCandidates(LookupCandidates);
-                }
+                // Picker reads LookupCandidates via parameter binding; the
+                // page calls picker.ApplyCandidatesAsync explicitly after
+                // this method returns so the fuzzy-match auto-select runs
+                // once per lookup (not on every re-render — keeps manual
+                // genre removals sticky).
 
                 SeriesSuggestion = await seriesMatch.FindMatchAsync(result);
                 SeriesSuggestionDismissed = false;
@@ -267,7 +267,7 @@ public class BookAddViewModel(
     }
 
     /// <summary>Resets all input state so the page is ready for the next book.</summary>
-    public void Reset(GenrePickerViewModel? genrePicker)
+    public void Reset()
     {
         BookInput = new();
         WorkInput = new();
@@ -289,11 +289,9 @@ public class BookAddViewModel(
         CollectionWorks = [new()];
         SingleAuthor = false;
         SharedAuthors = [];
-        if (genrePicker is not null)
-        {
-            genrePicker.SelectedGenreIds = [];
-            genrePicker.LookupCandidates = [];
-        }
+        // Picker state clears via parameter binding when the page resets
+        // its selectedGenreIds + this VM's LookupCandidates above. No
+        // direct picker poke needed.
     }
 
     public record ExistingBookMatch(int BookId, int EditionId, string Title, string Author, int CopyCount);
@@ -326,7 +324,7 @@ public class BookAddViewModel(
         }
     }
 
-    public async Task ApplyCandidateAsync(BookSearchCandidate candidate, GenrePickerViewModel? genrePicker)
+    public async Task ApplyCandidateAsync(BookSearchCandidate candidate)
     {
         if (string.IsNullOrWhiteSpace(BookInput.Title)) BookInput.Title = candidate.Title ?? "";
         if (string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl)) BookInput.DefaultCoverArtUrl = candidate.CoverUrl;
@@ -351,7 +349,6 @@ public class BookAddViewModel(
 
         // No genre auto-pick for the no-ISBN flow — search results don't
         // carry subjects. User selects genres manually via the picker.
-        _ = genrePicker;
     }
 
     public async Task<int?> SaveAsync(List<int> selectedGenreIds)
