@@ -789,6 +789,82 @@ public class BookDetailViewModelTests
     }
 
     [Fact]
+    public async Task RemoveWorkFromBookAsync_WorkOnMultipleBooks_OnlyDetachesFromCurrent()
+    {
+        // Shared Work between two Books (Drew's Lovecraft case) — removing
+        // it from one Book must keep the other Book's join intact.
+        var factory = new TestDbContextFactory();
+        int currentBookId, otherBookId, workId;
+        using (var db = factory.CreateDbContext())
+        {
+            var author = new Author { Name = "Lovecraft" };
+            var shared = new Work
+            {
+                Title = "The Call of Cthulhu",
+                WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
+            };
+            var keeper = new Work
+            {
+                Title = "Anchor",
+                WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
+            };
+            var current = new Book { Title = "Compendium A", Works = [keeper, shared] };
+            var other = new Book { Title = "Compendium B", Works = [shared] };
+            db.Books.AddRange(current, other);
+            await db.SaveChangesAsync();
+            currentBookId = current.Id;
+            otherBookId = other.Id;
+            workId = shared.Id;
+        }
+
+        var vm = CreateVm(factory);
+        await vm.InitializeAsync(currentBookId);
+
+        var removed = await vm.RemoveWorkFromBookAsync(workId);
+
+        Assert.Equal("The Call of Cthulhu", removed);
+        // Current book loses the work — only the anchor remains.
+        Assert.Single(vm.Book!.Works);
+        // Other book still has the work (Work row preserved).
+        using var verify = factory.CreateDbContext();
+        var work = await verify.Works.Include(w => w.Books).FirstOrDefaultAsync(w => w.Id == workId);
+        Assert.NotNull(work);
+        Assert.Single(work!.Books);
+        Assert.Equal(otherBookId, work.Books[0].Id);
+    }
+
+    [Fact]
+    public async Task RemoveWorkFromBookAsync_WorkOnOnlyThisBook_DeletesWorkOutright()
+    {
+        // No other Books reference the Work → orphan after detach. Delete
+        // outright to avoid Work-noise data.
+        var factory = new TestDbContextFactory();
+        int bookId, keeperWorkId, orphanWorkId;
+        using (var db = factory.CreateDbContext())
+        {
+            var author = new Author { Name = "Author" };
+            var keeper = new Work { Title = "Anchor", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+            var orphan = new Work { Title = "Outlier", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+            db.Books.Add(new Book { Title = "Solo", Works = [keeper, orphan] });
+            await db.SaveChangesAsync();
+            bookId = db.Books.Single().Id;
+            keeperWorkId = keeper.Id;
+            orphanWorkId = orphan.Id;
+        }
+
+        var vm = CreateVm(factory);
+        await vm.InitializeAsync(bookId);
+
+        var removed = await vm.RemoveWorkFromBookAsync(orphanWorkId);
+
+        Assert.Equal("Outlier", removed);
+        Assert.Single(vm.Book!.Works);
+        using var verify = factory.CreateDbContext();
+        Assert.False(await verify.Works.AnyAsync(w => w.Id == orphanWorkId));
+        Assert.True(await verify.Works.AnyAsync(w => w.Id == keeperWorkId));
+    }
+
+    [Fact]
     public async Task DeleteBookAsync_RemovesBookAndCascadesEditionsCopies()
     {
         // PR 6 — replaces /edit'\''s Delete affordance with a View-page

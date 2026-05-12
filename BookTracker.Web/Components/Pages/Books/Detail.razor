@@ -268,7 +268,7 @@
                                                         }
                                                     </MudStack>
                                                 }
-                                                <div class="mt-1">
+                                                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" Class="mt-1">
                                                     <MudButton OnClick="@(() => OpenWorkEditDialog(w.Id))"
                                                                Disabled="@dialogOpening"
                                                                Variant="Variant.Outlined"
@@ -277,7 +277,22 @@
                                                                Size="Size.Small">
                                                         Edit work
                                                     </MudButton>
-                                                </div>
+                                                    @* Remove-from-book only when there's more than one Work — pulling
+                                                       the only Work off a Book leaves it without a creative unit, which
+                                                       is broken model state. If the user wants that, they should delete
+                                                       the Book itself. *@
+                                                    @if (book.Works.Count > 1)
+                                                    {
+                                                        <MudButton OnClick="@(() => ConfirmRemoveWorkAsync(w.Id, w.Title))"
+                                                                   Disabled="@dialogOpening"
+                                                                   Variant="Variant.Text"
+                                                                   Color="Color.Error"
+                                                                   StartIcon="@Icons.Material.Filled.LinkOff"
+                                                                   Size="Size.Small">
+                                                            Remove from book
+                                                        </MudButton>
+                                                    }
+                                                </MudStack>
                                             </MudStack>
                                         </div>
                                     }
@@ -704,6 +719,38 @@
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
         var dialog = await DialogService.ShowAsync<AddWorkDialog>("Add work", parameters, options);
         await dialog.Result;
+    });
+
+    private Task ConfirmRemoveWorkAsync(int workId, string workTitle) => OpenDialogGuardedAsync(async () =>
+    {
+        if (VM.Book is null) return;
+        // The dialog wording shifts whether this is a detach (Work lives on
+        // elsewhere) or an outright delete. We don't know which until the
+        // VM runs the query, so phrase the prompt for the worst case —
+        // delete — and the VM does the right thing under the hood.
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Remove this work?",
+            $"\"{workTitle}\" will be detached from this book. If it's not attached to any other book, it'll be deleted.",
+            yesText: "Remove",
+            cancelText: "Cancel");
+        if (confirmed != true) return;
+
+        try
+        {
+            var removed = await VM.RemoveWorkFromBookAsync(workId);
+            if (removed is not null)
+            {
+                Snackbar.Add($"Removed \"{removed}\".", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Couldn't remove the work.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Couldn't remove the work: {ex.Message}", Severity.Error);
+        }
     });
 
     private Task ConfirmDeleteBookAsync() => OpenDialogGuardedAsync(async () =>
