@@ -204,6 +204,31 @@
                 <div class="card">
                     <div class="card-header bg-white"><h2 class="h5 mb-0">Works in this collection</h2></div>
                     <div class="card-body">
+                        @* Single-Author mode — when on, render one shared
+                           MudAuthorPicker; the per-row author pickers are
+                           hidden and save applies the shared authors to
+                           every Work. Common case (~50%) is a single-
+                           author compendium where typing the author once
+                           is the desired flow. *@
+                        <div class="form-check form-switch mb-3">
+                            <input type="checkbox" id="singleAuthorToggle"
+                                   class="form-check-input"
+                                   @bind="VM.SingleAuthor" />
+                            <label for="singleAuthorToggle" class="form-check-label">
+                                Same author(s) for all works
+                            </label>
+                        </div>
+
+                        @if (VM.SingleAuthor)
+                        {
+                            <div class="mb-3">
+                                <label class="form-label small">Author(s) for all works in this collection</label>
+                                <MudAuthorPicker Authors="VM.SharedAuthors"
+                                                 AuthorsChanged="list => VM.SharedAuthors = list"
+                                                 Label="Add author" />
+                            </div>
+                        }
+
                         @for (var i = 0; i < VM.CollectionWorks.Count; i++)
                         {
                             var index = i;
@@ -217,7 +242,7 @@
                                     }
                                 </div>
                                 <div class="row g-2">
-                                    <div class="col-md-7">
+                                    <div class="col-md-@(VM.SingleAuthor ? 12 : 7)">
                                         <label class="form-label small">Title</label>
                                         @* Enter on these title inputs is handled in two layers:
                                            collection-works.js installs a document-level keydown
@@ -238,12 +263,15 @@
                                                    data-collection-work-title=""
                                                    @onkeydown="@(e => OnCollectionTitleKeyDownAsync(e, index))" />
                                     </div>
-                                    <div class="col-md-5">
-                                        <label class="form-label small">Author(s)</label>
-                                        <MudAuthorPicker Authors="work.Authors"
-                                                         AuthorsChanged="list => work.Authors = list"
-                                                         Label="Add author" />
-                                    </div>
+                                    @if (!VM.SingleAuthor)
+                                    {
+                                        <div class="col-md-5">
+                                            <label class="form-label small">Author(s)</label>
+                                            <MudAuthorPicker Authors="work.Authors"
+                                                             AuthorsChanged="list => work.Authors = list"
+                                                             Label="Add author" />
+                                        </div>
+                                    }
                                     <div class="col-md-7">
                                         <label class="form-label small">Subtitle <span class="text-muted">(optional)</span></label>
                                         <InputText @bind-Value="work.Subtitle" class="form-control" />

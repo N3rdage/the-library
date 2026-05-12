@@ -26,16 +26,14 @@ public class BookAddViewModelTests
         // 13 author chip entries.
         var vm = CreateVm();
         vm.IsCollection = true;
-        // Default constructor seeds 2 empty rows.
+        // Default constructor seeds 1 empty starter row.
         vm.CollectionWorks[0].Authors = new List<string> { "Stephen King" };
 
         vm.AddCollectionWorkRow();
 
-        // Row 2 (the second pre-seeded row, untouched) stays empty.
-        // Row 3 (just added) inherits row 1's authors — the most recent
+        // The newly-added row inherits row 0's authors — the most recent
         // populated row walking backwards.
-        Assert.Empty(vm.CollectionWorks[1].Authors);
-        Assert.Equal(new[] { "Stephen King" }, vm.CollectionWorks[2].Authors);
+        Assert.Equal(new[] { "Stephen King" }, vm.CollectionWorks[1].Authors);
     }
 
     [Fact]
@@ -65,12 +63,84 @@ public class BookAddViewModelTests
         // null, not throw).
         var vm = CreateVm();
         vm.IsCollection = true;
-        // Default 2 empty rows.
+        // Default 1 empty starter row.
 
         vm.AddCollectionWorkRow();
 
-        Assert.Equal(3, vm.CollectionWorks.Count);
-        Assert.Empty(vm.CollectionWorks[2].Authors);
+        Assert.Equal(2, vm.CollectionWorks.Count);
+        Assert.Empty(vm.CollectionWorks[1].Authors);
+    }
+
+    [Fact]
+    public void DefaultCollectionState_StartsWithOneEmptyRow()
+    {
+        // The capture flow grows the row list via Enter-on-Title; pre-
+        // seeding multiple rows forced users to manually re-enter authors
+        // on row 2 (the row already existed before any author was typed,
+        // so the new-row inheritance didn't help). Verify the default
+        // shape stays single-row.
+        var vm = CreateVm();
+
+        Assert.Single(vm.CollectionWorks);
+        Assert.False(vm.SingleAuthor);
+        Assert.Empty(vm.SharedAuthors);
+    }
+
+    [Fact]
+    public async Task SaveAsync_SingleAuthorMode_AppliesSharedAuthorsToEveryWork()
+    {
+        // Single-Author mode is the "King's Different Seasons" shape —
+        // user enters the author once at the top; save applies it to
+        // every Work row.
+        var vm = CreateVm();
+        vm.BookInput.Title = "Different Seasons";
+        vm.EditionInput.Format = BookFormat.TradePaperback;
+        vm.IsCollection = true;
+        vm.SingleAuthor = true;
+        vm.SharedAuthors = new List<string> { "Stephen King" };
+        vm.CollectionWorks =
+        [
+            new() { Title = "Rita Hayworth and Shawshank Redemption" },
+            new() { Title = "Apt Pupil" },
+            new() { Title = "The Body" },
+            new() { Title = "The Breathing Method" },
+        ];
+
+        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+
+        Assert.NotNull(bookId);
+        await using var db = _factory.CreateDbContext();
+        var saved = await db.Books
+            .Include(b => b.Works)
+                .ThenInclude(w => w.WorkAuthors)
+                .ThenInclude(wa => wa.Author)
+            .FirstAsync(b => b.Id == bookId);
+
+        Assert.Equal(4, saved.Works.Count);
+        Assert.All(saved.Works, w =>
+        {
+            Assert.Single(w.WorkAuthors);
+            Assert.Equal("Stephen King", w.WorkAuthors[0].Author.Name);
+        });
+    }
+
+    [Fact]
+    public async Task SaveAsync_SingleAuthorMode_NoSharedAuthors_Throws()
+    {
+        // Save in Single-Author mode with no shared authors set should
+        // fail with a clear message rather than silently produce zero
+        // works.
+        var vm = CreateVm();
+        vm.BookInput.Title = "Untitled Collection";
+        vm.EditionInput.Format = BookFormat.TradePaperback;
+        vm.IsCollection = true;
+        vm.SingleAuthor = true;
+        vm.SharedAuthors = [];
+        vm.CollectionWorks = [new() { Title = "Story A" }];
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => vm.SaveAsync(selectedGenreIds: []));
+        Assert.Contains("Single-Author", ex.Message);
     }
 
     [Fact]
