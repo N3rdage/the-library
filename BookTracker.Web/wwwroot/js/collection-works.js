@@ -103,6 +103,19 @@ window.collectionWorks = (function () {
             // Free-text Enter: block MudAutocomplete's auto-pick of the
             // first-highlighted item, then invoke the page's add-row /
             // focus-next handler with the typed text intact.
+            //
+            // Known trade-off: the popover stays visible after this
+            // Enter because stopImmediatePropagation prevents
+            // MudAutocomplete from learning about the keypress. The
+            // user dismisses it with Esc (universal "close popup"
+            // affordance). Three close-it-for-them attempts failed:
+            // input.blur() doesn't cascade to a portaled popover;
+            // synthetic Esc keydown gets filtered out by Blazor's
+            // event delegation (isTrusted=false); directly removing
+            // the .mud-popover-open class drifted MudAutocomplete's
+            // internal state vs. the DOM and didn't actually hide
+            // the popover. Living with the papercut is cheaper than
+            // a fragile fix.
             e.stopImmediatePropagation();
 
             const indexStr = wrapper.getAttribute('data-collection-work-title');
