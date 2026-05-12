@@ -156,6 +156,17 @@ public partial class MainPage : ContentPage
         await Navigation.PushAsync(page);
     }
 
+    private async void OnFindByAuthorClicked(object? sender, EventArgs e)
+    {
+        // Same DI pattern as OnScanClicked. AuthorSearchPage is
+        // transient so each visit gets fresh debounce state.
+        var services = Microsoft.Maui.Controls.Application.Current?.Handler?.MauiContext?.Services
+            ?? throw new InvalidOperationException("ServiceProvider not available.");
+        var page = services.GetService(typeof(AuthorSearchPage)) as AuthorSearchPage
+            ?? throw new InvalidOperationException("AuthorSearchPage not registered.");
+        await Navigation.PushAsync(page);
+    }
+
     private async Task RefreshMetaAsync()
     {
         try
@@ -181,14 +192,16 @@ public partial class MainPage : ContentPage
         SignInButton.IsVisible = !_signedIn;
         SignInButton.IsEnabled = !_busy && !_signedIn;
 
-        // Signed-in flow: Load catalog + Scan visible. Load stays
-        // visible after first load so the user can tap to refresh.
-        // Scan needs both signed-in AND cached data (otherwise every
-        // scan would say "not in your library").
+        // Signed-in flow: Load catalog + Scan + Find by author visible.
+        // Load stays visible after first load so the user can tap to
+        // refresh. Scan + Find-by-author both need cached data
+        // (otherwise both would say "not in your library").
         LoadCatalogButton.IsVisible = _signedIn;
         LoadCatalogButton.IsEnabled = !_busy && _signedIn;
         ScanButton.IsVisible = _signedIn;
         ScanButton.IsEnabled = !_busy && _signedIn && hasCache;
+        FindByAuthorButton.IsVisible = _signedIn;
+        FindByAuthorButton.IsEnabled = !_busy && _signedIn && hasCache;
 
         // Cache stats panel: passive info, only when we have data.
         // Renders independently of signed-in state — cached data
