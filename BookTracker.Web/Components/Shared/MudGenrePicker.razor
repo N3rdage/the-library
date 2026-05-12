@@ -27,7 +27,8 @@
                 var label = VM.ChipLabel(id);
                 <MudChip T="string"
                          Size="Size.Small"
-                         Variant="Variant.Outlined"
+                         Variant="Variant.Filled"
+                         Color="Color.Primary"
                          OnClose="@(() => OnRemoveAsync(id))">@label</MudChip>
             }
         </MudStack>
