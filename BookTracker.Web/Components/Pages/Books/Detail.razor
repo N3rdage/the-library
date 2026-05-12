@@ -86,7 +86,8 @@
                                              Value="s"
                                              Size="Size.Small"
                                              Variant="@(isCurrent ? Variant.Filled : Variant.Outlined)"
-                                             Color="@(isCurrent ? StatusColor(s) : Color.Default)">@StatusLabel(s)</MudChip>
+                                             Color="@(isCurrent ? StatusColor(s) : Color.Default)"
+                                             Style="@(isCurrent ? "font-weight: 700;" : null)">@StatusLabel(s)</MudChip>
                                 }
                             </MudChipSet>
                             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@(book.Category == BookCategory.Fiction ? "Fiction" : "Non-Fiction")</MudChip>
@@ -783,9 +784,16 @@
 
     private static Color StatusColor(BookStatus status) => status switch
     {
+        // Read → Success (muted green from theme), Reading → Info (muted
+        // blue), Unread → Warning (muted brass gold). All three semantic
+        // colours from BookTrackerTheme — none are Default, because Filled
+        // + Default is visually almost identical to Outlined + Default
+        // (Drew's testing-feedback "VERY subtle on my monitor"). Warning
+        // semantically reads as "this needs attention / todo state" which
+        // matches Unread.
         BookStatus.Read => Color.Success,
         BookStatus.Reading => Color.Info,
-        BookStatus.Unread => Color.Default,
+        BookStatus.Unread => Color.Warning,
         _ => Color.Default,
     };
 
