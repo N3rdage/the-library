@@ -1,4 +1,5 @@
 using BookTracker.Data.Models;
+using BookTracker.Web.Services;
 using BookTracker.Web.Services.Covers;
 using BookTracker.Web.ViewModels;
 using Microsoft.AspNetCore.Components.Forms;
@@ -14,6 +15,7 @@ public class BookDetailViewModelTests
     private static BookDetailViewModel CreateVm(TestDbContextFactory factory, IBookCoverStorage? coverStorage = null) =>
         new(factory,
             coverStorage ?? Substitute.For<IBookCoverStorage>(),
+            new WorkSearchService(factory),
             NullLogger<BookDetailViewModel>.Instance);
 
     [Fact]
@@ -613,5 +615,119 @@ public class BookDetailViewModelTests
 
         Assert.False(result.Success);
         Assert.Contains("not configured", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SearchAttachableWorksAsync_ExcludesWorksAlreadyOnThisBook()
+    {
+        // The dialog's search shouldn't offer up Works the user has already
+        // attached — the underlying WorkSearchService already excludes by
+        // bookId, so this verifies the VM is wiring that excludeBookId
+        // through correctly.
+        var factory = new TestDbContextFactory();
+        int bookId;
+        using (var db = factory.CreateDbContext())
+        {
+            var author = new Author { Name = "H.P. Lovecraft" };
+            var cthulhu = new Work
+            {
+                Title = "The Call of Cthulhu",
+                WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
+            };
+            var dunwich = new Work
+            {
+                Title = "The Dunwich Horror",
+                WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
+            };
+            db.Books.Add(new Book { Title = "Anthology A", Works = [cthulhu] });
+            db.Books.Add(new Book { Title = "Anthology B", Works = [dunwich] });
+            await db.SaveChangesAsync();
+            bookId = db.Books.Single(b => b.Title == "Anthology A").Id;
+        }
+
+        var vm = CreateVm(factory);
+        await vm.InitializeAsync(bookId);
+
+        var results = await vm.SearchAttachableWorksAsync("the", CancellationToken.None);
+
+        // "The Call of Cthulhu" is already on Anthology A → filtered out.
+        // "The Dunwich Horror" is on Anthology B → eligible.
+        Assert.Single(results);
+        Assert.Equal("The Dunwich Horror", results[0].Title);
+    }
+
+    [Fact]
+    public async Task AttachExistingWorkAsync_AddsWorkToBookAndRefreshesSnapshot()
+    {
+        // The HP Lovecraft "complete works" case — attach a Work that
+        // already exists elsewhere in the library to the current Book
+        // without duplicating it.
+        var factory = new TestDbContextFactory();
+        int bookId, dunwichId;
+        using (var db = factory.CreateDbContext())
+        {
+            var author = new Author { Name = "H.P. Lovecraft" };
+            var cthulhu = new Work
+            {
+                Title = "The Call of Cthulhu",
+                WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
+            };
+            var dunwich = new Work
+            {
+                Title = "The Dunwich Horror",
+                WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
+            };
+            db.Books.Add(new Book { Title = "Anthology A", Works = [cthulhu] });
+            db.Books.Add(new Book { Title = "Anthology B", Works = [dunwich] });
+            await db.SaveChangesAsync();
+            bookId = db.Books.Single(b => b.Title == "Anthology A").Id;
+            dunwichId = dunwich.Id;
+        }
+
+        var vm = CreateVm(factory);
+        await vm.InitializeAsync(bookId);
+        Assert.Single(vm.Book!.Works);
+
+        var attachedTitle = await vm.AttachExistingWorkAsync(dunwichId);
+
+        Assert.Equal("The Dunwich Horror", attachedTitle);
+        // VM snapshot refreshed inline → page sees the new Work immediately.
+        Assert.Equal(2, vm.Book!.Works.Count);
+        Assert.Contains(vm.Book.Works, w => w.Id == dunwichId);
+
+        // Underlying DB: Work is on BOTH books now, no duplicate Work row.
+        using var verifyDb = factory.CreateDbContext();
+        var attached = await verifyDb.Works.Include(w => w.Books).FirstAsync(w => w.Id == dunwichId);
+        Assert.Equal(2, attached.Books.Count);
+    }
+
+    [Fact]
+    public async Task AttachExistingWorkAsync_AlreadyAttached_ReturnsNullAndDoesNotDoubleAdd()
+    {
+        // Defensive guard against stale dialog state (search filter normally
+        // prevents this — but a fast double-click in the dialog could race).
+        var factory = new TestDbContextFactory();
+        int bookId, workId;
+        using (var db = factory.CreateDbContext())
+        {
+            var author = new Author { Name = "H.P. Lovecraft" };
+            var work = new Work
+            {
+                Title = "The Call of Cthulhu",
+                WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
+            };
+            db.Books.Add(new Book { Title = "Anthology", Works = [work] });
+            await db.SaveChangesAsync();
+            bookId = db.Books.Single().Id;
+            workId = work.Id;
+        }
+
+        var vm = CreateVm(factory);
+        await vm.InitializeAsync(bookId);
+
+        var result = await vm.AttachExistingWorkAsync(workId);
+
+        Assert.Null(result);
+        Assert.Single(vm.Book!.Works);
     }
 }

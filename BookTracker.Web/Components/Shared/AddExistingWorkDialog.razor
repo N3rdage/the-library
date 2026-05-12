@@ -1,0 +1,181 @@
+@* Modal dialog for attaching an already-saved Work to the current Book.
+   Drew's HP Lovecraft case: many "complete works" books share the same
+   constituent stories, so capturing those by retyping every Work would
+   be wasteful. This dialog reuses IWorkSearchService (the same surface
+   the /edit page's "Other works" attach flow uses).
+
+   Stays open after a successful attach so the user can attach several
+   Works in one pass — the typical case for a compendium re-add. The
+   parent (BookDetail) refreshes its snapshot via VM.InitializeAsync as
+   part of AttachExistingWorkAsync, so the underlying book state is
+   always current. Returns true on close iff at least one attach
+   happened (the parent uses this to decide whether to surface a
+   "saved" snackbar / re-render). *@
+
+@inject BookDetailViewModel VM
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="2" Style="min-width: 320px;">
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Find a Work already in your library and attach it to this Book.
+                Works already on this Book are filtered out.
+            </MudText>
+
+            <MudTextField T="string"
+                          Value="@query"
+                          ValueChanged="OnQueryChangedAsync"
+                          Placeholder="Search by title..."
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Immediate="true"
+                          DebounceInterval="250"
+                          Clearable="true"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" />
+
+            @if (searching)
+            {
+                <MudStack AlignItems="AlignItems.Center" Class="py-2">
+                    <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                </MudStack>
+            }
+            else if (results.Count == 0 && !string.IsNullOrWhiteSpace(query) && query.Trim().Length >= 2)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    No matches. Try a different title, or capture as a new Work via the edit page.
+                </MudAlert>
+            }
+            else
+            {
+                <MudList T="int" Dense="true" Class="pa-0">
+                    @foreach (var r in results)
+                    {
+                        var workId = r.Id;
+                        var attaching = busyWorkId == workId;
+                        <MudListItem T="int" Class="px-2">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap">
+                                <MudStack Spacing="0" Class="flex-grow-1" Style="min-width: 0;">
+                                    <MudText Typo="Typo.body1" Style="word-break: break-word;">
+                                        @r.Title@(r.FirstPublishedYear is int y ? $" ({y})" : "")
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @r.AuthorName · in @r.BookCount @(r.BookCount == 1 ? "book" : "books")
+                                    </MudText>
+                                </MudStack>
+                                <MudButton OnClick="@(() => AttachAsync(workId))"
+                                           Disabled="@(busyWorkId is not null)"
+                                           Variant="Variant.Outlined"
+                                           Color="Color.Primary"
+                                           Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.Add">
+                                    @(attaching ? "Adding..." : "Add")
+                                </MudButton>
+                            </MudStack>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+
+            @if (attachedCount > 0)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Success">
+                    Added @attachedCount @(attachedCount == 1 ? "work" : "works") to this book.
+                </MudText>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Done</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private string? query;
+    private IReadOnlyList<WorkSearchResult> results = [];
+    private bool searching;
+    private int? busyWorkId;
+    private int attachedCount;
+    private CancellationTokenSource? searchCts;
+
+    private async Task OnQueryChangedAsync(string? value)
+    {
+        query = value;
+        // Replace any in-flight search so a fast typer's stale-result race
+        // can't clobber the dropdown. MudTextField's DebounceInterval already
+        // throttles keystrokes; this cancels the previous request if the
+        // user types again before it returns.
+        searchCts?.Cancel();
+        searchCts?.Dispose();
+        searchCts = new CancellationTokenSource();
+        var ct = searchCts.Token;
+
+        var q = (value ?? "").Trim();
+        if (q.Length < 2)
+        {
+            results = [];
+            searching = false;
+            return;
+        }
+
+        searching = true;
+        try
+        {
+            var found = await VM.SearchAttachableWorksAsync(q, ct);
+            if (!ct.IsCancellationRequested)
+            {
+                results = found;
+            }
+        }
+        catch (OperationCanceledException) { /* superseded by a newer query */ }
+        finally
+        {
+            if (!ct.IsCancellationRequested) searching = false;
+        }
+    }
+
+    private async Task AttachAsync(int workId)
+    {
+        busyWorkId = workId;
+        try
+        {
+            var title = await VM.AttachExistingWorkAsync(workId);
+            if (title is not null)
+            {
+                attachedCount++;
+                Snackbar.Add($"Attached \"{title}\".", Severity.Success);
+                // Drop the just-attached row from results so the user
+                // doesn't see it in the list and try to add it twice
+                // before re-typing the search.
+                results = results.Where(r => r.Id != workId).ToList();
+            }
+            else
+            {
+                Snackbar.Add("Couldn't attach that work — it may already be on this book.", Severity.Warning);
+            }
+        }
+        finally
+        {
+            busyWorkId = null;
+        }
+    }
+
+    private void Close()
+    {
+        // attachedCount > 0 → tell the parent something changed so it can
+        // re-render (VM.InitializeAsync already ran inside AttachExistingWorkAsync,
+        // so the result is informational only). Parent decides what to do
+        // with it (snackbar, no-op, etc.).
+        if (attachedCount > 0)
+        {
+            MudDialog.Close(DialogResult.Ok(attachedCount));
+        }
+        else
+        {
+            MudDialog.Cancel();
+        }
+    }
+}

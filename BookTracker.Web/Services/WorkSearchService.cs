@@ -17,6 +17,10 @@ public record WorkSearchResult(
     string Title,
     string? Subtitle,
     string AuthorName,
+    /// <summary>Year only — helps disambiguate same-titled Works ("The Call
+    /// of Cthulhu" by Lovecraft 1928 vs an unrelated novel). Null when the
+    /// Work has no recorded date.</summary>
+    int? FirstPublishedYear,
     int BookCount);
 
 public class WorkSearchService(IDbContextFactory<BookTrackerDbContext> dbFactory) : IWorkSearchService
@@ -59,6 +63,7 @@ public class WorkSearchService(IDbContextFactory<BookTrackerDbContext> dbFactory
                 // co-authors are elided here. The full multi-author display
                 // appears once the user picks the work and lands on BookDetail.
                 AuthorName = w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name).FirstOrDefault() ?? "",
+                Year = (int?)(w.FirstPublishedDate == null ? null : (int?)w.FirstPublishedDate.Value.Year),
                 BookCount = w.Books.Count,
                 TitleLower = w.Title.ToLower()
             })
@@ -71,7 +76,7 @@ public class WorkSearchService(IDbContextFactory<BookTrackerDbContext> dbFactory
             .OrderByDescending(m => m.TitleLower.StartsWith(q))
             .ThenBy(m => m.Title, StringComparer.OrdinalIgnoreCase)
             .Take(maxResults)
-            .Select(m => new WorkSearchResult(m.Id, m.Title, m.Subtitle, m.AuthorName, m.BookCount))
+            .Select(m => new WorkSearchResult(m.Id, m.Title, m.Subtitle, m.AuthorName, m.Year, m.BookCount))
             .ToList();
     }
 }
