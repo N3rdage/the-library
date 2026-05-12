@@ -12,6 +12,16 @@ updates:
       ef-core:
         patterns:
           - "Microsoft.EntityFrameworkCore*"
+    ignore:
+      # Microsoft.ApplicationInsights.AspNetCore 3.x is a full OpenTelemetry
+      # rewrite of the classic SDK — ITelemetryInitializer (currently used
+      # by UserTelemetryInitializer.cs) is gone; migration to BaseProcessor
+      # <Activity> + IHttpContextAccessor is non-trivial. Tracked in TODO
+      # #42; ignore the major bump until then so Dependabot doesn't keep
+      # re-opening the failing PR. Minor / patch updates within 2.x stay
+      # auto-applied.
+      - dependency-name: "Microsoft.ApplicationInsights.AspNetCore"
+        update-types: ["version-update:semver-major"]
 
   # npm packages (vendored JS libraries like html5-qrcode)
   - package-ecosystem: "npm"

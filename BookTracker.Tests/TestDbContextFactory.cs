@@ -1,4 +1,5 @@
 using BookTracker.Data;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Respawn;
 
@@ -40,18 +41,26 @@ public class TestDbContextFactory : IDbContextFactory<BookTrackerDbContext>
 
     private void WipeAndReseed()
     {
-        var respawner = GetRespawner();
-        respawner.ResetAsync(_connectionString).GetAwaiter().GetResult();
+        // Respawn 7.x removed the (string connectionString) overloads on
+        // CreateAsync + ResetAsync — both now take a DbConnection. Open
+        // a fresh SqlConnection per call rather than holding one open
+        // across tests (Respawn builds its FK graph at CreateAsync and
+        // doesn't keep the connection afterwards).
+        using var connection = new SqlConnection(_connectionString);
+        connection.Open();
 
-        // Don'\''t re-seed HasData rows: tests that need the follow-up Tag
-        // either seed it themselves or rely on production code'\''s
+        var respawner = GetRespawner(connection);
+        respawner.ResetAsync(connection).GetAwaiter().GetResult();
+
+        // Don't re-seed HasData rows: tests that need the follow-up Tag
+        // either seed it themselves or rely on production code's
         // EnsureFollowUpTagAsync helper (which creates the Tag if missing).
         // Re-seeding here would conflict with tests that explicitly add the
         // same Tag, since Tag.Name has a unique index that surfaces under
         // real SQL but was lax under InMemory.
     }
 
-    private Respawner GetRespawner()
+    private Respawner GetRespawner(SqlConnection connection)
     {
         // Lazy-init the Respawner once per process — building it inspects
         // the schema (tables, FK graph) which is stable across tests.
@@ -60,7 +69,7 @@ public class TestDbContextFactory : IDbContextFactory<BookTrackerDbContext>
         _respawnerLock.Wait();
         try
         {
-            return _respawner ??= Respawner.CreateAsync(_connectionString, new RespawnerOptions
+            return _respawner ??= Respawner.CreateAsync(connection, new RespawnerOptions
             {
                 TablesToIgnore = [new("__EFMigrationsHistory")],
                 DbAdapter = DbAdapter.SqlServer,

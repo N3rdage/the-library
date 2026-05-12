@@ -38,7 +38,7 @@ public class MudAuthorPickerTests : ComponentTestBase
     [Fact]
     public void EmptyAuthors_RendersNoChips()
     {
-        var cut = RenderComponent<MudAuthorPicker>(p => p
+        var cut = Render<MudAuthorPicker>(p => p
             .Add(c => c.Authors, []));
 
         Assert.Empty(cut.FindAll(".mud-chip"));
@@ -47,7 +47,7 @@ public class MudAuthorPickerTests : ComponentTestBase
     [Fact]
     public void PreSeededAuthors_RendersOneChipPerName()
     {
-        var cut = RenderComponent<MudAuthorPicker>(p => p
+        var cut = Render<MudAuthorPicker>(p => p
             .Add(c => c.Authors, ["Douglas Preston", "Lincoln Child"]));
 
         var chips = cut.FindAll(".mud-chip");
@@ -61,7 +61,7 @@ public class MudAuthorPickerTests : ComponentTestBase
     {
         var authors = new List<string>();
         List<string>? captured = null;
-        var cut = RenderComponent<MudAuthorPicker>(p => p
+        var cut = Render<MudAuthorPicker>(p => p
             .Add(c => c.Authors, authors)
             .Add(c => c.AuthorsChanged, (List<string> list) => captured = list));
 
@@ -80,7 +80,7 @@ public class MudAuthorPickerTests : ComponentTestBase
         // typed. TryAddAsync strips it so the chip text doesn't carry
         // punctuation noise.
         var authors = new List<string>();
-        var cut = RenderComponent<MudAuthorPicker>(p => p
+        var cut = Render<MudAuthorPicker>(p => p
             .Add(c => c.Authors, authors));
 
         await cut.InvokeAsync(() => cut.Instance.OnCommitKey("Preston,"));
@@ -92,7 +92,7 @@ public class MudAuthorPickerTests : ComponentTestBase
     public async Task OnCommitKey_TrimsLeadingAndTrailingWhitespace()
     {
         var authors = new List<string>();
-        var cut = RenderComponent<MudAuthorPicker>(p => p
+        var cut = Render<MudAuthorPicker>(p => p
             .Add(c => c.Authors, authors));
 
         await cut.InvokeAsync(() => cut.Instance.OnCommitKey("  Preston  "));
@@ -107,7 +107,7 @@ public class MudAuthorPickerTests : ComponentTestBase
         // no-op rather than adding a duplicate row that'd then collide
         // with the unique index on Author.Name at save time.
         var authors = new List<string> { "Preston" };
-        var cut = RenderComponent<MudAuthorPicker>(p => p
+        var cut = Render<MudAuthorPicker>(p => p
             .Add(c => c.Authors, authors));
 
         await cut.InvokeAsync(() => cut.Instance.OnCommitKey("PRESTON"));
@@ -128,7 +128,7 @@ public class MudAuthorPickerTests : ComponentTestBase
         // a future tighten-up isn'\''t a surprise.
         var authors = new List<string>();
         List<string>? captured = null;
-        var cut = RenderComponent<MudAuthorPicker>(p => p
+        var cut = Render<MudAuthorPicker>(p => p
             .Add(c => c.Authors, authors)
             .Add(c => c.AuthorsChanged, (List<string> list) => captured = list));
 
@@ -149,7 +149,7 @@ public class MudAuthorPickerTests : ComponentTestBase
         // commits) means each OnCommitKey call adds exactly one chip,
         // appended at the end of the list in call order.
         var authors = new List<string>();
-        var cut = RenderComponent<MudAuthorPicker>(p => p
+        var cut = Render<MudAuthorPicker>(p => p
             .Add(c => c.Authors, authors));
 
         await cut.InvokeAsync(() => cut.Instance.OnCommitKey("Preston"));
@@ -164,7 +164,7 @@ public class MudAuthorPickerTests : ComponentTestBase
     {
         var authors = new List<string> { "Preston", "Child" };
         List<string>? captured = null;
-        var cut = RenderComponent<MudAuthorPicker>(p => p
+        var cut = Render<MudAuthorPicker>(p => p
             .Add(c => c.Authors, authors)
             .Add(c => c.AuthorsChanged, (List<string> list) => captured = list));
 
