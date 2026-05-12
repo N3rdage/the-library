@@ -1,6 +1,7 @@
 @page "/books/add"
 @inject BookAddViewModel VM
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Add a book - BookTracker</PageTitle>
 
@@ -218,7 +219,24 @@
                                 <div class="row g-2">
                                     <div class="col-md-7">
                                         <label class="form-label small">Title</label>
-                                        <InputText @bind-Value="work.Title" class="form-control" />
+                                        @* Enter on these title inputs is handled in two layers:
+                                           collection-works.js installs a document-level keydown
+                                           listener that preventDefaults Enter on any element marked
+                                           with data-collection-work-title (stops the surrounding
+                                           form submitting); Blazor's @onkeydown still fires and
+                                           routes to OnCollectionTitleKeyDownAsync — Enter on the
+                                           last row adds a new row (inheriting authors from the
+                                           most recent populated row) and focuses its Title; Enter
+                                           on a non-last row jumps focus to the next row's Title.
+                                           Razor compiler rejects both inline onkeydown + Blazor's
+                                           @onkeydown on the same element (duplicate parameter name),
+                                           so the suppression lives in JS — same shape as the
+                                           chip-picker arc. *@
+                                        <InputText @bind-Value="work.Title"
+                                                   class="form-control"
+                                                   id="@($"collection-work-title-{index}")"
+                                                   data-collection-work-title=""
+                                                   @onkeydown="@(e => OnCollectionTitleKeyDownAsync(e, index))" />
                                     </div>
                                     <div class="col-md-5">
                                         <label class="form-label small">Author(s)</label>
@@ -269,6 +287,52 @@
     private List<int> selectedGenreIds = [];
     private GenrePicker? genrePicker;
     private bool addAnother;
+
+    // After OnCollectionTitleKeyDownAsync grows the CollectionWorks list,
+    // the new row's DOM element only exists post-render. Stash the index
+    // here and apply focus in OnAfterRenderAsync so the JS focus call
+    // hits an element that actually exists.
+    private int? _pendingCollectionFocusIndex;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Install the Enter-suppression keydown listener once per
+            // SPA session. Idempotent on the JS side; firstRender
+            // gating here keeps the call count to one per page-load.
+            await JS.InvokeVoidAsync("collectionWorks.bindEnterSuppression");
+        }
+
+        if (_pendingCollectionFocusIndex is int idx)
+        {
+            _pendingCollectionFocusIndex = null;
+            await JS.InvokeVoidAsync("collectionWorks.focusTitle", idx);
+        }
+    }
+
+    private async Task OnCollectionTitleKeyDownAsync(KeyboardEventArgs e, int index)
+    {
+        if (e.Key != "Enter") return;
+        if (!VM.IsCollection) return;
+        if (index < 0 || index >= VM.CollectionWorks.Count) return;
+
+        if (index == VM.CollectionWorks.Count - 1)
+        {
+            // Last row: add a new row (inheriting authors per
+            // BookAddViewModel.AddCollectionWorkRow) and queue focus
+            // on it for after the re-render.
+            VM.AddCollectionWorkRow();
+            _pendingCollectionFocusIndex = VM.CollectionWorks.Count - 1;
+        }
+        else
+        {
+            // Mid-list Enter: jump focus to the next row's Title field.
+            // Tab-like behaviour for the typing flow without touching
+            // the surrounding form's tab order.
+            await JS.InvokeVoidAsync("collectionWorks.focusTitle", index + 1);
+        }
+    }
 
     private async Task LookupAsync()
     {

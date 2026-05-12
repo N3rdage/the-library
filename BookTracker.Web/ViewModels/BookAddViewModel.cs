@@ -37,7 +37,21 @@ public class BookAddViewModel(
     public bool IsCollection { get; set; }
     public List<WorkFormViewModel.WorkFormInput> CollectionWorks { get; set; } = [new(), new()];
 
-    public void AddCollectionWorkRow() => CollectionWorks.Add(new());
+    public void AddCollectionWorkRow()
+    {
+        // Inherit authors from the most recent row that has authors so
+        // repetitive single-author compendiums (e.g. King's "Different
+        // Seasons", Christie collections) only need authors entered once.
+        // User can clear / replace per row. If no row has authors yet —
+        // including the first-time case before anything is typed — the
+        // new row starts empty as before.
+        var seedAuthors = CollectionWorks
+            .AsEnumerable()
+            .Reverse()
+            .FirstOrDefault(w => w.Authors.Count > 0)?.Authors
+            .ToList() ?? [];
+        CollectionWorks.Add(new WorkFormViewModel.WorkFormInput { Authors = seedAuthors });
+    }
 
     public void RemoveCollectionWorkRow(int index)
     {

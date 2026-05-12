@@ -18,6 +18,62 @@ public class BookAddViewModelTests
     private GenrePickerViewModel CreateGenrePicker() => new(_factory);
 
     [Fact]
+    public void AddCollectionWorkRow_InheritsAuthorsFromMostRecentPopulatedRow()
+    {
+        // Single-author compendium case (King's Different Seasons, Christie
+        // collections): typing the author once on row 1 should propagate to
+        // subsequently-added rows so the 13-works capture flow doesn't need
+        // 13 author chip entries.
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        // Default constructor seeds 2 empty rows.
+        vm.CollectionWorks[0].Authors = new List<string> { "Stephen King" };
+
+        vm.AddCollectionWorkRow();
+
+        // Row 2 (the second pre-seeded row, untouched) stays empty.
+        // Row 3 (just added) inherits row 1's authors — the most recent
+        // populated row walking backwards.
+        Assert.Empty(vm.CollectionWorks[1].Authors);
+        Assert.Equal(new[] { "Stephen King" }, vm.CollectionWorks[2].Authors);
+    }
+
+    [Fact]
+    public void AddCollectionWorkRow_AuthorInheritanceIsACopyNotAReference()
+    {
+        // Each row owns its author list — editing one row's authors must
+        // not mutate another row's list (would otherwise corrupt the
+        // capture state when MudAuthorPicker mutates the bound list).
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        vm.CollectionWorks[0].Authors = new List<string> { "Stephen King" };
+
+        vm.AddCollectionWorkRow();
+
+        var newRow = vm.CollectionWorks[^1];
+        newRow.Authors.Add("Richard Bachman");
+
+        Assert.Single(vm.CollectionWorks[0].Authors);
+        Assert.Equal("Stephen King", vm.CollectionWorks[0].Authors[0]);
+    }
+
+    [Fact]
+    public void AddCollectionWorkRow_NoPopulatedRows_StartsEmpty()
+    {
+        // First time the + button is tapped, before any author has been
+        // typed, the new row must start with an empty Authors list (not
+        // null, not throw).
+        var vm = CreateVm();
+        vm.IsCollection = true;
+        // Default 2 empty rows.
+
+        vm.AddCollectionWorkRow();
+
+        Assert.Equal(3, vm.CollectionWorks.Count);
+        Assert.Empty(vm.CollectionWorks[2].Authors);
+    }
+
+    [Fact]
     public async Task SearchAsync_EmptyInputs_ReportsMessageAndDoesNotCallLookup()
     {
         var vm = CreateVm();
