@@ -118,6 +118,14 @@
                             Edit work
                         </MudButton>
                     }
+                    <MudButton OnClick="OpenAddExistingWorkDialog"
+                               Disabled="@dialogOpening"
+                               Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.PostAdd"
+                               Size="Size.Small">
+                        Add existing work
+                    </MudButton>
                     <MudButton Href="@($"/books/{book.Id}/edit")"
                                Variant="Variant.Text"
                                Color="Color.Default"
@@ -677,6 +685,29 @@
         {
             Snackbar.Add("Work saved", Severity.Success);
             await VM.InitializeAsync(BookId);
+        }
+    });
+
+    private Task OpenAddExistingWorkDialog() => OpenDialogGuardedAsync(async () =>
+    {
+        if (VM.Book is null) return;
+        // Pass our initialised VM through. BookDetailViewModel is Transient
+        // so @inject inside the dialog would hand it a fresh instance whose
+        // .Book is null — same wiring as EditionCoverUploadDialog above.
+        var parameters = new DialogParameters<AddExistingWorkDialog>
+        {
+            { x => x.VM, VM },
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<AddExistingWorkDialog>("Add existing work", parameters, options);
+        var result = await dialog.Result;
+        // Dialog refreshes VM.Book inline on each successful attach (via
+        // AttachExistingWorkAsync → InitializeAsync), so the page state is
+        // already current. The result payload carries the count, used here
+        // only to decide whether to show a closing summary snackbar.
+        if (result is not null && !result.Canceled && result.Data is int count && count > 0)
+        {
+            Snackbar.Add($"Added {count} work{(count == 1 ? "" : "s")} to this book.", Severity.Success);
         }
     });
 

@@ -16,6 +16,7 @@ namespace BookTracker.Web.ViewModels;
 public class BookDetailViewModel(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
     IBookCoverStorage coverStorage,
+    IWorkSearchService workSearch,
     ILogger<BookDetailViewModel> logger)
 {
     /// <summary>Server-side cap on user-uploaded cover photos. 10 MB is generous
@@ -285,6 +286,42 @@ public class BookDetailViewModel(
         }
 
         CurrentTags.RemoveAll(t => t.Id == tagId);
+    }
+
+    /// <summary>Search Works to attach to this Book — used by the
+    /// AddExistingWorkDialog. Already-attached Works are filtered out
+    /// server-side so re-attach attempts can't reach the dialog.</summary>
+    public Task<IReadOnlyList<WorkSearchResult>> SearchAttachableWorksAsync(string query, CancellationToken ct)
+    {
+        if (Book is null) return Task.FromResult<IReadOnlyList<WorkSearchResult>>([]);
+        return workSearch.SearchAsync(query, excludeBookId: Book.Id, ct: ct);
+    }
+
+    /// <summary>Attach an existing Work to this Book. Returns the Work's
+    /// title on success, null when the attach was rejected (Book missing,
+    /// Work missing, or already attached — the search filter prevents
+    /// this last case in practice but the guard is defensive against
+    /// stale dialog state). Refreshes the snapshot so the page re-renders
+    /// with the new Work in the Works list.</summary>
+    public async Task<string?> AttachExistingWorkAsync(int workId)
+    {
+        if (Book is null) return null;
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var book = await db.Books.Include(b => b.Works).FirstOrDefaultAsync(b => b.Id == Book.Id);
+        if (book is null) return null;
+
+        var work = await db.Works.FirstOrDefaultAsync(w => w.Id == workId);
+        if (work is null) return null;
+
+        if (book.Works.Any(w => w.Id == workId)) return null;
+
+        book.Works.Add(work);
+        await db.SaveChangesAsync();
+
+        var attachedTitle = work.Title;
+        await InitializeAsync(Book.Id);
+        return attachedTitle;
     }
 
     /// <summary>Tag autocomplete — returns existing tags not already assigned, filtered by substring.</summary>
