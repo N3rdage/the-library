@@ -67,7 +67,13 @@
                             <MudText Typo="Typo.subtitle1">@primary.AuthorName@(VM.IsSingleWork ? "" : $" (+ {book.Works.Count - 1} more)")</MudText>
                         }
                         <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mt-1">
-                            @* Status: three filter-chip buttons, single-selection, auto-save on change. *@
+                            @* Status: three filter-chip buttons, single-selection, auto-save on change.
+                               Variant + Color are computed per-chip from whether that chip matches
+                               VM.CurrentStatus so the selected one renders Filled + semantic-coloured
+                               and the others render Outlined + neutral. Setting Color unconditionally
+                               (the previous shape) made all three chips look identically active —
+                               Drew's testing-feedback "clicking the words seems a bit broken" because
+                               the visual didn't shift on click. *@
                             <MudChipSet T="BookStatus"
                                         SelectionMode="SelectionMode.SingleSelection"
                                         CheckMark="false"
@@ -75,7 +81,13 @@
                                         SelectedValueChanged="OnStatusChanged">
                                 @foreach (var s in new[] { BookStatus.Unread, BookStatus.Reading, BookStatus.Read })
                                 {
-                                    <MudChip T="BookStatus" Value="s" Size="Size.Small" Color="@StatusColor(s)">@StatusLabel(s)</MudChip>
+                                    var isCurrent = s == VM.CurrentStatus;
+                                    <MudChip T="BookStatus"
+                                             Value="s"
+                                             Size="Size.Small"
+                                             Variant="@(isCurrent ? Variant.Filled : Variant.Outlined)"
+                                             Color="@(isCurrent ? StatusColor(s) : Color.Default)"
+                                             Style="@(isCurrent ? "font-weight: 700;" : null)">@StatusLabel(s)</MudChip>
                                 }
                             </MudChipSet>
                             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@(book.Category == BookCategory.Fiction ? "Fiction" : "Non-Fiction")</MudChip>
@@ -772,9 +784,16 @@
 
     private static Color StatusColor(BookStatus status) => status switch
     {
+        // Read → Success (muted green from theme), Reading → Info (muted
+        // blue), Unread → Warning (muted brass gold). All three semantic
+        // colours from BookTrackerTheme — none are Default, because Filled
+        // + Default is visually almost identical to Outlined + Default
+        // (Drew's testing-feedback "VERY subtle on my monitor"). Warning
+        // semantically reads as "this needs attention / todo state" which
+        // matches Unread.
         BookStatus.Read => Color.Success,
         BookStatus.Reading => Color.Info,
-        BookStatus.Unread => Color.Default,
+        BookStatus.Unread => Color.Warning,
         _ => Color.Default,
     };
 
