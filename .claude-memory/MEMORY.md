@@ -2,6 +2,7 @@
 - ["plan:" prefix](feedback_plan_prefix.md) — when a message starts with "plan:", propose with defaults + open questions and wait; don't execute.
 - [Drew — solo developer](user_drew.md) — context on the user, their stack (Windows/PowerShell/Azure/GitHub `N3rdage/the-library`, Gandi DNS), and collaboration style.
 - [Auto-commit locally](feedback_commit_locally.md) — always stage and commit before handing off; don't wait to be asked.
+- [Hot-reload ≠ committed](feedback_hot_reload_commit_gap.md) — every mid-PR-cycle edit must be committed before the user tests it; hot-reload makes uncommitted edits feel "done".
 - [Delete merged branches](feedback_delete_merged_branch.md) — delete local feature branch after pulling the merge into main.
 - [Branch from main](feedback_branch_from_main.md) — always start a new branch from a fresh `main` pull; never from a sibling branch (squash-merge would bundle content).
 - [Use PowerShell tool](feedback_use_powershell.md) — default shell for this project is PowerShell 7, not Bash; CLAUDE.md mandates Windows shell and Drew works in PowerShell.
