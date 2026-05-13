@@ -140,76 +140,72 @@
             </CardHeaderActions>
         </MudCardHeader>
 
-        @* Desktop table — HTML <table> retained inside the MudCard for tabular
-           density. Mud styling applied via row-level chrome (chips, buttons). *@
+        @* Desktop table — MudTable for visual consistency with the rest of the
+           Mud chrome. Per-row tinting (accepted / follow-up / duplicate states)
+           via RowStyleFunc that maps RowAction to a translucent background. *@
         <div class="d-none d-md-block">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th style="width: 60px;"></th>
-                            <th>ISBN</th>
-                            <th>Title</th>
-                            <th>Author</th>
-                            <th>Source</th>
-                            <th>Status</th>
-                            <th style="width: 280px;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var row in VM.Rows)
+            <MudTable Items="@VM.Rows"
+                      Hover="true"
+                      Elevation="0"
+                      Dense="false"
+                      RowStyleFunc="@RowStyle">
+                <HeaderContent>
+                    <MudTh Style="width: 60px;"></MudTh>
+                    <MudTh>ISBN</MudTh>
+                    <MudTh>Title</MudTh>
+                    <MudTh>Author</MudTh>
+                    <MudTh>Source</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh Style="width: 280px;">Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>
+                        @RenderCover(context)
+                    </MudTd>
+                    <MudTd Class="font-monospace" Style="font-size: 0.85rem;">@context.Isbn</MudTd>
+                    <MudTd>
+                        @if (context.Status == BulkAddViewModel.RowStatus.NotFound)
                         {
-                            <tr class="@BulkAddViewModel.RowCssClass(row)">
-                                <td>
-                                    @RenderCover(row)
-                                </td>
-                                <td class="font-monospace small">@row.Isbn</td>
-                                <td>
-                                    @if (row.Status == BulkAddViewModel.RowStatus.NotFound)
-                                    {
-                                        <MudTextField T="string"
-                                                      @bind-Value="row.Title"
-                                                      Placeholder="Book title..."
-                                                      Variant="Variant.Outlined"
-                                                      Margin="Margin.Dense" />
-                                    }
-                                    else
-                                    {
-                                        @(row.Title ?? "—")
-                                    }
-                                    @RenderSeriesSuggestion(row)
-                                </td>
-                                <td>
-                                    @* Editable so multi-author and lookup-miss rows can be
-                                       fixed inline. Comma or "&" separates multiple authors —
-                                       parsed at save time via AuthorResolver.ParseNames. *@
-                                    <MudTextField T="string"
-                                                  @bind-Value="row.Author"
-                                                  Placeholder="Author(s) — use commas for co-authors"
-                                                  Variant="Variant.Outlined"
-                                                  Margin="Margin.Dense" />
-                                </td>
-                                <td>
-                                    @RenderSource(row)
-                                </td>
-                                <td>
-                                    @RenderStatusBadge(row)
-                                </td>
-                                <td>
-                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                                        @RenderActions(row)
-                                        <MudIconButton Size="Size.Small"
-                                                       Icon="@Icons.Material.Filled.Close"
-                                                       Color="Color.Error"
-                                                       OnClick="@(() => VM.RemoveRow(row))"
-                                                       title="Remove from grid" />
-                                    </MudStack>
-                                </td>
-                            </tr>
+                            <MudTextField T="string"
+                                          @bind-Value="context.Title"
+                                          Placeholder="Book title..."
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense" />
                         }
-                    </tbody>
-                </table>
-            </div>
+                        else
+                        {
+                            @(context.Title ?? "—")
+                        }
+                        @RenderSeriesSuggestion(context)
+                    </MudTd>
+                    <MudTd>
+                        @* Editable so multi-author and lookup-miss rows can be
+                           fixed inline. Comma or "&" separates multiple authors —
+                           parsed at save time via AuthorResolver.ParseNames. *@
+                        <MudTextField T="string"
+                                      @bind-Value="context.Author"
+                                      Placeholder="Author(s) — use commas for co-authors"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense" />
+                    </MudTd>
+                    <MudTd>
+                        @RenderSource(context)
+                    </MudTd>
+                    <MudTd>
+                        @RenderStatusBadge(context)
+                    </MudTd>
+                    <MudTd>
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            @RenderActions(context)
+                            <MudIconButton Size="Size.Small"
+                                           Icon="@Icons.Material.Filled.Close"
+                                           Color="Color.Error"
+                                           OnClick="@(() => VM.RemoveRow(context))"
+                                           title="Remove from grid" />
+                        </MudStack>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
         </div>
 
         @* Mobile card layout *@
@@ -450,6 +446,17 @@
         }
         dotNetRef?.Dispose();
     }
+
+    // Per-row background tint for MudTable rows, mirroring the previous
+    // Bootstrap table-success / table-warning / table-secondary classes.
+    // Translucent colours so the underlying row hover still reads.
+    private string RowStyle(BulkAddViewModel.DiscoveryRow row, int rowIndex) => row.Action switch
+    {
+        BulkAddViewModel.RowAction.Accepted => "background-color: rgba(76, 175, 80, 0.10);",
+        BulkAddViewModel.RowAction.FollowUp => "background-color: rgba(255, 152, 0, 0.10);",
+        BulkAddViewModel.RowAction.Duplicate => "background-color: rgba(158, 158, 158, 0.10);",
+        _ => ""
+    };
 
     private RenderFragment RenderCover(BulkAddViewModel.DiscoveryRow row) => __builder =>
     {
