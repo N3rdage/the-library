@@ -7,66 +7,60 @@
 
 <PageTitle>Bulk add books - BookTracker</PageTitle>
 
-<h1 class="mb-3">Bulk add books</h1>
+<MudText Typo="Typo.h4" Class="mb-3">Bulk add books</MudText>
 
-<div class="card mb-4">
-    <div class="card-body">
+<MudCard Elevation="0" Outlined="true" Class="mb-4">
+    <MudCardContent>
         @* Mobile: scanner buttons first, full-width and prominent *@
         <div class="d-md-none mb-3 d-flex gap-2">
-            <button type="button" class="btn flex-grow-1 @(scannerActive ? "btn-danger" : "btn-primary")" @onclick="ToggleScannerAsync">
-                @if (scannerActive)
-                {
-                    <span>Stop scanner</span>
-                }
-                else
-                {
-                    <span>Scan barcode</span>
-                }
-            </button>
-            <button type="button" class="btn flex-grow-1 @(photoActive ? "btn-danger" : "btn-outline-primary")" @onclick="TogglePhotoCaptureAsync">
-                @if (photoActive)
-                {
-                    <span>Cancel photo</span>
-                }
-                else
-                {
-                    <span>Photo ISBN</span>
-                }
-            </button>
+            <MudButton Variant="Variant.Filled"
+                       Color="@(scannerActive ? Color.Error : Color.Primary)"
+                       OnClick="ToggleScannerAsync"
+                       Class="flex-grow-1">
+                @(scannerActive ? "Stop scanner" : "Scan barcode")
+            </MudButton>
+            <MudButton Variant="@(photoActive ? Variant.Filled : Variant.Outlined)"
+                       Color="@(photoActive ? Color.Error : Color.Primary)"
+                       OnClick="TogglePhotoCaptureAsync"
+                       Class="flex-grow-1">
+                @(photoActive ? "Cancel photo" : "Photo ISBN")
+            </MudButton>
         </div>
 
-        <label class="form-label fw-semibold">Add ISBN</label>
-        <div class="input-group">
-            <input type="text" inputmode="numeric" autocomplete="off" class="form-control" placeholder="9780345391803" @bind="VM.IsbnInput"
-                   @onkeyup="HandleIsbnKeyUp" />
-            <button type="button" class="btn btn-outline-primary" @onclick="AddIsbnAsync" disabled="@string.IsNullOrWhiteSpace(VM.IsbnInput)">
+        <div class="d-flex gap-2 align-end" data-bulk-isbn-input>
+            <MudTextField T="string"
+                          @bind-Value="VM.IsbnInput"
+                          Label="Add ISBN"
+                          Placeholder="9780345391803"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          InputMode="InputMode.numeric"
+                          autocomplete="off"
+                          @onkeyup="HandleIsbnKeyUp"
+                          Class="flex-grow-1" />
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       OnClick="AddIsbnAsync"
+                       Disabled="@string.IsNullOrWhiteSpace(VM.IsbnInput)">
                 Add
-            </button>
+            </MudButton>
         </div>
-        <div class="form-text">Type or paste an ISBN and press Enter, or scan a barcode with your camera.</div>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-1">
+            Type or paste an ISBN and press Enter, or scan a barcode with your camera.
+        </MudText>
 
         @* Desktop: scanner buttons below input *@
         <div class="d-none d-md-flex mt-3 gap-2">
-            <button type="button" class="btn @(scannerActive ? "btn-danger" : "btn-outline-secondary")" @onclick="ToggleScannerAsync">
-                @if (scannerActive)
-                {
-                    <span>Stop scanner</span>
-                }
-                else
-                {
-                    <span>Scan barcode</span>
-                }
-            </button>
-            <button type="button" class="btn @(photoActive ? "btn-danger" : "btn-outline-secondary")" @onclick="TogglePhotoCaptureAsync">
-                @if (photoActive)
-                {
-                    <span>Cancel photo</span>
-                }
-                else
-                {
-                    <span>Photo ISBN</span>
-                }
-            </button>
+            <MudButton Variant="@(scannerActive ? Variant.Filled : Variant.Outlined)"
+                       Color="@(scannerActive ? Color.Error : Color.Default)"
+                       OnClick="ToggleScannerAsync">
+                @(scannerActive ? "Stop scanner" : "Scan barcode")
+            </MudButton>
+            <MudButton Variant="@(photoActive ? Variant.Filled : Variant.Outlined)"
+                       Color="@(photoActive ? Color.Error : Color.Default)"
+                       OnClick="TogglePhotoCaptureAsync">
+                @(photoActive ? "Cancel photo" : "Photo ISBN")
+            </MudButton>
         </div>
 
         <div class="mt-2">
@@ -75,67 +69,80 @@
 
         @if (!string.IsNullOrEmpty(scannerError))
         {
-            <div class="alert alert-warning mt-2 mb-0 py-2 small">@scannerError</div>
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">@scannerError</MudAlert>
         }
-    </div>
-</div>
+    </MudCardContent>
+</MudCard>
 
 @if (scannerActive)
 {
-    <div class="card mb-4">
-        <div class="card-body text-center">
+    <MudCard Elevation="0" Outlined="true" Class="mb-4">
+        <MudCardContent Class="text-center">
             <div id="barcode-reader" class="scanner-container"></div>
-            <div class="form-text mt-2">Point your camera at the ISBN barcode on the back of the book.</div>
-        </div>
-    </div>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">
+                Point your camera at the ISBN barcode on the back of the book.
+            </MudText>
+        </MudCardContent>
+    </MudCard>
 }
 
 @if (photoActive)
 {
-    <div class="card mb-4">
-        <div class="card-body text-center">
+    <MudCard Elevation="0" Outlined="true" Class="mb-4">
+        <MudCardContent Class="text-center">
             <div class="scanner-container">
                 <video id="photo-video" autoplay playsinline muted style="width: 100%; border-radius: 0.25rem;"></video>
             </div>
-            <div class="mt-2 d-flex justify-content-center gap-2">
-                <button type="button" class="btn btn-primary" @onclick="CapturePhotoAsync" disabled="@extractingIsbn">
+            <div class="mt-2 d-flex justify-center gap-2">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           OnClick="CapturePhotoAsync"
+                           Disabled="@extractingIsbn">
                     @if (extractingIsbn)
                     {
-                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-1" />
                         <span>Reading ISBN...</span>
                     }
                     else
                     {
                         <span>Capture</span>
                     }
-                </button>
+                </MudButton>
             </div>
-            <div class="form-text mt-2">Frame the printed ISBN number and tap Capture.</div>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">
+                Frame the printed ISBN number and tap Capture.
+            </MudText>
             @if (photoError is not null)
             {
-                <div class="alert alert-warning mt-2 py-2 small">@photoError</div>
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">@photoError</MudAlert>
             }
-        </div>
-    </div>
+        </MudCardContent>
+    </MudCard>
 }
 
 @if (VM.Rows.Count > 0)
 {
-    <div class="card mb-4">
-        <div class="card-header bg-white d-flex justify-content-between align-items-center">
-            <h2 class="h5 mb-0">Discovered (@VM.Rows.Count)</h2>
-            <div class="d-flex gap-2 align-items-center">
+    <MudCard Elevation="0" Outlined="true" Class="mb-4">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h6">Discovered (@VM.Rows.Count)</MudText>
+            </CardHeaderContent>
+            <CardHeaderActions>
                 @if (VM.Rows.Any(r => r.Status == BulkAddViewModel.RowStatus.Found && !r.IsDuplicate))
                 {
-                    <button type="button" class="btn btn-success btn-sm" @onclick="VM.AcceptAllFoundAsync">
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Filled"
+                               Color="Color.Success"
+                               OnClick="VM.AcceptAllFoundAsync">
                         Accept all
-                    </button>
+                    </MudButton>
                 }
-            </div>
-        </div>
+            </CardHeaderActions>
+        </MudCardHeader>
 
-        @* Desktop table *@
-        <div class="card-body p-0 d-none d-md-block">
+        @* Desktop table — HTML <table> retained inside the MudCard for tabular
+           density. Mud styling applied via row-level chrome (chips, buttons). *@
+        <div class="d-none d-md-block">
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
@@ -160,8 +167,11 @@
                                 <td>
                                     @if (row.Status == BulkAddViewModel.RowStatus.NotFound)
                                     {
-                                        <input type="text" class="form-control form-control-sm" placeholder="Book title..."
-                                               @bind="row.Title" />
+                                        <MudTextField T="string"
+                                                      @bind-Value="row.Title"
+                                                      Placeholder="Book title..."
+                                                      Variant="Variant.Outlined"
+                                                      Margin="Margin.Dense" />
                                     }
                                     else
                                     {
@@ -173,9 +183,11 @@
                                     @* Editable so multi-author and lookup-miss rows can be
                                        fixed inline. Comma or "&" separates multiple authors —
                                        parsed at save time via AuthorResolver.ParseNames. *@
-                                    <input type="text" class="form-control form-control-sm"
-                                           @bind="row.Author"
-                                           placeholder="Author(s) — use commas for co-authors" />
+                                    <MudTextField T="string"
+                                                  @bind-Value="row.Author"
+                                                  Placeholder="Author(s) — use commas for co-authors"
+                                                  Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense" />
                                 </td>
                                 <td>
                                     @RenderSource(row)
@@ -184,12 +196,14 @@
                                     @RenderStatusBadge(row)
                                 </td>
                                 <td>
-                                    <div class="d-flex gap-1 align-items-center">
+                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                                         @RenderActions(row)
-                                        <button type="button" class="btn btn-outline-danger btn-sm ms-1" @onclick="() => VM.RemoveRow(row)" title="Remove from grid">
-                                            &times;
-                                        </button>
-                                    </div>
+                                        <MudIconButton Size="Size.Small"
+                                                       Icon="@Icons.Material.Filled.Close"
+                                                       Color="Color.Error"
+                                                       OnClick="@(() => VM.RemoveRow(row))"
+                                                       title="Remove from grid" />
+                                    </MudStack>
                                 </td>
                             </tr>
                         }
@@ -199,7 +213,7 @@
         </div>
 
         @* Mobile card layout *@
-        <div class="card-body d-md-none">
+        <MudCardContent Class="d-md-none">
             @foreach (var row in VM.Rows)
             {
                 <div class="discovery-card">
@@ -212,8 +226,12 @@
                                 <div class="min-width-0">
                                     @if (row.Status == BulkAddViewModel.RowStatus.NotFound)
                                     {
-                                        <input type="text" class="form-control form-control-sm mb-1" placeholder="Book title..."
-                                               @bind="row.Title" />
+                                        <MudTextField T="string"
+                                                      @bind-Value="row.Title"
+                                                      Placeholder="Book title..."
+                                                      Variant="Variant.Outlined"
+                                                      Margin="Margin.Dense"
+                                                      Class="mb-1" />
                                     }
                                     else
                                     {
@@ -225,14 +243,20 @@
                                            otherwise overflow the flex container. *@
                                         <div class="fw-semibold text-break">@(row.Title ?? "—")</div>
                                     }
-                                    <input type="text" class="form-control form-control-sm mb-1"
-                                           @bind="row.Author"
-                                           placeholder="Author(s) — commas for co-authors" />
+                                    <MudTextField T="string"
+                                                  @bind-Value="row.Author"
+                                                  Placeholder="Author(s) — commas for co-authors"
+                                                  Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense"
+                                                  Class="mb-1" />
                                     <div class="font-monospace text-muted" style="font-size: 0.7rem;">@row.Isbn</div>
                                 </div>
-                                <button type="button" class="btn btn-outline-danger btn-sm flex-shrink-0 ms-2" @onclick="() => VM.RemoveRow(row)" title="Remove">
-                                    &times;
-                                </button>
+                                <MudIconButton Size="Size.Small"
+                                               Icon="@Icons.Material.Filled.Close"
+                                               Color="Color.Error"
+                                               OnClick="@(() => VM.RemoveRow(row))"
+                                               title="Remove"
+                                               Class="flex-shrink-0 ms-2" />
                             </div>
                             <div class="mt-2 d-flex flex-wrap gap-1 align-items-center">
                                 @RenderStatusBadge(row)
@@ -246,16 +270,15 @@
                     </div>
                 </div>
             }
-        </div>
-    </div>
-
+        </MudCardContent>
+    </MudCard>
 }
 
 @* Always-visible nav back to Home — Home surfaces the running counts, which is
    the natural "OK, I'm done capturing" destination after a bulk-add session.
    Outside the rows-conditional so it's reachable even on a fresh page load. *@
 <div class="mt-3">
-    <a href="/" class="btn btn-outline-secondary">Back to home</a>
+    <MudButton Variant="Variant.Outlined" Href="/">Back to home</MudButton>
 </div>
 
 @code {
@@ -432,11 +455,16 @@
     {
         if (!string.IsNullOrWhiteSpace(row.CoverUrl))
         {
-            <img src="@row.CoverUrl" alt="" loading="lazy" decoding="async" class="rounded" style="width: 40px; height: 56px; object-fit: cover;" />
+            <MudImage Src="@row.CoverUrl"
+                      Alt=""
+                      loading="lazy"
+                      decoding="async"
+                      Class="rounded"
+                      Style="width: 40px; height: 56px; object-fit: cover;" />
         }
         else
         {
-            <div class="rounded bg-light d-flex align-items-center justify-content-center" style="width: 40px; height: 56px;">
+            <div class="rounded d-flex align-items-center justify-content-center" style="width: 40px; height: 56px; background: var(--mud-palette-background-grey);">
                 <span class="text-muted small">--</span>
             </div>
         }
@@ -446,11 +474,11 @@
     {
         if (row.Status == BulkAddViewModel.RowStatus.Searching)
         {
-            <span class="spinner-border spinner-border-sm" role="status"></span>
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
         }
         else if (row.Source is not null)
         {
-            <span class="text-muted small">@row.Source</span>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@row.Source</MudText>
         }
     };
 
@@ -460,24 +488,24 @@
         // Pending and Duplicate-skip states are reachable here.
         if (row.Action == BulkAddViewModel.RowAction.Duplicate)
         {
-            <span class="badge bg-secondary">Duplicate</span>
+            <MudChip T="string" Size="Size.Small" Color="Color.Default">Duplicate</MudChip>
         }
         else if (row.IsDuplicate)
         {
-            <span class="badge bg-warning text-dark">In library</span>
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning">In library</MudChip>
         }
         else
         {
             switch (row.Status)
             {
                 case BulkAddViewModel.RowStatus.Found:
-                    <span class="badge bg-info text-dark">Found</span>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Found</MudChip>
                     break;
                 case BulkAddViewModel.RowStatus.NotFound:
-                    <span class="badge bg-danger">Not found</span>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error">Not found</MudChip>
                     break;
                 case BulkAddViewModel.RowStatus.Searching:
-                    <span class="badge bg-light text-dark">Searching...</span>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default">Searching...</MudChip>
                     break;
             }
         }
@@ -504,7 +532,7 @@
                         <span class="text-muted"> (will be created)</span>
                     }
                 </span>
-                <button type="button" class="btn btn-link btn-sm p-0 lh-1" @onclick="() => VM.UndoSeriesSuggestionAccept(row)">Undo</button>
+                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => VM.UndoSeriesSuggestionAccept(row))">Undo</MudButton>
             </div>
         }
         else
@@ -514,12 +542,12 @@
                     <strong>Series:</strong> @row.SeriesSuggestion.Message
                     @if (row.SeriesSuggestion.SeriesId.HasValue)
                     {
-                        <a href="@($"/series/{row.SeriesSuggestion.SeriesId}")" class="ms-1" target="_blank">View</a>
+                        <MudLink Href="@($"/series/{row.SeriesSuggestion.SeriesId}")" Class="ms-1" Target="_blank">View</MudLink>
                     }
                 </span>
                 @if (row.SeriesSuggestion.Reason is MatchReason.ApiMatchExisting or MatchReason.ApiMatchNewSeries)
                 {
-                    <button type="button" class="btn btn-success btn-sm py-0 px-2" @onclick="() => VM.AcceptSeriesSuggestion(row)">Accept</button>
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" OnClick="@(() => VM.AcceptSeriesSuggestion(row))">Accept</MudButton>
                 }
             </div>
         }
@@ -531,37 +559,37 @@
         {
             if (row.Status == BulkAddViewModel.RowStatus.Found)
             {
-                <div class="btn-group btn-group-sm">
+                <MudStack Row="true" Spacing="1">
                     @if (row.IsDuplicate)
                     {
-                        <button type="button" class="btn btn-outline-success" @onclick="() => VM.AcceptRowAsync(row)" title="Add another copy">
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success" OnClick="@(() => VM.AcceptRowAsync(row))" title="Add another copy">
                             Add copy
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary" @onclick="() => row.Action = BulkAddViewModel.RowAction.Duplicate" title="Skip duplicate">
+                        </MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => row.Action = BulkAddViewModel.RowAction.Duplicate)" title="Skip duplicate">
                             Skip
-                        </button>
+                        </MudButton>
                     }
                     else
                     {
-                        <button type="button" class="btn btn-outline-success" @onclick="() => VM.AcceptRowAsync(row)">
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success" OnClick="@(() => VM.AcceptRowAsync(row))">
                             Accept
-                        </button>
+                        </MudButton>
                     }
-                    <button type="button" class="btn btn-outline-warning" @onclick="() => VM.FollowUpRowAsync(row)">
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" OnClick="@(() => VM.FollowUpRowAsync(row))">
                         Follow-up
-                    </button>
-                </div>
+                    </MudButton>
+                </MudStack>
             }
             else if (row.Status == BulkAddViewModel.RowStatus.NotFound)
             {
-                <button type="button" class="btn btn-outline-warning btn-sm" @onclick="() => VM.FollowUpNotFoundAsync(row)">
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" OnClick="@(() => VM.FollowUpNotFoundAsync(row))">
                     Add as follow-up
-                </button>
+                </MudButton>
             }
         }
         else
         {
-            <span class="text-muted small">Done</span>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Done</MudText>
         }
     };
 }

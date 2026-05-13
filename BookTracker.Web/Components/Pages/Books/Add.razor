@@ -8,88 +8,119 @@
 
 <PageTitle>Add a book - BookTracker</PageTitle>
 
-<h1 class="mb-3">Add a book</h1>
+<MudText Typo="Typo.h4" Class="mb-3">Add a book</MudText>
 
 <EditForm Model="this" OnValidSubmit="SaveAsync" FormName="addBook">
     <DataAnnotationsValidator />
 
-    <div class="row g-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-body">
-                    <div class="form-check form-switch mb-2">
-                        <input type="checkbox" id="noIsbnToggle" class="form-check-input" @bind="VM.NoIsbnMode" />
-                        <label for="noIsbnToggle" class="form-check-label">No ISBN (pre-1974 book)</label>
-                    </div>
-                    <div class="form-check form-switch mb-3">
-                        @* Custom @onchange instead of @bind because flipping the toggle OFF when
-                           any row is an attach-existing reference would silently discard those
-                           attachments — confirm first so a fat-finger flick is recoverable. *@
-                        <input type="checkbox" id="collectionToggle" class="form-check-input"
-                               checked="@VM.IsCollection" @onchange="OnCollectionToggleChangedAsync" />
-                        <label for="collectionToggle" class="form-check-label">This is a collection (multiple works in one book)</label>
-                    </div>
+    <MudGrid Spacing="4">
+        <MudItem xs="12">
+            <MudCard Elevation="0" Outlined="true">
+                <MudCardContent>
+                    <MudSwitch T="bool"
+                               Value="VM.NoIsbnMode"
+                               ValueChanged="@(v => VM.NoIsbnMode = v)"
+                               Color="Color.Primary"
+                               Label="No ISBN (pre-1974 book)" />
+                    @* Custom ValueChanged instead of @bind because flipping the toggle OFF when
+                       any row is an attach-existing reference would silently discard those
+                       attachments — confirm first so a fat-finger flick is recoverable. *@
+                    <MudSwitch T="bool"
+                               Value="VM.IsCollection"
+                               ValueChanged="@OnCollectionToggleChangedAsync"
+                               Color="Color.Primary"
+                               Label="This is a collection (multiple works in one book)"
+                               Class="mb-3" />
 
                     @if (!VM.NoIsbnMode)
                     {
-                        <label class="form-label fw-semibold">Look up by ISBN</label>
                         @* Wrapper attribute lets book-form-keys.js route Enter on the
                            ISBN input to OnIsbnLookupEnter — without the data-attr the
                            document-level keydown listener ignores it and Enter falls
                            through to the surrounding EditForm's submit handler, which
                            would then call SaveAsync on an empty form. *@
-                        <div class="input-group" data-isbn-lookup-input>
-                            <InputText @bind-Value="VM.LookupIsbn" class="form-control" placeholder="9780345391803" />
-                            <button type="button" class="btn btn-outline-primary" @onclick="LookupAsync" disabled="@VM.LookingUp">
+                        <div class="d-flex gap-2 align-end" data-isbn-lookup-input>
+                            <MudTextField T="string"
+                                          @bind-Value="VM.LookupIsbn"
+                                          Label="Look up by ISBN"
+                                          Placeholder="9780345391803"
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense"
+                                          Class="flex-grow-1" />
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Primary"
+                                       OnClick="LookupAsync"
+                                       Disabled="@VM.LookingUp"
+                                       StartIcon="@(VM.LookingUp ? null : null)">
                                 @if (VM.LookingUp)
                                 {
-                                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-2" />
                                 }
                                 Look up
-                            </button>
+                            </MudButton>
                         </div>
-                        <div class="form-text">Searches Open Library, then Google Books. Prefills the fields below — you can edit anything before saving.</div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-1">
+                            Searches Open Library, then Google Books. Prefills the fields below — you can edit anything before saving.
+                        </MudText>
                     }
                     else
                     {
-                        <label class="form-label fw-semibold">Search by title and/or author</label>
-                        <div class="row g-2">
-                            <div class="col-md-5">
-                                <InputText @bind-Value="VM.SearchTitle" class="form-control" placeholder="Title" />
-                            </div>
-                            <div class="col-md-5">
-                                <InputText @bind-Value="VM.SearchAuthor" class="form-control" placeholder="Author" />
-                            </div>
-                            <div class="col-md-2 d-grid">
-                                <button type="button" class="btn btn-outline-primary" @onclick="SearchAsync" disabled="@VM.Searching">
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">Search by title and/or author</MudText>
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12" md="5">
+                                <MudTextField T="string"
+                                              @bind-Value="VM.SearchTitle"
+                                              Placeholder="Title"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12" md="5">
+                                <MudTextField T="string"
+                                              @bind-Value="VM.SearchAuthor"
+                                              Placeholder="Author"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12" md="2">
+                                <MudButton Variant="Variant.Outlined"
+                                           Color="Color.Primary"
+                                           OnClick="SearchAsync"
+                                           Disabled="@VM.Searching"
+                                           FullWidth="true">
                                     @if (VM.Searching)
                                     {
-                                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-2" />
                                     }
                                     Search
-                                </button>
-                            </div>
-                        </div>
-                        <div class="form-text">Searches Open Library by title/author. Pick a candidate to prefill — you'll need to fill format, exact print date, and publisher from the book in hand.</div>
+                                </MudButton>
+                            </MudItem>
+                        </MudGrid>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-1">
+                            Searches Open Library by title/author. Pick a candidate to prefill — you'll need to fill format, exact print date, and publisher from the book in hand.
+                        </MudText>
 
                         @if (VM.SearchCandidates.Count > 0)
                         {
-                            <div class="mt-3 d-flex flex-column gap-2">
+                            <MudStack Spacing="2" Class="mt-3">
                                 @foreach (var candidate in VM.SearchCandidates)
                                 {
-                                    <div class="card border-secondary-subtle">
-                                        <div class="card-body py-2 d-flex align-items-center gap-3">
+                                    <MudPaper Outlined="true" Class="pa-2">
+                                        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
                                             @if (!string.IsNullOrEmpty(candidate.CoverUrl))
                                             {
-                                                <img src="@candidate.CoverUrl" alt="" loading="lazy" decoding="async" style="width: 48px; height: 72px; object-fit: cover;" />
+                                                <MudImage Src="@candidate.CoverUrl"
+                                                          Alt=""
+                                                          loading="lazy"
+                                                          decoding="async"
+                                                          Style="width: 48px; height: 72px; object-fit: cover;" />
                                             }
                                             else
                                             {
                                                 <div style="width: 48px; height: 72px; background: #eee;"></div>
                                             }
-                                            <div class="flex-grow-1">
-                                                <div class="fw-semibold">@candidate.Title</div>
-                                                <div class="small text-muted">
+                                            <MudStack Spacing="0" Class="flex-grow-1" Style="min-width: 0;">
+                                                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@candidate.Title</MudText>
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
                                                     @candidate.Author
                                                     @if (candidate.FirstPublishYear.HasValue)
                                                     {
@@ -99,50 +130,62 @@
                                                     {
                                                         <span> &middot; @n edition@(n == 1 ? "" : "s") on file</span>
                                                     }
-                                                </div>
+                                                </MudText>
                                                 @if (!string.IsNullOrEmpty(candidate.OpenLibraryUrl))
                                                 {
-                                                    <div class="small">
-                                                        <a href="@candidate.OpenLibraryUrl" target="_blank" rel="noopener">Show all editions on Open Library &rarr;</a>
-                                                    </div>
+                                                    <MudLink Href="@candidate.OpenLibraryUrl" Target="_blank" Typo="Typo.caption">
+                                                        Show all editions on Open Library &rarr;
+                                                    </MudLink>
                                                 }
-                                            </div>
-                                            <button type="button" class="btn btn-sm btn-primary" @onclick="() => ApplyCandidateAsync(candidate)">
+                                            </MudStack>
+                                            <MudButton Size="Size.Small"
+                                                       Variant="Variant.Filled"
+                                                       Color="Color.Primary"
+                                                       OnClick="@(() => ApplyCandidateAsync(candidate))">
                                                 Use this
-                                            </button>
-                                        </div>
-                                    </div>
+                                            </MudButton>
+                                        </MudStack>
+                                    </MudPaper>
                                 }
-                            </div>
+                            </MudStack>
                         }
                     }
 
                     @if (VM.ExistingBook is not null)
                     {
-                        <div class="alert alert-warning mt-3 mb-0 py-2">
-                            <div class="fw-semibold mb-1">You already own this book.</div>
-                            <div class="small mb-2">
+                        <MudAlert Severity="Severity.Warning" Class="mt-3" Dense="true">
+                            <MudText Typo="Typo.subtitle2">You already own this book.</MudText>
+                            <MudText Typo="Typo.body2" Class="mb-2">
                                 <strong>@VM.ExistingBook.Title</strong> by @VM.ExistingBook.Author —
                                 @VM.ExistingBook.CopyCount cop@(VM.ExistingBook.CopyCount == 1 ? "y" : "ies") on file.
-                            </div>
-                            <div class="d-flex gap-2 flex-wrap">
-                                <button type="button" class="btn btn-success btn-sm" @onclick="AddCopyAsync" disabled="@VM.AddingCopy">
+                            </MudText>
+                            <MudStack Row="true" Spacing="2">
+                                <MudButton Size="Size.Small"
+                                           Variant="Variant.Filled"
+                                           Color="Color.Success"
+                                           OnClick="AddCopyAsync"
+                                           Disabled="@VM.AddingCopy">
                                     @if (VM.AddingCopy)
                                     {
-                                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-1" />
                                     }
                                     Add another copy
-                                </button>
-                                <a class="btn btn-outline-primary btn-sm" href="@($"/books/{VM.ExistingBook.BookId}")">View existing book</a>
-                            </div>
-                        </div>
+                                </MudButton>
+                                <MudButton Size="Size.Small"
+                                           Variant="Variant.Outlined"
+                                           Color="Color.Primary"
+                                           Href="@($"/books/{VM.ExistingBook.BookId}")">
+                                    View existing book
+                                </MudButton>
+                            </MudStack>
+                        </MudAlert>
                     }
                     @{
                         var lookupMsg = VM.NoIsbnMode ? VM.SearchMessage : VM.LookupMessage;
                     }
                     @if (!string.IsNullOrEmpty(lookupMsg))
                     {
-                        <div class="alert alert-info mt-3 mb-0 py-2">@lookupMsg</div>
+                        <MudAlert Severity="Severity.Info" Class="mt-3" Dense="true">@lookupMsg</MudAlert>
                     }
                     @if (VM.SeriesSuggestion is not null && !VM.SeriesSuggestionDismissed)
                     {
@@ -151,77 +194,90 @@
                              buttons (Accept only for actionable API-sourced reasons).
                            - Accepted: show "✓ Will attach" with the series name + an Undo
                              button. Dismiss (×) still available alongside Undo. *@
-                        <div class="alert mt-3 mb-0 py-2 d-flex justify-content-between align-items-start gap-2 @(VM.SeriesSuggestionAccepted ? "alert-success" : "alert-warning")">
-                            <div class="text-break">
-                                @if (VM.SeriesSuggestionAccepted)
-                                {
-                                    <strong>✓ Will attach to series:</strong>
-                                    <span>@VM.AcceptedSeriesName</span>
-                                    @if (VM.AcceptedSeriesOrder is int order)
+                        <MudAlert Severity="@(VM.SeriesSuggestionAccepted ? Severity.Success : Severity.Warning)"
+                                  Class="mt-3"
+                                  Dense="true"
+                                  ShowCloseIcon="true"
+                                  CloseIconClicked="() => VM.SeriesSuggestionDismissed = true">
+                            <MudStack Row="true" Spacing="2" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                                <div class="text-break">
+                                    @if (VM.SeriesSuggestionAccepted)
                                     {
-                                        <span> #@order</span>
+                                        <strong>✓ Will attach to series:</strong>
+                                        <span>@VM.AcceptedSeriesName</span>
+                                        @if (VM.AcceptedSeriesOrder is int order)
+                                        {
+                                            <span> #@order</span>
+                                        }
+                                        @if (VM.AcceptedSeriesId is null)
+                                        {
+                                            <span class="mud-typography-caption mud-text-secondary"> (will be created on save)</span>
+                                        }
                                     }
-                                    @if (VM.AcceptedSeriesId is null)
+                                    else
                                     {
-                                        <span class="text-muted small"> (will be created on save)</span>
+                                        <strong>Series suggestion:</strong>
+                                        <span>@VM.SeriesSuggestion.Message</span>
+                                        @if (VM.SeriesSuggestion.SeriesId.HasValue)
+                                        {
+                                            <span> &mdash; <MudLink Href="@($"/series/{VM.SeriesSuggestion.SeriesId}")" Target="_blank">View series</MudLink></span>
+                                        }
                                     }
-                                }
-                                else
-                                {
-                                    <strong>Series suggestion:</strong>
-                                    <span>@VM.SeriesSuggestion.Message</span>
-                                    @if (VM.SeriesSuggestion.SeriesId.HasValue)
+                                </div>
+                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="flex-shrink-0">
+                                    @if (VM.SeriesSuggestionAccepted)
                                     {
-                                        <span> &mdash; <a href="@($"/series/{VM.SeriesSuggestion.SeriesId}")" target="_blank">View series</a></span>
+                                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="VM.UndoSeriesSuggestionAccept">Undo</MudButton>
                                     }
-                                }
-                            </div>
-                            <div class="d-flex gap-1 align-items-center flex-shrink-0">
-                                @if (VM.SeriesSuggestionAccepted)
-                                {
-                                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="VM.UndoSeriesSuggestionAccept">Undo</button>
-                                }
-                                else if (VM.SeriesSuggestion.Reason is MatchReason.ApiMatchExisting or MatchReason.ApiMatchNewSeries)
-                                {
-                                    <button type="button" class="btn btn-success btn-sm" @onclick="VM.AcceptSeriesSuggestion">Accept</button>
-                                }
-                                <button type="button" class="btn-close btn-close-sm" @onclick="() => VM.SeriesSuggestionDismissed = true" aria-label="Dismiss"></button>
-                            </div>
-                        </div>
+                                    else if (VM.SeriesSuggestion.Reason is MatchReason.ApiMatchExisting or MatchReason.ApiMatchNewSeries)
+                                    {
+                                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" OnClick="VM.AcceptSeriesSuggestion">Accept</MudButton>
+                                    }
+                                </MudStack>
+                            </MudStack>
+                        </MudAlert>
                     }
-                </div>
-            </div>
-        </div>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
 
-        <div class="col-12">
+        <MudItem xs="12">
             <BookForm Input="VM.BookInput" />
-        </div>
+        </MudItem>
 
         @if (!VM.IsCollection)
         {
-            <div class="col-12">
+            <MudItem xs="12">
                 <WorkForm Input="VM.WorkInput" Title="Work (story / novel)" />
-            </div>
+            </MudItem>
 
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header bg-white"><h2 class="h5 mb-0">Genres</h2></div>
-                    <div class="card-body">
-                        <div class="form-text mb-2">Genres apply to the work above.</div>
+            <MudItem xs="12">
+                <MudCard Elevation="0" Outlined="true">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Genres</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-2">Genres apply to the work above.</MudText>
                         <MudGenrePicker @ref="genrePicker"
                                         SelectedGenreIds="selectedGenreIds"
                                         SelectedGenreIdsChanged="ids => selectedGenreIds = ids"
                                         LookupCandidates="VM.LookupCandidates" />
-                    </div>
-                </div>
-            </div>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
         }
         else
         {
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header bg-white"><h2 class="h5 mb-0">Works in this collection</h2></div>
-                    <div class="card-body">
+            <MudItem xs="12">
+                <MudCard Elevation="0" Outlined="true">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Works in this collection</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
                         @* Single-Author + Single-Genre modes — when on,
                            render a shared picker at the top; per-row
                            pickers are hidden and save applies the shared
@@ -231,27 +287,20 @@
                            shape for authors. State is sticky across
                            toggle flips — per-row entries don't get
                            clobbered if the user toggles on then off. *@
-                        <div class="form-check form-switch mb-2">
-                            <input type="checkbox" id="singleAuthorToggle"
-                                   class="form-check-input"
-                                   @bind="VM.SingleAuthor" />
-                            <label for="singleAuthorToggle" class="form-check-label">
-                                Same author(s) for all works
-                            </label>
-                        </div>
-                        <div class="form-check form-switch mb-3">
-                            <input type="checkbox" id="singleGenreToggle"
-                                   class="form-check-input"
-                                   @bind="VM.SingleGenre" />
-                            <label for="singleGenreToggle" class="form-check-label">
-                                Same genre(s) for all works
-                            </label>
-                        </div>
+                        <MudSwitch T="bool"
+                                   @bind-Value="VM.SingleAuthor"
+                                   Color="Color.Primary"
+                                   Label="Same author(s) for all works" />
+                        <MudSwitch T="bool"
+                                   @bind-Value="VM.SingleGenre"
+                                   Color="Color.Primary"
+                                   Label="Same genre(s) for all works"
+                                   Class="mb-3" />
 
                         @if (VM.SingleAuthor)
                         {
                             <div class="mb-3">
-                                <label class="form-label small">Author(s) for all works in this collection</label>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-1">Author(s) for all works in this collection</MudText>
                                 <MudAuthorPicker Authors="VM.SharedAuthors"
                                                  AuthorsChanged="list => VM.SharedAuthors = list"
                                                  Label="Add author" />
@@ -261,7 +310,7 @@
                         @if (VM.SingleGenre)
                         {
                             <div class="mb-3">
-                                <label class="form-label small">Genre(s) for all works in this collection</label>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-1">Genre(s) for all works in this collection</MudText>
                                 <MudGenrePicker SelectedGenreIds="VM.SharedGenreIds"
                                                 SelectedGenreIdsChanged="ids => VM.SharedGenreIds = ids" />
                             </div>
@@ -276,56 +325,55 @@
                                 @* Attach-existing summary card. Editable fields hidden; the existing Work
                                    carries its own authors / subtitle / first-published / genres. "Edit as new"
                                    reverts to the new-work shape preserving whatever title was typed. *@
-                                <div class="border rounded p-3 mb-3 bg-body-tertiary">
-                                    <div class="d-flex justify-content-between align-items-start gap-2">
+                                <MudPaper Outlined="true" Class="pa-3 mb-3" Style="background: var(--mud-palette-background-grey);">
+                                    <MudStack Row="true" Spacing="2" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
                                         <div class="flex-grow-1" style="min-width: 0;">
-                                            <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
-                                                <span class="badge bg-secondary">Existing work</span>
+                                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-1" Wrap="Wrap.Wrap">
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Default">Existing work</MudChip>
                                                 <strong style="word-break: break-word;">@work.Title</strong>
-                                            </div>
+                                            </MudStack>
                                             @if (!string.IsNullOrEmpty(work.AttachedWorkAuthor))
                                             {
-                                                <div class="small text-muted">@work.AttachedWorkAuthor</div>
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">@work.AttachedWorkAuthor</MudText>
                                             }
                                         </div>
-                                        <div class="d-flex gap-1 flex-shrink-0">
-                                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => VM.DetachRow(index)">Edit as new</button>
+                                        <MudStack Row="true" Spacing="1" Class="flex-shrink-0">
+                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => VM.DetachRow(index)">Edit as new</MudButton>
                                             @if (VM.CollectionWorks.Count > 1)
                                             {
-                                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => VM.RemoveCollectionWorkRow(index)">Remove</button>
+                                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => VM.RemoveCollectionWorkRow(index)">Remove</MudButton>
                                             }
-                                        </div>
-                                    </div>
-                                </div>
+                                        </MudStack>
+                                    </MudStack>
+                                </MudPaper>
                             }
                             else
                             {
-                                <div class="border rounded p-3 mb-3">
-                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                <MudPaper Outlined="true" Class="pa-3 mb-3">
+                                    <MudStack Row="true" Spacing="2" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
                                         <strong>Work @(index + 1)</strong>
                                         @if (VM.CollectionWorks.Count > 1)
                                         {
-                                            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => VM.RemoveCollectionWorkRow(index)">Remove</button>
+                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => VM.RemoveCollectionWorkRow(index)">Remove</MudButton>
                                         }
-                                    </div>
-                                    <div class="row g-2">
-                                        <div class="col-md-@(VM.SingleAuthor ? 12 : 7)">
-                                            <label class="form-label small">Title</label>
+                                    </MudStack>
+                                    <MudGrid Spacing="2">
+                                        <MudItem xs="12" md="@(VM.SingleAuthor ? 12 : 7)">
                                             @* MudAutocomplete<WorkSearchResult> — as the user types, existing
                                                Works appear in the dropdown. Picking one fires ValueChanged →
                                                OnExistingWorkPickedAsync, flipping the row to attach-existing
                                                mode. Free-text Enter (no dropdown highlight) falls through to
-                                               collection-works.js → page [JSInvokable] OnCollectionTitleEnter,
+                                               book-form-keys.js → page [JSInvokable] OnCollectionTitleEnter,
                                                which adds a new row / focuses next. The wrapper div carries
                                                data-collection-work-title="@index" so the JS doc-level keydown
                                                listener can route the event correctly — MudAutocomplete renders
                                                its <input> deep inside, so we can't put the data-attribute
                                                directly on the input. *@
                                             <div data-collection-work-title="@index">
-                                                @* CoerceText="false" so Esc / un-picked dropdown close doesn'\''t
+                                                @* CoerceText="false" so Esc / un-picked dropdown close doesn't
                                                    revert work.Title to the (null) Value's display string —
                                                    the typed text needs to survive for the "captured as new"
-                                                   flow. Paired with the collection-works.js capture-phase
+                                                   flow. Paired with the book-form-keys.js capture-phase
                                                    listener that tracks user navigation (Down/Up) per input
                                                    and only defers to MudAutocomplete's auto-pick when the
                                                    user has explicitly arrow-keyed. *@
@@ -336,6 +384,7 @@
                                                                  TextChanged="@(t => work.Title = t ?? string.Empty)"
                                                                  SearchFunc="@(async (q, ct) => await SearchExistingWorksAsync(q, ct))"
                                                                  ToStringFunc="@(r => r?.Title ?? string.Empty)"
+                                                                 Label="Title"
                                                                  Placeholder="Type to search existing or capture new..."
                                                                  Variant="Variant.Outlined"
                                                                  Margin="Margin.Dense"
@@ -357,71 +406,82 @@
                                                     </ItemTemplate>
                                                 </MudAutocomplete>
                                             </div>
-                                        </div>
+                                        </MudItem>
                                         @if (!VM.SingleAuthor)
                                         {
-                                            <div class="col-md-5">
-                                                <label class="form-label small">Author(s)</label>
+                                            <MudItem xs="12" md="5">
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-1">Author(s)</MudText>
                                                 <MudAuthorPicker Authors="work.Authors"
                                                                  AuthorsChanged="list => work.Authors = list"
                                                                  Label="Add author" />
-                                            </div>
+                                            </MudItem>
                                         }
-                                        <div class="col-md-7">
-                                            <label class="form-label small">Subtitle <span class="text-muted">(optional)</span></label>
-                                            <InputText @bind-Value="work.Subtitle" class="form-control" />
-                                        </div>
-                                        <div class="col-md-5">
-                                            <label class="form-label small">First published <span class="text-muted">(optional)</span></label>
-                                            <InputText @bind-Value="work.FirstPublishedDate" class="form-control" placeholder="e.g. 1934" />
-                                        </div>
+                                        <MudItem xs="12" md="7">
+                                            <MudTextField T="string"
+                                                          @bind-Value="work.Subtitle"
+                                                          Label="Subtitle (optional)"
+                                                          Variant="Variant.Outlined"
+                                                          Margin="Margin.Dense" />
+                                        </MudItem>
+                                        <MudItem xs="12" md="5">
+                                            <MudTextField T="string"
+                                                          @bind-Value="work.FirstPublishedDate"
+                                                          Label="First published (optional)"
+                                                          Placeholder="e.g. 1934"
+                                                          Variant="Variant.Outlined"
+                                                          Margin="Margin.Dense" />
+                                        </MudItem>
                                         @if (!VM.SingleGenre)
                                         {
-                                            <div class="col-12">
-                                                <label class="form-label small">Genre(s)</label>
+                                            <MudItem xs="12">
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-1">Genre(s)</MudText>
                                                 <MudGenrePicker SelectedGenreIds="work.GenreIds"
                                                                 SelectedGenreIdsChanged="ids => work.GenreIds = ids" />
-                                            </div>
+                                            </MudItem>
                                         }
-                                    </div>
-                                </div>
+                                    </MudGrid>
+                                </MudPaper>
                             }
                         }
-                        <button type="button" class="btn btn-outline-primary btn-sm" @onclick="VM.AddCollectionWorkRow">+ Add another work</button>
-                        <div class="form-text mt-2">Start typing a title and any matching existing Works appear — Enter on a highlighted match attaches it; press Enter on free text to add the next new row.</div>
-                    </div>
-                </div>
-            </div>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" OnClick="VM.AddCollectionWorkRow">
+                            + Add another work
+                        </MudButton>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">
+                            Start typing a title and any matching existing Works appear — Enter on a highlighted match attaches it; press Enter on free text to add the next new row.
+                        </MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
         }
 
-        <div class="col-12">
+        <MudItem xs="12">
             <EditionCopyForm EditionInput="VM.EditionInput" CopyInput="VM.CopyInput" Title="First edition & copy" />
-        </div>
+        </MudItem>
 
         @if (!string.IsNullOrEmpty(saveErrorMessage))
         {
-            <div class="col-12">
-                <div class="alert alert-danger mb-0 py-2" role="alert">
-                    @saveErrorMessage
-                </div>
-            </div>
+            <MudItem xs="12">
+                <MudAlert Severity="Severity.Error" Dense="true">@saveErrorMessage</MudAlert>
+            </MudItem>
         }
 
-        <div class="col-12 d-flex gap-2 align-items-center flex-wrap">
-            <button type="submit" class="btn btn-primary" disabled="@VM.Saving">
-                @if (VM.Saving)
-                {
-                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                }
-                Save book
-            </button>
-            <a class="btn btn-outline-secondary" href="/">Cancel</a>
-            <div class="form-check ms-2">
-                <input type="checkbox" id="addAnother" class="form-check-input" @bind="addAnother" />
-                <label for="addAnother" class="form-check-label small">Add another?</label>
-            </div>
-        </div>
-    </div>
+        <MudItem xs="12">
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                <MudButton ButtonType="ButtonType.Submit"
+                           Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           Disabled="@VM.Saving">
+                    @if (VM.Saving)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-2" />
+                    }
+                    Save book
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" Href="/">Cancel</MudButton>
+                <MudCheckBox T="bool" @bind-Value="addAnother" Color="Color.Primary" Label="Add another?" />
+            </MudStack>
+        </MudItem>
+    </MudGrid>
 </EditForm>
 
 @code {
@@ -431,10 +491,10 @@
 
     // Save-error surface for #44 — when VM.SaveAsync throws, the
     // catch in SaveAsync below stashes the user-facing message here
-    // so the alert-danger above the Save button renders it. Cleared
-    // at the start of each Save attempt; not cleared on field edit
-    // (the user can read the message AND keep typing — clearing on
-    // every keypress would just flash the alert away mid-correction).
+    // so the alert above the Save button renders it. Cleared at the
+    // start of each Save attempt; not cleared on field edit (the user
+    // can read the message AND keep typing — clearing on every keypress
+    // would just flash the alert away mid-correction).
     private string? saveErrorMessage;
 
     // After Enter on a title grows the CollectionWorks list (or an
@@ -444,7 +504,7 @@
     // that actually exists.
     private int? _pendingCollectionFocusIndex;
 
-    // DotNetObjectReference handed to collection-works.js so the JS
+    // DotNetObjectReference handed to book-form-keys.js so the JS
     // keydown listener can call back into Blazor with the row index
     // when Enter fires on a non-highlighted Title (the "add new row /
     // focus next" path). Disposed on circuit teardown so the listener
@@ -531,9 +591,8 @@
     /// before flipping OFF when there are existing-Work attachments on
     /// rows (a fat-finger flick would otherwise silently drop them, since
     /// the single-Work form has nowhere to put attachments).</summary>
-    private async Task OnCollectionToggleChangedAsync(ChangeEventArgs e)
+    private async Task OnCollectionToggleChangedAsync(bool newValue)
     {
-        var newValue = e.Value is bool b && b;
         if (newValue == VM.IsCollection) return;
 
         if (!newValue && VM.HasAttachedWorkRows)
@@ -546,8 +605,8 @@
                 cancelText: "Keep collection mode");
             if (confirmed != true)
             {
-                // Confirm cancelled — re-render so the checkbox snaps back
-                // to ON (the DOM updated optimistically when the user clicked).
+                // Confirm cancelled — re-render so the switch snaps back
+                // to ON.
                 await InvokeAsync(StateHasChanged);
                 return;
             }
