@@ -1,6 +1,6 @@
 {
-  "name": "BookTracker",
-  "short_name": "BookTracker",
+  "name": "Bookcase",
+  "short_name": "Bookcase",
   "description": "Personal library tracker and shopping companion.",
   "start_url": "/",
   "scope": "/",
