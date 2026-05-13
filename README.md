@@ -1,6 +1,11 @@
 # BookTracker
 
-A personal library-tracking web app — catalog the books you own, scan ISBNs to add them, track reading status and ratings, spot duplicates, and ask an AI assistant for recommendations. Deployed at [books.silly.ninja](https://books.silly.ninja). Code is ASP.NET Core Blazor Server (.NET 10) backed by EF Core + Azure SQL, hosted on Azure App Service behind Easy Auth.
+A personal library system with two apps under one codebase:
+
+- **Bookcase** — the web app (installable as a PWA on mobile). Catalog books, scan ISBNs, track reading status, spot duplicates, ask an AI assistant for recommendations. Deployed at [books.silly.ninja](https://books.silly.ninja).
+- **Bookshelf** — the .NET MAUI Android companion. Offline-capable in-bookshop tool for "do I already own this?" and quick library lookups.
+
+Web is ASP.NET Core Blazor Server (.NET 10) backed by EF Core + Azure SQL, hosted on Azure App Service behind Easy Auth. Mobile is .NET MAUI sharing catalog snapshot DTOs from the same codebase. "BookTracker" remains the codebase / namespace umbrella.
 
 ## What this repo actually is
 

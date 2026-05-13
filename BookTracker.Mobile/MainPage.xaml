@@ -30,7 +30,7 @@
                              BackgroundColor="#3E2723"
                              Padding="24,20,24,18"
                              Spacing="2">
-            <Label Text="BookTracker"
+            <Label Text="Bookshelf"
                    FontSize="24"
                    FontAttributes="Bold"
                    TextColor="#F2EADB" />

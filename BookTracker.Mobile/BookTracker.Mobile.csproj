@@ -19,7 +19,7 @@
 
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
 
-		<ApplicationTitle>BookTracker</ApplicationTitle>
+		<ApplicationTitle>Bookshelf</ApplicationTitle>
 
 		<!-- Identifies the app to Android. Same value MUST appear in the AAD
 		     redirect URI (msauth://com.thelibrary.mobile/<hash>) and in the
