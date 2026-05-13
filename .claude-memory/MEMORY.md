@@ -12,7 +12,7 @@
 - [Testing conventions](feedback_testing_conventions.md) — minimal tests for new logic to prevent regression; skip for pure markup.
 - [Deployment safety](feedback_deployment_safety.md) — migrations must retain data; breaking changes need defaults and review tags.
 - [Performance target](project_performance_target.md) — system must handle 3000+ copies; flag designs that might struggle at scale.
-- [TODO tracking](feedback_todo_tracking.md) — all TODOs in TODO.md; "sync TODOs" reconciles memory + code + TODO.md.
+- [TODO tracking](feedback_todo_tracking.md) — all TODOs in TODO.md; "sync TODOs" reconciles memory + code + TODO.md AND probes each Open row against the codebase for shipped-but-not-moved drift.
 - [Memory excluded from PRs](feedback_memory_commits.md) — don't stage .claude-memory/ in feature commits; flag changes for a separate commit.
 - [Keep ARCHITECTURE.md updated](feedback_architecture_doc.md) — update when structural changes are made (entities, pages, services, patterns).
 - [Blog post backlog](blog_post_backlog.md) — corpus-derived candidate posts mineable from existing retros + `patterns.md`. 7 shipped + 7 strong / 6 possible candidates remaining from the 2026-04-28 catch-up mine.
