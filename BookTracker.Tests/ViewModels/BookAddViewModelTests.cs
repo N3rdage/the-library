@@ -982,6 +982,25 @@ public class BookAddViewModelTests
     }
 
     [Fact]
+    public async Task SaveAsync_NonCollection_NoAuthors_ThrowsWithUserFacingMessage()
+    {
+        // Drew's 2026-05-12 testing-feedback bug repro: Enter on the ISBN
+        // field submits the EditForm before lookup runs, which calls SaveAsync
+        // on an empty/sparse form. The non-collection branch throws
+        // InvalidOperationException with a user-facing message — the Add page
+        // catch block relies on that exception type to distinguish
+        // validation-style errors (show .Message) from genuine crashes
+        // (log + generic message). Lock the contract.
+        var vm = CreateVm();
+        vm.BookInput.Title = "Untitled";
+        // No authors on WorkInput.
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => vm.SaveAsync(new List<int>()));
+        Assert.Contains("author", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task LookupAsync_CollectionMode_FillsBookOnlyAndSkipsWorkFields()
     {
         _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())

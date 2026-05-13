@@ -56,10 +56,11 @@
     <script src="@Assets["js/navbar-collapse.js"]"></script>
     <script src="@Assets["js/scroll-to.js"]"></script>
     <script src="@Assets["js/chip-picker-keys.js"]"></script>
-    @* Add Book collection-mode focus helper. The Enter-suppression for
-       the title inputs is inline on each input; this module just owns
-       the imperative focusTitle(index) used after a row is added. *@
-    <script src="@Assets["js/collection-works.js"]"></script>
+    @* Keyboard affordances for the Book add/edit forms — Enter on
+       collection-mode Title rows + the Add Book ISBN lookup field +
+       reused by AddWorkDialog on the View page. Also owns focusTitle(index)
+       for imperative focus after a collection row is added. *@
+    <script src="@Assets["js/book-form-keys.js"]"></script>
     @* Bookshop offline cache — pure-JS IndexedDB module. Loaded on every
        page so it's available from the DevTools console for testing while
        the /bookshop UI (PR 3) is still in flight. Self-attaches to
