@@ -3,7 +3,7 @@ name: Swap staging to production
 # The `production` GitHub Environment (Settings -> Environments) gates this
 # job: 2-minute wait timer (cancellable window for fat-finger dispatches) and
 # Deployment branches restricted to `main`. Required-reviewer approval is a
-# future step, blocked on having a collaborator (TODO.md #26).
+# future step, blocked on having a collaborator (TODO.md #22).
 on:
   workflow_dispatch:
 
