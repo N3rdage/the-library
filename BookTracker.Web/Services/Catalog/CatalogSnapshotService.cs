@@ -14,9 +14,12 @@ namespace BookTracker.Web.Services.Catalog;
 // Size budget at the 3000+ books target: ~480KB raw / ~150KB gzipped.
 // Single endpoint hit; SW pre-caches; IndexedDB stores client-side.
 //
-// Deliberately omits cover URLs, notes, tags, edition/copy detail.
-// Bookshop mode is read-only-lookup; full detail is reachable via
-// "Open in app" deep-links to /books/{id} (online only).
+// Includes Book.DefaultCoverArtUrl for Bookshelf cover display
+// (downloaded once + cached locally as a 200px JPEG). Omits notes,
+// tags, edition/copy detail — those are edit-flow concerns reached
+// via "Open in app" deep-links to /books/{id} (online only).
+// Bookcase's /bookshop ignores the CoverUrl field (it deep-links
+// for visuals).
 //
 // DTO records live in BookTracker.Shared.Catalog — no EF dependency
 // there so the mobile project can reference the contract cleanly.
@@ -44,6 +47,7 @@ public class CatalogSnapshotService(
                 b.Title,
                 b.Status,
                 b.Rating,
+                b.DefaultCoverArtUrl,
                 Authors = b.Works.SelectMany(w => w.WorkAuthors.Select(wa => new
                 {
                     wa.Author.Name,
@@ -83,7 +87,8 @@ public class CatalogSnapshotService(
                 b.Rating,
                 b.Isbns.Distinct().ToList(),
                 b.FirstWorkSeries?.SeriesId,
-                b.FirstWorkSeries?.SeriesOrder))
+                b.FirstWorkSeries?.SeriesOrder,
+                b.DefaultCoverArtUrl))
             .OrderBy(b => b.Title)
             .ToList();
 

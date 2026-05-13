@@ -1,5 +1,10 @@
+using System.Net;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using BookTracker.Mobile.Cache;
 using BookTracker.Shared.Catalog;
+using SkiaSharp;
 
 namespace BookTracker.Mobile.Cache.Tests;
 
@@ -210,5 +215,182 @@ public class CatalogCacheTests
         Assert.NotNull(book);
         Assert.Equal(42, book!.SeriesId);
         Assert.Equal(1, book.SeriesOrder);
+    }
+
+    [Fact]
+    public async Task PopulateAsync_PreservesCoverUrlOnBooks()
+    {
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Foundation", "Isaac Asimov", ["Isaac Asimov"], "Read", 5,
+                    ["9780553293357"], null, null, "https://covers.example/foundation.jpg"),
+            ]));
+
+        var book = await cache.LookupByIsbnAsync("9780553293357");
+        Assert.NotNull(book);
+        Assert.Equal("https://covers.example/foundation.jpg", book!.CoverUrl);
+    }
+
+    // ---- EnsureCoverCachedAsync ----
+
+    [Fact]
+    public async Task EnsureCoverCachedAsync_DownloadsResizesAndWritesFile()
+    {
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books: [new(1, "Foundation", "Isaac Asimov", ["Isaac Asimov"], "Read", 5,
+                ["9780553293357"], null, null, "https://covers.example/foundation.jpg")]));
+
+        // Source image is 400×600 — wider-than-target-height so resize
+        // shrinks the long edge to 200 (so 200/600 * 400 ≈ 133 wide,
+        // 200 tall). Resize correctness is verified by re-decoding the
+        // written JPEG below.
+        var sourceBytes = MakePngBytes(width: 400, height: 600);
+        var http = HttpClientReturning(sourceBytes);
+
+        var path = await cache.EnsureCoverCachedAsync(1, http);
+
+        Assert.NotNull(path);
+        Assert.True(File.Exists(path));
+
+        var written = await File.ReadAllBytesAsync(path!);
+        using var decoded = SKBitmap.Decode(written);
+        Assert.NotNull(decoded);
+        // Long edge clamped to 200, aspect ratio preserved.
+        Assert.True(Math.Max(decoded!.Width, decoded.Height) <= 200);
+        Assert.Equal(200, decoded.Height); // tall source, height stays at long edge
+
+        // Subsequent LookupByIsbn surfaces the path through the snapshot
+        // pipeline via CachedBook.CoverPath (not exposed on BookSnapshot
+        // directly, but the second EnsureCoverCachedAsync call below
+        // proves persistence).
+    }
+
+    [Fact]
+    public async Task EnsureCoverCachedAsync_ShortCircuitsOnSecondCall()
+    {
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books: [new(1, "Foundation", "Isaac Asimov", ["Isaac Asimov"], "Read", 5,
+                ["9780553293357"], null, null, "https://covers.example/foundation.jpg")]));
+
+        var sourceBytes = MakePngBytes(100, 100);
+        var counter = new RequestCountingHandler(sourceBytes);
+        var http = new HttpClient(counter);
+
+        var path1 = await cache.EnsureCoverCachedAsync(1, http);
+        var path2 = await cache.EnsureCoverCachedAsync(1, http);
+
+        Assert.Equal(path1, path2);
+        // Second call hits the on-disk file path early and does NOT
+        // make a second HTTP request. This is the lazy-on-load
+        // payoff — repeated views of the same book cost zero network.
+        Assert.Equal(1, counter.RequestCount);
+    }
+
+    [Fact]
+    public async Task EnsureCoverCachedAsync_ReturnsNullWhenBookNotInCache()
+    {
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot()); // empty
+
+        var http = HttpClientReturning(MakePngBytes(10, 10));
+        Assert.Null(await cache.EnsureCoverCachedAsync(999, http));
+    }
+
+    [Fact]
+    public async Task EnsureCoverCachedAsync_ReturnsNullWhenCoverUrlIsNull()
+    {
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books: [new(1, "Foundation", "Isaac Asimov", ["Isaac Asimov"], "Read", 5,
+                ["9780553293357"], null, null, /* CoverUrl */ null)]));
+
+        // No HTTP request should be made — fail loudly if one is.
+        var failing = new HttpClient(new ThrowingHandler());
+        Assert.Null(await cache.EnsureCoverCachedAsync(1, failing));
+    }
+
+    [Fact]
+    public async Task EnsureCoverCachedAsync_ReturnsNullOnDownloadFailure()
+    {
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books: [new(1, "Foundation", "Isaac Asimov", ["Isaac Asimov"], "Read", 5,
+                ["9780553293357"], null, null, "https://covers.example/foundation.jpg")]));
+
+        var http = new HttpClient(new ThrowingHandler());
+        Assert.Null(await cache.EnsureCoverCachedAsync(1, http));
+
+        // No file written; second attempt with a working handler still
+        // tries the network rather than serving a phantom cached path.
+        var working = HttpClientReturning(MakePngBytes(50, 50));
+        var path = await cache.EnsureCoverCachedAsync(1, working);
+        Assert.NotNull(path);
+        Assert.True(File.Exists(path));
+    }
+
+    [Fact]
+    public async Task EnsureCoverCachedAsync_ReturnsNullWhenResponseIsNotDecodableImage()
+    {
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books: [new(1, "Foundation", "Isaac Asimov", ["Isaac Asimov"], "Read", 5,
+                ["9780553293357"], null, null, "https://covers.example/foundation.jpg")]));
+
+        var notImage = "<!doctype html><html>404</html>"u8.ToArray();
+        var http = HttpClientReturning(notImage);
+        Assert.Null(await cache.EnsureCoverCachedAsync(1, http));
+    }
+
+    // ---- helpers ----
+
+    private static byte[] MakePngBytes(int width, int height)
+    {
+        // Solid-colour bitmap encoded as PNG. SkiaSharp's decoder
+        // handles PNG + JPEG so test inputs don't need to match the
+        // (JPEG) output format.
+        using var bitmap = new SKBitmap(width, height);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.SteelBlue);
+        using var image = SKImage.FromBitmap(bitmap);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        return encoded.ToArray();
+    }
+
+    private static HttpClient HttpClientReturning(byte[] payload) =>
+        new(new ConstantBytesHandler(payload));
+
+    private sealed class ConstantBytesHandler(byte[] payload) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(payload),
+            });
+    }
+
+    private sealed class RequestCountingHandler(byte[] payload) : HttpMessageHandler
+    {
+        public int RequestCount { get; private set; }
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(payload),
+            });
+        }
+    }
+
+    private sealed class ThrowingHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new HttpRequestException("simulated network failure");
     }
 }

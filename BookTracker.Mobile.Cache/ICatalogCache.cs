@@ -38,6 +38,21 @@ public interface ICatalogCache
     /// <summary>Stored sync metadata — version, syncedAt, bookCount,
     /// authorCount. Null if the cache has never been populated.</summary>
     Task<CacheMeta?> GetMetaAsync();
+
+    /// <summary>Ensures a local copy of the Book's cover exists on disk
+    /// at &lt;covers-dir&gt;/{bookId}.jpg, downloading + resizing it on
+    /// first call. Returns the local path on success, or null if the
+    /// book isn't cached, has no CoverUrl, or the download/resize
+    /// failed (offline, 404, malformed bytes). Lazy-on-load: callers
+    /// invoke when about to render the cover. Idempotent — subsequent
+    /// calls short-circuit on the existing file.
+    ///
+    /// HttpClient is supplied by the caller rather than constructed
+    /// here so the platform layer (Bookshelf MAUI) keeps lifetime +
+    /// auth + retry concerns in one place, and tests can pass a
+    /// mocked HttpMessageHandler.
+    /// </summary>
+    Task<string?> EnsureCoverCachedAsync(int bookId, HttpClient http, CancellationToken ct = default);
 }
 
 public record CacheMeta(

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using BookTracker.Mobile.Cache.Models;
 using BookTracker.Shared.Catalog;
+using SkiaSharp;
 using SQLite;
 
 namespace BookTracker.Mobile.Cache;
@@ -15,7 +16,15 @@ public class CatalogCache : ICatalogCache
     private const string MetaKeyBookCount = "bookCount";
     private const string MetaKeyAuthorCount = "authorCount";
 
+    // Cover-resize target — long edge in pixels. Mirrors the Web's
+    // CoverStorage normalisation (which caps at 1200px); 200px is the
+    // mobile-list display size, so resize at fetch time avoids
+    // storing or rendering anything larger than needed.
+    private const int CoverLongEdgePx = 200;
+    private const int CoverJpegQuality = 80;
+
     private SQLiteAsyncConnection? _db;
+    private string? _coversDir;
 
     private SQLiteAsyncConnection Db
         => _db ?? throw new InvalidOperationException(
@@ -40,6 +49,13 @@ public class CatalogCache : ICatalogCache
         await _db.CreateTableAsync<CachedAuthor>();
         await _db.CreateTableAsync<CachedSeries>();
         await _db.CreateTableAsync<CachedMeta>();
+
+        // Covers live alongside the DB file by convention — Mobile's
+        // FileSystem.AppDataDirectory holds both. Single dbPath
+        // parameter keeps the public Init surface narrow; tests get
+        // a temp-dir + nested covers/ for free.
+        _coversDir = Path.Combine(Path.GetDirectoryName(dbPath) ?? ".", "covers");
+        Directory.CreateDirectory(_coversDir);
     }
 
     public async Task PopulateAsync(CatalogSnapshot snapshot)
@@ -77,6 +93,13 @@ public class CatalogCache : ICatalogCache
                     Rating = book.Rating,
                     SeriesId = book.SeriesId,
                     SeriesOrder = book.SeriesOrder,
+                    CoverUrl = book.CoverUrl,
+                    // CoverPath reset to null on every populate — lazy
+                    // re-fetch on first display after a refresh. When
+                    // delta sync (TODO #33) lands and Populate becomes
+                    // an upsert, the path can be preserved across
+                    // refreshes when CoverUrl is unchanged.
+                    CoverPath = null,
                 });
                 foreach (var isbn in book.Isbns ?? [])
                 {
@@ -244,6 +267,116 @@ public class CatalogCache : ICatalogCache
             book.Rating,
             isbns.Select(r => r.Isbn).ToList(),
             book.SeriesId,
-            book.SeriesOrder);
+            book.SeriesOrder,
+            book.CoverUrl);
+    }
+
+    public async Task<string?> EnsureCoverCachedAsync(int bookId, HttpClient http, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(http);
+
+        var book = await Db.FindAsync<CachedBook>(bookId);
+        if (book is null) return null;
+
+        // Already cached and the file still exists on disk: short-
+        // circuit. Covers can be evicted by the OS under storage
+        // pressure (Android external cache rules) — re-download if
+        // the path is stale.
+        if (book.CoverPath is not null && File.Exists(book.CoverPath))
+        {
+            return book.CoverPath;
+        }
+
+        if (string.IsNullOrWhiteSpace(book.CoverUrl)) return null;
+        if (_coversDir is null) return null; // InitAsync guarantees non-null at runtime
+
+        byte[] sourceBytes;
+        try
+        {
+            sourceBytes = await http.GetByteArrayAsync(book.CoverUrl, ct);
+        }
+        catch (Exception)
+        {
+            // Offline, 404, DNS failure, cancellation — leave CoverPath
+            // null so the next display attempt retries. Don't surface
+            // the error; callers fall through to the URL or a
+            // placeholder.
+            return null;
+        }
+
+        var resizedJpeg = ResizeToJpeg(sourceBytes);
+        if (resizedJpeg is null)
+        {
+            // Bytes weren't a decodable image. Same fall-through —
+            // null CoverPath so we'd retry later (in practice this
+            // means a broken upstream cover, but retry costs nothing
+            // and self-heals if upstream fixes it).
+            return null;
+        }
+
+        var destPath = Path.Combine(_coversDir, $"{bookId}.jpg");
+        await File.WriteAllBytesAsync(destPath, resizedJpeg, ct);
+
+        // Persist the path so next session skips the download. UPDATE
+        // by primary key — single-row touch.
+        book.CoverPath = destPath;
+        await Db.UpdateAsync(book);
+
+        return destPath;
+    }
+
+    /// <summary>Decodes the supplied image bytes, resizes to a
+    /// <see cref="CoverLongEdgePx"/>-long-edge variant maintaining
+    /// aspect ratio, and re-encodes as JPEG. Returns null when the
+    /// input isn't a decodable image. Synchronous SkiaSharp work
+    /// wrapped in a method so the cover-cache path is the only caller.
+    ///
+    /// SkiaSharp's SKBitmap.Decode throws ArgumentNullException
+    /// (rather than returning null) when the bytes can't be parsed
+    /// as a known image format — wrap in try/catch so a broken
+    /// upstream response surfaces as "couldn't cache" rather than
+    /// crashing the caller.
+    /// </summary>
+    private static byte[]? ResizeToJpeg(byte[] sourceBytes)
+    {
+        SKBitmap? source;
+        try
+        {
+            source = SKBitmap.Decode(sourceBytes);
+        }
+        catch (ArgumentNullException)
+        {
+            return null;
+        }
+        if (source is null) return null;
+        using (source)
+        {
+            var (width, height) = ScaleToLongEdge(source.Width, source.Height, CoverLongEdgePx);
+            using var resized = source.Resize(
+                new SKImageInfo(width, height, source.ColorType, source.AlphaType),
+                SKFilterQuality.High);
+            if (resized is null) return null;
+
+            using var image = SKImage.FromBitmap(resized);
+            using var encoded = image.Encode(SKEncodedImageFormat.Jpeg, CoverJpegQuality);
+            return encoded.ToArray();
+        }
+    }
+
+    private static (int Width, int Height) ScaleToLongEdge(int srcWidth, int srcHeight, int longEdge)
+    {
+        if (srcWidth <= 0 || srcHeight <= 0) return (longEdge, longEdge);
+        if (srcWidth >= srcHeight)
+        {
+            if (srcWidth <= longEdge) return (srcWidth, srcHeight);
+            var scaled = (int)Math.Round(srcHeight * (double)longEdge / srcWidth);
+            return (longEdge, Math.Max(1, scaled));
+        }
+        else
+        {
+            if (srcHeight <= longEdge) return (srcWidth, srcHeight);
+            var scaled = (int)Math.Round(srcWidth * (double)longEdge / srcHeight);
+            return (Math.Max(1, scaled), longEdge);
+        }
     }
 }

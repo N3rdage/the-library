@@ -28,6 +28,13 @@
          native SQLite via SQLitePCLRaw; works on Android, iOS, and
          desktop with no manual native-library hookup. -->
     <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
+    <!-- SkiaSharp: cross-platform image decode + resize. Pulls native
+         assets for Android (via transitive SkiaSharp.NativeAssets.*)
+         and for the test runner OS automatically. Used by
+         EnsureCoverCachedAsync to downscale fetched covers to a
+         200px-long-edge JPEG before writing to disk — ~25KB per
+         cover at the target sizes. -->
+    <PackageReference Include="SkiaSharp" Version="2.88.8" />
   </ItemGroup>
 
   <ItemGroup>
