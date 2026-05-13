@@ -25,8 +25,8 @@
             </MudText>
 
             @* The title autocomplete carries the same data-collection-work-title
-               wrapper attribute the JS interop layer looks for — collection-works.js
-               (PR 5) already runs at the capture phase and suppresses Enter-on-not-
+               wrapper attribute the JS interop layer looks for — book-form-keys.js
+               runs at the capture phase and suppresses Enter-on-not-
                navigated. With data-collection-work-title="-1" it'\''ll route Enter to
                OnCollectionTitleEnter on the *page*, which won't recognise our index
                and no-op — exactly the behaviour we want (block the auto-pick of the
@@ -129,7 +129,7 @@
             // _pageRef is the parent page'\''s ref — passing null is fine here;
             // the listener tolerates absence (it'\''ll still preventDefault Enter
             // and stopImmediatePropagation, just won'\''t invoke OnCollectionTitleEnter).
-            await JS.InvokeVoidAsync("collectionWorks.bindEnterSuppression", (object?)null);
+            await JS.InvokeVoidAsync("bookFormKeys.bindEnterSuppression", (object?)null);
         }
     }
 

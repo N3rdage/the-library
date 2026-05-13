@@ -1,17 +1,23 @@
-// JS helpers for the Add Book collection-mode "capture works" flow.
+// JS helpers for keyboard affordances on the Book add/edit forms.
+//
+// Originally introduced for the Add Book "capture works" collection-
+// mode flow; now also handles Enter on the Add Book ISBN lookup field
+// and is reused by the View page's AddWorkDialog for its single title
+// autocomplete. Naming follows the chip-picker-keys.js precedent.
 //
 // Three responsibilities:
 //
-//   (a) Stop the surrounding form from submitting on Enter inside a
-//       collection-mode Title input. Mirrors the chip-picker arc's
-//       trap — Blazor's @onkeydown:preventDefault is a compile-time
-//       constant and can't be conditional on the key.
+//   (a) Stop the surrounding form from submitting on Enter inside any
+//       wired-in input (collection-mode Title inputs and the ISBN
+//       lookup field). Mirrors the chip-picker arc's trap — Blazor's
+//       @onkeydown:preventDefault is a compile-time constant and
+//       can't be conditional on the key.
 //
-//   (b) Decide what Enter MEANS on a Title input. MudAutocomplete
-//       auto-highlights the first dropdown match as soon as the
-//       dropdown opens, so a naive "if highlighted, defer to
-//       MudAutocomplete" check would pick "Condor" whenever the user
-//       typed "Con" and pressed Enter — even if they intended to
+//   (b) Decide what Enter MEANS on a collection-mode Title input.
+//       MudAutocomplete auto-highlights the first dropdown match as
+//       soon as the dropdown opens, so a naive "if highlighted, defer
+//       to MudAutocomplete" check would pick "Condor" whenever the
+//       user typed "Con" and pressed Enter — even if they intended to
 //       capture "Con..." as a new Work. Drew's repro. Fix: track
 //       whether the user has explicitly arrow-keyed since the last
 //       text edit. Only THEN does Enter defer to MudAutocomplete; an
@@ -26,14 +32,15 @@
 //       through and MudAutocomplete commits the pick (→ ValueChanged
 //       → OnExistingWorkPickedAsync).
 //
-//   (c) Imperative focus on a specific row's Title input by index.
-//       Called from Blazor after OnAfterRenderAsync sees a freshly-
-//       added row so the DOM has had a chance to render the element.
+//   (c) Imperative focus on a specific collection row's Title input
+//       by index. Called from Blazor after OnAfterRenderAsync sees a
+//       freshly-added row so the DOM has had a chance to render the
+//       element.
 //
 // Idempotent binding — first OnAfterRenderAsync after page load
 // installs the listener; subsequent calls (re-renders, page revisits
 // within the same SPA session) just refresh the DotNetObjectReference.
-window.collectionWorks = (function () {
+window.bookFormKeys = (function () {
     let listenerBound = false;
     let pageDotnetRef = null;
     // WeakSet of input elements where the user has pressed Down/Up since
@@ -63,6 +70,26 @@ window.collectionWorks = (function () {
             const t = e.target;
             if (!t || typeof t.matches !== 'function') return;
 
+            // Branch 1: ISBN lookup input on /books/add. Enter triggers
+            // the lookup flow instead of submitting the form. No
+            // navigation/highlight semantics — Enter always means "look
+            // this up". Page provides [JSInvokable] OnIsbnLookupEnter.
+            if (t.closest && t.closest('[data-isbn-lookup-input]')) {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                if (pageDotnetRef) {
+                    try {
+                        await pageDotnetRef.invokeMethodAsync('OnIsbnLookupEnter');
+                    } catch (err) {
+                        // pageDotnetRef may be a disposed page (user
+                        // navigated away). Silently ignore.
+                    }
+                }
+                return;
+            }
+
+            // Branch 2: collection-mode Title input (or AddWorkDialog's
+            // single title input, with index="-1").
             const wrapper = t.closest === undefined ? null : t.closest('[data-collection-work-title]');
             if (!wrapper) return;
 
@@ -128,7 +155,7 @@ window.collectionWorks = (function () {
             const indexStr = wrapper.getAttribute('data-collection-work-title');
             const index = parseInt(indexStr, 10);
             if (isNaN(index) || index < 0) {
-                // Negative index = dialog usage (AddWorkDialog) where there'\''s
+                // Negative index = dialog usage (AddWorkDialog) where there's
                 // no row-add semantics to fire — suppression alone is enough.
                 return;
             }

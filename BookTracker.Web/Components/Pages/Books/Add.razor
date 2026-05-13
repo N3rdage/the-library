@@ -4,6 +4,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject IDialogService DialogService
+@inject ILogger<Add> Logger
 
 <PageTitle>Add a book - BookTracker</PageTitle>
 
@@ -32,7 +33,12 @@
                     @if (!VM.NoIsbnMode)
                     {
                         <label class="form-label fw-semibold">Look up by ISBN</label>
-                        <div class="input-group">
+                        @* Wrapper attribute lets book-form-keys.js route Enter on the
+                           ISBN input to OnIsbnLookupEnter — without the data-attr the
+                           document-level keydown listener ignores it and Enter falls
+                           through to the surrounding EditForm's submit handler, which
+                           would then call SaveAsync on an empty form. *@
+                        <div class="input-group" data-isbn-lookup-input>
                             <InputText @bind-Value="VM.LookupIsbn" class="form-control" placeholder="9780345391803" />
                             <button type="button" class="btn btn-outline-primary" @onclick="LookupAsync" disabled="@VM.LookingUp">
                                 @if (VM.LookingUp)
@@ -392,6 +398,15 @@
             <EditionCopyForm EditionInput="VM.EditionInput" CopyInput="VM.CopyInput" Title="First edition & copy" />
         </div>
 
+        @if (!string.IsNullOrEmpty(saveErrorMessage))
+        {
+            <div class="col-12">
+                <div class="alert alert-danger mb-0 py-2" role="alert">
+                    @saveErrorMessage
+                </div>
+            </div>
+        }
+
         <div class="col-12 d-flex gap-2 align-items-center flex-wrap">
             <button type="submit" class="btn btn-primary" disabled="@VM.Saving">
                 @if (VM.Saving)
@@ -414,6 +429,14 @@
     private MudGenrePicker? genrePicker;
     private bool addAnother;
 
+    // Save-error surface for #44 — when VM.SaveAsync throws, the
+    // catch in SaveAsync below stashes the user-facing message here
+    // so the alert-danger above the Save button renders it. Cleared
+    // at the start of each Save attempt; not cleared on field edit
+    // (the user can read the message AND keep typing — clearing on
+    // every keypress would just flash the alert away mid-correction).
+    private string? saveErrorMessage;
+
     // After Enter on a title grows the CollectionWorks list (or an
     // existing-Work pick advances to the next row), the new row's DOM
     // element only exists post-render. Stash the index here and apply
@@ -433,13 +456,13 @@
         if (firstRender)
         {
             _pageRef = DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("collectionWorks.bindEnterSuppression", _pageRef);
+            await JS.InvokeVoidAsync("bookFormKeys.bindEnterSuppression", _pageRef);
         }
 
         if (_pendingCollectionFocusIndex is int idx)
         {
             _pendingCollectionFocusIndex = null;
-            await JS.InvokeVoidAsync("collectionWorks.focusTitle", idx);
+            await JS.InvokeVoidAsync("bookFormKeys.focusTitle", idx);
         }
     }
 
@@ -449,7 +472,12 @@
         return ValueTask.CompletedTask;
     }
 
-    /// <summary>Invoked by collection-works.js when Enter fires on a
+    /// <summary>Invoked by book-form-keys.js when Enter fires on the
+    /// ISBN lookup input. Same effect as clicking "Look up".</summary>
+    [JSInvokable]
+    public Task OnIsbnLookupEnter() => LookupAsync();
+
+    /// <summary>Invoked by book-form-keys.js when Enter fires on a
     /// title input AND no autocomplete suggestion is highlighted —
     /// equivalent to the old @onkeydown handler's last-row vs mid-list
     /// behaviour. Existing-Work rows have no input (they render as a
@@ -468,7 +496,7 @@
         }
         else
         {
-            await JS.InvokeVoidAsync("collectionWorks.focusTitle", index + 1);
+            await JS.InvokeVoidAsync("bookFormKeys.focusTitle", index + 1);
         }
     }
 
@@ -554,7 +582,27 @@
 
     private async Task SaveAsync()
     {
-        var savedId = await VM.SaveAsync(selectedGenreIds);
+        saveErrorMessage = null;
+        int? savedId;
+        try
+        {
+            savedId = await VM.SaveAsync(selectedGenreIds);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Deliberate VM throws for validation-style problems —
+            // missing authors, collection rows without title/author etc.
+            // Messages are user-facing by construction; surface as-is.
+            saveErrorMessage = ex.Message;
+            return;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unexpected error saving book from Add page");
+            saveErrorMessage = "Save failed — your input is preserved. Try again, or see logs for details.";
+            return;
+        }
+
         if (savedId is null) return;
 
         if (addAnother)
