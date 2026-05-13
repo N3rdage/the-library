@@ -1,34 +1,54 @@
-<div class="card">
-    <div class="card-header bg-white"><h2 class="h5 mb-0">@Title</h2></div>
-    <div class="card-body">
-        <div class="row g-3">
-            <div class="col-md-8">
-                <label class="form-label">Title</label>
-                <InputText @bind-Value="Input.Title" class="form-control" />
-                <ValidationMessage For="() => Input.Title" class="text-danger small" />
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">Author(s)</label>
+@* Per-Work editor card. Used on the Add Book page (single-Work flow)
+   and any future Work-edit surface. EditForm + DataAnnotationsValidator
+   on the parent page drive validation — MudTextField surfaces errors
+   via the For="..." expression. *@
+
+<MudCard Elevation="0" Outlined="true">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">@Title</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="8">
+                <MudTextField T="string"
+                              @bind-Value="Input.Title"
+                              For="@(() => Input.Title)"
+                              Label="Title"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" md="4">
                 @* Multi-author chip picker — list of names; first chip is the
                    lead author (Work.AuthorId for legacy compat in PR1).
                    Validation lives in the save path because DataAnnotations
-                   doesn'\''t map "non-empty list of non-empty strings" cleanly. *@
+                   doesn't map "non-empty list of non-empty strings" cleanly. *@
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Author(s)</MudText>
                 <MudAuthorPicker Authors="Input.Authors"
                                  AuthorsChanged="list => Input.Authors = list"
                                  Label="Add author" />
-            </div>
-            <div class="col-md-8">
-                <label class="form-label">Subtitle</label>
-                <InputText @bind-Value="Input.Subtitle" class="form-control" />
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">First published</label>
-                <InputText @bind-Value="Input.FirstPublishedDate" class="form-control" placeholder="e.g. 1934, Jan 1934, 6 Jan 1934" />
-                <div class="form-text">When the work itself was first published. Year alone is fine.</div>
-            </div>
-        </div>
-    </div>
-</div>
+            </MudItem>
+            <MudItem xs="12" md="8">
+                <MudTextField T="string"
+                              @bind-Value="Input.Subtitle"
+                              For="@(() => Input.Subtitle)"
+                              Label="Subtitle"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudTextField T="string"
+                              @bind-Value="Input.FirstPublishedDate"
+                              Label="First published"
+                              Placeholder="e.g. 1934, Jan 1934, 6 Jan 1934"
+                              HelperText="When the work itself was first published. Year alone is fine."
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense" />
+            </MudItem>
+        </MudGrid>
+    </MudCardContent>
+</MudCard>
 
 @code {
     [Parameter, EditorRequired]

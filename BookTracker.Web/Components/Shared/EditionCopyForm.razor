@@ -1,54 +1,90 @@
 @inject EditionFormViewModel EditionVM
 
-<div class="card">
-    <div class="card-header bg-white"><h2 class="h5 mb-0">@Title</h2></div>
-    <div class="card-body">
-        <div class="row g-3">
-            <div class="col-md-3">
-                <label class="form-label">ISBN</label>
-                <InputText @bind-Value="EditionInput.Isbn" class="form-control" />
-                <ValidationMessage For="() => EditionInput.Isbn" class="text-danger small" />
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">Format</label>
-                <InputSelect @bind-Value="EditionInput.Format" class="form-select">
+@* Edition + Copy fields for a new book being captured on /books/add.
+   Publisher input is an autocomplete over existing Publisher rows
+   (drops the previous Bootstrap datalist) — typing finds matches and
+   the user can either pick an existing publisher or capture a new one
+   by leaving the free text in place. *@
+
+<MudCard Elevation="0" Outlined="true">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">@Title</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="3">
+                <MudTextField T="string"
+                              @bind-Value="EditionInput.Isbn"
+                              For="@(() => EditionInput.Isbn)"
+                              Label="ISBN"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect T="BookFormat"
+                           @bind-Value="EditionInput.Format"
+                           Label="Format"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense">
                     @foreach (var f in Enum.GetValues<BookFormat>())
                     {
-                        <option value="@f">@f.DisplayName()</option>
+                        <MudSelectItem T="BookFormat" Value="@f">@f.DisplayName()</MudSelectItem>
                     }
-                </InputSelect>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">Date printed</label>
-                <InputText @bind-Value="EditionInput.DatePrinted" class="form-control" placeholder="e.g. 1973, Oct 1973, or 12 Oct 1973" />
-                <div class="form-text">Year alone is fine if that's all you've got.</div>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">Condition</label>
-                <InputSelect @bind-Value="CopyInput.Condition" class="form-select">
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudTextField T="string"
+                              @bind-Value="EditionInput.DatePrinted"
+                              Label="Date printed"
+                              Placeholder="e.g. 1973, Oct 1973, or 12 Oct 1973"
+                              HelperText="Year alone is fine if that's all you've got."
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect T="BookCondition"
+                           @bind-Value="CopyInput.Condition"
+                           Label="Condition"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense">
                     @foreach (var c in Enum.GetValues<BookCondition>())
                     {
-                        <option value="@c">@CopyFormViewModel.FormatCondition(c)</option>
+                        <MudSelectItem T="BookCondition" Value="@c">@CopyFormViewModel.FormatCondition(c)</MudSelectItem>
                     }
-                </InputSelect>
-            </div>
-            <div class="col-md-6">
-                <label class="form-label">Publisher</label>
-                <InputText @bind-Value="EditionInput.Publisher" class="form-control" list="@publisherDatalistId" placeholder="Penguin Books" />
-                <datalist id="@publisherDatalistId">
-                    @foreach (var p in EditionVM.ExistingPublishers)
-                    {
-                        <option value="@p.Name"></option>
-                    }
-                </datalist>
-            </div>
-            <div class="col-md-6">
-                <label class="form-label">Edition cover URL (optional)</label>
-                <InputText @bind-Value="EditionInput.CoverUrl" class="form-control" placeholder="Overrides the book's default cover" />
-            </div>
-        </div>
-    </div>
-</div>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                @* Free-text-with-suggestions: MudAutocomplete on the Publisher
+                   name. CoerceText="false" + Strict="false" means the typed
+                   string survives even when no match is highlighted, so save-
+                   time find-or-create works the same as the previous datalist
+                   shape (user can either pick or type-new). *@
+                <MudAutocomplete T="string"
+                                 @bind-Value="EditionInput.Publisher"
+                                 SearchFunc="@SearchPublishers"
+                                 Label="Publisher"
+                                 Placeholder="Penguin Books"
+                                 Variant="Variant.Outlined"
+                                 Margin="Margin.Dense"
+                                 CoerceText="false"
+                                 CoerceValue="true"
+                                 Strict="false"
+                                 ResetValueOnEmptyText="false" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField T="string"
+                              @bind-Value="EditionInput.CoverUrl"
+                              For="@(() => EditionInput.CoverUrl)"
+                              Label="Edition cover URL (optional)"
+                              Placeholder="Overrides the book's default cover"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense" />
+            </MudItem>
+        </MudGrid>
+    </MudCardContent>
+</MudCard>
 
 @code {
     [Parameter, EditorRequired]
@@ -60,10 +96,19 @@
     [Parameter]
     public string Title { get; set; } = "Edition & Copy";
 
-    private string publisherDatalistId = $"publisher-options-{Guid.NewGuid():N}";
-
     protected override async Task OnInitializedAsync()
     {
         await EditionVM.InitializeAsync();
+    }
+
+    private Task<IEnumerable<string>> SearchPublishers(string? query, CancellationToken ct)
+    {
+        var q = (query ?? string.Empty).Trim();
+        IEnumerable<string> matches = string.IsNullOrEmpty(q)
+            ? EditionVM.ExistingPublishers.Select(p => p.Name)
+            : EditionVM.ExistingPublishers
+                .Where(p => p.Name.Contains(q, StringComparison.OrdinalIgnoreCase))
+                .Select(p => p.Name);
+        return Task.FromResult(matches);
     }
 }
