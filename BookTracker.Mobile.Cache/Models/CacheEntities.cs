@@ -23,6 +23,17 @@ internal class CachedBook
     public int Rating { get; set; }
     public int? SeriesId { get; set; }
     public int? SeriesOrder { get; set; }
+    /// <summary>Remote cover URL from the snapshot (server-side
+    /// Book.DefaultCoverArtUrl). Null when the Book has no cover set.
+    /// Populated from BookSnapshot.CoverUrl; reset on every
+    /// PopulateAsync (the wipe-and-rewrite pattern).</summary>
+    public string? CoverUrl { get; set; }
+    /// <summary>Local filesystem path of the cached cover JPEG, or null
+    /// if the cover hasn't been fetched yet (or the fetch failed).
+    /// Written by EnsureCoverCachedAsync after the download + resize
+    /// succeeds. Reset on every PopulateAsync — lazy re-fetch on first
+    /// display after a snapshot refresh.</summary>
+    public string? CoverPath { get; set; }
 }
 
 // One row per (BookId, Isbn). Many-to-one with books. Indexed on

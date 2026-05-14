@@ -30,7 +30,18 @@ public record BookSnapshot(
     // matching the same convention used for PrimaryAuthor. Nullable
     // because most books aren't part of a series.
     int? SeriesId,
-    int? SeriesOrder);
+    int? SeriesOrder,
+    // Book-level default cover URL. Nullable — pre-1974 / no-ISBN books
+    // and any Book that hasn't had a cover set yet ship without one.
+    // Bookshelf's cover-cache layer downloads on first display, resizes
+    // to a 200px-long-edge JPEG, stores locally, then serves from disk
+    // on subsequent loads. Bookcase's /bookshop ignores this field
+    // (deep-links into the app for visuals).
+    //
+    // Default of `null` is for backwards-compat with existing positional
+    // BookSnapshot constructions in tests and other callers; new code
+    // should set it explicitly.
+    string? CoverUrl = null);
 
 public record AuthorSnapshot(
     int Id,

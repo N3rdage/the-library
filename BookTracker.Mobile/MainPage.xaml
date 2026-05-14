@@ -161,6 +161,17 @@
                         Margin="0,32,0,0"
                         IsVisible="False" />
 
+                <!-- Build footer — version + short SHA so it's obvious
+                     which build is on the device. Populated in code-
+                     behind from BuildInfo.DisplayString. Centred + faded
+                     ink so it's unobtrusive. -->
+                <Label x:Name="BuildFooter"
+                       FontSize="11"
+                       TextColor="#6B5D4A"
+                       HorizontalOptions="Center"
+                       HorizontalTextAlignment="Center"
+                       Margin="0,16,0,0" />
+
             </VerticalStackLayout>
         </ScrollView>
     </Grid>

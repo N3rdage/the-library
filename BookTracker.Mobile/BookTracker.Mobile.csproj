@@ -65,4 +65,25 @@
 		<ProjectReference Include="..\BookTracker.Mobile.Cache\BookTracker.Mobile.Cache.csproj" />
 	</ItemGroup>
 
+	<!-- Stamps the current git commit SHA into SourceRevisionId so the
+	     SDK appends it to AssemblyInformationalVersionAttribute as
+	     "+<sha>". BookTracker.Mobile/Services/BuildInfo.cs parses that
+	     and renders it in the MainPage footer so Drew can confirm which
+	     build is on the device.
+	     Skips silently when SourceRevisionId is already set (e.g. a CI
+	     build) or when git isn't on PATH / not in a repo (downloaded
+	     source archive). -->
+	<Target Name="StampGitSha" BeforeTargets="GetAssemblyVersion" Condition="'$(SourceRevisionId)' == ''">
+		<Exec Command="git rev-parse HEAD"
+			  ConsoleToMSBuild="true"
+			  IgnoreExitCode="true"
+			  EchoOff="true">
+			<Output TaskParameter="ConsoleOutput" PropertyName="_BookshelfGitSha" />
+			<Output TaskParameter="ExitCode" PropertyName="_BookshelfGitExitCode" />
+		</Exec>
+		<PropertyGroup Condition="'$(_BookshelfGitExitCode)' == '0' AND '$(_BookshelfGitSha)' != ''">
+			<SourceRevisionId>$(_BookshelfGitSha)</SourceRevisionId>
+		</PropertyGroup>
+	</Target>
+
 </Project>

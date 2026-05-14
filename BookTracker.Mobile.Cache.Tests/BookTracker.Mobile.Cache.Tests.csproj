@@ -22,6 +22,19 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- SkiaSharp 3.x's meta-package no longer ships cross-platform
+         native assets transitively (it relies on the consuming TFM
+         for Android / iOS / etc.). The test project runs on plain
+         net10.0, so platform-specific natives have to be pulled in
+         explicitly — Linux for CI ubuntu runners, Win32 for local
+         Windows dev, macOS for completeness. The runtime picks the
+         one matching its RID and ignores the others. -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.2" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="3.119.2" />
+    <PackageReference Include="SkiaSharp.NativeAssets.macOS" Version="3.119.2" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 

@@ -24,6 +24,10 @@ public partial class MainPage : ContentPage
         _auth = auth;
         _api = api;
         _cache = cache;
+        // Build footer — version + SHA so Drew can see which build is
+        // on the device. BuildInfo is static and computed once on
+        // first reference, so this is just a label assignment.
+        BuildFooter.Text = BuildInfo.DisplayString;
         RefreshUi();
     }
 

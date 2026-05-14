@@ -7,6 +7,7 @@ namespace BookTracker.Mobile.Pages;
 public partial class ScanPage : ContentPage
 {
     private readonly ICatalogCache _cache;
+    private readonly IHttpClientFactory _httpFactory;
 
     // Debounce — barcode scanners fire detect events ~10x/sec while
     // the code is in frame. We only want one lookup per "real" scan,
@@ -16,10 +17,16 @@ public partial class ScanPage : ContentPage
     private string? _lastScannedIsbn;
     private DateTime _lastScannedAt = DateTime.MinValue;
 
-    public ScanPage(ICatalogCache cache)
+    // Cancels any in-flight cover fetch when a new lookup starts —
+    // otherwise scanning two books in a row could land Book A's cover
+    // bytes onto the result card for Book B.
+    private CancellationTokenSource? _coverCts;
+
+    public ScanPage(ICatalogCache cache, IHttpClientFactory httpFactory)
     {
         InitializeComponent();
         _cache = cache;
+        _httpFactory = httpFactory;
 
         // Filter the camera reader to book barcodes only — EAN-13 is
         // the ~99% case (modern ISBN-13); EAN-8 catches the rare
@@ -127,6 +134,13 @@ public partial class ScanPage : ContentPage
         StatusLabel.Text = $"Looking up {isbn}…";
         FoundFrame.IsVisible = false;
         MissingFrame.IsVisible = false;
+        // Reset the cover slot before any new lookup — keeps a stale
+        // image from the previous scan off the new card while we wait
+        // for the new fetch (or fall through to the placeholder).
+        FoundCover.IsVisible = false;
+        FoundCover.Source = null;
+        FoundCoverPlaceholder.IsVisible = true;
+        _coverCts?.Cancel();
 
         BookSnapshot? book;
         try
@@ -159,6 +173,37 @@ public partial class ScanPage : ContentPage
             FoundIsbn.Text = $"ISBN: {isbn}";
             OpenInAppButton.CommandParameter = book.Id;
             FoundFrame.IsVisible = true;
+
+            // Kick the cover fetch off without awaiting — the rest of
+            // the card renders immediately and the cover swaps in
+            // when ready (or stays as the placeholder if not).
+            _coverCts = new CancellationTokenSource();
+            var capturedToken = _coverCts.Token;
+            var capturedBookId = book.Id;
+            _ = LoadCoverAsync(capturedBookId, capturedToken);
+        }
+    }
+
+    private async Task LoadCoverAsync(int bookId, CancellationToken ct)
+    {
+        try
+        {
+            var http = _httpFactory.CreateClient("covers");
+            var path = await _cache.EnsureCoverCachedAsync(bookId, http, ct);
+            if (path is null || ct.IsCancellationRequested) return;
+            await MainThread.InvokeOnMainThreadAsync(() =>
+            {
+                // Guard against the user having scanned a different
+                // book in the time it took for this fetch to land.
+                if (ct.IsCancellationRequested) return;
+                FoundCover.Source = ImageSource.FromFile(path);
+                FoundCover.IsVisible = true;
+                FoundCoverPlaceholder.IsVisible = false;
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // Replaced by a later scan; leave the placeholder in place.
         }
     }
 

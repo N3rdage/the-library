@@ -27,11 +27,13 @@ public partial class AuthorSearchPage : ContentPage
     private static readonly Color ErrorColor = Color.FromArgb("#9B3B2E");
 
     private CancellationTokenSource? _searchCts;
+    private readonly IHttpClientFactory _httpFactory;
 
-    public AuthorSearchPage(ICatalogCache cache)
+    public AuthorSearchPage(ICatalogCache cache, IHttpClientFactory httpFactory)
     {
         InitializeComponent();
         _cache = cache;
+        _httpFactory = httpFactory;
     }
 
     protected override void OnAppearing()
@@ -172,7 +174,7 @@ public partial class AuthorSearchPage : ContentPage
         // plus the runtime-chosen author. Constructed inline rather
         // than through the service provider because the AuthorSnapshot
         // isn't something DI can supply.
-        var page = new AuthorBooksPage(_cache, author);
+        var page = new AuthorBooksPage(_cache, _httpFactory, author);
         await Navigation.PushAsync(page);
     }
 }

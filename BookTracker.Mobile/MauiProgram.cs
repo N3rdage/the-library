@@ -40,6 +40,12 @@ public static class MauiProgram
         // before any other method on first use.
         builder.Services.AddSingleton<ICatalogCache, CatalogCache>();
 
+        // Named HttpClient for cover fetches. No BaseAddress — cover
+        // URLs are absolute (Open Library / Google Books / Azure Blob
+        // mirror). IHttpClientFactory handles connection pooling so
+        // repeated fetches across pages reuse the same handler.
+        builder.Services.AddHttpClient("covers");
+
         builder.Services.AddSingleton<MainPage>();
         // Scan page is transient — every navigation gets a fresh
         // CameraBarcodeReaderView so we don't hold the camera open

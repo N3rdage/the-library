@@ -24,10 +24,26 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- ILogger surface for structured cache logging (cover fetch
+         diagnostics). Abstractions-only — concrete provider is wired
+         up on the Bookshelf side (MauiProgram.AddDebug + platform
+         logcat sink); tests use NullLogger. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <!-- sqlite-net-pcl: ORM-lite over SQLite. Bundles a managed +
          native SQLite via SQLitePCLRaw; works on Android, iOS, and
          desktop with no manual native-library hookup. -->
     <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
+    <!-- SkiaSharp: cross-platform image decode + resize. Pulls native
+         assets for Android (via transitive SkiaSharp.NativeAssets.*)
+         and for the test runner OS automatically. Used by
+         EnsureCoverCachedAsync to downscale fetched covers to a
+         200px-long-edge JPEG before writing to disk — ~25KB per
+         cover at the target sizes.
+         3.x is required for Android 16 — the 2.x native libs aren't
+         16KB-page-aligned and fail to load on Android 16 devices
+         with 16KB pages enabled (the XA0141 build warning). 3.x's
+         Resize API replaces SKFilterQuality with SKSamplingOptions. -->
+    <PackageReference Include="SkiaSharp" Version="3.119.2" />
   </ItemGroup>
 
   <ItemGroup>
