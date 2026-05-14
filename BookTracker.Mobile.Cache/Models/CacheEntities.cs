@@ -53,6 +53,36 @@ internal class CachedBookIsbn
     [Indexed] public string Isbn { get; set; } = string.Empty;
 }
 
+// One row per Edition of a Book. Backs the enhanced ScanPage "which
+// editions do I already own?" view — Hardcover, Paperback, MM, etc.
+// Indexed on BookId so the per-Book lookup is a B-tree hit.
+[Table("book_editions")]
+internal class CachedBookEdition
+{
+    // Edition.Id from the server — keeps a stable identity so future
+    // upserts could diff at the Edition level. For PR 1 we wipe-and-
+    // rewrite per Book on every populate / delta-upsert; the Id is
+    // just useful for testability and future incremental shapes.
+    [PrimaryKey] public int Id { get; set; }
+    [Indexed] public int BookId { get; set; }
+    public string? Isbn { get; set; }
+    public string Format { get; set; } = string.Empty;
+    public string? CoverUrl { get; set; }
+}
+
+// One row per Work belonging to a Book. Almost always one Work per
+// Book; multi-Work rows are compendiums (anthologies, collections).
+// Surfaced in ScanPage when Count > 1 — "Contains: 'Foundation',
+// 'Second Foundation', ...".
+[Table("book_works")]
+internal class CachedBookWork
+{
+    [PrimaryKey] public int Id { get; set; }
+    [Indexed] public int BookId { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string PrimaryAuthor { get; set; } = string.Empty;
+}
+
 [Table("authors")]
 internal class CachedAuthor
 {

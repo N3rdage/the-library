@@ -57,7 +57,44 @@ public record BookSnapshot(
     // Default of `null` is for backwards-compat with existing positional
     // BookSnapshot constructions in tests and other callers; new code
     // should set it explicitly.
-    string? CoverUrl = null);
+    string? CoverUrl = null,
+    // Per-Edition detail for the Bookshelf enhanced-card view —
+    // "which editions of this do I already own?". Each row is one
+    // physical Edition (Hardcover / Paperback / MM / ...). Surfaced
+    // in ScanPage's FoundFrame so the user can avoid double-buying.
+    // Defaults to null for back-compat with positional BookSnapshot
+    // constructions written before this field shipped; callers that
+    // care should treat null as "no enrichment available" (the wire
+    // could be an older server that doesn't project this).
+    IReadOnlyList<EditionSnapshot>? Editions = null,
+    // Per-Work detail — "what stories are in this compendium?".
+    // Only meaningful for multi-Work compendiums; single-Work books
+    // ship a one-element list which the UI hides. Defaults to null
+    // for the same back-compat reason as Editions.
+    IReadOnlyList<WorkSnapshot>? Works = null);
+
+public record EditionSnapshot(
+    int Id,
+    // Nullable for pre-1974 / no-ISBN editions (matches Edition.Isbn).
+    string? Isbn,
+    // Format as the BookFormat enum's string name (Hardcover /
+    // TradePaperback / MassMarketPaperback / ...). The DTO record
+    // stays free of the BookTracker.Data dependency so Shared is
+    // portable to non-Web consumers (Mobile, future projects).
+    string Format,
+    // Edition-level cover URL — distinct from BookSnapshot.CoverUrl
+    // which is the Book-level default. Nullable when no cover has
+    // been captured for this specific edition.
+    string? CoverUrl);
+
+public record WorkSnapshot(
+    int Id,
+    string Title,
+    // Lowest-Order WorkAuthor's name. Same convention as
+    // BookSnapshot.PrimaryAuthor but scoped to this specific Work
+    // — a compendium's Asimov-Bradbury-King anthology shows the
+    // per-Work attribution rather than the Book-wide rollup.
+    string PrimaryAuthor);
 
 public record AuthorSnapshot(
     int Id,
