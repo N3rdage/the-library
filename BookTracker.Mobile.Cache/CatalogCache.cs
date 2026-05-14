@@ -30,6 +30,11 @@ public class CatalogCache : ICatalogCache
     private const string MetaKeySyncedAt = "syncedAt";
     private const string MetaKeyBookCount = "bookCount";
     private const string MetaKeyAuthorCount = "authorCount";
+    // Server-side max(UpdatedAt | DeletedAt) at the moment of the
+    // last apply. Round-tripped to/from the server as the `?since=`
+    // delta token. Stored in ISO 8601 ("O") form so the parse path
+    // is round-trip-safe across timezones (server is UTC).
+    private const string MetaKeyLatestUpdatedAt = "latestUpdatedAt";
 
     // Cover-resize target — long edge in pixels. Mirrors the Web's
     // CoverStorage normalisation (which caps at 1200px); 200px is the
@@ -158,6 +163,148 @@ public class CatalogCache : ICatalogCache
             conn.Insert(new CachedMeta { Key = MetaKeySyncedAt, Value = snapshot.SyncedAt.ToString("O") });
             conn.Insert(new CachedMeta { Key = MetaKeyBookCount, Value = books.Count.ToString() });
             conn.Insert(new CachedMeta { Key = MetaKeyAuthorCount, Value = authors.Count.ToString() });
+            // Watermark for delta refreshes. Default(DateTime) means
+            // the server never set the field (old build) — store null
+            // by skipping the row entirely so GetMetaAsync surfaces
+            // LatestUpdatedAt = null and the next refresh defaults to
+            // a full load.
+            if (snapshot.LatestUpdatedAt != default)
+            {
+                conn.Insert(new CachedMeta
+                {
+                    Key = MetaKeyLatestUpdatedAt,
+                    Value = snapshot.LatestUpdatedAt.ToString("O"),
+                });
+            }
+        });
+    }
+
+    public async Task ApplyDeltaAsync(CatalogSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        // Delta path. Books upsert (preserving CoverPath when the URL
+        // hasn't moved); Authors + Series wipe-and-rewrite (the server
+        // always full-lists them on every snapshot, full or delta);
+        // DeletedIds remove tombstoned rows. One SQLite transaction
+        // wraps the lot so a mid-apply crash can't leave the cache in
+        // a half-merged state.
+        await Db.RunInTransactionAsync(conn =>
+        {
+            var incomingBooks = snapshot.Books ?? [];
+            foreach (var book in incomingBooks)
+            {
+                // Existing local row carries the CoverPath we want to
+                // preserve when the URL hasn't moved. Find-by-PK is a
+                // single index seek.
+                var existing = conn.Find<CachedBook>(book.Id);
+                var preservedCoverPath = existing is not null
+                    && string.Equals(existing.CoverUrl, book.CoverUrl, StringComparison.Ordinal)
+                    ? existing.CoverPath
+                    : null;
+
+                // InsertOrReplace handles both shapes: new Book (no
+                // existing row) and upsert (overwrites every column).
+                conn.InsertOrReplace(new CachedBook
+                {
+                    Id = book.Id,
+                    Title = book.Title ?? "",
+                    PrimaryAuthor = book.PrimaryAuthor ?? "",
+                    AllAuthorsJson = JsonSerializer.Serialize(book.AllAuthors ?? []),
+                    Status = book.Status ?? "",
+                    Rating = book.Rating,
+                    SeriesId = book.SeriesId,
+                    SeriesOrder = book.SeriesOrder,
+                    CoverUrl = book.CoverUrl,
+                    // CoverPath survives when CoverUrl unchanged. When
+                    // it changed, nulling out lets EnsureCoverCachedAsync
+                    // re-fetch the new thumbnail on next display. The
+                    // stale file on disk gets overwritten in place
+                    // because Path.Combine builds the same {bookId}.jpg
+                    // path; no orphan-cleanup pass needed.
+                    CoverPath = preservedCoverPath,
+                });
+
+                // ISBN join rows: wipe-and-rewrite per Book. Cheap and
+                // correctness-trivial (no need to diff individual ISBNs).
+                conn.Execute("DELETE FROM book_isbns WHERE BookId = ?", book.Id);
+                foreach (var isbn in book.Isbns ?? [])
+                {
+                    if (!string.IsNullOrWhiteSpace(isbn))
+                    {
+                        conn.Insert(new CachedBookIsbn
+                        {
+                            BookId = book.Id,
+                            Isbn = isbn,
+                        });
+                    }
+                }
+            }
+
+            // Tombstones — server-side soft-deletes since the last
+            // sync token. Delete by PK plus the book_isbns rows so
+            // ISBN lookups don't surface a dead book's ISBN.
+            foreach (var deletedId in snapshot.DeletedIds ?? [])
+            {
+                conn.Delete<CachedBook>(deletedId);
+                conn.Execute("DELETE FROM book_isbns WHERE BookId = ?", deletedId);
+            }
+
+            // Authors + Series — server always full-lists on every
+            // snapshot, so we wipe and rewrite. Cheap (hundreds of
+            // rows total) and avoids drift from rename / canonical
+            // updates that wouldn't propagate via a delta.
+            conn.DeleteAll<CachedAuthor>();
+            var authors = snapshot.Authors ?? [];
+            foreach (var author in authors)
+            {
+                var name = author.Name ?? "";
+                conn.Insert(new CachedAuthor
+                {
+                    Id = author.Id,
+                    Name = name,
+                    NameLower = name.ToLowerInvariant(),
+                    CanonicalId = author.CanonicalId,
+                    BookCount = author.BookCount,
+                });
+            }
+
+            conn.DeleteAll<CachedSeries>();
+            foreach (var s in snapshot.Series ?? [])
+            {
+                conn.Insert(new CachedSeries
+                {
+                    Id = s.Id,
+                    Name = s.Name ?? "",
+                    Type = s.Type ?? "",
+                    ExpectedCount = s.ExpectedCount,
+                });
+            }
+
+            // Recompute book / author counters from the current row
+            // count post-merge — incremental tracking would be fragile
+            // (Books table mutates via both upsert and tombstone-delete
+            // in the same transaction). The Books count after the
+            // delta is the sum of all rows; faster + simpler than
+            // tracking deltas.
+            var bookCount = conn.ExecuteScalar<int>("SELECT COUNT(*) FROM books");
+            var authorCount = authors.Count;
+
+            // Replace meta wholesale rather than UPDATE-per-key — the
+            // table is tiny and InsertOrReplace handles the existing /
+            // missing-row cases uniformly.
+            conn.InsertOrReplace(new CachedMeta { Key = MetaKeyVersion, Value = snapshot.Version ?? "" });
+            conn.InsertOrReplace(new CachedMeta { Key = MetaKeySyncedAt, Value = snapshot.SyncedAt.ToString("O") });
+            conn.InsertOrReplace(new CachedMeta { Key = MetaKeyBookCount, Value = bookCount.ToString() });
+            conn.InsertOrReplace(new CachedMeta { Key = MetaKeyAuthorCount, Value = authorCount.ToString() });
+            if (snapshot.LatestUpdatedAt != default)
+            {
+                conn.InsertOrReplace(new CachedMeta
+                {
+                    Key = MetaKeyLatestUpdatedAt,
+                    Value = snapshot.LatestUpdatedAt.ToString("O"),
+                });
+            }
         });
     }
 
@@ -255,11 +402,20 @@ public class CatalogCache : ICatalogCache
             syncedAt = parsed;
         }
 
+        DateTime? latestUpdatedAt = null;
+        if (lookup.TryGetValue(MetaKeyLatestUpdatedAt, out var lua)
+            && DateTime.TryParse(lua, null,
+                System.Globalization.DateTimeStyles.RoundtripKind, out var luaParsed))
+        {
+            latestUpdatedAt = luaParsed;
+        }
+
         return new CacheMeta(
             Version: lookup.GetValueOrDefault(MetaKeyVersion),
             SyncedAt: syncedAt,
             BookCount: int.TryParse(lookup.GetValueOrDefault(MetaKeyBookCount), out var bc) ? bc : 0,
-            AuthorCount: int.TryParse(lookup.GetValueOrDefault(MetaKeyAuthorCount), out var ac) ? ac : 0);
+            AuthorCount: int.TryParse(lookup.GetValueOrDefault(MetaKeyAuthorCount), out var ac) ? ac : 0,
+            LatestUpdatedAt: latestUpdatedAt);
     }
 
     private async Task<BookSnapshot> ToSnapshotAsync(CachedBook book)

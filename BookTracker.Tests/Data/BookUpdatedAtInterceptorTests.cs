@@ -286,4 +286,46 @@ public class BookUpdatedAtInterceptorTests
                 $"Expected UpdatedAt to bump after Tag attach. initial={initial:O}, current={bumped.UpdatedAt:O}");
         }
     }
+
+    [Fact]
+    public async Task UpdatedAt_AndDeletedAt_ReadBack_WithKindUtc()
+    {
+        // Regression test for the cross-timezone delta-sync bug
+        // diagnosed 2026-05-14: SQL Server's datetime2 doesn't store
+        // DateTime.Kind, so without an EF value converter, EF returns
+        // Kind=Unspecified on read. System.Text.Json then serialises
+        // Unspecified timestamps WITHOUT the trailing "Z" — non-UTC
+        // clients parse them as Local and their .ToUniversalTime()
+        // shifts the watermark by the client's TZ offset on the next
+        // ?since= call. The fix is the HasConversion(...) stamps in
+        // BookTrackerDbContext.OnModelCreating; this test locks the
+        // contract so a future refactor can't accidentally remove the
+        // converter without a CI signal.
+        int bookId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = new Author { Name = "Isaac Asimov" };
+            db.Authors.Add(asimov);
+            var book = new Book
+            {
+                Title = "Foundation",
+                Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }],
+                DeletedAt = DateTime.UtcNow, // populate so we can assert Kind on the nullable property too
+            };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            bookId = book.Id;
+        }
+
+        using (var db = _factory.CreateDbContext())
+        {
+            // IgnoreQueryFilters so we get the tombstoned husk back —
+            // otherwise the global filter would hide it.
+            var reread = await db.Books.IgnoreQueryFilters()
+                .FirstAsync(b => b.Id == bookId);
+            Assert.Equal(DateTimeKind.Utc, reread.UpdatedAt.Kind);
+            Assert.NotNull(reread.DeletedAt);
+            Assert.Equal(DateTimeKind.Utc, reread.DeletedAt!.Value.Kind);
+        }
+    }
 }

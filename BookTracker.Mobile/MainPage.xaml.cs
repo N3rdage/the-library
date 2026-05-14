@@ -84,20 +84,56 @@ public partial class MainPage : ContentPage
     {
         await RunBusyAsync("Loading catalog…", async () =>
         {
-            var snapshot = await _api.GetCatalogSnapshotAsync();
-            // Atomic populate — a partial fill can't leave the DB
-            // half-shrunken. PR 4's defensive null coalesces inside
-            // PopulateAsync mean a server that hasn't shipped /series
-            // yet still hydrates Books + Authors without throwing.
-            await _cache.PopulateAsync(snapshot);
+            // Delta-sync decision tree:
+            //   1. No stored watermark → first load → full PopulateAsync.
+            //   2. Have watermark → call with ?since=<token>.
+            //      a. Response.Version matches stored Version → merge
+            //         deltas into existing cache via ApplyDeltaAsync.
+            //         Preserves CoverPath when CoverUrl unchanged so
+            //         we don't re-download thumbnails on every refresh.
+            //      b. Response.Version differs → server deploy
+            //         invalidated cache shape; fall back to full
+            //         PopulateAsync.
+            // Status text mentions delta vs full so Drew can see which
+            // path the refresh took — useful both for sanity-checking
+            // the feature and for "wait why was that so quick" intuition.
+
+            var storedToken = _meta?.LatestUpdatedAt;
+            var storedVersion = _meta?.Version;
+            var snapshot = await _api.GetCatalogSnapshotAsync(since: storedToken);
+
+            string statusSuffix;
+            if (storedToken is null)
+            {
+                await _cache.PopulateAsync(snapshot);
+                statusSuffix = "full";
+            }
+            else if (!string.Equals(snapshot.Version, storedVersion, StringComparison.Ordinal))
+            {
+                // Version moved on the server. The delta response is
+                // still valid for the new shape, but our local rows
+                // were keyed to the old shape — safer to wipe.
+                await _cache.PopulateAsync(snapshot);
+                statusSuffix = "full (version changed)";
+            }
+            else
+            {
+                await _cache.ApplyDeltaAsync(snapshot);
+                var bookChanges = snapshot.Books?.Count ?? 0;
+                var deletes = snapshot.DeletedIds?.Count ?? 0;
+                statusSuffix = bookChanges == 0 && deletes == 0
+                    ? "delta · no changes"
+                    : $"delta · {bookChanges} updated, {deletes} removed";
+            }
+
             await RefreshMetaAsync();
 
             // Surface the redeploy hint only when the server is
             // genuinely lagging on the /series field — the original
             // PR 4 NRE diagnostic kept around as a passive warning.
             return snapshot.Series is null
-                ? "Catalog loaded ✓ (server lacks /series field — redeploy Web)"
-                : "Catalog loaded ✓";
+                ? $"Catalog loaded ✓ ({statusSuffix}, server lacks /series field — redeploy Web)"
+                : $"Catalog loaded ✓ ({statusSuffix})";
         });
     }
 
