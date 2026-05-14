@@ -247,5 +247,9 @@ public static class ProgramSetup
         // §SEC-006).
         app.MapCatalogEndpoints();
         app.MapWishlistEndpoints();
+        // /warmup is anonymous (excluded from Easy Auth) by design —
+        // see WarmupEndpoints.cs and infra/modules/app-config.bicep's
+        // `publicPaths` list. Used by Azure's slot-swap warmup probe.
+        app.MapWarmupEndpoints();
     }
 }

@@ -72,6 +72,17 @@ var commonAppSettings = {
   // initialisation. 600s gives generous headroom for slow days without
   // letting genuinely broken bits hide forever.
   WEBSITES_CONTAINER_START_TIME_LIMIT: '600'
+  // Slot-swap warmup probe — Azure pings this path on the source slot
+  // (the one about to be promoted to production) during a swap and
+  // won't complete the swap until it returns 2xx. Without it the
+  // probe defaults to `/`, which under Easy Auth returns a 302 to
+  // login (and warms nothing in the .NET app — Easy Auth blocks
+  // before hand-off). `/warmup` is excluded from Easy Auth (see
+  // `publicPaths` below) and does a trivial Books.Take(1) so the
+  // SQL connection pool + managed-identity AAD token are warm when
+  // the slot starts taking real traffic. Implementation:
+  // BookTracker.Web/Api/WarmupEndpoints.cs.
+  WEBSITE_SWAP_WARMUP_PING_PATH: '/warmup'
   MICROSOFT_PROVIDER_AUTHENTICATION_SECRET: authClientSecretRef
   AI__DefaultProvider: aiDefaultProvider
   AI__AzureOpenAI__Endpoint: aiAzureOpenAIEndpoint
@@ -115,22 +126,32 @@ var slotStickyAppSettingNames = [
   'CoverStorage__PublicBaseUrl'
 ]
 
-// Paths served publicly (without Easy Auth). Limited to the PWA assets
-// Chrome/Safari fetch without credentials during the install-validation
-// handshake. Manifest + icons + service worker script are all non-sensitive
-// (public app name, theme colour, static images, client-side caching logic).
+// Paths served publicly (without Easy Auth). Two distinct shapes:
+//
+// 1. PWA assets — Chrome/Safari fetch these without credentials during
+//    the install-validation handshake. Manifest + icons + service
+//    worker script are all non-sensitive (public app name, theme
+//    colour, static images, client-side caching logic).
+// 2. /warmup — Azure's slot-swap warmup probe (see
+//    WEBSITE_SWAP_WARMUP_PING_PATH below) is anonymous; if it required
+//    AAD it would 302 to login and never actually warm the .NET app.
+//    The endpoint returns a fixed string and reveals no business data,
+//    so anonymous access is harmless. Implementation in
+//    BookTracker.Web/Api/WarmupEndpoints.cs.
+//
 // Expand deliberately — every entry here bypasses AAD sign-in.
 //
 // NOTE: Easy Auth v2 excludedPaths does EXACT path matching, not prefix.
 // "/icons" does not match "/icons/icon-192.png" — each file must be listed.
 // If you add another icon, add it here too.
-var pwaPublicPaths = [
+var publicPaths = [
   '/manifest.webmanifest'
   '/service-worker.js'
   '/icons/icon.svg'
   '/icons/icon-192.png'
   '/icons/icon-512.png'
   '/icons/apple-touch-icon.png'
+  '/warmup'
 ]
 
 resource app 'Microsoft.Web/sites@2023-12-01' existing = {
@@ -198,7 +219,7 @@ resource authConfig 'Microsoft.Web/sites/config@2023-12-01' = {
       requireAuthentication: true
       unauthenticatedClientAction: 'RedirectToLoginPage'
       redirectToProvider: 'azureactivedirectory'
-      excludedPaths: pwaPublicPaths
+      excludedPaths: publicPaths
     }
     identityProviders: {
       azureActiveDirectory: {
@@ -256,7 +277,7 @@ resource stagingAuthConfig 'Microsoft.Web/sites/slots/config@2023-12-01' = {
       requireAuthentication: true
       unauthenticatedClientAction: 'RedirectToLoginPage'
       redirectToProvider: 'azureactivedirectory'
-      excludedPaths: pwaPublicPaths
+      excludedPaths: publicPaths
     }
     identityProviders: {
       azureActiveDirectory: {
