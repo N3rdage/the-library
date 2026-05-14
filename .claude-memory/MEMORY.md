@@ -28,3 +28,4 @@
 - [MudAutocomplete capture-phase JS recipe](feedback_mudautocomplete_capture_phase.md) — block MudBlazor's auto-pick of the first-highlighted match without breaking the navigated-pick path; reusable across any inline-search-with-new-fallback.
 - [Close TODOs in same PR](feedback_close_todos_in_same_pr.md) — when a PR delivers a TODO row, move Open→Shipped in the same commit.
 - [Add/View/Edit polish arc retro](retros/retro_add_view_edit_polish_arc.md) — six PRs decommissioning `/edit`; three durable patterns + one accepted papercut (MudAutocomplete portaled popover stays open after free-text Enter, Esc dismisses).
+- [sqlite-net-pcl schema backfill](feedback_sqlite_net_pcl_schema_backfill.md) — adding a queryable column to `Cached*` entities silently breaks queries for existing rows (CreateTableAsync ALTERs but doesn't populate); always pair with a one-shot UPDATE in `CatalogCache.InitAsync`.
