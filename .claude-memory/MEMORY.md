@@ -29,3 +29,4 @@
 - [Close TODOs in same PR](feedback_close_todos_in_same_pr.md) — when a PR delivers a TODO row, move Open→Shipped in the same commit.
 - [Add/View/Edit polish arc retro](retros/retro_add_view_edit_polish_arc.md) — six PRs decommissioning `/edit`; three durable patterns + one accepted papercut (MudAutocomplete portaled popover stays open after free-text Enter, Esc dismisses).
 - [sqlite-net-pcl schema backfill](feedback_sqlite_net_pcl_schema_backfill.md) — adding a queryable column to `Cached*` entities silently breaks queries for existing rows (CreateTableAsync ALTERs but doesn't populate); always pair with a one-shot UPDATE in `CatalogCache.InitAsync`.
+- [Runbook: Bookshelf Clear data kills the app](runbook_bookshelf_clear_data_kills_app.md) — Android Settings → Clear data prevents Bookshelf from launching afterwards (2026-05-14). Use uninstall + reinstall instead; root cause not yet diagnosed.
