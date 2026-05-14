@@ -14,12 +14,21 @@ public class ApiClient(HttpClient http, IAuthService auth) : IApiClient
         PropertyNameCaseInsensitive = true,
     };
 
-    public async Task<CatalogSnapshot> GetCatalogSnapshotAsync(CancellationToken ct = default)
+    public async Task<CatalogSnapshot> GetCatalogSnapshotAsync(
+        DateTime? since = null, CancellationToken ct = default)
     {
         var token = await auth.AcquireTokenSilentAsync()
             ?? await auth.SignInAsync();
 
-        var request = new HttpRequestMessage(HttpMethod.Get, "/api/catalog-snapshot");
+        // ISO 8601 "O" format round-trips the UTC offset (the "Z"
+        // suffix) so the server-side AdjustToUniversal | AssumeUniversal
+        // parser pins it to UTC even though we use raw string-binding.
+        // Uri.EscapeDataString handles the ":" / "." characters that
+        // would otherwise need percent-encoding in a query string.
+        var path = since is { } sinceUtc
+            ? $"/api/catalog-snapshot?since={Uri.EscapeDataString(sinceUtc.ToUniversalTime().ToString("O"))}"
+            : "/api/catalog-snapshot";
+        var request = new HttpRequestMessage(HttpMethod.Get, path);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         using var response = await http.SendAsync(request, ct);

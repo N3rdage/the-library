@@ -16,8 +16,25 @@ public interface ICatalogCache
 
     /// <summary>Wipes existing cache rows and inserts the snapshot
     /// from scratch. Atomic via a single SQLite transaction — a
-    /// partial populate can't leave the DB half-shrunken.</summary>
+    /// partial populate can't leave the DB half-shrunken. Use this
+    /// for first-load (no stored watermark) and full-reset paths
+    /// (server <c>Version</c> mismatch — deploy invalidated cache).</summary>
     Task PopulateAsync(CatalogSnapshot snapshot);
+
+    /// <summary>Merges a delta-shaped snapshot into the existing
+    /// cache. Upserts incoming Books (preserves <c>CoverPath</c> when
+    /// <c>CoverUrl</c> hasn't changed, clears it when it has so
+    /// <see cref="EnsureCoverCachedAsync"/> re-fetches the thumbnail).
+    /// Wipes-and-rewrites Authors + Series (server always full-lists
+    /// them regardless of <c>?since=</c>). Processes
+    /// <c>snapshot.DeletedIds</c> as DELETEs against the local rows.
+    /// Updates the watermark meta (<c>latestUpdatedAt</c>) so the
+    /// next refresh can send it as <c>?since=</c>.
+    ///
+    /// Atomic via a single SQLite transaction. Caller is responsible
+    /// for falling back to <see cref="PopulateAsync"/> on a
+    /// server-version mismatch.</summary>
+    Task ApplyDeltaAsync(CatalogSnapshot snapshot);
 
     /// <summary>Finds the book with the given ISBN, or null if not
     /// in the cache. Uses the book_isbns index — sub-millisecond
@@ -59,4 +76,11 @@ public record CacheMeta(
     string? Version,
     DateTime? SyncedAt,
     int BookCount,
-    int AuthorCount);
+    int AuthorCount,
+    // Server-side max(Book.UpdatedAt | DeletedAt) at the moment of
+    // the last successful PopulateAsync / ApplyDeltaAsync. Caller
+    // sends this back as <c>?since=</c> on the next refresh so the
+    // server returns only changed Books + tombstones. Null when no
+    // snapshot has been applied yet (or it was stored before the
+    // server started shipping the field — back-compat).
+    DateTime? LatestUpdatedAt = null);

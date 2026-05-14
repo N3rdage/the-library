@@ -31,13 +31,18 @@ public class CatalogCacheTests
     private static CatalogSnapshot SampleSnapshot(
         IReadOnlyList<BookSnapshot>? books = null,
         IReadOnlyList<AuthorSnapshot>? authors = null,
-        IReadOnlyList<SeriesSnapshot>? series = null) =>
+        IReadOnlyList<SeriesSnapshot>? series = null,
+        DateTime latestUpdatedAt = default,
+        IReadOnlyList<int>? deletedIds = null,
+        string version = "test-v1") =>
         new(
-            Version: "test-v1",
+            Version: version,
             SyncedAt: new DateTime(2026, 5, 11, 12, 0, 0, DateTimeKind.Utc),
             Books: books ?? [],
             Authors: authors ?? [],
-            Series: series ?? []);
+            Series: series ?? [],
+            LatestUpdatedAt: latestUpdatedAt,
+            DeletedIds: deletedIds);
 
     [Fact]
     public async Task GetMetaAsync_ReturnsNullBeforePopulate()
@@ -343,6 +348,226 @@ public class CatalogCacheTests
         var notImage = "<!doctype html><html>404</html>"u8.ToArray();
         var http = HttpClientReturning(notImage);
         Assert.Null(await cache.EnsureCoverCachedAsync(1, http));
+    }
+
+    // ---- delta sync (ApplyDeltaAsync + LatestUpdatedAt) ----
+
+    [Fact]
+    public async Task PopulateAsync_StoresLatestUpdatedAt_RoundTripsViaGetMeta()
+    {
+        // First-load path: the server sends a full snapshot with the
+        // delta watermark already populated. Storing it lets the next
+        // refresh send `?since=<token>` rather than re-fetching the
+        // full catalog.
+        var cache = await NewCacheAsync();
+        var token = new DateTime(2026, 5, 14, 8, 30, 0, DateTimeKind.Utc);
+
+        await cache.PopulateAsync(SampleSnapshot(
+            books: [new(1, "Foundation", "Isaac Asimov", ["Isaac Asimov"], "Read", 5, ["9780553293357"], null, null)],
+            latestUpdatedAt: token));
+
+        var meta = await cache.GetMetaAsync();
+        Assert.NotNull(meta);
+        Assert.Equal(token, meta!.LatestUpdatedAt);
+    }
+
+    [Fact]
+    public async Task ApplyDeltaAsync_UpsertsExistingBook_PreservesCoverPathWhenCoverUrlUnchanged()
+    {
+        // The cover-cache payoff. After a successful EnsureCoverCachedAsync
+        // on a previous load, CoverPath holds the on-disk JPEG path. A
+        // delta refresh with the same CoverUrl must not wipe it — that
+        // would force a re-download of every thumbnail on every refresh.
+        var cache = await NewCacheAsync();
+        var initialLatest = new DateTime(2026, 5, 14, 8, 0, 0, DateTimeKind.Utc);
+        var coverUrl = "https://covers.example/foundation.jpg";
+
+        await cache.PopulateAsync(SampleSnapshot(
+            books: [new(1, "Foundation", "Isaac Asimov", ["Isaac Asimov"], "Read", 5,
+                ["9780553293357"], null, null, coverUrl)],
+            latestUpdatedAt: initialLatest));
+
+        // Simulate a cover-cache hit so CoverPath is populated.
+        var http = HttpClientReturning(MakePngBytes(100, 150));
+        var coverPath = await cache.EnsureCoverCachedAsync(1, http);
+        Assert.NotNull(coverPath);
+        Assert.True(File.Exists(coverPath));
+
+        // Now a delta refresh: same Book, same CoverUrl, but the title
+        // bumped (e.g. user edited it on the Web side).
+        var newLatest = new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc);
+        await cache.ApplyDeltaAsync(SampleSnapshot(
+            books: [new(1, "Foundation (revised)", "Isaac Asimov", ["Isaac Asimov"], "Read", 5,
+                ["9780553293357"], null, null, coverUrl)],
+            latestUpdatedAt: newLatest));
+
+        // CoverPath is preserved → EnsureCoverCachedAsync short-circuits
+        // on the next call without re-downloading.
+        var counter = new RequestCountingHandler(MakePngBytes(50, 50));
+        var http2 = new HttpClient(counter);
+        var pathAfter = await cache.EnsureCoverCachedAsync(1, http2);
+        Assert.Equal(coverPath, pathAfter);
+        Assert.Equal(0, counter.RequestCount);
+
+        // And the new title is visible.
+        var book = await cache.LookupByIsbnAsync("9780553293357");
+        Assert.Equal("Foundation (revised)", book!.Title);
+    }
+
+    [Fact]
+    public async Task ApplyDeltaAsync_ClearsCoverPathWhenCoverUrlChanged()
+    {
+        // CoverUrl changed (user uploaded a new cover) → drop the
+        // cached path so EnsureCoverCachedAsync re-fetches from the
+        // new URL on next display.
+        var cache = await NewCacheAsync();
+        var oldUrl = "https://covers.example/foundation-old.jpg";
+        var newUrl = "https://covers.example/foundation-new.jpg";
+
+        await cache.PopulateAsync(SampleSnapshot(
+            books: [new(1, "Foundation", "Isaac Asimov", ["Isaac Asimov"], "Read", 5,
+                ["9780553293357"], null, null, oldUrl)],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 8, 0, 0, DateTimeKind.Utc)));
+
+        var oldHttp = HttpClientReturning(MakePngBytes(100, 150));
+        Assert.NotNull(await cache.EnsureCoverCachedAsync(1, oldHttp));
+
+        // Delta: same Book, new CoverUrl.
+        await cache.ApplyDeltaAsync(SampleSnapshot(
+            books: [new(1, "Foundation", "Isaac Asimov", ["Isaac Asimov"], "Read", 5,
+                ["9780553293357"], null, null, newUrl)],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc)));
+
+        // Next EnsureCoverCachedAsync must hit the network (CoverPath
+        // was cleared) and fetch from the new URL.
+        var counter = new RequestCountingHandler(MakePngBytes(50, 50));
+        var newHttp = new HttpClient(counter);
+        var pathAfter = await cache.EnsureCoverCachedAsync(1, newHttp);
+        Assert.NotNull(pathAfter);
+        Assert.Equal(1, counter.RequestCount);
+    }
+
+    [Fact]
+    public async Task ApplyDeltaAsync_InsertsNewBookNotPreviouslyInCache()
+    {
+        // First sync had Foundation; delta brings in I, Robot for the
+        // first time. Both should survive the merge.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books: [new(1, "Foundation", "Isaac Asimov", ["Isaac Asimov"], "Read", 5, ["9780553293357"], null, null)],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 8, 0, 0, DateTimeKind.Utc)));
+
+        await cache.ApplyDeltaAsync(SampleSnapshot(
+            books: [new(2, "I, Robot", "Isaac Asimov", ["Isaac Asimov"], "Read", 4, ["9780553294385"], null, null)],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc)));
+
+        Assert.NotNull(await cache.LookupByIsbnAsync("9780553293357"));
+        Assert.NotNull(await cache.LookupByIsbnAsync("9780553294385"));
+        var meta = await cache.GetMetaAsync();
+        Assert.Equal(2, meta!.BookCount);
+    }
+
+    [Fact]
+    public async Task ApplyDeltaAsync_DeletedIdsRemovesBookAndItsIsbnRows()
+    {
+        // Soft-deleted Book surfaces in DeletedIds. The local row must
+        // disappear AND its ISBN join rows go too — otherwise a
+        // subsequent ISBN scan would still hit the dead book.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Foundation", "Isaac Asimov", ["Isaac Asimov"], "Read", 5, ["9780553293357"], null, null),
+                new(2, "Doomed", "X", ["X"], "Read", 0, ["9999999999999"], null, null),
+            ],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 8, 0, 0, DateTimeKind.Utc)));
+
+        await cache.ApplyDeltaAsync(SampleSnapshot(
+            // No Books changes this delta — just a tombstone.
+            deletedIds: [2],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc)));
+
+        Assert.NotNull(await cache.LookupByIsbnAsync("9780553293357"));
+        // Dead book gone, AND its ISBN no longer resolves.
+        Assert.Null(await cache.LookupByIsbnAsync("9999999999999"));
+        var meta = await cache.GetMetaAsync();
+        Assert.Equal(1, meta!.BookCount);
+    }
+
+    [Fact]
+    public async Task ApplyDeltaAsync_AuthorsAndSeriesAreFullRewrittenNotMerged()
+    {
+        // Server always full-lists Authors + Series on every snapshot,
+        // so a delta missing an author means the author was deleted.
+        // Cache must reflect that — wipe-and-rewrite, not merge.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            authors:
+            [
+                new(1, "Isaac Asimov", 1, 5),
+                new(2, "Discontinued Author", 2, 1),
+            ],
+            series:
+            [
+                new(10, "Foundation", "Series", 7),
+                new(11, "Discontinued Series", "Series", 3),
+            ],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 8, 0, 0, DateTimeKind.Utc)));
+
+        // Delta carries only the surviving rows for both lists.
+        await cache.ApplyDeltaAsync(SampleSnapshot(
+            authors: [new(1, "Isaac Asimov", 1, 5)],
+            series: [new(10, "Foundation", "Series", 7)],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc)));
+
+        var asimov = await cache.SearchAuthorsAsync("Asimov", 10);
+        Assert.Single(asimov);
+        // Discontinued author gone — search returns no hits.
+        Assert.Empty(await cache.SearchAuthorsAsync("Discontinued", 10));
+
+        var meta = await cache.GetMetaAsync();
+        Assert.Equal(1, meta!.AuthorCount);
+    }
+
+    [Fact]
+    public async Task ApplyDeltaAsync_AdvancesLatestUpdatedAtWatermark()
+    {
+        // The whole point of the round-trip — the new token surfaces
+        // on GetMetaAsync so the next refresh can send it as ?since=.
+        var cache = await NewCacheAsync();
+        var t1 = new DateTime(2026, 5, 14, 8, 0, 0, DateTimeKind.Utc);
+        var t2 = new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc);
+
+        await cache.PopulateAsync(SampleSnapshot(latestUpdatedAt: t1));
+        Assert.Equal(t1, (await cache.GetMetaAsync())!.LatestUpdatedAt);
+
+        await cache.ApplyDeltaAsync(SampleSnapshot(latestUpdatedAt: t2));
+        Assert.Equal(t2, (await cache.GetMetaAsync())!.LatestUpdatedAt);
+    }
+
+    [Fact]
+    public async Task ApplyDeltaAsync_BookCountReflectsPostMergeRowCountNotIncomingDelta()
+    {
+        // BookCount must be the on-disk row count after upsert +
+        // tombstone-delete, not the size of the incoming delta. A
+        // delta of "1 changed Book, no tombstones" with 5 pre-existing
+        // rows should report 5 — not 1.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "A", "X", ["X"], "Read", 0, [], null, null),
+                new(2, "B", "X", ["X"], "Read", 0, [], null, null),
+                new(3, "C", "X", ["X"], "Read", 0, [], null, null),
+            ],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 8, 0, 0, DateTimeKind.Utc)));
+
+        await cache.ApplyDeltaAsync(SampleSnapshot(
+            books: [new(1, "A (revised)", "X", ["X"], "Read", 0, [], null, null)],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc)));
+
+        var meta = await cache.GetMetaAsync();
+        Assert.Equal(3, meta!.BookCount);
     }
 
     // ---- helpers ----
