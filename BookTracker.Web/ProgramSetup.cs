@@ -1,4 +1,5 @@
 using BookTracker.Data;
+using BookTracker.Data.Interceptors;
 using BookTracker.Web.Api;
 using BookTracker.Web.Components;
 using BookTracker.Web.Services;
@@ -87,8 +88,14 @@ public static class ProgramSetup
         // Blazor Server circuits are long-lived while DbContext is scoped and not
         // thread-safe, so components take IDbContextFactory<T> and create a short-lived
         // context per operation rather than injecting DbContext directly.
+        //
+        // BookUpdatedAtInterceptor bumps Book.UpdatedAt whenever the Book aggregate
+        // changes — backs the `/api/catalog-snapshot?since=<token>` delta query.
+        // Stateless, so a single instance is reused across context creations.
         builder.Services.AddDbContextFactory<BookTrackerDbContext>(options =>
-            options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+            options
+                .UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
+                .AddInterceptors(new BookUpdatedAtInterceptor()));
 
         builder.Services.Configure<TroveOptions>(
             builder.Configuration.GetSection(TroveOptions.SectionName));

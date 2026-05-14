@@ -259,13 +259,15 @@ public class CatalogSnapshotServiceTests
     }
 
     [Fact]
-    public async Task GetSnapshotAsync_SeriesListIncludesOnlySeriesWithBooksInCatalog()
+    public async Task GetSnapshotAsync_SeriesListIncludesAllSeries_EvenEmptyOnes()
     {
-        // Series referenced by at least one Work that's in at least one
-        // Book ships in CatalogSnapshot.Series. An empty series (e.g.
-        // user creates "Wheel of Time" in advance, no books yet)
-        // doesn't — it's not useful for the bookshop "missing books"
-        // view client-side.
+        // Series list is always full-listed (changed from "only series
+        // referenced by Books" in the PR that added delta sync). The
+        // rationale is correctness on delta refreshes: a Series rename
+        // that doesn't happen to bump any owning Books (interceptor
+        // doesn't propagate Series → Book) wouldn't surface to clients
+        // on a `?since=` delta if Series were filtered. Cost is a few
+        // KB on the wire for an empty-Series row.
         using (var db = _factory.CreateDbContext())
         {
             var asimov = new Author { Name = "Isaac Asimov" };
@@ -291,9 +293,117 @@ public class CatalogSnapshotServiceTests
 
         var snapshot = await CreateService().GetSnapshotAsync();
 
-        var series = Assert.Single(snapshot.Series);
-        Assert.Equal("Foundation", series.Name);
-        Assert.Equal("Series", series.Type);
-        Assert.Equal(7, series.ExpectedCount);
+        Assert.Equal(2, snapshot.Series.Count);
+        Assert.Contains(snapshot.Series, s => s.Name == "Foundation" && s.ExpectedCount == 7);
+        Assert.Contains(snapshot.Series, s => s.Name == "Empire of Light" && s.ExpectedCount == 3);
+    }
+
+    // ---- Delta-sync (`?since=` filter + LatestUpdatedAt) ----
+
+    [Fact]
+    public async Task GetSnapshotAsync_NoSince_ReturnsAllBooks_AndLatestIsMaxUpdatedAt()
+    {
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = new Author { Name = "Isaac Asimov" };
+            db.Authors.Add(asimov);
+            db.Books.AddRange(
+                new Book { Title = "Foundation", Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] },
+                new Book { Title = "I, Robot", Works = [new Work { Title = "I, Robot", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] });
+            await db.SaveChangesAsync();
+        }
+
+        var snapshot = await CreateService().GetSnapshotAsync(since: null);
+
+        Assert.Equal(2, snapshot.Books.Count);
+        // LatestUpdatedAt = max Book.UpdatedAt in the result. Both
+        // books were just saved so both have post-creation stamps;
+        // the max is non-default and not the syncedAt sentinel.
+        Assert.True(snapshot.LatestUpdatedAt > DateTime.UtcNow.AddMinutes(-1));
+        Assert.True(snapshot.LatestUpdatedAt <= snapshot.SyncedAt);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_SinceInFuture_ReturnsNoBooks_AndLatestIsSince()
+    {
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = new Author { Name = "Isaac Asimov" };
+            db.Authors.Add(asimov);
+            db.Books.Add(new Book { Title = "Foundation", Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] });
+            await db.SaveChangesAsync();
+        }
+
+        var farFuture = DateTime.UtcNow.AddDays(1);
+        var snapshot = await CreateService().GetSnapshotAsync(since: farFuture);
+
+        Assert.Empty(snapshot.Books);
+        // Empty delta echoes back the supplied since — clients keep
+        // polling with the same token until something changes.
+        Assert.Equal(farFuture, snapshot.LatestUpdatedAt);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_SinceMidway_ReturnsOnlyBooksBumpedAfter()
+    {
+        DateTime mid;
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = new Author { Name = "Isaac Asimov" };
+            db.Authors.Add(asimov);
+            db.Books.Add(new Book { Title = "Foundation", Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] });
+            await db.SaveChangesAsync();
+        }
+
+        // Datetime2 has 100ns precision; a small delay guarantees the
+        // mid stamp falls between the two saves with no risk of
+        // boundary races.
+        await Task.Delay(20);
+        mid = DateTime.UtcNow;
+        await Task.Delay(20);
+
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = db.Authors.Single();
+            db.Books.Add(new Book { Title = "I, Robot", Works = [new Work { Title = "I, Robot", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] });
+            await db.SaveChangesAsync();
+        }
+
+        var delta = await CreateService().GetSnapshotAsync(since: mid);
+
+        var book = Assert.Single(delta.Books);
+        Assert.Equal("I, Robot", book.Title);
+        Assert.True(delta.LatestUpdatedAt > mid);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_DeltaResponse_StillFullsAuthorsAndSeries()
+    {
+        // Even on a delta call, Authors + Series ship in full —
+        // they're small payloads and the client needs the full set
+        // for joins/lookups against books it has locally cached.
+        DateTime mid;
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = new Author { Name = "Isaac Asimov" };
+            db.Authors.Add(asimov);
+            db.Series.Add(new Series { Name = "Foundation", Type = SeriesType.Series, ExpectedCount = 7 });
+            db.Books.Add(new Book { Title = "Foundation", Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] });
+            await db.SaveChangesAsync();
+        }
+
+        await Task.Delay(20);
+        mid = DateTime.UtcNow;
+        await Task.Delay(20);
+
+        // No book changes after mid — delta should be empty for books,
+        // but Authors + Series still full-listed.
+        var delta = await CreateService().GetSnapshotAsync(since: mid);
+
+        Assert.Empty(delta.Books);
+        Assert.NotEmpty(delta.Authors);
+        Assert.Contains(delta.Authors, a => a.Name == "Isaac Asimov");
+        Assert.NotEmpty(delta.Series);
+        Assert.Contains(delta.Series, s => s.Name == "Foundation");
     }
 }

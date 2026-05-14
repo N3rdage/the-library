@@ -1,4 +1,5 @@
 using BookTracker.Data;
+using BookTracker.Data.Interceptors;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Respawn;
@@ -32,6 +33,9 @@ public class TestDbContextFactory : IDbContextFactory<BookTrackerDbContext>
         _connectionString = SqlServerContainer.ConnectionString;
         _options = new DbContextOptionsBuilder<BookTrackerDbContext>()
             .UseSqlServer(_connectionString)
+            // Match production wiring so the interceptor's
+            // Book.UpdatedAt bump runs in tests.
+            .AddInterceptors(new BookUpdatedAtInterceptor())
             .Options;
 
         WipeAndReseed();

@@ -25,13 +25,20 @@ namespace BookTracker.Web.Services.Catalog;
 // there so the mobile project can reference the contract cleanly.
 public interface ICatalogSnapshotService
 {
-    Task<CatalogSnapshot> GetSnapshotAsync(CancellationToken ct = default);
+    /// <summary>Full snapshot when <paramref name="since"/> is null;
+    /// delta-of-Books-changed-after-since otherwise. Authors + Series
+    /// are always full-listed regardless of <paramref name="since"/>
+    /// (they're tiny and the client needs the full set anyway). The
+    /// returned <see cref="CatalogSnapshot.LatestUpdatedAt"/> is the
+    /// max Book.UpdatedAt across the response — clients store it and
+    /// send it as <c>?since=</c> on the next call.</summary>
+    Task<CatalogSnapshot> GetSnapshotAsync(DateTime? since = null, CancellationToken ct = default);
 }
 
 public class CatalogSnapshotService(
     IDbContextFactory<BookTrackerDbContext> dbFactory) : ICatalogSnapshotService
 {
-    public async Task<CatalogSnapshot> GetSnapshotAsync(CancellationToken ct = default)
+    public async Task<CatalogSnapshot> GetSnapshotAsync(DateTime? since = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
@@ -39,8 +46,17 @@ public class CatalogSnapshotService(
         // catalog size (3000+ target), so the materialise-then-project cost
         // is fine. AsNoTracking per scale-audit defaults; this is a read-
         // only path with immediate projection into records.
-        var booksRaw = await db.Books
-            .AsNoTracking()
+        //
+        // When `since` is non-null, the IX_Books_UpdatedAt index makes the
+        // filter a B-tree seek — at delta-typical sizes (a handful of
+        // changed Books) this returns sub-millisecond.
+        var booksQuery = db.Books.AsNoTracking();
+        if (since is DateTime sinceUtc)
+        {
+            booksQuery = booksQuery.Where(b => b.UpdatedAt > sinceUtc);
+        }
+
+        var booksRaw = await booksQuery
             .Select(b => new
             {
                 b.Id,
@@ -48,6 +64,7 @@ public class CatalogSnapshotService(
                 b.Status,
                 b.Rating,
                 b.DefaultCoverArtUrl,
+                b.UpdatedAt,
                 Authors = b.Works.SelectMany(w => w.WorkAuthors.Select(wa => new
                 {
                     wa.Author.Name,
@@ -140,25 +157,15 @@ public class CatalogSnapshotService(
             .OrderBy(a => a.Name)
             .ToList();
 
-        // Series — only those referenced by at least one book in the
-        // snapshot. Derive the IDs from booksRaw (already materialised)
-        // rather than re-querying through Series→Works→Books — that
-        // 3-level nav-property chain doesn't translate cleanly under
-        // the M:N BookWork join table on EF Core 10.x. Side effect of
-        // the simpler shape: a series only attached via a non-first
-        // Work of a compendium won't surface here, which is fine for
-        // v1; the bookshop "missing books" view operates against books
-        // with a clear primary series anyway.
-        var referencedSeriesIds = booksRaw
-            .Select(b => b.FirstWorkSeries?.SeriesId)
-            .Where(id => id.HasValue)
-            .Select(id => id!.Value)
-            .Distinct()
-            .ToList();
-
+        // Series — always full-listed (small set, ~tens at most).
+        // Earlier versions filtered to only those referenced by Books
+        // in the snapshot to shave a few KB, but that broke the
+        // delta-sync rename case: when only one Book changes, a Series
+        // rename on that Book's series surfaces, but Series renames
+        // that don't bump any owning Books wouldn't propagate to
+        // clients on delta refreshes. Always-all is correct + simpler.
         var seriesRaw = await db.Series
             .AsNoTracking()
-            .Where(s => referencedSeriesIds.Contains(s.Id))
             .Select(s => new { s.Id, s.Name, s.Type, s.ExpectedCount })
             .ToListAsync(ct);
 
@@ -167,15 +174,24 @@ public class CatalogSnapshotService(
             .OrderBy(s => s.Name)
             .ToList();
 
+        // LatestUpdatedAt = max Book.UpdatedAt in this response, or the
+        // server clock if no books in the response (empty delta). The
+        // client stores this and sends it back as `?since=` next time.
+        var syncedAt = DateTime.UtcNow;
+        var latestUpdatedAt = booksRaw.Count > 0
+            ? booksRaw.Max(b => b.UpdatedAt)
+            : (since ?? syncedAt);
+
         // Version is the deployed commit SHA when available (so the
         // client-side cache can detect a deploy and trigger a refresh)
         // or "dev" when running locally without the build-time SHA
         // injection. SyncedAt is server clock at projection time.
         return new CatalogSnapshot(
             BuildInfo.ShortSha ?? "dev",
-            DateTime.UtcNow,
+            syncedAt,
             books,
             authors,
-            series);
+            series,
+            latestUpdatedAt);
     }
 }

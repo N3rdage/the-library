@@ -21,6 +21,16 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Book.UpdatedAt: default to SQL Server's GETUTCDATE() so the
+        // migration backfills existing rows with a real timestamp.
+        // Indexed because the snapshot delta query
+        // (CatalogSnapshotService with ?since=<token>) filters on it.
+        modelBuilder.Entity<Book>()
+            .Property(b => b.UpdatedAt)
+            .HasDefaultValueSql("GETUTCDATE()");
+        modelBuilder.Entity<Book>()
+            .HasIndex(b => b.UpdatedAt);
+
         modelBuilder.Entity<Edition>()
             .HasOne(e => e.Book)
             .WithMany(b => b.Editions)

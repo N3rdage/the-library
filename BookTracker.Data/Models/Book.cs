@@ -39,6 +39,14 @@ public class Book
 
     public DateTime DateAdded { get; set; } = DateTime.UtcNow;
 
+    /// <summary>UTC stamp updated whenever this Book OR any entity in
+    /// its aggregate (Edition, Copy, Work, WorkAuthor, BookTag) changes.
+    /// Backs the `GET /api/catalog-snapshot?since=<token>` delta query
+    /// so Bookshelf refreshes can ship only changed Books instead of
+    /// the full ~150KB snapshot. Bumped via BookUpdatedAtInterceptor at
+    /// SaveChanges time — save sites don't need to set it explicitly.</summary>
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
     [MaxLength(500)]
     public string? DefaultCoverArtUrl { get; set; }
 

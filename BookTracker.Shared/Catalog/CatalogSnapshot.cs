@@ -15,7 +15,17 @@ public record CatalogSnapshot(
     DateTime SyncedAt,
     IReadOnlyList<BookSnapshot> Books,
     IReadOnlyList<AuthorSnapshot> Authors,
-    IReadOnlyList<SeriesSnapshot> Series);
+    IReadOnlyList<SeriesSnapshot> Series,
+    // Max Book.UpdatedAt across the rows in this response, or
+    // SyncedAt when the response contains no books. Clients store
+    // this and send it back as `?since=<token>` on the next refresh
+    // to fetch only Books that changed since this snapshot — turning
+    // refreshes into deltas instead of full reloads.
+    //
+    // Default of SyncedAt is for backwards-compat with any test or
+    // caller constructing CatalogSnapshot positionally without the
+    // new field.
+    DateTime LatestUpdatedAt = default);
 
 public record BookSnapshot(
     int Id,
