@@ -1,3 +1,4 @@
+using System.Globalization;
 using BookTracker.Web.Services.Catalog;
 
 namespace BookTracker.Web.Api;
@@ -19,15 +20,39 @@ public static class CatalogEndpoints
 {
     public static IEndpointRouteBuilder MapCatalogEndpoints(this IEndpointRouteBuilder app)
     {
-        // GET /api/catalog-snapshot — slim catalog JSON for the bookshop
-        // offline cache. ~150KB gzipped at the 3000+ books target. Service
-        // worker pre-caches the response; IndexedDB stores client-side.
-        // See docs/bookshop-mode-design.md for the full architecture.
+        // GET /api/catalog-snapshot[?since=<ISO 8601 UTC>] — slim catalog
+        // JSON for the bookshop offline cache. Full snapshot when `since`
+        // is absent; delta of Books with UpdatedAt > since when present
+        // (Authors + Series are always full-listed regardless of since).
+        // Service worker pre-caches the response; IndexedDB / SQLite
+        // stores client-side. See docs/bookshop-mode-design.md.
+        //
+        // `since` is bound as a raw string so we can enforce UTC parsing
+        // explicitly via DateTimeStyles.AdjustToUniversal — the default
+        // DateTime binder in Minimal API treats values without timezone
+        // suffix as Local, which would produce wrong-by-hours filtering
+        // on a UTC-stored column.
         app.MapGet("/api/catalog-snapshot", async (
+            string? since,
             ICatalogSnapshotService service,
             CancellationToken ct) =>
         {
-            var snapshot = await service.GetSnapshotAsync(ct);
+            DateTime? parsedSince = null;
+            if (!string.IsNullOrWhiteSpace(since))
+            {
+                if (!DateTime.TryParse(
+                        since,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
+                        out var parsed))
+                {
+                    return Results.BadRequest(
+                        $"Invalid 'since' value: '{since}'. Expected ISO 8601 UTC (e.g. 2026-05-14T12:30:00Z).");
+                }
+                parsedSince = parsed;
+            }
+
+            var snapshot = await service.GetSnapshotAsync(parsedSince, ct);
             return Results.Ok(snapshot);
         });
 
