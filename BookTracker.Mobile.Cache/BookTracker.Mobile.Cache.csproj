@@ -33,8 +33,12 @@
          and for the test runner OS automatically. Used by
          EnsureCoverCachedAsync to downscale fetched covers to a
          200px-long-edge JPEG before writing to disk — ~25KB per
-         cover at the target sizes. -->
-    <PackageReference Include="SkiaSharp" Version="2.88.8" />
+         cover at the target sizes.
+         3.x is required for Android 16 — the 2.x native libs aren't
+         16KB-page-aligned and fail to load on Android 16 devices
+         with 16KB pages enabled (the XA0141 build warning). 3.x's
+         Resize API replaces SKFilterQuality with SKSamplingOptions. -->
+    <PackageReference Include="SkiaSharp" Version="3.119.2" />
   </ItemGroup>
 
   <ItemGroup>

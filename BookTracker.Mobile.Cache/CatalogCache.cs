@@ -331,11 +331,14 @@ public class CatalogCache : ICatalogCache
     /// input isn't a decodable image. Synchronous SkiaSharp work
     /// wrapped in a method so the cover-cache path is the only caller.
     ///
-    /// SkiaSharp's SKBitmap.Decode throws ArgumentNullException
-    /// (rather than returning null) when the bytes can't be parsed
-    /// as a known image format — wrap in try/catch so a broken
-    /// upstream response surfaces as "couldn't cache" rather than
-    /// crashing the caller.
+    /// SkiaSharp.Decode can throw or return null on malformed bytes
+    /// — wrap both in try/catch so a broken upstream response surfaces
+    /// as "couldn't cache" rather than crashing the caller.
+    ///
+    /// SkiaSharp 3.x replaced SKFilterQuality with SKSamplingOptions
+    /// on the Resize signature. Mitchell cubic resampler matches the
+    /// previous SKFilterQuality.High treatment for downscaling — a
+    /// good fit for book cover thumbnails.
     /// </summary>
     private static byte[]? ResizeToJpeg(byte[] sourceBytes)
     {
@@ -354,7 +357,7 @@ public class CatalogCache : ICatalogCache
             var (width, height) = ScaleToLongEdge(source.Width, source.Height, CoverLongEdgePx);
             using var resized = source.Resize(
                 new SKImageInfo(width, height, source.ColorType, source.AlphaType),
-                SKFilterQuality.High);
+                new SKSamplingOptions(SKCubicResampler.Mitchell));
             if (resized is null) return null;
 
             using var image = SKImage.FromBitmap(resized);
