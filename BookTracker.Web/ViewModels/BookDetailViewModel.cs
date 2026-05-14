@@ -406,18 +406,33 @@ public class BookDetailViewModel(
         return title;
     }
 
-    /// <summary>Delete this Book. EF cascades remove the Editions / Copies
-    /// (PK cascade); Works are detached from the join — if a Work was
-    /// only on this Book it becomes orphan-removable and EF cleans it up.
+    /// <summary>Delete this Book. Soft-delete: the Book row is kept as
+    /// a tombstone (DeletedAt = UtcNow, hidden from every normal query
+    /// by the global HasQueryFilter) so the catalog snapshot delta path
+    /// can emit it in <c>deletedIds[]</c> for Bookshelf clients. The
+    /// aggregate children are hard-removed at the same save:
+    ///   - Editions (+ Copies via cascade) get RemoveRange'd.
+    ///   - Tags / Works join rows are cleared (skip-nav).
+    /// Net visible behaviour matches the old hard-delete (book + its
+    /// editions/copies/joins disappear) — only the husk row survives.
     /// Returns true on success so the caller can navigate away.</summary>
     public async Task<bool> DeleteBookAsync()
     {
         if (Book is null) return false;
 
         await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books.FindAsync(Book.Id);
+        var book = await db.Books
+            .Include(b => b.Editions)
+            .Include(b => b.Tags)
+            .Include(b => b.Works)
+            .FirstOrDefaultAsync(b => b.Id == Book.Id);
         if (book is null) return false;
-        db.Books.Remove(book);
+
+        db.Editions.RemoveRange(book.Editions); // Copies cascade via PK
+        book.Tags.Clear();
+        book.Works.Clear();
+        book.DeletedAt = DateTime.UtcNow;
+
         await db.SaveChangesAsync();
         return true;
     }

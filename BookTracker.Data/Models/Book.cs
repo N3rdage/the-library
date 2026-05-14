@@ -47,6 +47,17 @@ public class Book
     /// SaveChanges time — save sites don't need to set it explicitly.</summary>
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>Soft-delete tombstone. Non-null = the Book is "deleted"
+    /// from the user's perspective; a global EF query filter
+    /// (HasQueryFilter) hides these rows from every normal query, so
+    /// the Library / View / search / merge surfaces all behave as if
+    /// the row is gone. The husk row survives so the delta-sync
+    /// endpoint can emit it as a tombstone in <c>deletedIds[]</c> for
+    /// Bookshelf clients to drop from their local cache. Children
+    /// (Editions, Copies, BookTag join, BookWork join) are
+    /// hard-removed at delete time — the husk has no aggregate.</summary>
+    public DateTime? DeletedAt { get; set; }
+
     [MaxLength(500)]
     public string? DefaultCoverArtUrl { get; set; }
 

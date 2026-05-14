@@ -145,7 +145,12 @@ public class BookMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
             .ToListAsync(ct);
         db.IgnoredDuplicates.RemoveRange(staleIgnores);
 
-        db.Books.Remove(loser);
+        // Soft-delete the loser: the row is kept as a tombstone for the
+        // catalog snapshot's deletedIds[]. The merge has already moved
+        // Editions to the winner and cleared Works/Tags on the loser, so
+        // the husk row owns no aggregate. The global HasQueryFilter
+        // hides the loser from all subsequent queries.
+        loser.DeletedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);

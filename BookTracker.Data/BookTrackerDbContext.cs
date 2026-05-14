@@ -31,6 +31,22 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
         modelBuilder.Entity<Book>()
             .HasIndex(b => b.UpdatedAt);
 
+        // Soft-delete: a global query filter hides tombstoned Books from
+        // every normal query (Library, View, search, merge, …). The dead
+        // husks survive only to power tombstone emission in the catalog
+        // snapshot's deletedIds[] for Bookshelf clients. The tombstone
+        // emission query opts out with IgnoreQueryFilters().
+        //
+        // Indexed because the snapshot delta path queries `DeletedAt >
+        // since` for tombstones, and the index narrows the husk-only
+        // subset cheaply (most rows have DeletedAt = NULL, which a
+        // filtered index skips entirely).
+        modelBuilder.Entity<Book>()
+            .HasQueryFilter(b => b.DeletedAt == null);
+        modelBuilder.Entity<Book>()
+            .HasIndex(b => b.DeletedAt)
+            .HasFilter("[DeletedAt] IS NOT NULL");
+
         modelBuilder.Entity<Edition>()
             .HasOne(e => e.Book)
             .WithMany(b => b.Editions)

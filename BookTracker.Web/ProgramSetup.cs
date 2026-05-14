@@ -10,6 +10,7 @@ using BookTracker.Web.Telemetry;
 using BookTracker.Web.ViewModels;
 using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Options;
 using MudBlazor.Services;
 
@@ -95,7 +96,17 @@ public static class ProgramSetup
         builder.Services.AddDbContextFactory<BookTrackerDbContext>(options =>
             options
                 .UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
-                .AddInterceptors(new BookUpdatedAtInterceptor()));
+                .AddInterceptors(new BookUpdatedAtInterceptor())
+                // Suppress EF's PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning:
+                // Book has a soft-delete query filter (DeletedAt == null) and is the required
+                // parent of Edition/Tag joins. EF rightly notes that a Book filtered out by
+                // the filter would orphan its Editions — but our soft-delete path
+                // (BookDetailViewModel.DeleteBookAsync, BookMergeService) hard-removes
+                // children before stamping DeletedAt, so a tombstoned Book never has
+                // attached Editions in practice. Without this suppression the warning
+                // fires on every build and at startup.
+                .ConfigureWarnings(w => w.Ignore(
+                    CoreEventId.PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning)));
 
         builder.Services.Configure<TroveOptions>(
             builder.Configuration.GetSection(TroveOptions.SectionName));

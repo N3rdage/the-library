@@ -25,7 +25,13 @@ public record CatalogSnapshot(
     // Default of SyncedAt is for backwards-compat with any test or
     // caller constructing CatalogSnapshot positionally without the
     // new field.
-    DateTime LatestUpdatedAt = default);
+    DateTime LatestUpdatedAt = default,
+    // Book IDs that have been soft-deleted since the `since` token.
+    // Populated only on delta calls (since != null); always empty on
+    // a full snapshot. Bookshelf clients drop these rows from their
+    // local cache when applying a delta. Default empty for back-compat
+    // with positional CatalogSnapshot constructions.
+    IReadOnlyList<int>? DeletedIds = null);
 
 public record BookSnapshot(
     int Id,

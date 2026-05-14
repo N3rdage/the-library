@@ -1,6 +1,7 @@
 using BookTracker.Data.Models;
 using BookTracker.Shared.Catalog;
 using BookTracker.Web.Services.Catalog;
+using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Tests.Services;
 
@@ -405,5 +406,141 @@ public class CatalogSnapshotServiceTests
         Assert.Contains(delta.Authors, a => a.Name == "Isaac Asimov");
         Assert.NotEmpty(delta.Series);
         Assert.Contains(delta.Series, s => s.Name == "Foundation");
+    }
+
+    // ---- Soft-delete + deletedIds tombstones ----
+
+    [Fact]
+    public async Task GetSnapshotAsync_SoftDeletedBook_ExcludedFromBooksList()
+    {
+        // The global HasQueryFilter on Book hides soft-deleted rows
+        // from every normal query — including the snapshot's Books
+        // projection. The husk row stays in the DB only to power
+        // tombstone emission on the delta path.
+        int bookIdToKeep, bookIdToDelete;
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = new Author { Name = "Isaac Asimov" };
+            db.Authors.Add(asimov);
+            var keeper = new Book { Title = "Foundation", Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] };
+            var doomed = new Book { Title = "Doomed", Works = [new Work { Title = "Doomed", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] };
+            db.Books.AddRange(keeper, doomed);
+            await db.SaveChangesAsync();
+            bookIdToKeep = keeper.Id;
+            bookIdToDelete = doomed.Id;
+        }
+
+        using (var db = _factory.CreateDbContext())
+        {
+            var toDelete = await db.Books.FirstAsync(b => b.Id == bookIdToDelete);
+            toDelete.DeletedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+        }
+
+        var snapshot = await CreateService().GetSnapshotAsync();
+
+        var surviving = Assert.Single(snapshot.Books);
+        Assert.Equal(bookIdToKeep, surviving.Id);
+        Assert.Empty(snapshot.DeletedIds ?? []);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_FullSnapshot_ReturnsEmptyDeletedIds()
+    {
+        // No `since` ⇒ client is doing a fresh load and has no local
+        // rows to tombstone. Always return empty (not null) so client
+        // code can iterate without null-checks.
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = new Author { Name = "Isaac Asimov" };
+            db.Authors.Add(asimov);
+            var dead = new Book { Title = "Doomed", Works = [new Work { Title = "Doomed", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] };
+            db.Books.Add(dead);
+            await db.SaveChangesAsync();
+            dead.DeletedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+        }
+
+        var snapshot = await CreateService().GetSnapshotAsync(since: null);
+
+        Assert.NotNull(snapshot.DeletedIds);
+        Assert.Empty(snapshot.DeletedIds);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_DeltaWithTombstone_EmitsIdAndAdvancesLatest()
+    {
+        // The killer case: client did a full sync at T0, then a Book
+        // was soft-deleted at T1, client refreshes with since=T0. The
+        // tombstone must surface in deletedIds AND LatestUpdatedAt must
+        // advance past T1 — otherwise the client sends the same `since`
+        // forever and infinite-loops the tombstone.
+        int doomedId;
+        DateTime midpoint;
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = new Author { Name = "Isaac Asimov" };
+            db.Authors.Add(asimov);
+            db.Books.Add(new Book { Title = "Foundation", Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] });
+            var doomed = new Book { Title = "Doomed", Works = [new Work { Title = "Doomed", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] };
+            db.Books.Add(doomed);
+            await db.SaveChangesAsync();
+            doomedId = doomed.Id;
+        }
+
+        await Task.Delay(20);
+        midpoint = DateTime.UtcNow;
+        await Task.Delay(20);
+
+        using (var db = _factory.CreateDbContext())
+        {
+            var doomed = await db.Books.FirstAsync(b => b.Id == doomedId);
+            doomed.DeletedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+        }
+
+        var delta = await CreateService().GetSnapshotAsync(since: midpoint);
+
+        // Live Books with UpdatedAt > midpoint — none (the surviving
+        // book hasn't changed since its creation, which was before
+        // midpoint). Tombstones — exactly the doomed one.
+        Assert.Empty(delta.Books);
+        Assert.NotNull(delta.DeletedIds);
+        var tombstoneId = Assert.Single(delta.DeletedIds);
+        Assert.Equal(doomedId, tombstoneId);
+
+        // Advance-past-tombstone invariant: next-token must move
+        // forward so the client doesn't refetch the same tombstone.
+        Assert.True(delta.LatestUpdatedAt > midpoint,
+            $"LatestUpdatedAt must advance past tombstone's DeletedAt. midpoint={midpoint:O}, latest={delta.LatestUpdatedAt:O}");
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_DeltaWithOldTombstone_OmitsIt()
+    {
+        // Tombstone-already-seen: a Book was soft-deleted at T1, client
+        // synced past T1, client now polls with since>T1. The
+        // tombstone is older than `since` and must NOT reappear — the
+        // client has already dropped it.
+        int doomedId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = new Author { Name = "Isaac Asimov" };
+            db.Authors.Add(asimov);
+            var doomed = new Book { Title = "Doomed", Works = [new Work { Title = "Doomed", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] };
+            db.Books.Add(doomed);
+            await db.SaveChangesAsync();
+            doomedId = doomed.Id;
+            doomed.DeletedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+        }
+
+        await Task.Delay(20);
+        var afterDelete = DateTime.UtcNow;
+
+        var delta = await CreateService().GetSnapshotAsync(since: afterDelete);
+
+        Assert.NotNull(delta.DeletedIds);
+        Assert.Empty(delta.DeletedIds);
     }
 }
