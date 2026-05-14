@@ -408,6 +408,78 @@ public class CatalogSnapshotServiceTests
         Assert.Contains(delta.Series, s => s.Name == "Foundation");
     }
 
+    // ---- Enriched detail (Editions + Works) ----
+
+    [Fact]
+    public async Task GetSnapshotAsync_ProjectsEditionsWithFormatAndCoverUrl()
+    {
+        using (var db = _factory.CreateDbContext())
+        {
+            var clarke = new Author { Name = "Arthur C. Clarke" };
+            db.Authors.Add(clarke);
+            db.Books.Add(new Book
+            {
+                Title = "Rendezvous with Rama",
+                Works = [new Work { Title = "Rendezvous with Rama", WorkAuthors = [new WorkAuthor { Author = clarke, Order = 0 }] }],
+                Editions =
+                [
+                    new Edition { Isbn = "9780553287899", Format = BookFormat.MassMarketPaperback, CoverUrl = "https://covers.example/mm.jpg" },
+                    new Edition { Isbn = "9780575094192", Format = BookFormat.TradePaperback, CoverUrl = null },
+                    // No-ISBN edition still shipped (Format + maybe a
+                    // CoverUrl) so the enhanced ScanPage view doesn't
+                    // hide them.
+                    new Edition { Isbn = null, Format = BookFormat.Hardcover, CoverUrl = null },
+                ]
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var snapshot = await CreateService().GetSnapshotAsync();
+        var book = Assert.Single(snapshot.Books);
+
+        Assert.NotNull(book.Editions);
+        Assert.Equal(3, book.Editions!.Count);
+        // Format serialised as enum name string (DTO is data-project free).
+        Assert.Contains(book.Editions, e => e.Format == "MassMarketPaperback" && e.Isbn == "9780553287899");
+        Assert.Contains(book.Editions, e => e.Format == "TradePaperback" && e.Isbn == "9780575094192");
+        Assert.Contains(book.Editions, e => e.Format == "Hardcover" && e.Isbn is null);
+        // CoverUrl preserved through the projection.
+        Assert.Equal("https://covers.example/mm.jpg",
+            book.Editions.First(e => e.Format == "MassMarketPaperback").CoverUrl);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_ProjectsWorksWithPerWorkPrimaryAuthor()
+    {
+        // Compendium with multiple Works, each by a different author —
+        // the per-Work PrimaryAuthor must reflect THAT Work's lowest-
+        // Order WorkAuthor, not the Book-level rollup.
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = new Author { Name = "Isaac Asimov" };
+            var king = new Author { Name = "Stephen King" };
+            db.Authors.AddRange(asimov, king);
+            db.Books.Add(new Book
+            {
+                Title = "The Funhouse",
+                Works =
+                [
+                    new Work { Title = "Asimov story", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] },
+                    new Work { Title = "King story", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] },
+                ]
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var snapshot = await CreateService().GetSnapshotAsync();
+        var book = Assert.Single(snapshot.Books);
+
+        Assert.NotNull(book.Works);
+        Assert.Equal(2, book.Works!.Count);
+        Assert.Contains(book.Works, w => w.Title == "Asimov story" && w.PrimaryAuthor == "Isaac Asimov");
+        Assert.Contains(book.Works, w => w.Title == "King story" && w.PrimaryAuthor == "Stephen King");
+    }
+
     // ---- Soft-delete + deletedIds tombstones ----
 
     [Fact]

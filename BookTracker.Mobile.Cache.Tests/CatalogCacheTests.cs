@@ -833,6 +833,136 @@ public class CatalogCacheTests
             gaps.Select(g => g.SeriesName).ToArray());
     }
 
+    // ---- enriched detail (Editions + Works per Book) ----
+
+    [Fact]
+    public async Task GetBookEnrichedDetailAsync_ReturnsEditionsAndWorks()
+    {
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Foundation", "Asimov", ["Asimov"], "Read", 5, [],
+                    null, null, null,
+                    Editions:
+                    [
+                        new EditionSnapshot(101, "9780553293357", "MassMarketPaperback", "https://covers.example/mm.jpg"),
+                        new EditionSnapshot(102, "9780553382570", "TradePaperback", "https://covers.example/tp.jpg"),
+                    ],
+                    Works:
+                    [
+                        new WorkSnapshot(201, "Foundation", "Isaac Asimov"),
+                    ]),
+            ]));
+
+        var detail = await cache.GetBookEnrichedDetailAsync(1);
+
+        Assert.NotNull(detail);
+        Assert.Equal(2, detail!.Editions.Count);
+        Assert.Contains(detail.Editions, e => e.Isbn == "9780553293357");
+        Assert.Contains(detail.Editions, e => e.Isbn == "9780553382570");
+        var work = Assert.Single(detail.Works);
+        Assert.Equal("Foundation", work.Title);
+        Assert.Equal("Isaac Asimov", work.PrimaryAuthor);
+    }
+
+    [Fact]
+    public async Task GetBookEnrichedDetailAsync_ReturnsNullForUnknownBook()
+    {
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot());
+
+        Assert.Null(await cache.GetBookEnrichedDetailAsync(9999));
+    }
+
+    [Fact]
+    public async Task GetBookEnrichedDetailAsync_EmptyListsWhenServerOmitsEnrichedFields()
+    {
+        // Back-compat: an older server that doesn't ship Editions/Works
+        // gets the BookSnapshot default of null. Cache stores zero rows
+        // in the new tables; GetBookEnrichedDetailAsync returns the
+        // Book but with empty inner lists.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            // Editions / Works omitted — defaults to null.
+            books: [new(1, "Foundation", "Asimov", ["Asimov"], "Read", 5, [], null, null)]));
+
+        var detail = await cache.GetBookEnrichedDetailAsync(1);
+        Assert.NotNull(detail);
+        Assert.Empty(detail!.Editions);
+        Assert.Empty(detail.Works);
+    }
+
+    [Fact]
+    public async Task ApplyDeltaAsync_ReplacesEditionsAndWorksOnUpsert()
+    {
+        // Editing the book on the server (renaming, swapping format,
+        // removing an edition) must show up after a delta refresh —
+        // the per-Book wipe-and-rewrite on book_editions / book_works
+        // is what makes the cache match the server.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Foundation", "Asimov", ["Asimov"], "Read", 5, [],
+                    null, null, null,
+                    Editions: [new EditionSnapshot(101, "9780000000001", "Hardcover", null)],
+                    Works: [new WorkSnapshot(201, "Foundation", "Asimov")]),
+            ],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 8, 0, 0, DateTimeKind.Utc)));
+
+        // Delta: same book, but the Edition list moved to a different
+        // ISBN/format and a second Work was attached.
+        await cache.ApplyDeltaAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Foundation", "Asimov", ["Asimov"], "Read", 5, [],
+                    null, null, null,
+                    Editions: [new EditionSnapshot(102, "9780000000002", "TradePaperback", null)],
+                    Works:
+                    [
+                        new WorkSnapshot(201, "Foundation", "Asimov"),
+                        new WorkSnapshot(202, "Foundation and Empire", "Asimov"),
+                    ]),
+            ],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc)));
+
+        var detail = await cache.GetBookEnrichedDetailAsync(1);
+        Assert.NotNull(detail);
+        // Old Edition gone, new one present.
+        var edition = Assert.Single(detail!.Editions);
+        Assert.Equal(102, edition.Id);
+        Assert.Equal("9780000000002", edition.Isbn);
+        // Two Works after the delta.
+        Assert.Equal(2, detail.Works.Count);
+    }
+
+    [Fact]
+    public async Task ApplyDeltaAsync_DeletedIdsRemovesEditionsAndWorks()
+    {
+        // Tombstone for a Book must also wipe its book_editions and
+        // book_works rows — otherwise GetBookEnrichedDetailAsync on
+        // a dead Book ID would return orphan Editions when called
+        // through a different lookup path (or surface in future
+        // queries that join over the tables).
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Doomed", "X", ["X"], "Read", 0, [],
+                    null, null, null,
+                    Editions: [new EditionSnapshot(101, "9999999999999", "Hardcover", null)],
+                    Works: [new WorkSnapshot(201, "Doomed", "X")]),
+            ],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 8, 0, 0, DateTimeKind.Utc)));
+
+        await cache.ApplyDeltaAsync(SampleSnapshot(
+            deletedIds: [1],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc)));
+
+        Assert.Null(await cache.GetBookEnrichedDetailAsync(1));
+    }
+
     // ---- helpers ----
 
     private static byte[] MakePngBytes(int width, int height)

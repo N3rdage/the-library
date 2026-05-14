@@ -66,6 +66,8 @@ public class CatalogCache : ICatalogCache
         _db = new SQLiteAsyncConnection(dbPath);
         await _db.CreateTableAsync<CachedBook>();
         await _db.CreateTableAsync<CachedBookIsbn>();
+        await _db.CreateTableAsync<CachedBookEdition>();
+        await _db.CreateTableAsync<CachedBookWork>();
         await _db.CreateTableAsync<CachedAuthor>();
         await _db.CreateTableAsync<CachedSeries>();
         await _db.CreateTableAsync<CachedMeta>();
@@ -110,6 +112,8 @@ public class CatalogCache : ICatalogCache
         {
             conn.DeleteAll<CachedBook>();
             conn.DeleteAll<CachedBookIsbn>();
+            conn.DeleteAll<CachedBookEdition>();
+            conn.DeleteAll<CachedBookWork>();
             conn.DeleteAll<CachedAuthor>();
             conn.DeleteAll<CachedSeries>();
             conn.DeleteAll<CachedMeta>();
@@ -147,6 +151,30 @@ public class CatalogCache : ICatalogCache
                             Isbn = isbn,
                         });
                     }
+                }
+                // Editions + Works — back-compat for older servers
+                // that don't ship these yet (deserialised as null).
+                // No-op when null/empty.
+                foreach (var edition in book.Editions ?? [])
+                {
+                    conn.Insert(new CachedBookEdition
+                    {
+                        Id = edition.Id,
+                        BookId = book.Id,
+                        Isbn = edition.Isbn,
+                        Format = edition.Format ?? "",
+                        CoverUrl = edition.CoverUrl,
+                    });
+                }
+                foreach (var work in book.Works ?? [])
+                {
+                    conn.Insert(new CachedBookWork
+                    {
+                        Id = work.Id,
+                        BookId = book.Id,
+                        Title = work.Title ?? "",
+                        PrimaryAuthor = work.PrimaryAuthor ?? "",
+                    });
                 }
             }
 
@@ -257,15 +285,47 @@ public class CatalogCache : ICatalogCache
                         });
                     }
                 }
+
+                // Editions + Works: same wipe-and-rewrite pattern as
+                // the ISBN join rows. Each row's PK is the server
+                // Id, so we explicitly delete by BookId rather than
+                // by PK (the incoming Ids would replace, but stale
+                // rows from a since-deleted Edition would linger).
+                conn.Execute("DELETE FROM book_editions WHERE BookId = ?", book.Id);
+                foreach (var edition in book.Editions ?? [])
+                {
+                    conn.Insert(new CachedBookEdition
+                    {
+                        Id = edition.Id,
+                        BookId = book.Id,
+                        Isbn = edition.Isbn,
+                        Format = edition.Format ?? "",
+                        CoverUrl = edition.CoverUrl,
+                    });
+                }
+                conn.Execute("DELETE FROM book_works WHERE BookId = ?", book.Id);
+                foreach (var work in book.Works ?? [])
+                {
+                    conn.Insert(new CachedBookWork
+                    {
+                        Id = work.Id,
+                        BookId = book.Id,
+                        Title = work.Title ?? "",
+                        PrimaryAuthor = work.PrimaryAuthor ?? "",
+                    });
+                }
             }
 
             // Tombstones — server-side soft-deletes since the last
-            // sync token. Delete by PK plus the book_isbns rows so
-            // ISBN lookups don't surface a dead book's ISBN.
+            // sync token. Delete by PK plus the per-Book join rows
+            // (book_isbns / book_editions / book_works) so a dead
+            // book doesn't leak through any read path.
             foreach (var deletedId in snapshot.DeletedIds ?? [])
             {
                 conn.Delete<CachedBook>(deletedId);
                 conn.Execute("DELETE FROM book_isbns WHERE BookId = ?", deletedId);
+                conn.Execute("DELETE FROM book_editions WHERE BookId = ?", deletedId);
+                conn.Execute("DELETE FROM book_works WHERE BookId = ?", deletedId);
             }
 
             // Authors + Series — server always full-lists on every
@@ -487,6 +547,41 @@ public class CatalogCache : ICatalogCache
         return results
             .OrderBy(g => g.SeriesName, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    public async Task<BookEnrichedDetail?> GetBookEnrichedDetailAsync(int bookId)
+    {
+        // Confirm the Book exists in the cache before reporting on
+        // its Editions/Works — otherwise an orphan Edition row (if
+        // one ever crept in) would surface a nonsense detail page.
+        var book = await Db.FindAsync<CachedBook>(bookId);
+        if (book is null) return null;
+
+        var editionRows = await Db.Table<CachedBookEdition>()
+            .Where(e => e.BookId == bookId)
+            .ToListAsync();
+        var workRows = await Db.Table<CachedBookWork>()
+            .Where(w => w.BookId == bookId)
+            .ToListAsync();
+
+        var editions = editionRows
+            // Format alpha-sort gives a stable order (Hardcover →
+            // MassMarketPaperback → Paperback → ...), tie-break by
+            // Isbn so two paperback rows don't randomise on each read.
+            .OrderBy(e => e.Format, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(e => e.Isbn ?? "", StringComparer.OrdinalIgnoreCase)
+            .Select(e => new EditionSnapshot(e.Id, e.Isbn, e.Format, e.CoverUrl))
+            .ToList();
+        var works = workRows
+            // Server projects in OrderBy(w => w.Id) — same order is
+            // useful client-side because that's how the PrimaryAuthor
+            // convention picks the "first Work" for series + author
+            // rollups elsewhere.
+            .OrderBy(w => w.Id)
+            .Select(w => new WorkSnapshot(w.Id, w.Title, w.PrimaryAuthor))
+            .ToList();
+
+        return new BookEnrichedDetail(editions, works);
     }
 
     public async Task<CacheMeta?> GetMetaAsync()

@@ -1,24 +1,25 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!--
-  BookTracker app icon — foreground layer.
+  Bookshelf app icon — foreground layer.
 
-  Mirrors the PWA's BookTracker.Web/wwwroot/icons/icon.svg design:
-  a darker-purple book spine block on the left, three white "text
-  line" stripes representing book pages. Sits on top of the solid
-  purple background in appicon.svg.
+  Spine + text-line design carried over from the previous purple-themed
+  icon. Recoloured to match the in-app palette so the icon and the
+  running app read as one product:
+    spine       brass    #A67B3A  primary visible mass
+    text lines  parchment #F2EADB  matches the in-app card surface
 
-  The original PWA design fills a 512x512 viewBox edge-to-edge. For
-  Android adaptive icons we need the visible content to live within
-  the inner ~66% safe zone (otherwise launcher masks crop it on round
-  / squircle shapes). The nested 0-512 viewBox is mapped into a
-  300x300 region centred at (78,78)..(378,378), scaling the design
-  down to ~58% so it sits comfortably inside the safe zone.
+  The original design fills a 512x512 viewBox edge-to-edge. For Android
+  adaptive icons the visible content has to live within the inner ~66%
+  safe zone (launcher masks crop it on round / squircle shapes). The
+  nested 0-512 viewBox is mapped into a 300x300 region centred at
+  (78,78)..(378,378), scaling the design to ~58% so it sits comfortably
+  inside the safe zone.
 -->
 <svg width="456" height="456" viewBox="0 0 456 456" xmlns="http://www.w3.org/2000/svg">
     <svg x="78" y="78" width="300" height="300" viewBox="0 0 512 512">
-        <rect x="96" y="72" width="96" height="368" fill="#4F378B" />
-        <line x1="208" y1="170" x2="400" y2="170" stroke="#ffffff" stroke-width="14" stroke-linecap="round" />
-        <line x1="208" y1="250" x2="400" y2="250" stroke="#ffffff" stroke-width="14" stroke-linecap="round" />
-        <line x1="208" y1="330" x2="348" y2="330" stroke="#ffffff" stroke-width="14" stroke-linecap="round" />
+        <rect x="96" y="72" width="96" height="368" fill="#A67B3A" />
+        <line x1="208" y1="170" x2="400" y2="170" stroke="#F2EADB" stroke-width="14" stroke-linecap="round" />
+        <line x1="208" y1="250" x2="400" y2="250" stroke="#F2EADB" stroke-width="14" stroke-linecap="round" />
+        <line x1="208" y1="330" x2="348" y2="330" stroke="#F2EADB" stroke-width="14" stroke-linecap="round" />
     </svg>
 </svg>

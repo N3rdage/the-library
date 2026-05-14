@@ -63,12 +63,13 @@
 
                 <!-- In-cache result. Border (replaces obsolete Frame in
                      .NET 9+) — needs an explicit StrokeShape for the
-                     corner-radius effect. Two-column inner layout:
-                     cover thumbnail on the left, text stack on the
-                     right. FoundCover is bound at runtime from the
-                     local cover-cache path (or shows the grey
-                     placeholder when no cover is set / not yet
-                     fetched). -->
+                     corner-radius effect. Top row is two-column: cover
+                     thumbnail on the left, primary text stack on the
+                     right. Below sit two optional sections (Works for
+                     compendiums, Editions for multi-edition books) —
+                     populated and shown conditionally by code-behind.
+                     Sections rendered as code-behind View children so
+                     a variable row count works without XAML gymnastics. -->
                 <Border
                     x:Name="FoundFrame"
                     IsVisible="False"
@@ -78,34 +79,61 @@
                     <Border.StrokeShape>
                         <RoundRectangle CornerRadius="8" />
                     </Border.StrokeShape>
-                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                        <Grid Grid.Column="0"
-                              WidthRequest="80"
-                              HeightRequest="120"
-                              BackgroundColor="{AppThemeBinding Light=#E0DAC8, Dark=#2A2A2A}"
-                              VerticalOptions="Start">
-                            <!-- Single child swaps between two states.
-                                 Image is hidden until the local path
-                                 lands; FoundCoverPlaceholder fills the
-                                 grey square until then. -->
-                            <Label x:Name="FoundCoverPlaceholder"
-                                   Text="📖"
-                                   FontSize="32"
-                                   HorizontalOptions="Center"
-                                   VerticalOptions="Center"
-                                   TextColor="{AppThemeBinding Light=#A67B3A, Dark=#6B5D4A}" />
-                            <Image x:Name="FoundCover"
-                                   IsVisible="False"
-                                   Aspect="AspectFit" />
+                    <VerticalStackLayout Spacing="12">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                            <Grid Grid.Column="0"
+                                  WidthRequest="80"
+                                  HeightRequest="120"
+                                  BackgroundColor="{AppThemeBinding Light=#E0DAC8, Dark=#2A2A2A}"
+                                  VerticalOptions="Start">
+                                <!-- Single child swaps between two states.
+                                     Image is hidden until the local path
+                                     lands; FoundCoverPlaceholder fills the
+                                     grey square until then. -->
+                                <Label x:Name="FoundCoverPlaceholder"
+                                       Text="📖"
+                                       FontSize="32"
+                                       HorizontalOptions="Center"
+                                       VerticalOptions="Center"
+                                       TextColor="{AppThemeBinding Light=#A67B3A, Dark=#6B5D4A}" />
+                                <Image x:Name="FoundCover"
+                                       IsVisible="False"
+                                       Aspect="AspectFit" />
+                            </Grid>
+                            <VerticalStackLayout Grid.Column="1" Spacing="6">
+                                <Label x:Name="FoundTitle" FontAttributes="Bold" FontSize="18" />
+                                <Label x:Name="FoundAuthors" FontSize="14" TextColor="{AppThemeBinding Light=#555, Dark=#BBB}" />
+                                <Label x:Name="FoundStatusRating" FontSize="13" />
+                                <Label x:Name="FoundIsbn" FontSize="12" FontFamily="Courier New" TextColor="{AppThemeBinding Light=#555, Dark=#BBB}" />
+                                <Button x:Name="OpenInAppButton" Text="Open in app →" Clicked="OnOpenInAppClicked" HorizontalOptions="Start" />
+                            </VerticalStackLayout>
                         </Grid>
-                        <VerticalStackLayout Grid.Column="1" Spacing="6">
-                            <Label x:Name="FoundTitle" FontAttributes="Bold" FontSize="18" />
-                            <Label x:Name="FoundAuthors" FontSize="14" TextColor="{AppThemeBinding Light=#555, Dark=#BBB}" />
-                            <Label x:Name="FoundStatusRating" FontSize="13" />
-                            <Label x:Name="FoundIsbn" FontSize="12" FontFamily="Courier New" TextColor="{AppThemeBinding Light=#555, Dark=#BBB}" />
-                            <Button x:Name="OpenInAppButton" Text="Open in app →" Clicked="OnOpenInAppClicked" HorizontalOptions="Start" />
+
+                        <!-- Works section — hidden by default; shown when
+                             the Book has more than one Work (compendium).
+                             Header label + rows populated in code-behind. -->
+                        <VerticalStackLayout x:Name="WorksSection"
+                                             IsVisible="False"
+                                             Spacing="4">
+                            <Label Text="Works in this book"
+                                   FontSize="12"
+                                   FontAttributes="Bold"
+                                   TextColor="{AppThemeBinding Light=#3E2723, Dark=#A67B3A}" />
+                            <VerticalStackLayout x:Name="WorksLayout" Spacing="4" />
                         </VerticalStackLayout>
-                    </Grid>
+
+                        <!-- Editions section — hidden by default; shown
+                             when the Book has more than one Edition. -->
+                        <VerticalStackLayout x:Name="EditionsSection"
+                                             IsVisible="False"
+                                             Spacing="4">
+                            <Label Text="Editions you own"
+                                   FontSize="12"
+                                   FontAttributes="Bold"
+                                   TextColor="{AppThemeBinding Light=#3E2723, Dark=#A67B3A}" />
+                            <VerticalStackLayout x:Name="EditionsLayout" Spacing="6" />
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
                 </Border>
 
                 <!-- Not-in-cache result -->

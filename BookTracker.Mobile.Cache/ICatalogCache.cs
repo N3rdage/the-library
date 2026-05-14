@@ -69,6 +69,14 @@ public interface ICatalogCache
     /// gaps" page — "in the bookshop, what am I missing?"</summary>
     Task<IReadOnlyList<SeriesGap>> GetSeriesGapsAsync();
 
+    /// <summary>Reads the per-Book Editions + Works detail for the
+    /// enhanced ScanPage view. Returns null when the Book isn't in
+    /// the cache. Editions list is sorted by Format then Isbn; Works
+    /// list is sorted by Work.Id (mirrors the server's "first Work
+    /// by Id" convention). Empty inner lists are possible when the
+    /// server hasn't shipped the enriched fields yet (back-compat).</summary>
+    Task<BookEnrichedDetail?> GetBookEnrichedDetailAsync(int bookId);
+
     /// <summary>Stored sync metadata — version, syncedAt, bookCount,
     /// authorCount. Null if the cache has never been populated.</summary>
     Task<CacheMeta?> GetMetaAsync();
@@ -103,6 +111,16 @@ public record SeriesGap(
     int ExpectedCount,
     int OwnedCount,
     IReadOnlyList<int> MissingOrders);
+
+/// <summary>Per-Book enriched detail surfaced in Bookshelf's ScanPage
+/// FoundFrame — the "which Editions of this do I own, and what Works
+/// does it contain?" view. Editions + Works lists are always non-null;
+/// callers check Count and hide the corresponding section when ≤ 1
+/// (multi-edition / multi-work books are the cases that benefit from
+/// the enriched display).</summary>
+public record BookEnrichedDetail(
+    IReadOnlyList<EditionSnapshot> Editions,
+    IReadOnlyList<WorkSnapshot> Works);
 
 public record CacheMeta(
     string? Version,

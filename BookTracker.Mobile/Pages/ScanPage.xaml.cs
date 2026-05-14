@@ -134,12 +134,17 @@ public partial class ScanPage : ContentPage
         StatusLabel.Text = $"Looking up {isbn}…";
         FoundFrame.IsVisible = false;
         MissingFrame.IsVisible = false;
-        // Reset the cover slot before any new lookup — keeps a stale
-        // image from the previous scan off the new card while we wait
-        // for the new fetch (or fall through to the placeholder).
+        // Reset the cover slot + the enriched-detail sections before
+        // any new lookup — keeps stale content from the previous scan
+        // off the new card while we wait for the new fetches (or
+        // fall through to the placeholder / hidden sections).
         FoundCover.IsVisible = false;
         FoundCover.Source = null;
         FoundCoverPlaceholder.IsVisible = true;
+        WorksSection.IsVisible = false;
+        EditionsSection.IsVisible = false;
+        WorksLayout.Children.Clear();
+        EditionsLayout.Children.Clear();
         _coverCts?.Cancel();
 
         BookSnapshot? book;
@@ -181,7 +186,185 @@ public partial class ScanPage : ContentPage
             var capturedToken = _coverCts.Token;
             var capturedBookId = book.Id;
             _ = LoadCoverAsync(capturedBookId, capturedToken);
+
+            // Enriched detail (Works + Editions). Fire-and-forget so
+            // the basic card renders without waiting for the SQLite
+            // round-trip; the sections appear inline when ready.
+            _ = LoadEnrichedDetailAsync(capturedBookId, capturedToken);
         }
+    }
+
+    private async Task LoadEnrichedDetailAsync(int bookId, CancellationToken ct)
+    {
+        BookEnrichedDetail? detail;
+        try
+        {
+            detail = await _cache.GetBookEnrichedDetailAsync(bookId);
+        }
+        catch
+        {
+            // Enriched detail is gravy — failure to load it shouldn't
+            // poison the main result card. Sections stay hidden.
+            return;
+        }
+        if (detail is null || ct.IsCancellationRequested) return;
+
+        await MainThread.InvokeOnMainThreadAsync(() =>
+        {
+            if (ct.IsCancellationRequested) return;
+
+            // Works section: only meaningful for multi-Work compendiums.
+            // Single-Work books would just echo the title we already
+            // show — noise.
+            if (detail.Works.Count > 1)
+            {
+                foreach (var work in detail.Works)
+                {
+                    WorksLayout.Children.Add(BuildWorkRow(work));
+                }
+                WorksSection.IsVisible = true;
+            }
+
+            // Editions section: only meaningful when the user owns
+            // multiple editions of the Book. One-edition books would
+            // just echo the cover/ISBN already shown in the top row.
+            if (detail.Editions.Count > 1)
+            {
+                foreach (var edition in detail.Editions)
+                {
+                    EditionsLayout.Children.Add(BuildEditionRow(edition));
+                }
+                EditionsSection.IsVisible = true;
+            }
+        });
+    }
+
+    private static View BuildWorkRow(WorkSnapshot work)
+    {
+        // "Title — Author" per work; tight 13px so a 12-work compendium
+        // doesn't overflow the FoundFrame visually.
+        return new Label
+        {
+            Text = string.IsNullOrWhiteSpace(work.PrimaryAuthor)
+                ? work.Title
+                : $"{work.Title} — {work.PrimaryAuthor}",
+            FontSize = 13,
+            TextColor = Color.FromArgb("#2C2416"),
+            LineBreakMode = LineBreakMode.WordWrap,
+        };
+    }
+
+    private View BuildEditionRow(EditionSnapshot edition)
+    {
+        // Two-column layout: small cover thumb + format/ISBN stack.
+        // Smaller than the main FoundCover (40x60 vs 80x120) so the
+        // section feels visually subordinate to the primary card.
+        var coverPlaceholder = new Label
+        {
+            Text = "📖",
+            FontSize = 16,
+            HorizontalOptions = LayoutOptions.Center,
+            VerticalOptions = LayoutOptions.Center,
+            TextColor = Color.FromArgb("#A67B3A"),
+        };
+        var coverImage = new Image
+        {
+            IsVisible = false,
+            Aspect = Aspect.AspectFit,
+        };
+        var coverSlot = new Grid
+        {
+            WidthRequest = 40,
+            HeightRequest = 60,
+            BackgroundColor = Color.FromArgb("#E0DAC8"),
+            VerticalOptions = LayoutOptions.Start,
+            Children = { coverPlaceholder, coverImage },
+        };
+
+        var formatLabel = new Label
+        {
+            Text = FormatPrettyName(edition.Format),
+            FontSize = 13,
+            FontAttributes = FontAttributes.Bold,
+            TextColor = Color.FromArgb("#2C2416"),
+        };
+        var isbnLabel = new Label
+        {
+            Text = string.IsNullOrWhiteSpace(edition.Isbn) ? "no ISBN" : edition.Isbn,
+            FontSize = 11,
+            FontFamily = "Courier New",
+            TextColor = Color.FromArgb("#6B5D4A"),
+        };
+
+        var textStack = new VerticalStackLayout
+        {
+            Spacing = 2,
+            VerticalOptions = LayoutOptions.Center,
+            Children = { formatLabel, isbnLabel },
+        };
+
+        var row = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition(GridLength.Auto),
+                new ColumnDefinition(GridLength.Star),
+            },
+            ColumnSpacing = 10,
+        };
+        row.Add(coverSlot, 0, 0);
+        row.Add(textStack, 1, 0);
+
+        // Per-edition cover fetch — uses the edition's CoverUrl (the
+        // edition-specific cover, distinct from Book.DefaultCoverArtUrl).
+        // Cache miss / no-URL silently leaves the placeholder. We
+        // route through HttpClient directly rather than the cache's
+        // EnsureCoverCachedAsync — that one keys on Book.Id and would
+        // overwrite the main cover. For now, edition thumbs are a
+        // best-effort in-memory fetch with no disk cache; revisit if
+        // re-fetching every scan becomes a problem.
+        _ = LoadEditionCoverAsync(edition.CoverUrl, coverImage, coverPlaceholder);
+
+        return row;
+    }
+
+    private async Task LoadEditionCoverAsync(string? coverUrl, Image target, Label placeholder)
+    {
+        if (string.IsNullOrWhiteSpace(coverUrl)) return;
+        try
+        {
+            var http = _httpFactory.CreateClient("covers");
+            var bytes = await http.GetByteArrayAsync(coverUrl);
+            await MainThread.InvokeOnMainThreadAsync(() =>
+            {
+                target.Source = ImageSource.FromStream(() => new MemoryStream(bytes));
+                target.IsVisible = true;
+                placeholder.IsVisible = false;
+            });
+        }
+        catch
+        {
+            // Placeholder stays. No retry layer — the section is
+            // best-effort gravy on top of the main card.
+        }
+    }
+
+    private static string FormatPrettyName(string format)
+    {
+        // BookFormat enum names are PascalCase (MassMarketPaperback,
+        // TradePaperback, etc) — render with a space before each
+        // capital so they read naturally.
+        if (string.IsNullOrEmpty(format)) return "(unknown)";
+        var sb = new System.Text.StringBuilder(format.Length + 4);
+        for (int i = 0; i < format.Length; i++)
+        {
+            if (i > 0 && char.IsUpper(format[i]) && !char.IsUpper(format[i - 1]))
+            {
+                sb.Append(' ');
+            }
+            sb.Append(format[i]);
+        }
+        return sb.ToString();
     }
 
     private async Task LoadCoverAsync(int bookId, CancellationToken ct)

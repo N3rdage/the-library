@@ -75,6 +75,38 @@ public class CatalogSnapshotService(
                     .Where(e => e.Isbn != null && e.Isbn != "")
                     .Select(e => e.Isbn!)
                     .ToList(),
+                // Per-Edition detail for the Bookshelf enhanced-card
+                // view. Includes the no-ISBN editions (pre-1974) too —
+                // those still have a Format + maybe a CoverUrl worth
+                // showing. Distinct from the Isbns flat list above
+                // which filters them out.
+                Editions = b.Editions
+                    .Select(e => new
+                    {
+                        e.Id,
+                        e.Isbn,
+                        e.Format,
+                        e.CoverUrl,
+                    })
+                    .ToList(),
+                // Per-Work detail for compendiums. PrimaryAuthor per
+                // Work picks the lowest-Order WorkAuthor on THAT work
+                // (not the Book-level rollup) so the compendium row
+                // shows each story's true attribution. Single-Work
+                // books still ship a one-element list; the client
+                // hides the section when Count <= 1.
+                Works = b.Works
+                    .OrderBy(w => w.Id)
+                    .Select(w => new
+                    {
+                        w.Id,
+                        w.Title,
+                        WorkAuthors = w.WorkAuthors
+                            .OrderBy(wa => wa.Order)
+                            .Select(wa => wa.Author.Name)
+                            .ToList(),
+                    })
+                    .ToList(),
                 // Series membership lives on Work. For multi-Work
                 // compendiums take the first Work by Work.Id —
                 // matches the PrimaryAuthor convention. Single-Work
@@ -105,7 +137,16 @@ public class CatalogSnapshotService(
                 b.Isbns.Distinct().ToList(),
                 b.FirstWorkSeries?.SeriesId,
                 b.FirstWorkSeries?.SeriesOrder,
-                b.DefaultCoverArtUrl))
+                b.DefaultCoverArtUrl,
+                Editions: b.Editions
+                    .Select(e => new EditionSnapshot(e.Id, e.Isbn, e.Format.ToString(), e.CoverUrl))
+                    .ToList(),
+                Works: b.Works
+                    .Select(w => new WorkSnapshot(
+                        w.Id,
+                        w.Title,
+                        w.WorkAuthors.FirstOrDefault() ?? "(unknown)"))
+                    .ToList()))
             .OrderBy(b => b.Title)
             .ToList();
 
