@@ -56,29 +56,39 @@ internal class CachedBookIsbn
 // One row per Edition of a Book. Backs the enhanced ScanPage "which
 // editions do I already own?" view — Hardcover, Paperback, MM, etc.
 // Indexed on BookId so the per-Book lookup is a B-tree hit.
+//
+// Surrogate AutoIncrement PK + natural EditionId column — matches the
+// CachedBookIsbn pattern. Edition is 1:N with Book on the server side
+// (an Edition belongs to one Book), so a natural-Id PK wouldn't collide
+// today, but the symmetric shape with CachedBookWork (which DOES need
+// the surrogate to avoid the shared-Work collision) is safer to maintain.
 [Table("book_editions")]
 internal class CachedBookEdition
 {
-    // Edition.Id from the server — keeps a stable identity so future
-    // upserts could diff at the Edition level. For PR 1 we wipe-and-
-    // rewrite per Book on every populate / delta-upsert; the Id is
-    // just useful for testability and future incremental shapes.
-    [PrimaryKey] public int Id { get; set; }
+    [PrimaryKey, AutoIncrement] public int RowId { get; set; }
     [Indexed] public int BookId { get; set; }
+    public int EditionId { get; set; }
     public string? Isbn { get; set; }
     public string Format { get; set; } = string.Empty;
     public string? CoverUrl { get; set; }
 }
 
-// One row per Work belonging to a Book. Almost always one Work per
-// Book; multi-Work rows are compendiums (anthologies, collections).
-// Surfaced in ScanPage when Count > 1 — "Contains: 'Foundation',
-// 'Second Foundation', ...".
+// One row per (Book, Work) pair — Book ↔ Work is many-to-many on the
+// server (a Work like Lovecraft's "Call of Cthulhu" can appear in
+// multiple anthologies you own). Surrogate AutoIncrement PK so the
+// same Work.Id can repeat across rows under different BookIds without
+// hitting a UNIQUE constraint. Indexed on BookId for the per-Book
+// lookup in GetBookEnrichedDetailAsync.
+//
+// Surfaced in ScanPage when the Book has more than one Work —
+// "Contains: 'Foundation', 'Second Foundation', ...". Single-Work
+// books still get a row each but the UI hides the section.
 [Table("book_works")]
 internal class CachedBookWork
 {
-    [PrimaryKey] public int Id { get; set; }
+    [PrimaryKey, AutoIncrement] public int RowId { get; set; }
     [Indexed] public int BookId { get; set; }
+    public int WorkId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string PrimaryAuthor { get; set; } = string.Empty;
 }
