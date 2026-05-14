@@ -54,16 +54,26 @@ Deliberately muted so they sit inside the palette rather than shouting over it. 
 | Warning | `#B8861B` | Soft warnings — staleness banners, "consider re-syncing" prompts |
 | Error | `#9B3B2E` | Validation errors, exception messages |
 
-### Brand-mark purple (icon-only)
+### Brand-mark colours (icon-only)
 
-The PWA / launcher icon uses Material You purple as a brand-mark holdover from before the leather palette was settled. **These two values are intentionally outside the in-app palette** — they live only in the icon SVGs and the PWA manifest `theme_color`. Listed here for completeness; do not use elsewhere.
+Each app's launcher icon is its own brand mark, deliberately distinct from the in-app palette so a phone with both apps installed reads them as different things at a glance.
+
+**Bookcase PWA** uses Material You purple — a holdover from before the leather palette was settled. **These two values are intentionally outside the in-app palette** — they live only in the Web icon SVG and the PWA manifest `theme_color`.
 
 | Name | Hex | Where |
 |---|---|---|
-| Brand purple | `#6750A4` | `BookTracker.Web/wwwroot/icons/icon.svg:2`, `BookTracker.Mobile/Resources/AppIcon/appicon.svg:7`, `wwwroot/manifest.webmanifest:10`, `Components/App.razor:15` (theme-color meta) |
-| Brand purple dark | `#4F378B` | Same SVGs, used for the book spine block |
+| Brand purple | `#6750A4` | `BookTracker.Web/wwwroot/icons/icon.svg:2`, `wwwroot/manifest.webmanifest:10`, `Components/App.razor:15` (theme-color meta) |
+| Brand purple dark | `#4F378B` | Same SVG, used for the book spine block |
 
-See [Known inconsistencies](#known-inconsistencies) for the long-term plan.
+**Bookshelf MAUI** uses the in-app palette (espresso background + brass spine + parchment text lines) so the launcher icon and running app read as one product. Distinct from the Bookcase brand purple so installing both apps doesn't put two identical purple icons in the launcher.
+
+| Name | Hex | Where |
+|---|---|---|
+| Espresso (icon bg) | `#3E2723` | `BookTracker.Mobile/Resources/AppIcon/appicon.svg`, `BookTracker.Mobile/BookTracker.Mobile.csproj` (MauiIcon + MauiSplashScreen `Color`) |
+| Brass (icon spine) | `#A67B3A` | `BookTracker.Mobile/Resources/AppIcon/appiconfg.svg`, `BookTracker.Mobile/Resources/Splash/splash.svg` |
+| Parchment (icon text lines) | `#F2EADB` | Same SVGs as brass row |
+
+See [Known inconsistencies](#known-inconsistencies) for the Bookcase-side resolution still pending.
 
 ### Surface accent colours (Web-only, transitional)
 
@@ -315,9 +325,13 @@ Note: the Mobile scan target uses Material green rather than the leather palette
 
 ## Iconography
 
-### Brand mark (PWA + Mobile launcher)
+### Brand marks
 
-Source: `BookTracker.Web/wwwroot/icons/icon.svg`. 512×512 viewBox; rounded purple rectangle background with a darker book-spine block on the left and three white text-line stripes representing the pages.
+Each app has its own launcher icon — same spine + text-lines design, different palette.
+
+**Bookcase PWA:** `BookTracker.Web/wwwroot/icons/icon.svg`. 512×512 viewBox; rounded purple rectangle background with a darker book-spine block on the left and three white text-line stripes representing the pages.
+
+**Bookshelf MAUI:** `BookTracker.Mobile/Resources/AppIcon/appicon.svg` (background) + `appiconfg.svg` (foreground). Espresso `#3E2723` background, brass `#A67B3A` spine, parchment `#F2EADB` text lines — the in-app palette, so the launcher icon and running app are visually continuous. Different from Bookcase's purple so a phone with both apps installed shows two distinct icons in the launcher.
 
 Derivatives:
 
@@ -326,9 +340,9 @@ Derivatives:
 | `BookTracker.Web/wwwroot/icons/icon-192.png` | PWA manifest 192×192 (Android home-screen install) |
 | `BookTracker.Web/wwwroot/icons/icon-512.png` | PWA manifest 512×512 (Android splash, taskbar high-DPI) |
 | `BookTracker.Web/wwwroot/icons/apple-touch-icon.png` | iOS Safari "Add to home screen" |
-| `BookTracker.Mobile/Resources/AppIcon/appicon.svg` | MAUI Android adaptive-icon **background** layer — solid `#6750A4` matching the PWA |
-| `BookTracker.Mobile/Resources/AppIcon/appiconfg.svg` | MAUI Android adaptive-icon **foreground** layer — spine + text lines, scaled to 58% and centred in the inner 300×300 safe zone of the 456×456 canvas |
-| `BookTracker.Mobile/Resources/Splash/splash.svg` | MAUI splash screen — same spine + lines design, full-bleed; MauiSplashScreen Color is set to `#6750A4` so the surrounding fill matches the icon background |
+| `BookTracker.Mobile/Resources/AppIcon/appicon.svg` | MAUI Android adaptive-icon **background** layer — solid espresso `#3E2723` (the in-app header banner colour). Differentiates from Bookcase's purple. |
+| `BookTracker.Mobile/Resources/AppIcon/appiconfg.svg` | MAUI Android adaptive-icon **foreground** layer — brass `#A67B3A` spine + parchment `#F2EADB` text lines, scaled to 58% and centred in the inner 300×300 safe zone of the 456×456 canvas |
+| `BookTracker.Mobile/Resources/Splash/splash.svg` | MAUI splash screen — same spine + lines design, full-bleed; MauiSplashScreen Color is set to `#3E2723` so the surrounding fill matches the icon background |
 
 PNG renders are generated reproducibly by `scripts/generate-pwa-icons.ps1`.
 
@@ -396,12 +410,14 @@ The honest version: not everything is consistent yet. These are the gaps the doc
 
 ### Brand-mark purple vs in-app leather palette
 
-The launcher icon and PWA `theme_color` use Material You purple (`#6750A4` / `#4F378B`) — a holdover from before the leather/brass palette was decided for the in-app UI. The icon-to-app transition is therefore not visually continuous: tap the purple icon, land on a parchment-and-leather screen.
+The Bookcase PWA launcher icon and `theme_color` use Material You purple (`#6750A4` / `#4F378B`) — a holdover from before the leather/brass palette was decided for the in-app UI. Tap the purple icon, land on a parchment-and-leather screen: not visually continuous.
 
-Options for resolution (deferred):
+**Bookshelf MAUI was rebranded** to the in-app palette (espresso bg + brass spine + parchment text lines) when Drew installed both apps and the two purple icons sat next to each other in the launcher. So the inconsistency is now half-resolved — Bookshelf is consistent end-to-end; Bookcase still has the purple gap.
 
-1. **Rebrand the icon** to the leather palette (leather spine block + parchment lines + brass border). Most invasive — touches `icon.svg`, the PNG renders via the regen script, MAUI's appicon SVGs, MAUI splash, manifest `theme_color`, App.razor `theme-color` meta.
-2. **Adopt the icon palette in-app** — invert the choice: use the purple as the actual brand identity, retheme the in-app palette. Wider blast radius than (1).
+Options for the remaining Bookcase resolution (deferred):
+
+1. **Rebrand the Bookcase icon** to the leather palette (matching Bookshelf's new design or its own variant). Touches `BookTracker.Web/wwwroot/icons/icon.svg`, the PNG renders via the regen script, `wwwroot/manifest.webmanifest` `theme_color`, `Components/App.razor` `theme-color` meta.
+2. **Adopt the icon palette in-app** — invert the choice: use the purple as the actual brand identity, retheme the in-app palette. Wider blast radius than (1) and would walk back Bookshelf's just-shipped alignment.
 3. **Accept and document** — current state. The purple is brand-mark only; the parchment-and-leather is the product palette. Many apps do this (e.g. Slack's neon icon vs muted desktop chrome).
 
 (3) is the current state. Revisit if the inconsistency causes confusion in real use.

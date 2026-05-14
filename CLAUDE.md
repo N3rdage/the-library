@@ -8,18 +8,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-BookTracker — ASP.NET Core Blazor Web App (net10.0) using **Interactive Server** render mode, backed by EF Core + SQL Server. Target deployment is Azure App Service against Azure SQL (Basic tier) via GitHub Actions. Planned: AI book recommendations via the Anthropic API.
+BookTracker is the codebase / namespace umbrella for two apps:
+
+- **Bookcase** — ASP.NET Core Blazor Web App (net10.0, Interactive Server), backed by EF Core + Azure SQL. PWA-installable. Deployed at `books.silly.ninja`.
+- **Bookshelf** — .NET MAUI Android companion. Offline-capable in-bookshop tool. Read-only against a slim JSON catalog snapshot served by Bookcase.
+
+AI features (Anthropic / Azure OpenAI / Microsoft Foundry) live in Bookcase.
 
 ## Architecture
 
-Two-project solution (`BookTracker.slnx`, the new XML solution format):
+Six-project solution (`BookTracker.slnx`, the new XML solution format):
 
-- **`BookTracker.Web\`** — Blazor Web App host. Owns `Program.cs`, `appsettings*.json`, Razor components under `Components\` (`App.razor`, `Routes.razor`, `Layout\MainLayout.razor`, pages under `Components\Pages\`), and lookup service under `Services\`. The whole app is rendered with `@rendermode="InteractiveServer"` set globally via `<Routes>` in `App.razor` — no per-page render-mode attributes. Uses net9+ `MapStaticAssets()` pipeline.
-- **`BookTracker.Data\`** — Class library holding `BookTrackerDbContext`, entities in `Models\`, and EF migrations in `Migrations\`. EF tooling (`Microsoft.EntityFrameworkCore.Tools`) lives here, so migrations run against this project with `BookTracker.Web` as the startup project (so config + connection string resolve).
+- **`BookTracker.Web\`** — Blazor Web App host (Bookcase). Owns `Program.cs`, `ProgramSetup.cs`, `appsettings*.json`, Razor components under `Components\` (`App.razor`, `Routes.razor`, `Layout\MainLayout.razor`, pages under `Components\Pages\`), services under `Services\`, and Minimal API endpoints under `Api\`. The whole app is rendered with `@rendermode="InteractiveServer"` set globally via `<Routes>` in `App.razor` — no per-page render-mode attributes. Uses net9+ `MapStaticAssets()` pipeline.
+- **`BookTracker.Data\`** — Class library holding `BookTrackerDbContext`, entities in `Models\`, EF migrations in `Migrations\`, and the `BookUpdatedAtInterceptor` under `Interceptors\`. EF tooling (`Microsoft.EntityFrameworkCore.Tools`) lives here, so migrations run against this project with `BookTracker.Web` as the startup project (so config + connection string resolve).
+- **`BookTracker.Shared\`** — Wire-format DTO records (`CatalogSnapshot`, `BookSnapshot`, `EditionSnapshot`, `WorkSnapshot`, `AuthorSnapshot`, `SeriesSnapshot`) under `Catalog\`. Zero EF dependency so Mobile can reference them without dragging in `BookTracker.Data`. Web projects from EF into these; Mobile + the PWA `/bookshop` deserialise from the same shapes.
+- **`BookTracker.Mobile\`** — .NET MAUI Android app (Bookshelf), `net10.0-android`. Pages under `Pages\`. Auth via MSAL public-client against the same Entra app reg as Bookcase's Easy Auth.
+- **`BookTracker.Mobile.Cache\`** — sqlite-net-pcl-backed `CatalogCache` library, pure `net10.0`. Exposes `ICatalogCache` with `PopulateAsync` / `ApplyDeltaAsync` / `LookupByIsbn` / `LookupByAuthor` / `SearchAuthors` / `SearchBooksByTitle` / `GetSeriesGaps` / `GetBookEnrichedDetail` / `EnsureCoverCached` / `GetMeta`. Pure-net10 so it tests cleanly without the MAUI runtime.
+- **`BookTracker.Mobile.Cache.Tests\`** + **`BookTracker.Tests\`** — xUnit test projects (see Tests section below).
 
-**DbContext lifetime:** Blazor Server circuits are long-lived while `DbContext` is scoped and not thread-safe. `Program.cs` registers `AddDbContextFactory<BookTrackerDbContext>`; components inject `IDbContextFactory<T>` and create/dispose a context per operation (`await using var db = await DbFactory.CreateDbContextAsync();`). Do **not** switch back to `AddDbContext` + direct injection.
+**DbContext lifetime:** Blazor Server circuits are long-lived while `DbContext` is scoped and not thread-safe. `ProgramSetup.cs` registers `AddDbContextFactory<BookTrackerDbContext>`; components inject `IDbContextFactory<T>` and create/dispose a context per operation (`await using var db = await DbFactory.CreateDbContextAsync();`). Do **not** switch back to `AddDbContext` + direct injection.
 
-Entity model: `Book` (Title, `BookStatus`, Rating, Notes, DateAdded, DefaultCoverArtUrl, many-to-many `Works`, one-to-many `Editions`, many-to-many `Tags`), `Work` (Title, Subtitle, AuthorId/Author, FirstPublishedDate, many-to-many `Genres`, optional `Series` + SeriesOrder, many-to-many `Books`), `Author` (Name unique, nullable self-FK `CanonicalAuthorId` for pen-name aliases, one-to-many `Works`), `Edition` (filtered-unique nullable Isbn, `BookFormat`, DatePrinted, CoverUrl, Publisher, one-to-many `Copies`), `Copy` (Condition, DateAcquired, Notes), `Genre` (hierarchical with parent/child, many-to-many to Work), `Series` (Name, Author string display-only, `SeriesType` Series/Collection, ExpectedCount, one-to-many `Works`), `Tag` (many-to-many with Book), `Publisher`, and `WishlistItem` (Title, Author, Priority, optional Isbn/Series link). The Work refactor sits the abstract creative unit (story / novel / play) above the physical Book grouping — single-Work books are the common case (Add page auto-creates one alongside the Book); compendiums use the Edit page's "Other works" section. Authorship, subtitle, genres, and series live on the Work, not the Book. Pen names: each Work points at a specific Author row; aliases (e.g. Bachman) carry `CanonicalAuthorId` referencing the canonical (King) so aggregations roll up; `/authors` page manages aliases. Find-or-create on save is auto via `AuthorResolver`.
+Entity model: `Book` (Title, `BookStatus`, Rating, Notes, DateAdded, DefaultCoverArtUrl, **UpdatedAt** for delta-sync, **DeletedAt** for soft-delete, many-to-many `Works`, one-to-many `Editions`, many-to-many `Tags`), `Work` (Title, Subtitle, AuthorId/Author, FirstPublishedDate, many-to-many `Genres`, optional `Series` + SeriesOrder, many-to-many `Books`), `Author` (Name unique, nullable self-FK `CanonicalAuthorId` for pen-name aliases, one-to-many `Works`), `Edition` (filtered-unique nullable Isbn, `BookFormat`, DatePrinted, CoverUrl, Publisher, one-to-many `Copies`), `Copy` (Condition, DateAcquired, Notes), `Genre` (hierarchical with parent/child, many-to-many to Work), `Series` (Name, Author string display-only, `SeriesType` Series/Collection, ExpectedCount, one-to-many `Works`), `Tag` (many-to-many with Book), `Publisher`, and `WishlistItem` (Title, Author, Priority, optional Isbn/Series link). The Work refactor sits the abstract creative unit (story / novel / play) above the physical Book grouping — single-Work books are the common case (Add page auto-creates one alongside the Book); compendiums attach extra Works via the Book Detail "Add Work" dialog (the `/books/{id}/edit` page was decommissioned). Authorship, subtitle, genres, and series live on the Work, not the Book. Pen names: each Work points at a specific Author row; aliases (e.g. Bachman) carry `CanonicalAuthorId` referencing the canonical (King) so aggregations roll up; `/authors` page manages aliases. Find-or-create on save is auto via `AuthorResolver`.
+
+`Book.UpdatedAt` is bumped automatically on every aggregate change by `BookUpdatedAtInterceptor` (a `SaveChangesInterceptor`). A value converter pins `Kind=Utc` on read so cross-timezone clients round-trip the watermark correctly. `Book.DeletedAt` drives soft-delete via a global EF query filter — tombstoned rows are hidden from every normal query, but visible to `IgnoreQueryFilters()` so the catalog snapshot can emit them in `deletedIds[]`. See `ARCHITECTURE.md` for the full surface.
 
 Config convention: connection string name is **`DefaultConnection`**. Dev value lives in `appsettings.Development.json` and points at the Docker SQL container. Prod and staging slots in Azure point at **separate databases** (`booktracker` vs `booktracker-staging` on the same SQL server) via slot-sticky `DefaultConnection` — the slot swap is purely code-shaped and never moves the DB underneath the bits. `appsettings*.json` is **gitignored**; committed templates live alongside them as `appsettings.Example.json` and `appsettings.Development.Example.json` — on a fresh clone, copy each `.Example.json` to the real filename and fill in secrets.
 
@@ -59,7 +70,12 @@ End-to-end setup (Docker Desktop containers for SQL Server + Azurite, mkcert for
 
 ## Mobile considerations
 
-The app is used on both desktop and mobile (phones for barcode scanning and quick library checks). When planning new features, always clarify whether the feature should be **mobile-prioritised** (responsive-first, tested at small breakpoints) or **web-only** (desktop layout sufficient). Key mobile workflows: bulk ISBN scanning, library search.
+Two distinct mobile surfaces:
+
+- **Bookcase as a PWA** — installable on mobile + desktop, runs in standalone display mode with the same Blazor Server backend. Mobile-responsive Razor pages; primary in-bookshop surface is `/bookshop` (IndexedDB cache + scan + author lookup tabs).
+- **Bookshelf MAUI Android app** — native sibling for the same in-bookshop use case, but offline-capable. Pulls a slim JSON catalog snapshot from Bookcase, caches it in local SQLite. Pages: Sign in / Load catalog / Scan ISBN / Find by author / Find by title / Series gaps.
+
+When planning new features, always clarify which surface(s) it touches: **Bookcase web only**, **Bookcase web + PWA mobile**, **Bookshelf only**, or **both apps**. The decision drives where the work lands (Razor + JS, MAUI XAML + cache, or DTO + both consumers). Key mobile workflows: in-bookshop ISBN scan, author/title lookup, series gaps (do I need #6 of Foundation while I'm here?).
 
 ## AI integration
 
@@ -81,4 +97,9 @@ Local: Azurite emulator on `localhost:10000` (see Docker Compose section above).
 
 ## Tests
 
-Tests live in `BookTracker.Tests\` (xUnit + NSubstitute + EF InMemory). CI runs tests on all PRs to main.
+Two xUnit projects:
+
+- **`BookTracker.Tests\`** — Bookcase tests. xUnit + NSubstitute against a **real SQL Server via MSSQL Testcontainer** (one container per process, Respawn-based wipe + reseed per `TestDbContextFactory`). EF InMemory was the original choice; the pivot off it caught real bugs InMemory's lax SQL translation had let through. Playwright E2E lives in `E2E/` (gated by `Category=E2E`) — requires `ms-playwright` browsers locally.
+- **`BookTracker.Mobile.Cache.Tests\`** — Bookshelf cache tests. Pure xUnit + real SQLite files (GUID-named temp files, one per test). No MAUI runtime needed.
+
+CI runs `dotnet test` on all PRs to main. The full suite must stay green before merge.
