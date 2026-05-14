@@ -652,6 +652,45 @@ public class CatalogCacheTests
     }
 
     [Fact]
+    public async Task InitAsync_BackfillsTitleLowerForLegacyRowsWrittenBeforeTheColumnExisted()
+    {
+        // Regression for the title-search-finds-nothing prod report
+        // 2026-05-14. sqlite-net-pcl's CreateTableAsync ALTERs to add
+        // the new TitleLower column but doesn't populate it — every
+        // book already cached on Drew's phone had TitleLower = NULL
+        // after the update, so SearchByTitle's LIKE predicate matched
+        // zero rows. InitAsync now backfills via UPDATE on every open.
+        var path = Path.Combine(Path.GetTempPath(), $"booktracker-cache-backfill-{Guid.NewGuid():N}.db");
+
+        // Step 1 — populate, then nuke TitleLower via a parallel
+        // SQLite connection (mirrors the post-ALTER state on Drew's
+        // phone where existing rows ended up with NULL).
+        {
+            var cache = new CatalogCache();
+            await cache.InitAsync(path);
+            await cache.PopulateAsync(SampleSnapshot(
+                books: [new(1, "Foundation", "Asimov", ["Asimov"], "Read", 5, [], null, null)]));
+
+            // Sanity: search hits before sabotage.
+            Assert.Single(await cache.SearchBooksByTitleAsync("foundation", 10));
+
+            var parallel = new SQLite.SQLiteAsyncConnection(path);
+            await parallel.ExecuteAsync("UPDATE books SET TitleLower = NULL");
+            await parallel.CloseAsync();
+        }
+
+        // Step 2 — re-open. InitAsync's backfill UPDATE should
+        // re-populate TitleLower, and search should find the book.
+        {
+            var cache = new CatalogCache();
+            await cache.InitAsync(path);
+            var hits = await cache.SearchBooksByTitleAsync("foundation", 10);
+            Assert.Single(hits);
+            Assert.Equal("Foundation", hits[0].Title);
+        }
+    }
+
+    [Fact]
     public async Task ApplyDeltaAsync_UpdatesTitleLowerOnUpsertSoSearchHitsNewTitle()
     {
         // Regression test for the TitleLower invariant. If ApplyDelta

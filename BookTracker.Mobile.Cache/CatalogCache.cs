@@ -70,6 +70,20 @@ public class CatalogCache : ICatalogCache
         await _db.CreateTableAsync<CachedSeries>();
         await _db.CreateTableAsync<CachedMeta>();
 
+        // Schema-evolution backfill: sqlite-net-pcl's CreateTableAsync
+        // ALTERs an existing table to add new columns, but doesn't
+        // populate existing rows. When the TitleLower column landed
+        // (alongside the title-search feature), every Book already
+        // cached on Drew's phone got the column as NULL — SearchByTitle's
+        // LIKE predicate then matched zero rows on the bulk of the
+        // catalogue (only newly-upserted Books had the column populated).
+        // Backfill on every Init: idempotent (no-op once everything's
+        // populated), microseconds for 3000 rows, and survives the next
+        // schema bump that needs the same treatment (just add another
+        // UPDATE here).
+        await _db.ExecuteAsync(
+            "UPDATE books SET TitleLower = LOWER(Title) WHERE TitleLower IS NULL OR TitleLower = ''");
+
         // Covers live alongside the DB file by convention — Mobile's
         // FileSystem.AppDataDirectory holds both. Single dbPath
         // parameter keeps the public Init surface narrow; tests get
