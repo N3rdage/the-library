@@ -51,7 +51,14 @@ public class BookMergeServiceTests
         Assert.Equal(1, result.EditionsReassigned);
 
         using var verify = _factory.CreateDbContext();
+        // Loser invisible to normal queries (soft-deleted) ...
         Assert.Null(verify.Books.FirstOrDefault(b => b.Id == loser.Id));
+        // ... but the husk row survives with DeletedAt set so the
+        // catalog snapshot can tombstone it for Bookshelf clients.
+        var husk = await verify.Books.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(b => b.Id == loser.Id);
+        Assert.NotNull(husk);
+        Assert.NotNull(husk!.DeletedAt);
         var winnerEditions = verify.Editions.Where(e => e.BookId == winner.Id).ToList();
         Assert.Single(winnerEditions);
         Assert.Equal("9780000000001", winnerEditions[0].Isbn);

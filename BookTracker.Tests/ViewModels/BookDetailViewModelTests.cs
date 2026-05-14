@@ -865,11 +865,13 @@ public class BookDetailViewModelTests
     }
 
     [Fact]
-    public async Task DeleteBookAsync_RemovesBookAndCascadesEditionsCopies()
+    public async Task DeleteBookAsync_SoftDeletesBookAndCascadesEditionsCopies()
     {
-        // PR 6 — replaces /edit'\''s Delete affordance with a View-page
-        // confirm dialog. Verifies the cascade rules (book → editions →
-        // copies) still hold via EF.
+        // Soft-delete shape: the Book row stays as a tombstone (DeletedAt
+        // set), invisible to normal queries via the global HasQueryFilter.
+        // Editions + Copies hard-removed at the same save (cascade) so
+        // user-visible behaviour matches the old hard-delete — only the
+        // husk row survives for the catalog snapshot's deletedIds[].
         var factory = new TestDbContextFactory();
         int bookId;
         using (var db = factory.CreateDbContext())
@@ -899,9 +901,17 @@ public class BookDetailViewModelTests
 
         Assert.True(ok);
         using var verify = factory.CreateDbContext();
+        // Normal queries see the book as gone — query filter hides it.
         Assert.Empty(verify.Books);
+        // Children hard-removed via cascade.
         Assert.Empty(verify.Editions);
         Assert.Empty(verify.Copies);
+        // The husk row survives with DeletedAt set so the snapshot
+        // delta path can emit it in deletedIds[].
+        var husk = await verify.Books.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(b => b.Id == bookId);
+        Assert.NotNull(husk);
+        Assert.NotNull(husk!.DeletedAt);
     }
 
     [Fact]

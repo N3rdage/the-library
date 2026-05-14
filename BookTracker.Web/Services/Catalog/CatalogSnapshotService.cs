@@ -174,13 +174,49 @@ public class CatalogSnapshotService(
             .OrderBy(s => s.Name)
             .ToList();
 
-        // LatestUpdatedAt = max Book.UpdatedAt in this response, or the
-        // server clock if no books in the response (empty delta). The
-        // client stores this and sends it back as `?since=` next time.
+        // Tombstones — soft-deleted Books since the `since` token.
+        // Only emitted on delta calls; a full snapshot returns an
+        // empty list (the client is doing a fresh load and has no
+        // local rows to drop).
+        //
+        // IgnoreQueryFilters() opts out of the global DeletedAt == null
+        // filter so dead husks are visible to this query. We project
+        // both Id and DeletedAt — the Id goes on the wire, the
+        // DeletedAt feeds into LatestUpdatedAt so the next-token
+        // calculation advances past a pure-tombstone delta. The
+        // IX_Books_DeletedAt filtered index covers the predicate
+        // cheaply (most rows have DeletedAt = NULL and are skipped).
+        var tombstones = since is DateTime sinceForTombstones
+            ? await db.Books
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(b => b.DeletedAt != null && b.DeletedAt > sinceForTombstones)
+                .Select(b => new { b.Id, b.DeletedAt })
+                .ToListAsync(ct)
+            : [];
+
+        var deletedIds = tombstones.Select(t => t.Id).ToList();
+
+        // LatestUpdatedAt = max stamp across the rows that contributed
+        // to this response — Book.UpdatedAt for live rows, Book.DeletedAt
+        // for tombstones. Falling back to `since` (or now) when the
+        // delta is fully empty is fine; the client just sends the same
+        // token and gets another empty response next time. Falling back
+        // when the delta has tombstones would cause an infinite re-fetch
+        // loop (client keeps sending the same `since`, server keeps
+        // returning the same dead IDs).
         var syncedAt = DateTime.UtcNow;
-        var latestUpdatedAt = booksRaw.Count > 0
-            ? booksRaw.Max(b => b.UpdatedAt)
-            : (since ?? syncedAt);
+        DateTime? maxBookStamp = booksRaw.Count > 0 ? booksRaw.Max(b => b.UpdatedAt) : null;
+        DateTime? maxTombstoneStamp = tombstones.Count > 0
+            ? tombstones.Max(t => t.DeletedAt!.Value)
+            : null;
+        var latestUpdatedAt = (maxBookStamp, maxTombstoneStamp) switch
+        {
+            (DateTime b, DateTime t) => b > t ? b : t,
+            (DateTime b, null) => b,
+            (null, DateTime t) => t,
+            _ => since ?? syncedAt,
+        };
 
         // Version is the deployed commit SHA when available (so the
         // client-side cache can detect a deploy and trigger a refresh)
@@ -192,6 +228,7 @@ public class CatalogSnapshotService(
             books,
             authors,
             series,
-            latestUpdatedAt);
+            latestUpdatedAt,
+            deletedIds);
     }
 }

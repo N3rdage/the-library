@@ -2,6 +2,7 @@ using BookTracker.Data;
 using BookTracker.Data.Interceptors;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Respawn;
 
 namespace BookTracker.Tests;
@@ -36,6 +37,11 @@ public class TestDbContextFactory : IDbContextFactory<BookTrackerDbContext>
             // Match production wiring so the interceptor's
             // Book.UpdatedAt bump runs in tests.
             .AddInterceptors(new BookUpdatedAtInterceptor())
+            // Mirror ProgramSetup.cs's suppression of EF's required-nav-with-
+            // query-filter warning (Book's soft-delete filter + required Edition
+            // parent end). See the comment there for rationale.
+            .ConfigureWarnings(w => w.Ignore(
+                CoreEventId.PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning))
             .Options;
 
         WipeAndReseed();
