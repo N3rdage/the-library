@@ -4,20 +4,31 @@ This document describes the overall design and structure of BookTracker. It shou
 
 ## Overview
 
-BookTracker is an ASP.NET Core Blazor Web App for managing a personal book library. It runs in **Interactive Server** render mode (Blazor Server), backed by EF Core + SQL Server. It includes AI-powered features via multiple providers: Anthropic (Claude, public API) and Azure OpenAI (GPT-4o, Azure-hosted). Microsoft Foundry (Claude on Azure) is supported in code but not currently provisioned — see `infra/README.md` and `TODO.md`.
+BookTracker is the codebase / namespace umbrella for **two apps**:
 
-Target deployment: Azure App Service + Azure SQL (Basic tier) via GitHub Actions. SQL, Key Vault, and Azure OpenAI sit behind Private Endpoints; the App Service reaches them through VNet integration + a peered eastus2 VNet for the OpenAI account.
+- **Bookcase** — the ASP.NET Core Blazor Web App (Interactive Server) backed by EF Core + Azure SQL. Catalog, edit, browse, AI assistant, bookshop-mode scanning. PWA-installable on mobile and desktop. Deployed at `books.silly.ninja`.
+- **Bookshelf** — the .NET MAUI Android companion. Offline-capable in-bookshop tool. Consumes a slim JSON catalog snapshot from Bookcase; doesn't talk to SQL directly.
+
+AI features sit in Bookcase via multiple providers: Anthropic (Claude, public API) and Azure OpenAI (GPT-4o, Azure-hosted). Microsoft Foundry (Claude on Azure) is supported in code but not currently provisioned — see `infra/README.md` and `TODO.md`.
+
+Target deployment for Bookcase: Azure App Service + Azure SQL (Basic tier) via GitHub Actions. SQL, Key Vault, and Azure OpenAI sit behind Private Endpoints; the App Service reaches them through VNet integration + a peered eastus2 VNet for the OpenAI account. Bookshelf is an APK that talks to Bookcase's `/api/*` surface over HTTPS with AAD bearer tokens.
 
 ## Solution structure
 
 ```
 BookTracker.slnx
-  BookTracker.Data/        Class library — entities, DbContext, EF migrations
-  BookTracker.Web/         Blazor Web App — UI, services, ViewModels
-  BookTracker.Tests/       xUnit test project
+  BookTracker.Data/                Class library — entities, DbContext, EF migrations
+  BookTracker.Shared/              Wire-format DTOs (CatalogSnapshot, BookSnapshot, …)
+                                   — no EF dependency, referenced by Web + Mobile
+  BookTracker.Web/                 Blazor Web App (Bookcase) — UI, services, ViewModels, /api/*
+  BookTracker.Mobile/              .NET MAUI Android app (Bookshelf) — net10.0-android
+  BookTracker.Mobile.Cache/        SQLite-backed catalog cache library — pure net10.0
+                                   (referenced by Mobile + tested independently)
+  BookTracker.Mobile.Cache.Tests/  xUnit tests for the cache, no MAUI runtime needed
+  BookTracker.Tests/               xUnit tests for Web — real SQL via Testcontainers
 ```
 
-All projects target `net10.0`.
+All projects target `net10.0` (the Mobile project adds `net10.0-android`).
 
 ## Data model
 
@@ -25,7 +36,9 @@ All projects target `net10.0`.
 Book                                                ← physical-object grouping
   Title, Category (Fiction/NonFiction),
   Status (Unread/Reading/Read), Rating (0-5),
-  Notes, DateAdded, DefaultCoverArtUrl
+  Notes, DateAdded, DefaultCoverArtUrl,
+  UpdatedAt (DATETIME2, default GETUTCDATE(), indexed),
+  DeletedAt (nullable, filtered index, soft-delete tombstone)
   ├── Works (many-to-many)                          ← what's actually inside the book
   │     Title, Subtitle, FirstPublishedDate
   │     ├── Author (many-to-1 → Author)
@@ -84,6 +97,8 @@ Key design decisions:
 - **Edition.ISBN is unique** (filtered — pre-1974 books with no ISBN coexist as nullable rows).
 - **Series.Type**: `Series` = numbered with known order; `Collection` = loose grouping. Series membership is per-Work — a short story republished in three compendiums shows once in the series with three book references.
 - **Genre hierarchy**: top-level genres with sub-genres. Selecting a sub-genre auto-selects its parent.
+- **Book.UpdatedAt** is auto-stamped on aggregate change via `BookUpdatedAtInterceptor` (a `SaveChangesInterceptor`) — any change to the Book itself OR to its Edition / Copy / Work / WorkAuthor / Tag membership bumps the Book row's timestamp. Backs the delta-sync `?since=` filter on `/api/catalog-snapshot`. Save sites don't need to set it explicitly. A value converter pins `Kind=Utc` on read so cross-timezone clients round-trip the watermark correctly.
+- **Book.DeletedAt** drives a soft-delete shape: a global EF `HasQueryFilter(b => b.DeletedAt == null)` hides tombstoned rows from every normal query (Library / View / search / merge). The husk row survives only so the catalog snapshot can emit it in `deletedIds[]` for Bookshelf clients to drop locally. Aggregate children (Editions + Copies + joins) are hard-removed at delete time — the husk has no aggregate. `BookDetailViewModel.DeleteBookAsync` and `BookMergeService` (loser-side) are the two soft-delete callsites.
 
 ## Architecture pattern — MVVM
 
@@ -118,22 +133,33 @@ A short-lived context is created per operation. Never inject `DbContext` directl
 |-------|------|---------|
 | `/` | Home | Dashboard — book count, author/genre stats |
 | `/books` | Library | Filterable book list (search, category, genre, tag, author). Group-by picker (Author / Genre / Series / None) renders the books as a collapsible accordion of groups, each with its own paginated book list (lazy-loaded on first expand). Filters reduce within groups. Desktop table + mobile cards. |
-| `/books/add` | Add Book | ISBN lookup + manual entry. Creates Book + Edition + Copy. Series suggestion after lookup. |
-| `/books/{id}` | Book Detail | Default browsing surface for a single book. Read-only scaffold with inline auto-save (rating / status / notes / tags). Modal edits open `BookEditDialog` / `WorkEditDialog` / `EditionFormDialog` / `CopyFormDialog`. |
-| `/books/{id}/edit` | Edit Book | Full-edit escape hatch. Edit metadata, genres, tags, series assignment. Manage editions and copies. Delete book. |
+| `/books/add` | Add Book | ISBN lookup + manual entry. Creates Book + Edition + Copy. Series suggestion after lookup. Collection mode for multi-Work compendiums with inline existing-Work attach via title typeahead. |
+| `/books/{id}` | Book Detail | Default browsing surface for a single book. Read-only scaffold with inline auto-save (rating / status / notes / tags) plus a Delete affordance. Modal edits open `BookEditDialog` / `WorkEditDialog` / `EditionFormDialog` / `CopyFormDialog` / `AddWorkDialog`. The `/books/{id}/edit` "full edit page" escape hatch was decommissioned — every edit surface is now reachable from here. |
 | `/books/bulk-add` | Bulk Add | Rapid ISBN entry (text or barcode scanner). Discovery grid with async lookup, accept/follow-up, duplicate detection. |
+| `/bookshop` | Bookshop Mode (PWA) | Mobile-optimised offline-capable surface for the "in a real bookshop" use case. ISBN scan + manual ISBN + author lookup tabs, backed by an IndexedDB cache populated from `/api/catalog-snapshot`. Sibling of Bookshelf MAUI — separate cache, same DTO shape. |
 | `/series` | Series List | All series/collections with completion status |
 | `/series/new` | New Series | Create a new series or collection |
 | `/series/{id}` | Edit Series | Edit series, manage books in series, reorder |
-| `/shopping` | Shopping Mode | Mobile-optimised. "Do I have this?" (scan/search), series gaps, shopping list with "bought" action. |
+| `/shopping` | Shopping Mode | Earlier mobile-optimised page covering scan + series gaps + wishlist. Overlaps with `/bookshop`; TODO #28 tracks the consolidation. |
 | `/assistant` | AI Assistant | Book advisor (Opus), genre cleanup, collection cataloguing, shopping suggestions (Sonnet). |
 | `/authors` | Authors | MudBlazor list with per-row drill-down to Works/Books, alias rollup on canonical rows, inline rename / merge / alias-resolve. Deep-linked from Home top-10. |
+| `/authors/{id}` | Author Detail | Per-author drill-down — works list, alias graph, attached books. |
 | `/publishers` | Publishers | MudBlazor list mirroring `/authors` structurally — per-row drill-down to editions, inline rename, two-step-confirm merge (no alias model — outright absorption), delete-unused. |
 | `/duplicates` | Duplicates | Tabs for Authors / Works / Books / Editions. Lists candidate duplicate pairs detected on-demand. Dismiss false positives (reversible via the "Dismissed" section). Author pairs have a Merge → button. Web-primary, desktop-first layout. |
 | `/duplicates/merge/author/{idA}/{idB}` | Merge authors | Side-by-side review of the pair, radio to pick a winner, preview of impact (N works + M aliases to reassign), transactional merge. Refuses when the two authors resolve to different canonicals — user resolves aliases on `/authors` first. |
 | `/duplicates/merge/work/{idA}/{idB}` | Merge works | Side-by-side review, radio to pick a winner, preview of impact (books to reassign + any books that already contain both → loser dropped). Transactional with auto-fill-empties semantics. Refuses if the two resolve to different authors (merge authors first). |
 | `/duplicates/merge/edition/{idA}/{idB}` | Merge editions | Side-by-side review with cover thumbnails, winner radio, preview of copies to reassign + which empty winner fields will be auto-filled from loser (ISBN, date printed, publisher, cover). Refuses cross-book edition merges (merge the Books first). |
 | `/duplicates/merge/book/{idA}/{idB}` | Merge books | Side-by-side review with cover thumbnail, winner radio, preview of editions to reassign + works / tags to union + auto-fill hints (notes, cover, rating-if-unrated). No structural incompatibility path — Book merge is the aggregator and everything beneath it is moved or unioned. |
+
+## API endpoints (Minimal API)
+
+Lightweight JSON surface consumed by Bookshelf (MAUI) and `/bookshop` (PWA). Each domain gets its own `*Endpoints.cs` static class with an extension method on `IEndpointRouteBuilder`; `ProgramSetup.cs` maps them all together. All routes (except `/warmup`) are gated by Easy Auth at the App Service platform layer — there's no app-side auth middleware.
+
+| Route | Purpose |
+|-------|---------|
+| `GET /api/catalog-snapshot[?since=<ISO 8601 UTC>]` | Slim catalog JSON. Full snapshot when `since` is absent; delta of changed Books + `deletedIds[]` tombstones when present. Returns Authors + Series in full regardless of `since` (they're tiny + the rename-propagation case is brittle on a filtered list). The response carries a `LatestUpdatedAt` watermark the client stores and sends back as the next `?since=`. Drives Bookshelf catalog refresh + `/bookshop` cache hydration. |
+| `GET /api/wishlist-snapshot` | Read-only wishlist projection for the `/bookshop` "shopping list" tab. Bookcase web remains the canonical writer (add/remove/edit). |
+| `GET /warmup` | Anonymous slot-swap warmup probe — wired via `WEBSITE_SWAP_WARMUP_PING_PATH` in Bicep. Does a trivial `Books.Take(1)` to warm the SQL connection pool + managed-identity AAD token before the slot promotes. One of the two paths excluded from Easy Auth (alongside PWA static assets). |
 
 ## Shared components
 
@@ -145,6 +171,20 @@ A short-lived context is created per operation. Never inject `DbContext` directl
 | `AIProviderToggle.razor` | Dropdown to switch AI provider at runtime + call counter badge |
 
 ## Services
+
+### CatalogSnapshotService
+Projects the catalog into the slim wire-format `CatalogSnapshot` consumed by Bookshelf (MAUI) and `/bookshop` (PWA). Carries Books (with nested Editions + Works for the enhanced ScanPage view), Authors (with canonical/alias rollup counts), Series (always full-listed regardless of `since`), and the `LatestUpdatedAt` watermark + `DeletedIds[]` tombstones for delta-sync. The `?since=` filter is a B-tree seek on `IX_Books_UpdatedAt`; tombstones come from `IgnoreQueryFilters().Where(DeletedAt > since)` since the soft-delete filter would otherwise hide them.
+
+### WishlistSnapshotService
+Read-only wishlist projection for `/api/wishlist-snapshot`. Bookcase web remains the canonical write surface — add/remove/edit happen there. `/bookshop` and the future Bookshelf wishlist surface consume this DTO read-only and synthesise a local "bought" flag that self-heals on each catalog refresh.
+
+### BookCoverStorage
+Mirrors upstream cover URLs (Open Library / Google Books / Trove) into Azure Blob Storage so renders never depend on upstream latency. Downloads, normalises via ImageSharp (JPEG, max 1200px long edge — falls back to raw bytes with a logged warning if conversion fails), uploads to the `book-covers` container, swaps the URL on `Edition.CoverUrl` / `Book.DefaultCoverArtUrl` to the blob URL.
+
+`CoverMirrorBackgroundService` (hosted service) polls every 30s for un-mirrored URLs and processes them in batches of 50. Handles both the initial backfill and ongoing mirroring. Local dev uses Azurite on `localhost:10000`; prod uses a real Storage Account provisioned by `infra/modules/cover-storage.bicep` with the connection string in Key Vault.
+
+### BookUpdatedAtInterceptor
+`SaveChangesInterceptor` registered on the DbContextFactory. Walks `ChangeTracker.Entries()` on every save; bumps `Book.UpdatedAt` whenever any aggregate entity (Book itself, Edition, Copy, Work, WorkAuthor, BookTag join, Tag rename) changes. Special-cases skip-nav collection changes on Book (`book.Tags.Add(tag)` leaves Book.State = Unchanged but the Collection is IsModified). Single source of truth — save sites don't need to remember the discipline.
 
 ### BookLookupService
 Looks up book metadata by ISBN. Tries Open Library first, falls back to Google Books, then Trove (NLA) as a coverage-of-last-resort for self-published / Australian titles the other two tend to miss. Trove is skipped silently when no API key is configured. Returns `BookLookupResult` with title, author, publisher, genres, cover URL, etc.
@@ -207,26 +247,47 @@ For older books without barcodes, `photo-capture.js` opens the camera for a stil
 
 Mid-migration from Bootstrap to **MudBlazor 9** (`BookTracker.Web.csproj`). Current state:
 
-- **Pages using MudBlazor:** Home, Duplicates/MergeBook, Book Detail (`/books/{id}`) and its dialogs (BookEditDialog, WorkEditDialog, EditionFormDialog, CopyFormDialog), the `MudGenrePicker` shared component, Authors, Publishers. These use `MudCard`, `MudButton`, `MudText`, `MudContainer`, `MudDialog`, `MudAutocomplete`, etc.
-- **Pages still on Bootstrap:** Library list, Book Add, Book Bulk Add, Book Edit (the "full edit page" escape hatch), Series, Shopping, AI Assistant, Duplicates list. The navbar in `MainLayout.razor` is still Bootstrap.
+- **Pages using MudBlazor:** Home, Duplicates/MergeBook, Book Detail (`/books/{id}`) and its dialogs (BookEditDialog, WorkEditDialog, EditionFormDialog, CopyFormDialog, AddWorkDialog), the `MudGenrePicker` + `MudAuthorPicker` shared components, Authors, Publishers, Book Add, Book Bulk Add. These use `MudCard`, `MudButton`, `MudText`, `MudContainer`, `MudDialog`, `MudAutocomplete`, etc. `/books/{id}/edit` was decommissioned — every edit surface now reachable from Book Detail.
+- **Pages still on Bootstrap:** Library list, Series, Shopping, AI Assistant, Duplicates list. The navbar in `MainLayout.razor` is still Bootstrap.
 - **Rollout strategy:** no migration deadline — pages convert as they're touched for other reasons. Low-traffic pages may stay Bootstrap indefinitely; that's fine.
 - **Coexistence:** both stylesheets are loaded in `App.razor`. MudBlazor's four root providers (`MudThemeProvider`, `MudPopoverProvider`, `MudDialogProvider`, `MudSnackbarProvider`) sit in `MainLayout.razor` — harmless on Bootstrap-only pages. Each page picks one lane.
 - **Theme:** custom "warm library" palette in `BookTracker.Web/Theme/BookTrackerTheme.cs` (oxblood / antique brass / forest / parchment / espresso). Applied globally via `<MudThemeProvider Theme="BookTrackerTheme.Default" />`. Dark mode not wired yet.
 
-## Mobile responsiveness
+## Mobile responsiveness (Bookcase web)
 
 Key mobile workflows: barcode scanning, library search, shopping mode. Pages use Bootstrap responsive utilities:
 - **Collapsible filters** on Library list (below `md` breakpoint)
 - **Card layouts** replacing tables on mobile (Library list, Bulk Add discovery grid, Series list)
 - **Scanner-first** on mobile (full-width primary button above text input)
 
+## Bookshelf — MAUI Android companion
+
+Native Android app for the "phone in hand in a bookshop" use case. Read-only against the Bookcase catalog; offline-capable so signal-free bookshops still work.
+
+**Project layout:**
+- `BookTracker.Mobile/` (net10.0-android) — MAUI host. Pages: `MainPage` (Sign in / Load catalog / Scan ISBN / Find by author / Find by title / Series gaps), `ScanPage` (camera + ZXing barcode + manual ISBN entry), `AuthorSearchPage` + `AuthorBooksPage`, `TitleSearchPage`, `SeriesGapsPage`. Auth via MSAL public-client OIDC against the same Entra app as Bookcase's Easy Auth.
+- `BookTracker.Mobile.Cache/` (pure net10.0) — sqlite-net-pcl-backed `CatalogCache`. Implements `ICatalogCache.PopulateAsync` (full reset) and `ApplyDeltaAsync` (delta merge preserving cover paths when CoverUrl is unchanged). Tables: books, book_isbns, book_editions, book_works, authors, series, meta. Init-time backfill UPDATE handles schema-evolution gaps (sqlite-net-pcl ALTERs but doesn't populate new columns on existing rows).
+
+**Catalog refresh flow:**
+1. First load → no stored watermark → full `PopulateAsync`.
+2. Subsequent loads → stored watermark sent as `?since=<ISO 8601 UTC>` → `ApplyDeltaAsync` (Books upsert, ISBN/Edition/Work join rows wipe-and-rewrite per Book, Authors+Series fully rewritten, DeletedIds tombstones drop rows).
+3. Server `Version` mismatch (deploy changed projection shape) → fall back to full `PopulateAsync` regardless of watermark.
+
+**Cover thumbnails** download on first display via `EnsureCoverCachedAsync`, resized to 200px long-edge JPEG via SkiaSharp, stored at `<db-dir>/covers/{bookId}.jpg`. Survives `ApplyDeltaAsync` when CoverUrl is unchanged (the delta sync's main bandwidth win — no re-downloads on refresh).
+
+**Sharing the DTO contract:** `BookTracker.Shared.Catalog` holds the `CatalogSnapshot` / `BookSnapshot` / `EditionSnapshot` / `WorkSnapshot` / `AuthorSnapshot` / `SeriesSnapshot` records. Web projects them server-side; Mobile deserialises the same wire shape. The PWA `/bookshop` page's IndexedDB cache uses the same DTOs via the JSON response.
+
+**Visual differentiation:** Bookshelf's launcher icon uses the in-app palette (espresso `#3E2723` background, brass `#A67B3A` spine, parchment text lines) — distinct from Bookcase PWA's Material-You purple. See `docs/STYLE-GUIDE.md` §Known inconsistencies for the Bookcase-side resolution still pending.
+
 ## Testing
 
-xUnit + NSubstitute + EF Core InMemory provider. Tests cover ViewModels and services — business logic that can break silently. Pure markup/CSS changes don't need tests.
+xUnit + NSubstitute. Tests cover ViewModels and services — business logic that can break silently. Pure markup/CSS changes don't need tests.
 
-Test helper: `TestDbContextFactory` creates isolated in-memory databases per test.
+**Real SQL Server, not InMemory.** Tests run against an MSSQL Testcontainer (one container per process; `SqlServerContainer` is the singleton). `TestDbContextFactory` wraps each instantiation with a Respawn-based wipe + reseed (~50-150ms) so each `new TestDbContextFactory()` is a clean state. The pivot off EF InMemory caught real bugs that InMemory's lax LINQ-to-SQL translation had let through — `?since=` translation, query-filter semantics with `Include`, value converter behaviour on read.
 
-CI runs `dotnet test` on all PRs to main.
+The mobile cache tests (`BookTracker.Mobile.Cache.Tests`) run against real SQLite files (one temp-file per test, GUID-named) — same rationale: in-memory shortcuts hid the schema-evolution gotcha (sqlite-net-pcl's `ALTER ADD COLUMN` doesn't backfill existing rows).
+
+CI runs `dotnet test` on all PRs to main. Playwright E2E lives in `BookTracker.Tests/E2E/` but requires `ms-playwright` browsers installed locally to run outside CI; it's gated by a `Category=E2E` xUnit trait.
 
 ## Audit skills
 
@@ -256,11 +317,13 @@ Dev config templates: `appsettings.Example.json`, `appsettings.Development.Examp
 
 ## Infrastructure
 
-- Docker Compose for local SQL Server 2022 Developer
-- GitHub Actions CI (build + test on PR)
+- Docker Compose for local SQL Server 2022 Developer + Azurite (cover-storage blob emulator)
+- GitHub Actions CI (build + test on PR), deploy-to-staging-slot, manual swap workflow, secret rotation
 - Dependabot for NuGet (EF Core grouped) and npm (html5-qrcode)
-- Azure Bicep templates under `infra/`. SQL, Key Vault, and Azure OpenAI are reachable only via Private Endpoints; the App Service uses VNet integration + a peered eastus2 VNet to reach OpenAI. See `infra/README.md` for the full topology.
-- Auto-migration on startup (`TODO.md`: switch to deploy-time migration bundle when going multi-instance)
+- Azure Bicep templates under `infra/`. SQL, Key Vault, Azure OpenAI, and the cover-storage Blob account are reachable only via Private Endpoints; the App Service uses VNet integration + a peered eastus2 VNet to reach OpenAI. See `infra/README.md` for the full topology.
+- **Slot-swap warmup** — `WEBSITE_SWAP_WARMUP_PING_PATH=/warmup` (set in `app-config.bicep`) makes Azure ping the dedicated `/warmup` endpoint during a slot swap, so the SQL pool + AAD token cold-start happens before promotion. Without the dedicated endpoint Azure would ping `/` which Easy Auth blocks (302 to login) and warm nothing.
+- **Container start time limit** — `WEBSITES_CONTAINER_START_TIME_LIMIT=600` (Linux App Service default is 230s, too tight under cold AAD + CA-cert update). See the in-bicep comment for the timing breakdown.
+- Auto-migration on startup (`TODO.md #21`: switch to deploy-time migration bundle when going multi-instance)
 
 ## Progressive Web App (PWA)
 
