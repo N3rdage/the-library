@@ -110,9 +110,16 @@ public partial class MainPage : ContentPage
             }
             else if (!string.Equals(snapshot.Version, storedVersion, StringComparison.Ordinal))
             {
-                // Version moved on the server. The delta response is
-                // still valid for the new shape, but our local rows
-                // were keyed to the old shape — safer to wipe.
+                // Version moved on the server. The snapshot we just
+                // fetched is a DELTA — we sent `since=<storedToken>`
+                // so the server filtered to Books with UpdatedAt > since.
+                // Populating with it would wipe-and-rewrite the cache
+                // using only the delta-window books, leaving everything
+                // older missing locally (which we hit 2026-05-14 on the
+                // Arc D deploy — search returned only the few books
+                // changed in the deploy window). Re-fetch without the
+                // token for a true full snapshot before wiping.
+                snapshot = await _api.GetCatalogSnapshotAsync(since: null);
                 await _cache.PopulateAsync(snapshot);
                 statusSuffix = "full (version changed)";
             }
