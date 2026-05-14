@@ -1,5 +1,6 @@
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace BookTracker.Data;
 
@@ -25,9 +26,25 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
         // migration backfills existing rows with a real timestamp.
         // Indexed because the snapshot delta query
         // (CatalogSnapshotService with ?since=<token>) filters on it.
+        //
+        // Value converter stamps Kind=Utc on every read. SQL Server's
+        // datetime2 doesn't store Kind, so EF returns Kind=Unspecified
+        // by default. System.Text.Json then serialises Unspecified
+        // timestamps WITHOUT the trailing "Z", non-UTC clients parse
+        // them as Local, and their .ToUniversalTime() shifts the
+        // watermark by the client's timezone offset on the next
+        // ?since= round-trip. The delta filter `UpdatedAt > since`
+        // ends up matching every Book edited in the last N hours
+        // instead of just the ones changed since the last sync —
+        // silently defeating delta-sync's bandwidth savings.
+        // First diagnosed 2026-05-14 on an NZ phone: 1 book added,
+        // delta returned 1,146 books (whole catalogue).
         modelBuilder.Entity<Book>()
             .Property(b => b.UpdatedAt)
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("GETUTCDATE()")
+            .HasConversion(new ValueConverter<DateTime, DateTime>(
+                v => v,
+                v => DateTime.SpecifyKind(v, DateTimeKind.Utc)));
         modelBuilder.Entity<Book>()
             .HasIndex(b => b.UpdatedAt);
 
@@ -41,11 +58,23 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
         // since` for tombstones, and the index narrows the husk-only
         // subset cheaply (most rows have DeletedAt = NULL, which a
         // filtered index skips entirely).
+        //
+        // Same Kind=Utc-on-read converter as UpdatedAt above. DeletedAt
+        // doesn't cross the wire as a DateTime today (only the Id ships
+        // in deletedIds[]), but the LatestUpdatedAt watermark factors
+        // max(UpdatedAt, DeletedAt) on the server, so a Kind-Unspecified
+        // DeletedAt would re-introduce the timezone-shift bug on the
+        // pure-tombstone-delta path.
         modelBuilder.Entity<Book>()
             .HasQueryFilter(b => b.DeletedAt == null);
         modelBuilder.Entity<Book>()
             .HasIndex(b => b.DeletedAt)
             .HasFilter("[DeletedAt] IS NOT NULL");
+        modelBuilder.Entity<Book>()
+            .Property(b => b.DeletedAt)
+            .HasConversion(new ValueConverter<DateTime?, DateTime?>(
+                v => v,
+                v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : null));
 
         modelBuilder.Entity<Edition>()
             .HasOne(e => e.Book)
