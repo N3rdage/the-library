@@ -24,6 +24,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- ILogger surface for structured cache logging (cover fetch
+         diagnostics). Abstractions-only — concrete provider is wired
+         up on the Bookshelf side (MauiProgram.AddDebug + platform
+         logcat sink); tests use NullLogger. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <!-- sqlite-net-pcl: ORM-lite over SQLite. Bundles a managed +
          native SQLite via SQLitePCLRaw; works on Android, iOS, and
          desktop with no manual native-library hookup. -->

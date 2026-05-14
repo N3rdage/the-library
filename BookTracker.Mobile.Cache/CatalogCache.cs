@@ -1,6 +1,8 @@
 using System.Text.Json;
 using BookTracker.Mobile.Cache.Models;
 using BookTracker.Shared.Catalog;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using SkiaSharp;
 using SQLite;
 
@@ -8,6 +10,19 @@ namespace BookTracker.Mobile.Cache;
 
 public class CatalogCache : ICatalogCache
 {
+    private readonly ILogger<CatalogCache> _logger;
+
+    /// <summary>Default constructor — kept for back-compat with tests
+    /// that don't need structured logging. Uses a no-op logger.
+    /// Production registration (MauiProgram) calls the DI-friendly
+    /// overload that takes an ILogger.</summary>
+    public CatalogCache() : this(NullLogger<CatalogCache>.Instance) { }
+
+    public CatalogCache(ILogger<CatalogCache> logger)
+    {
+        _logger = logger;
+    }
+
     // Meta-store keys. Plain consts rather than an enum so the
     // wire-shape (catalog-cache.js uses the same key names) stays
     // greppable across both implementations.
@@ -276,7 +291,11 @@ public class CatalogCache : ICatalogCache
         ArgumentNullException.ThrowIfNull(http);
 
         var book = await Db.FindAsync<CachedBook>(bookId);
-        if (book is null) return null;
+        if (book is null)
+        {
+            _logger.LogInformation("Cover cache miss: book {BookId} not in cache", bookId);
+            return null;
+        }
 
         // Already cached and the file still exists on disk: short-
         // circuit. Covers can be evicted by the OS under storage
@@ -284,23 +303,39 @@ public class CatalogCache : ICatalogCache
         // the path is stale.
         if (book.CoverPath is not null && File.Exists(book.CoverPath))
         {
+            _logger.LogDebug("Cover already cached for book {BookId} at {Path}", bookId, book.CoverPath);
             return book.CoverPath;
         }
 
-        if (string.IsNullOrWhiteSpace(book.CoverUrl)) return null;
-        if (_coversDir is null) return null; // InitAsync guarantees non-null at runtime
+        if (string.IsNullOrWhiteSpace(book.CoverUrl))
+        {
+            _logger.LogInformation(
+                "Cover cache skip: book {BookId} has no CoverUrl in the cache row " +
+                "(common cause: catalog snapshot served by the server predates the " +
+                "BookSnapshot.CoverUrl field — refresh the catalog after Bookcase is " +
+                "redeployed with the projection)", bookId);
+            return null;
+        }
+        if (_coversDir is null)
+        {
+            _logger.LogWarning("Cover cache skip: covers dir is null — InitAsync was not called");
+            return null;
+        }
 
+        _logger.LogInformation("Fetching cover for book {BookId} from {CoverUrl}", bookId, book.CoverUrl);
         byte[] sourceBytes;
         try
         {
             sourceBytes = await http.GetByteArrayAsync(book.CoverUrl, ct);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // Offline, 404, DNS failure, cancellation — leave CoverPath
-            // null so the next display attempt retries. Don't surface
-            // the error; callers fall through to the URL or a
-            // placeholder.
+            // null so the next display attempt retries. Logged at
+            // Warning so logcat surfaces it without paranoid Error-level
+            // alerting (cover misses self-heal on the next attempt).
+            _logger.LogWarning(ex,
+                "Cover fetch failed for book {BookId} from {CoverUrl}", bookId, book.CoverUrl);
             return null;
         }
 
@@ -311,17 +346,32 @@ public class CatalogCache : ICatalogCache
             // null CoverPath so we'd retry later (in practice this
             // means a broken upstream cover, but retry costs nothing
             // and self-heals if upstream fixes it).
+            _logger.LogWarning(
+                "Cover decode/resize returned null for book {BookId} ({ByteCount} bytes downloaded from {CoverUrl})",
+                bookId, sourceBytes.Length, book.CoverUrl);
             return null;
         }
 
         var destPath = Path.Combine(_coversDir, $"{bookId}.jpg");
-        await File.WriteAllBytesAsync(destPath, resizedJpeg, ct);
+        try
+        {
+            await File.WriteAllBytesAsync(destPath, resizedJpeg, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Cover write failed for book {BookId} to {DestPath}", bookId, destPath);
+            return null;
+        }
 
         // Persist the path so next session skips the download. UPDATE
         // by primary key — single-row touch.
         book.CoverPath = destPath;
         await Db.UpdateAsync(book);
 
+        _logger.LogInformation(
+            "Cover cached for book {BookId} at {DestPath} ({JpegByteCount} bytes JPEG)",
+            bookId, destPath, resizedJpeg.Length);
         return destPath;
     }
 
