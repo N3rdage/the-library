@@ -11,6 +11,12 @@ internal class CachedBook
 {
     [PrimaryKey] public int Id { get; set; }
     public string Title { get; set; } = string.Empty;
+    /// <summary>Lowercased title for case-insensitive substring search.
+    /// Mirrors the <see cref="CachedAuthor.NameLower"/> pattern so
+    /// SearchBooksByTitleAsync's LIKE predicate sits on an indexed
+    /// column. Recomputed on every insert / upsert; do not write
+    /// directly from callers.</summary>
+    [Indexed] public string TitleLower { get; set; } = string.Empty;
     public string PrimaryAuthor { get; set; } = string.Empty;
     /// <summary>JSON-encoded list of all credited author names.
     /// sqlite-net-pcl has no native collection mapping; we serialise

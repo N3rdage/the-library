@@ -570,6 +570,230 @@ public class CatalogCacheTests
         Assert.Equal(3, meta!.BookCount);
     }
 
+    // ---- title search ----
+
+    [Fact]
+    public async Task SearchBooksByTitleAsync_MatchesCaseInsensitiveSubstring()
+    {
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Foundation", "Isaac Asimov", ["Isaac Asimov"], "Read", 5, [], null, null),
+                new(2, "Mountains of Madness", "H.P. Lovecraft", ["H.P. Lovecraft"], "Read", 4, [], null, null),
+                new(3, "The Hobbit", "J.R.R. Tolkien", ["J.R.R. Tolkien"], "Read", 5, [], null, null),
+            ]));
+
+        // Mid-word match across case.
+        var mountain = await cache.SearchBooksByTitleAsync("MOUNTAIN", 10);
+        Assert.Single(mountain);
+        Assert.Equal("Mountains of Madness", mountain[0].Title);
+
+        // Word at the start.
+        var found = await cache.SearchBooksByTitleAsync("found", 10);
+        Assert.Single(found);
+        Assert.Equal("Foundation", found[0].Title);
+    }
+
+    [Fact]
+    public async Task SearchBooksByTitleAsync_EmptyOrWhitespaceQueryReturnsEmpty()
+    {
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books: [new(1, "Foundation", "X", ["X"], "Read", 0, [], null, null)]));
+
+        Assert.Empty(await cache.SearchBooksByTitleAsync("", 10));
+        Assert.Empty(await cache.SearchBooksByTitleAsync("   ", 10));
+    }
+
+    [Fact]
+    public async Task SearchBooksByTitleAsync_NoMatchReturnsEmpty()
+    {
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books: [new(1, "Foundation", "X", ["X"], "Read", 0, [], null, null)]));
+
+        Assert.Empty(await cache.SearchBooksByTitleAsync("nonexistent", 10));
+    }
+
+    [Fact]
+    public async Task SearchBooksByTitleAsync_ResultsAlphabeticallySorted()
+    {
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                // Insertion order deliberately not alphabetical.
+                new(3, "Foundation and Empire", "X", ["X"], "Read", 0, [], null, null),
+                new(1, "Foundation", "X", ["X"], "Read", 0, [], null, null),
+                new(2, "Foundation's Edge", "X", ["X"], "Read", 0, [], null, null),
+            ]));
+
+        var hits = await cache.SearchBooksByTitleAsync("foundation", 10);
+        Assert.Equal(
+            ["Foundation", "Foundation and Empire", "Foundation's Edge"],
+            hits.Select(b => b.Title).ToArray());
+    }
+
+    [Fact]
+    public async Task SearchBooksByTitleAsync_RespectsLimit()
+    {
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Foundation 1", "X", ["X"], "Read", 0, [], null, null),
+                new(2, "Foundation 2", "X", ["X"], "Read", 0, [], null, null),
+                new(3, "Foundation 3", "X", ["X"], "Read", 0, [], null, null),
+            ]));
+
+        var hits = await cache.SearchBooksByTitleAsync("foundation", 2);
+        Assert.Equal(2, hits.Count);
+    }
+
+    [Fact]
+    public async Task ApplyDeltaAsync_UpdatesTitleLowerOnUpsertSoSearchHitsNewTitle()
+    {
+        // Regression test for the TitleLower invariant. If ApplyDelta
+        // upserts a Book but forgets to recompute TitleLower, the
+        // search index falls out of sync with the displayed Title —
+        // user searches the new title, gets no hit.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books: [new(1, "Foundation", "X", ["X"], "Read", 0, [], null, null)],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 8, 0, 0, DateTimeKind.Utc)));
+
+        // Search the original title hits.
+        Assert.Single(await cache.SearchBooksByTitleAsync("foundation", 10));
+
+        // Delta renames the book.
+        await cache.ApplyDeltaAsync(SampleSnapshot(
+            books: [new(1, "Renamed Title", "X", ["X"], "Read", 0, [], null, null)],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc)));
+
+        // Old title no longer matches; new title does.
+        Assert.Empty(await cache.SearchBooksByTitleAsync("foundation", 10));
+        var renamed = await cache.SearchBooksByTitleAsync("renamed", 10);
+        Assert.Single(renamed);
+        Assert.Equal("Renamed Title", renamed[0].Title);
+    }
+
+    // ---- series gaps ----
+
+    [Fact]
+    public async Task GetSeriesGapsAsync_ReturnsMissingOrdersForPartiallyOwnedSeries()
+    {
+        // Foundation series has ExpectedCount=7. User owns #1, #3, #5 →
+        // missing #2, #4, #6, #7.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Foundation", "Asimov", ["Asimov"], "Read", 5, [], SeriesId: 10, SeriesOrder: 1),
+                new(2, "Second Foundation", "Asimov", ["Asimov"], "Read", 5, [], SeriesId: 10, SeriesOrder: 3),
+                new(3, "Foundation's Edge", "Asimov", ["Asimov"], "Read", 5, [], SeriesId: 10, SeriesOrder: 5),
+            ],
+            series: [new(10, "Foundation", "Series", 7)]));
+
+        var gaps = await cache.GetSeriesGapsAsync();
+
+        var gap = Assert.Single(gaps);
+        Assert.Equal(10, gap.SeriesId);
+        Assert.Equal("Foundation", gap.SeriesName);
+        Assert.Equal(7, gap.ExpectedCount);
+        Assert.Equal(3, gap.OwnedCount);
+        Assert.Equal([2, 4, 6, 7], gap.MissingOrders);
+    }
+
+    [Fact]
+    public async Task GetSeriesGapsAsync_SkipsSeriesWithNullExpectedCount()
+    {
+        // Open-ended series (no ExpectedCount) — no notion of "complete",
+        // so no gap to surface.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books: [new(1, "Book A", "X", ["X"], "Read", 0, [], SeriesId: 10, SeriesOrder: 1)],
+            series: [new(10, "Open-ended Series", "Series", null)]));
+
+        Assert.Empty(await cache.GetSeriesGapsAsync());
+    }
+
+    [Fact]
+    public async Task GetSeriesGapsAsync_SkipsSeriesUserDoesntOwn()
+    {
+        // Series exists in the catalog (someone else's recommendation,
+        // or a Series imported alongside another Book in the same arc)
+        // but user owns zero of them.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books: [],
+            series: [new(10, "Foundation", "Series", 7)]));
+
+        Assert.Empty(await cache.GetSeriesGapsAsync());
+    }
+
+    [Fact]
+    public async Task GetSeriesGapsAsync_SkipsCompletedSeries()
+    {
+        // User owns all of #1..#3 for a 3-book series → no gaps,
+        // not in the result.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Vol 1", "X", ["X"], "Read", 0, [], SeriesId: 10, SeriesOrder: 1),
+                new(2, "Vol 2", "X", ["X"], "Read", 0, [], SeriesId: 10, SeriesOrder: 2),
+                new(3, "Vol 3", "X", ["X"], "Read", 0, [], SeriesId: 10, SeriesOrder: 3),
+            ],
+            series: [new(10, "Trilogy", "Series", 3)]));
+
+        Assert.Empty(await cache.GetSeriesGapsAsync());
+    }
+
+    [Fact]
+    public async Task GetSeriesGapsAsync_BooksWithNullSeriesOrderCountTowardOwnedButNotMissing()
+    {
+        // Book in the series but with no SeriesOrder set (rare —
+        // upstream metadata gap). OwnedCount reflects it; MissingOrders
+        // doesn't subtract for it (we don't know which slot it fills).
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Vol 1", "X", ["X"], "Read", 0, [], SeriesId: 10, SeriesOrder: 1),
+                new(2, "Vol ?", "X", ["X"], "Read", 0, [], SeriesId: 10, SeriesOrder: null),
+            ],
+            series: [new(10, "Trilogy", "Series", 3)]));
+
+        var gap = Assert.Single(await cache.GetSeriesGapsAsync());
+        Assert.Equal(2, gap.OwnedCount); // both books count
+        Assert.Equal([2, 3], gap.MissingOrders); // null-order doesn't fill a slot
+    }
+
+    [Fact]
+    public async Task GetSeriesGapsAsync_AlphabeticallySortedByName()
+    {
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Z1", "X", ["X"], "Read", 0, [], SeriesId: 30, SeriesOrder: 1),
+                new(2, "A1", "X", ["X"], "Read", 0, [], SeriesId: 10, SeriesOrder: 1),
+                new(3, "M1", "X", ["X"], "Read", 0, [], SeriesId: 20, SeriesOrder: 1),
+            ],
+            series:
+            [
+                new(30, "Zeta", "Series", 2),
+                new(10, "Alpha", "Series", 2),
+                new(20, "Mu", "Series", 2),
+            ]));
+
+        var gaps = await cache.GetSeriesGapsAsync();
+        Assert.Equal(
+            ["Alpha", "Mu", "Zeta"],
+            gaps.Select(g => g.SeriesName).ToArray());
+    }
+
     // ---- helpers ----
 
     private static byte[] MakePngBytes(int width, int height)

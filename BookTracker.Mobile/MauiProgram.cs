@@ -56,6 +56,10 @@ public static class MauiProgram
         // registered — it's constructed inline because it needs a
         // runtime-chosen AuthorSnapshot that DI can't supply.
         builder.Services.AddTransient<AuthorSearchPage>();
+        // Title search + Series gaps — same transient lifetime so each
+        // visit gets fresh state.
+        builder.Services.AddTransient<TitleSearchPage>();
+        builder.Services.AddTransient<SeriesGapsPage>();
 
 #if DEBUG
         builder.Logging.AddDebug();

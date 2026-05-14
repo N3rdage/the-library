@@ -103,10 +103,12 @@ public class CatalogCache : ICatalogCache
             var books = snapshot.Books ?? [];
             foreach (var book in books)
             {
+                var title = book.Title ?? "";
                 conn.Insert(new CachedBook
                 {
                     Id = book.Id,
-                    Title = book.Title ?? "",
+                    Title = title,
+                    TitleLower = title.ToLowerInvariant(),
                     PrimaryAuthor = book.PrimaryAuthor ?? "",
                     AllAuthorsJson = JsonSerializer.Serialize(book.AllAuthors ?? []),
                     Status = book.Status ?? "",
@@ -205,10 +207,12 @@ public class CatalogCache : ICatalogCache
 
                 // InsertOrReplace handles both shapes: new Book (no
                 // existing row) and upsert (overwrites every column).
+                var title = book.Title ?? "";
                 conn.InsertOrReplace(new CachedBook
                 {
                     Id = book.Id,
-                    Title = book.Title ?? "",
+                    Title = title,
+                    TitleLower = title.ToLowerInvariant(),
                     PrimaryAuthor = book.PrimaryAuthor ?? "",
                     AllAuthorsJson = JsonSerializer.Serialize(book.AllAuthors ?? []),
                     Status = book.Status ?? "",
@@ -385,6 +389,89 @@ public class CatalogCache : ICatalogCache
         return canonicals
             .OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase)
             .Select(a => new AuthorSnapshot(a.Id, a.Name, a.CanonicalId, a.BookCount))
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<BookSnapshot>> SearchBooksByTitleAsync(string query, int limit)
+    {
+        var cap = limit > 0 ? limit : 20;
+        var trimmed = (query ?? "").Trim();
+        if (trimmed.Length == 0) return [];
+        var lower = trimmed.ToLowerInvariant();
+
+        // Indexed substring scan on TitleLower. SQLite can't use the
+        // index for a leading-wildcard LIKE, so this is a table scan
+        // at the books-count scale (≤ a few thousand) — sub-millisecond
+        // in practice. Sort alphabetically client-side after rehydrating
+        // the snapshots; sorting in SQL by TitleLower vs Title doesn't
+        // matter for ASCII titles but the C#-side OrdinalIgnoreCase
+        // sort matches AuthorBooksPage's convention.
+        var matches = await Db.Table<CachedBook>()
+            .Where(b => b.TitleLower.Contains(lower))
+            .Take(cap)
+            .ToListAsync();
+        if (matches.Count == 0) return [];
+
+        var snapshots = new List<BookSnapshot>(matches.Count);
+        foreach (var book in matches)
+        {
+            snapshots.Add(await ToSnapshotAsync(book));
+        }
+        return snapshots
+            .OrderBy(b => b.Title, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<SeriesGap>> GetSeriesGapsAsync()
+    {
+        // Series gaps = for each Series with ExpectedCount set, the
+        // 1..ExpectedCount slots the user doesn't own. Skip series with
+        // no ExpectedCount (open-ended series — no "complete" target),
+        // skip series the user hasn't started (zero owned), and skip
+        // series the user has finished (no gaps). The bookshop use
+        // case is "I need #2 and #6 of Foundation" — series with
+        // nothing to add are noise.
+        var seriesWithTarget = (await Db.Table<CachedSeries>().ToListAsync())
+            .Where(s => s.ExpectedCount is > 0)
+            .ToList();
+        if (seriesWithTarget.Count == 0) return [];
+
+        // Pull all books once; we'll bucket them per-series in memory.
+        // At the 3000+ books target this is a single table scan that
+        // beats N round-trips per series.
+        var books = await Db.Table<CachedBook>().ToListAsync();
+
+        var results = new List<SeriesGap>();
+        foreach (var series in seriesWithTarget)
+        {
+            var inSeries = books.Where(b => b.SeriesId == series.Id).ToList();
+            if (inSeries.Count == 0) continue; // user hasn't started this series
+
+            // SeriesOrder slots the user occupies. Null orders count
+            // toward OwnedCount but don't fill a specific 1..N slot —
+            // they neither help nor hurt the missing-orders calc.
+            var ownedOrders = inSeries
+                .Where(b => b.SeriesOrder is > 0)
+                .Select(b => b.SeriesOrder!.Value)
+                .ToHashSet();
+
+            var expected = series.ExpectedCount!.Value;
+            var missing = Enumerable.Range(1, expected)
+                .Where(n => !ownedOrders.Contains(n))
+                .ToList();
+            if (missing.Count == 0) continue; // user has the full set
+
+            results.Add(new SeriesGap(
+                SeriesId: series.Id,
+                SeriesName: series.Name,
+                SeriesType: series.Type,
+                ExpectedCount: expected,
+                OwnedCount: inSeries.Count,
+                MissingOrders: missing));
+        }
+
+        return results
+            .OrderBy(g => g.SeriesName, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 

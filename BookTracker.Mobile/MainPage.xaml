@@ -98,6 +98,34 @@
                         HorizontalOptions="Fill"
                         IsVisible="False" />
 
+                <!-- Find by title — substring search on Book.Title for
+                     the "I'm pretty sure I have something Mountain"
+                     case. Same shape as Find by author. -->
+                <Button x:Name="FindByTitleButton"
+                        Text="🔍  Find by title"
+                        Clicked="OnFindByTitleClicked"
+                        HeightRequest="56"
+                        BackgroundColor="#6B2737"
+                        TextColor="#FAF6EC"
+                        FontSize="16"
+                        CornerRadius="8"
+                        HorizontalOptions="Fill"
+                        IsVisible="False" />
+
+                <!-- Series gaps — "what am I missing?" for series with
+                     a known length where the user owns some but not
+                     all. Useful while shopping. -->
+                <Button x:Name="SeriesGapsButton"
+                        Text="📚  Series gaps"
+                        Clicked="OnSeriesGapsClicked"
+                        HeightRequest="56"
+                        BackgroundColor="#6B2737"
+                        TextColor="#FAF6EC"
+                        FontSize="16"
+                        CornerRadius="8"
+                        HorizontalOptions="Fill"
+                        IsVisible="False" />
+
                 <!-- Cache stats panel — passive info card that surfaces
                      "what's stashed locally" so it isn't buried in
                      StatusLabel text. Brass border on aged-parchment
