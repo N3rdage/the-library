@@ -154,13 +154,14 @@ public class CatalogCache : ICatalogCache
                 }
                 // Editions + Works — back-compat for older servers
                 // that don't ship these yet (deserialised as null).
-                // No-op when null/empty.
+                // No-op when null/empty. RowId is AutoIncrement-assigned;
+                // EditionId / WorkId carry the server-side natural Id.
                 foreach (var edition in book.Editions ?? [])
                 {
                     conn.Insert(new CachedBookEdition
                     {
-                        Id = edition.Id,
                         BookId = book.Id,
+                        EditionId = edition.Id,
                         Isbn = edition.Isbn,
                         Format = edition.Format ?? "",
                         CoverUrl = edition.CoverUrl,
@@ -170,8 +171,8 @@ public class CatalogCache : ICatalogCache
                 {
                     conn.Insert(new CachedBookWork
                     {
-                        Id = work.Id,
                         BookId = book.Id,
+                        WorkId = work.Id,
                         Title = work.Title ?? "",
                         PrimaryAuthor = work.PrimaryAuthor ?? "",
                     });
@@ -286,18 +287,21 @@ public class CatalogCache : ICatalogCache
                     }
                 }
 
-                // Editions + Works: same wipe-and-rewrite pattern as
-                // the ISBN join rows. Each row's PK is the server
-                // Id, so we explicitly delete by BookId rather than
-                // by PK (the incoming Ids would replace, but stale
-                // rows from a since-deleted Edition would linger).
+                // Editions + Works: wipe-and-rewrite per Book. RowId
+                // is the AutoIncrement surrogate PK; EditionId / WorkId
+                // are the server-side natural Ids. Surrogate is
+                // mandatory for Works because a single Work can belong
+                // to multiple Books (Lovecraft's "Call of Cthulhu"
+                // appearing in three anthologies you own) — a
+                // natural-Id PK would UNIQUE-constraint on the second
+                // Book's insert.
                 conn.Execute("DELETE FROM book_editions WHERE BookId = ?", book.Id);
                 foreach (var edition in book.Editions ?? [])
                 {
                     conn.Insert(new CachedBookEdition
                     {
-                        Id = edition.Id,
                         BookId = book.Id,
+                        EditionId = edition.Id,
                         Isbn = edition.Isbn,
                         Format = edition.Format ?? "",
                         CoverUrl = edition.CoverUrl,
@@ -308,8 +312,8 @@ public class CatalogCache : ICatalogCache
                 {
                     conn.Insert(new CachedBookWork
                     {
-                        Id = work.Id,
                         BookId = book.Id,
+                        WorkId = work.Id,
                         Title = work.Title ?? "",
                         PrimaryAuthor = work.PrimaryAuthor ?? "",
                     });
@@ -570,15 +574,16 @@ public class CatalogCache : ICatalogCache
             // Isbn so two paperback rows don't randomise on each read.
             .OrderBy(e => e.Format, StringComparer.OrdinalIgnoreCase)
             .ThenBy(e => e.Isbn ?? "", StringComparer.OrdinalIgnoreCase)
-            .Select(e => new EditionSnapshot(e.Id, e.Isbn, e.Format, e.CoverUrl))
+            .Select(e => new EditionSnapshot(e.EditionId, e.Isbn, e.Format, e.CoverUrl))
             .ToList();
         var works = workRows
-            // Server projects in OrderBy(w => w.Id) — same order is
-            // useful client-side because that's how the PrimaryAuthor
+            // Server projects in OrderBy(w => w.Id) — preserve that
+            // client-side because that's how the PrimaryAuthor
             // convention picks the "first Work" for series + author
-            // rollups elsewhere.
-            .OrderBy(w => w.Id)
-            .Select(w => new WorkSnapshot(w.Id, w.Title, w.PrimaryAuthor))
+            // rollups elsewhere. Order by WorkId (the server-side Id),
+            // not RowId (the local surrogate, insertion-order).
+            .OrderBy(w => w.WorkId)
+            .Select(w => new WorkSnapshot(w.WorkId, w.Title, w.PrimaryAuthor))
             .ToList();
 
         return new BookEnrichedDetail(editions, works);

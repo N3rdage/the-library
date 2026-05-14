@@ -963,6 +963,70 @@ public class CatalogCacheTests
         Assert.Null(await cache.GetBookEnrichedDetailAsync(1));
     }
 
+    // ---- shared-Work + shared-data-shape regressions ----
+
+    [Fact]
+    public async Task PopulateAsync_SameWorkAttachedToMultipleBooks_DoesNotCollide()
+    {
+        // Regression for the 2026-05-14 prod report: PopulateAsync
+        // threw "UNIQUE constraint failed: book_works.Id" when a Work
+        // appeared in more than one Book (Lovecraft's "Call of Cthulhu"
+        // in two different anthologies). Work is many-to-many with
+        // Book on the server; CachedBookWork needs a surrogate
+        // AutoIncrement PK so the same server-side Work.Id can repeat
+        // across rows.
+        var cache = await NewCacheAsync();
+        var sharedWork = new WorkSnapshot(42, "The Call of Cthulhu", "H.P. Lovecraft");
+
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Lovecraft Anthology A", "Lovecraft", ["Lovecraft"], "Read", 5, [],
+                    null, null, null,
+                    Works: [sharedWork]),
+                new(2, "Lovecraft Anthology B", "Lovecraft", ["Lovecraft"], "Read", 5, [],
+                    null, null, null,
+                    Works: [sharedWork]),
+            ]));
+
+        // Both books should resolve the shared Work via GetBookEnrichedDetailAsync.
+        var detailA = await cache.GetBookEnrichedDetailAsync(1);
+        var detailB = await cache.GetBookEnrichedDetailAsync(2);
+        Assert.NotNull(detailA);
+        Assert.NotNull(detailB);
+        var workA = Assert.Single(detailA!.Works);
+        var workB = Assert.Single(detailB!.Works);
+        Assert.Equal(42, workA.Id);
+        Assert.Equal(42, workB.Id);
+        Assert.Equal("The Call of Cthulhu", workA.Title);
+    }
+
+    [Fact]
+    public async Task ApplyDeltaAsync_SameWorkAttachedToMultipleBooks_DoesNotCollide()
+    {
+        // Same regression as above but on the delta path — a delta
+        // refresh shouldn't introduce the collision either.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            latestUpdatedAt: new DateTime(2026, 5, 14, 8, 0, 0, DateTimeKind.Utc)));
+
+        var sharedWork = new WorkSnapshot(42, "The Call of Cthulhu", "H.P. Lovecraft");
+        await cache.ApplyDeltaAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Anthology A", "Lovecraft", ["Lovecraft"], "Read", 5, [],
+                    null, null, null,
+                    Works: [sharedWork]),
+                new(2, "Anthology B", "Lovecraft", ["Lovecraft"], "Read", 5, [],
+                    null, null, null,
+                    Works: [sharedWork]),
+            ],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc)));
+
+        Assert.Single((await cache.GetBookEnrichedDetailAsync(1))!.Works);
+        Assert.Single((await cache.GetBookEnrichedDetailAsync(2))!.Works);
+    }
+
     // ---- helpers ----
 
     private static byte[] MakePngBytes(int width, int height)
