@@ -207,6 +207,24 @@ public partial class MainPage : ContentPage
         await Navigation.PushAsync(page);
     }
 
+    private async void OnFindByTitleClicked(object? sender, EventArgs e)
+    {
+        var services = Microsoft.Maui.Controls.Application.Current?.Handler?.MauiContext?.Services
+            ?? throw new InvalidOperationException("ServiceProvider not available.");
+        var page = services.GetService(typeof(TitleSearchPage)) as TitleSearchPage
+            ?? throw new InvalidOperationException("TitleSearchPage not registered.");
+        await Navigation.PushAsync(page);
+    }
+
+    private async void OnSeriesGapsClicked(object? sender, EventArgs e)
+    {
+        var services = Microsoft.Maui.Controls.Application.Current?.Handler?.MauiContext?.Services
+            ?? throw new InvalidOperationException("ServiceProvider not available.");
+        var page = services.GetService(typeof(SeriesGapsPage)) as SeriesGapsPage
+            ?? throw new InvalidOperationException("SeriesGapsPage not registered.");
+        await Navigation.PushAsync(page);
+    }
+
     private async Task RefreshMetaAsync()
     {
         try
@@ -242,6 +260,10 @@ public partial class MainPage : ContentPage
         ScanButton.IsEnabled = !_busy && _signedIn && hasCache;
         FindByAuthorButton.IsVisible = _signedIn;
         FindByAuthorButton.IsEnabled = !_busy && _signedIn && hasCache;
+        FindByTitleButton.IsVisible = _signedIn;
+        FindByTitleButton.IsEnabled = !_busy && _signedIn && hasCache;
+        SeriesGapsButton.IsVisible = _signedIn;
+        SeriesGapsButton.IsEnabled = !_busy && _signedIn && hasCache;
 
         // Cache stats panel: passive info, only when we have data.
         // Renders independently of signed-in state — cached data

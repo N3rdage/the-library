@@ -52,6 +52,23 @@ public interface ICatalogCache
     /// "Bachman" finds King via the alias row.</summary>
     Task<IReadOnlyList<AuthorSnapshot>> SearchAuthorsAsync(string query, int limit);
 
+    /// <summary>Substring search on book title (case-insensitive).
+    /// Mirrors <see cref="SearchAuthorsAsync"/> shape for the "I'm
+    /// pretty sure I have a book called <i>something Mountain</i>"
+    /// use case. Returns at most <paramref name="limit"/> results
+    /// (default 20 when limit ≤ 0) sorted alphabetically by title.
+    /// Empty/whitespace query returns no results.</summary>
+    Task<IReadOnlyList<BookSnapshot>> SearchBooksByTitleAsync(string query, int limit);
+
+    /// <summary>Returns one entry per Series with a finite
+    /// <c>ExpectedCount</c> where the user owns at least one book but
+    /// not the full set. Skipped: series with no ExpectedCount
+    /// (open-ended), series with zero owned books (user hasn't started
+    /// the series), series with no gaps (complete). Sorted
+    /// alphabetically by series name. Backs the Bookshelf "Series
+    /// gaps" page — "in the bookshop, what am I missing?"</summary>
+    Task<IReadOnlyList<SeriesGap>> GetSeriesGapsAsync();
+
     /// <summary>Stored sync metadata — version, syncedAt, bookCount,
     /// authorCount. Null if the cache has never been populated.</summary>
     Task<CacheMeta?> GetMetaAsync();
@@ -71,6 +88,21 @@ public interface ICatalogCache
     /// </summary>
     Task<string?> EnsureCoverCachedAsync(int bookId, HttpClient http, CancellationToken ct = default);
 }
+
+/// <summary>One series the user owns part of but not all of. Backs the
+/// Bookshelf "Series gaps" page — at a glance, the user can see what's
+/// missing while standing in a bookshop. <see cref="MissingOrders"/>
+/// lists the integer SeriesOrder values from 1..ExpectedCount that the
+/// user doesn't own (e.g. <c>[2, 6]</c> means missing #2 and #6).
+/// Books with null SeriesOrder count toward OwnedCount but don't fill
+/// any specific slot — they neither help nor hurt the gap calculation.</summary>
+public record SeriesGap(
+    int SeriesId,
+    string SeriesName,
+    string SeriesType,
+    int ExpectedCount,
+    int OwnedCount,
+    IReadOnlyList<int> MissingOrders);
 
 public record CacheMeta(
     string? Version,
