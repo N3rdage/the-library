@@ -53,6 +53,11 @@ project.fragment.lock.json
 artifacts/
 *.pdb
 
+# Snapshot dumps from infra/dump-prod-to-json.ps1 — production data
+# intended for upload into the local "BookTracker Analysis" Claude
+# Project. Stays local; never committed.
+snapshots/
+
 # App config with secrets — committed only as *.Example.json templates
 appsettings.json
 appsettings.*.json

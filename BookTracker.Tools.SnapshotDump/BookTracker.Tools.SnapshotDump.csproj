@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    One-shot console CLI that reads the BookTracker catalogue from a
+    SQL Server connection (typically prod) and emits a single JSON
+    file in an analysis-oriented shape for upload into the "BookTracker
+    Analysis" Claude Project.
+
+    Driver: infra/dump-prod-to-json.ps1 — handles Az sign-in, opens a
+    temporary SQL firewall rule for the caller's IP, sets the
+    connection string env var, and invokes this CLI.
+
+    Why a CLI rather than a PowerShell-only solution: reuses
+    BookTracker.Data entity classes so the dump shape evolves with the
+    model (add a property to an entity → it lands in the DTO via the
+    projection in Program.cs), and the soft-delete global query filter
+    is honoured automatically.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>BookTracker.Tools.SnapshotDump</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BookTracker.Data\BookTracker.Data.csproj" />
+  </ItemGroup>
+
+</Project>

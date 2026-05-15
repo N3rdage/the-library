@@ -179,6 +179,34 @@ Direction: **prod → local only**. There is no reverse path — data flows into
 
 Flags: `-SkipExport` reuses the most recent BACPAC in `./artifacts/` (handy when iterating on import). `-SkipImport` just downloads the BACPAC.
 
+### Dump prod to JSON for Claude analysis
+
+To brainstorm shelving / categorisation / genre simplification with a Claude Project against real catalogue data:
+
+```powershell
+./infra/dump-prod-to-json.ps1 -TenantId '<tenant-guid>' -SubscriptionId '<sub-guid>'
+```
+
+What it does:
+
+1. Signs in to Azure, locates the prod SQL server (same pattern as `refresh-local-db.ps1`).
+2. Temporarily enables SQL public network access + opens a firewall rule for the caller's IP.
+3. Builds an AAD-auth connection string (`Authentication=Active Directory Default`, same mode the prod App Service uses) and sets `ConnectionStrings__DefaultConnection`.
+4. Invokes `BookTracker.Tools.SnapshotDump`, which loads the catalogue via EF Core (soft-deleted Books are excluded by the global query filter) and emits a single JSON file to `./snapshots/` (gitignored).
+5. Restores the firewall state in `finally` even if the dotnet step fails.
+
+Upload the resulting `./snapshots/booktracker-<stamp>.json` to the "BookTracker Analysis" Claude Project alongside `docs/DATA-DICTIONARY.md` and `docs/GENRE-TAXONOMY.md` to give the agent the interpretation layer for the data.
+
+Direction: **prod → JSON only**. Read-only — no schema or data changes. Any data updates the brainstorm produces come back as EF migrations or manual SQL via the normal PR flow; the air gap is deliberate.
+
+Prereqs:
+
+- .NET 10 SDK on PATH.
+- `Az.Accounts`, `Az.Resources`, `Az.Sql` modules — auto-install on first run.
+- Caller is the prod SQL server's AAD admin (Drew is, per `deploy.ps1`'s `sqlAadAdminObjectId = $me.Id` wiring). Anyone else needs `CREATE USER ... FROM EXTERNAL PROVIDER` + `db_datareader` on the `booktracker` database first.
+
+Flags: `-OutputPath <path>` overrides the default output location.
+
 ## GitHub Actions CI/CD
 
 After the first `deploy.ps1` run, set up the GitHub → Azure OIDC link:
