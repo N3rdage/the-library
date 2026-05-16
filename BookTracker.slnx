@@ -19,5 +19,6 @@
   <Project Path="BookTracker.Mobile.Cache.Tests/BookTracker.Mobile.Cache.Tests.csproj" />
   <Project Path="BookTracker.Shared/BookTracker.Shared.csproj" />
   <Project Path="BookTracker.Tests/BookTracker.Tests.csproj" />
+  <Project Path="BookTracker.Tools.SnapshotDump/BookTracker.Tools.SnapshotDump.csproj" />
   <Project Path="BookTracker.Web/BookTracker.Web.csproj" />
 </Solution>
