@@ -20,14 +20,20 @@ namespace BookTracker.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.InsertData(
-                table: "Tags",
-                columns: new[] { "Id", "Name" },
-                values: new object[,]
-                {
-                    { 2, "format:graphic-novel" },
-                    { 3, "format:short-stories" }
-                });
+            // Idempotent Tag seeding. The original auto-generated `InsertData`
+            // crashed on environments where a previous deploy attempt had
+            // already inserted rows at Id 2/3 but the migration-history row
+            // never landed (the slot-swap warmup runs migrations against
+            // prod DB with prod config; if the warmup ping then fails, the
+            // app dies before the migration history is consistent across
+            // retries). Guarding by Id makes this safe to re-run.
+            migrationBuilder.Sql(@"
+SET IDENTITY_INSERT [Tags] ON;
+IF NOT EXISTS (SELECT 1 FROM [Tags] WHERE [Id] = 2)
+    INSERT INTO [Tags] ([Id], [Name]) VALUES (2, N'format:graphic-novel');
+IF NOT EXISTS (SELECT 1 FROM [Tags] WHERE [Id] = 3)
+    INSERT INTO [Tags] ([Id], [Name]) VALUES (3, N'format:short-stories');
+SET IDENTITY_INSERT [Tags] OFF;");
 
             foreach (var name in FormatGenres)
             {
