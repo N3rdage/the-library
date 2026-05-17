@@ -92,9 +92,9 @@ Utopian                      (top-level, no sub-genres yet)
 Magical Realism              (top-level, no sub-genres yet)
 Biographical Fiction         (top-level, no sub-genres yet)
 Western                      (top-level, no sub-genres yet)
-Graphic Novels               (top-level, no sub-genres yet)
-Short Story Collections      (top-level, no sub-genres yet)
 ```
+
+> `Graphic Novels` and `Short Story Collections` were removed 2026-05-17 — they're format indicators, not genres. They now live as `format:graphic-novel` / `format:short-stories` Tags on the Book. See [`DATA-DICTIONARY.md`](DATA-DICTIONARY.md) §Tag conventions.
 
 ### Non-fiction branches
 
@@ -133,6 +133,7 @@ Religion & Spirituality
 | Horror sub-genres (Cthulhu Mythos / Vampire / Zombie) | Follow-up seed | `20260419110101_SeedHorrorSubGenres` |
 | Reference + Art + Religion & Spirituality (all three branches and their sub-genres) | Non-fiction starter set | `20260422090308_SeedNonFictionReferenceArtReligion` |
 | Science Fiction sub-tree (Hard SF / Space Opera / Cyberpunk / Military SF / Time Travel / First Contact / Post-Apocalyptic / Dystopian SF / Alternate History / Young Adult SF) + Horror sub-tree extension (Cosmic Horror / Gothic Horror / Supernatural / Psychological Horror / Splatterpunk / Folk Horror / Body Horror) | Genre-restructure pass (PR 1) | `20260516233131_SeedGenreExpansion` |
+| `Graphic Novels` + `Short Story Collections` removed from the tree (moved to `format:*` Tag convention); `format:graphic-novel` + `format:short-stories` Tag rows seeded | Genre-restructure pass (PR 2) | `20260517041346_RemoveFormatGenres` |
 
 User-added genres (created via the Add page typeahead's free-text fall-through, if that surface allows it — currently the picker is closed-list against `GenreSeed.All`) would *not* be in `GenreSeed.cs` but would live in the DB. If you see a Genre row in the snapshot that's not in this file, it's either a stale row from a withdrawn seed, an out-of-band insert, or this file is behind. As of this writing, the picker is closed-list, so the DB and `GenreSeed.cs` should match exactly.
 
@@ -173,6 +174,6 @@ If a brainstorming session proposes adding a branch, the addition is:
 
 1. **Where do cookbooks go?** Currently nowhere clean — Reference subtree was scoped to dictionaries / encyclopaedias / atlases / field guides / style guides / language learning. A new top-level "Cookery" or sub-branch under Reference would resolve it. Surfaced because reference book capture is the next planned wave (TODO #51).
 2. ~~**Sci-fi has no sub-genres yet** despite being one of the largest fiction branches.~~ **Resolved 2026-05-17** by `SeedGenreExpansion` — 10 sub-genres added including `Dystopian SF`. The existing top-level `Dystopian` is kept for non-SF dystopias (literary, near-future thriller) per the genre-restructure brief.
-3. **`Short Story Collections` as a top-level genre is structurally odd** — it's a *format* indicator, not a genre. A Christie short-story collection has Genre = Mystery on its constituent Works, plus the volume might (or might not) carry the Short-Story-Collections tag. Worth deciding whether to keep it, or migrate volumes that use it to a Book-level Tag instead.
-4. **`Graphic Novels` similar concern** — format or genre? Currently treated as genre.
+3. ~~**`Short Story Collections` as a top-level genre is structurally odd** — it's a *format* indicator, not a genre.~~ **Resolved 2026-05-17** by `RemoveFormatGenres` — moved to `format:short-stories` Tag on the Book. Constituent Works keep their thematic genre (e.g. Mystery for a Christie collection).
+4. ~~**`Graphic Novels` similar concern** — format or genre? Currently treated as genre.~~ **Resolved 2026-05-17** by `RemoveFormatGenres` — moved to `format:graphic-novel` Tag on the Book.
 5. **`Romantasy` vs `Paranormal Fantasy` vs `Paranormal Romance`** — three sub-genres at the boundary that may overlap in practice. Worth a usage scan: are all three actively used? Do any captures land in two of them simultaneously?

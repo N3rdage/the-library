@@ -84,8 +84,12 @@ public static class GenreSeed
         new("Magical Realism", null),
         new("Biographical Fiction", null),
         new("Western", null),
-        new("Graphic Novels", null),
-        new("Short Story Collections", null),
+        // `Graphic Novels` and `Short Story Collections` were removed
+        // 2026-05-17 — they're format indicators, not genres. They now
+        // live as `format:graphic-novel` / `format:short-stories` tags
+        // on the Book. See GENRE-TAXONOMY.md Provenance for the
+        // RemoveFormatGenres migration and DATA-DICTIONARY.md §Tag.
+
 
         // Non-fiction starter set — reference, art, and religious books.
         // Further non-fiction branches (History, Biography, Science,

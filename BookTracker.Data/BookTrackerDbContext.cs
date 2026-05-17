@@ -133,7 +133,10 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .IsUnique();
 
         modelBuilder.Entity<Tag>()
-            .HasData(new Tag { Id = 1, Name = "follow-up" });
+            .HasData(
+                new Tag { Id = 1, Name = "follow-up" },
+                new Tag { Id = 2, Name = "format:graphic-novel" },
+                new Tag { Id = 3, Name = "format:short-stories" });
 
         modelBuilder.Entity<MaintenanceLog>()
             .HasIndex(m => m.Name)
