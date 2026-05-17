@@ -16,12 +16,100 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore BookTracker.slnx
+
+      - name: Build migration bundle
+        # Same bundle the deploy.yml workflow built against staging DB,
+        # rebuilt here from the same commit on `main` for atomicity.
+        # Applies pending migrations against the connection string the
+        # bundle is invoked with. See TODO #21.
+        run: |
+          dotnet ef migrations bundle \
+            --project BookTracker.Data \
+            --startup-project BookTracker.Web \
+            --configuration Release \
+            --self-contained \
+            -r linux-x64 \
+            --output ./migrate \
+            --force
+
       - name: Azure login (OIDC)
         uses: azure/login@v2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve SQL server + open temp firewall
+        id: sql-fw
+        env:
+          AZURE_RG: ${{ vars.AZURE_RG }}
+        run: |
+          set -euo pipefail
+          SQL_SERVER=$(az sql server list \
+            --resource-group "$AZURE_RG" \
+            --query "[?starts_with(name, 'booktracker-sql-')].name | [0]" -o tsv)
+          if [ -z "$SQL_SERVER" ]; then
+            echo "::error::No SQL server matching booktracker-sql-* in $AZURE_RG"
+            exit 1
+          fi
+          echo "sql_server=$SQL_SERVER" >> "$GITHUB_OUTPUT"
+          echo "sql_fqdn=$SQL_SERVER.database.windows.net" >> "$GITHUB_OUTPUT"
+
+          PUBLIC_ACCESS_WAS=$(az sql server show \
+            --resource-group "$AZURE_RG" --name "$SQL_SERVER" \
+            --query "publicNetworkAccess" -o tsv)
+          echo "public_access_was=$PUBLIC_ACCESS_WAS" >> "$GITHUB_OUTPUT"
+
+          if [ "$PUBLIC_ACCESS_WAS" != "Enabled" ]; then
+            az sql server update \
+              --resource-group "$AZURE_RG" --name "$SQL_SERVER" \
+              --set publicNetworkAccess=Enabled --output none
+          fi
+
+          MY_IP=$(curl -fsSL https://api.ipify.org)
+          RULE_NAME="ghactions-swap-${{ github.run_id }}-${{ github.run_attempt }}"
+          echo "rule_name=$RULE_NAME" >> "$GITHUB_OUTPUT"
+          az sql server firewall-rule create \
+            --resource-group "$AZURE_RG" --server "$SQL_SERVER" \
+            --name "$RULE_NAME" \
+            --start-ip-address "$MY_IP" --end-ip-address "$MY_IP" \
+            --output none
+          sleep 10
+
+      - name: Apply migrations to prod DB
+        # If this step fails, the swap below does NOT run — prod stays on
+        # both old code AND old schema (clean abort, no partial state).
+        env:
+          PROD_CONN: Server=tcp:${{ steps.sql-fw.outputs.sql_fqdn }},1433;Database=booktracker;Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False;
+        run: |
+          chmod +x ./migrate
+          ./migrate --connection "$PROD_CONN"
+
+      - name: Close temp firewall
+        if: always() && steps.sql-fw.outputs.rule_name != ''
+        env:
+          AZURE_RG: ${{ vars.AZURE_RG }}
+          SQL_SERVER: ${{ steps.sql-fw.outputs.sql_server }}
+          RULE_NAME: ${{ steps.sql-fw.outputs.rule_name }}
+          PUBLIC_ACCESS_WAS: ${{ steps.sql-fw.outputs.public_access_was }}
+        run: |
+          az sql server firewall-rule delete \
+            --resource-group "$AZURE_RG" --server "$SQL_SERVER" \
+            --name "$RULE_NAME" --output none || true
+          if [ "$PUBLIC_ACCESS_WAS" != "Enabled" ]; then
+            az sql server update \
+              --resource-group "$AZURE_RG" --name "$SQL_SERVER" \
+              --set publicNetworkAccess="$PUBLIC_ACCESS_WAS" \
+              --output none || true
+          fi
 
       - name: Swap staging into production
         run: |
