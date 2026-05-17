@@ -129,6 +129,35 @@ The 30-minute timeout isn't waiting for the migration. The migration crashes in 
 
 That's why a 10-line SQL goof cost half an hour per retry. Not because anything was actually slow; because everything was failing fast, but the failure mode looked structurally identical to slowness from outside.
 
-There's a structural fix to this. It's [TODO #21](https://github.com/N3rdage/the-library/blob/main/TODO.md): replace migrate-on-startup with a deploy-time migration apply step. The migration runs as its own CI step against the staging DB before the app deploys, and against the prod DB before the slot swap dispatches. Failure shows up as a distinct red workflow step, not a 30-minute warmup probe timeout against an opaque "slot didn't respond." Multi-instance scale-out (today not needed, but a one-way door if traffic grows) stops being a race against `__EFMigrationsLock`. The app's runtime managed identity can drop `db_ddladmin` and stay at `db_datareader` / `db_datawriter`, because schema changes no longer happen from the app's process.
+## The structural fix
 
-That's the PR that lands alongside this post. [<!-- PR # TBD when shipped -->](https://github.com/N3rdage/the-library/pulls)
+[PR #275](https://github.com/N3rdage/the-library/pull/275) lands alongside this post. It does one thing structurally and a few things downstream of that.
+
+The structural change: migrations stop running at app startup. EF Core has a packaging tool — `dotnet ef migrations bundle` — that produces a self-contained binary baked with all the project's migrations. That binary accepts a `--connection` argument at runtime and applies any pending migrations against the passed-in database, then exits. The GitHub Actions deploy workflow now builds the bundle, opens a temporary firewall rule for the runner's IP, points the bundle at the staging DB via AAD auth, and waits for it to exit cleanly. Only then does the app code deploy to the staging slot. The swap workflow does the same against the prod DB before dispatching the slot swap.
+
+`Program.cs` is now four lines shorter — minus the `await ProgramSetup.RunMigrationsAsync(app)` call — except for one carve-out: when `app.Environment.IsDevelopment()` is true, migrate-on-startup still fires, because local `dotnet watch` shouldn't need a separate `dotnet ef database update` step before the app comes up.
+
+Three things change downstream of that structural move:
+
+**Failure modes get distinct signals.** A migration crash is a red step in the deploy workflow, captioned with the SQL exception, ten seconds after the workflow starts. Not a 30-minute warmup-probe timeout against "slot didn't respond." If yesterday's PK violation happened under the new pipeline, the deploy workflow would have failed in seconds, the app code wouldn't have deployed to the staging slot at all, and the manual swap step never would have been reachable. Easier to diagnose, easier to retry after a fix.
+
+**Scale-out becomes a single-instance choice, not a one-way door.** Today BookTracker runs on a single App Service instance and `Database.MigrateAsync()`'s `__EFMigrationsLock` applock serializes migrations even if multiple workers tried — which they don't. But "today" is one Bicep parameter away from "tomorrow." The migrate-on-startup pattern doesn't *break* under multi-instance, but it makes the timing of "when is the schema authoritative?" depend on the order workers wake up. Deploy-time migrations push the schema change to a single CI step, exactly once per deploy, regardless of how many workers eventually start.
+
+**The runtime managed identity can shed `db_ddladmin`.** Today the App Service identity for each slot has `db_datareader` + `db_datawriter` + `db_ddladmin` on its database, because `MigrateAsync()` runs DDL at startup. With deploy-time migrations, the CI identity holds `db_ddladmin` (only during the workflow's bundle apply), and the runtime identity can drop it. That's a [SECURITY-AUDIT.md §10](https://github.com/N3rdage/the-library/blob/main/SECURITY-AUDIT.md) suppression that goes away in a follow-up PR. Smaller blast radius if the App Service is ever compromised — read/write data, not schema.
+
+## What hasn't changed
+
+Migration *content* still goes through the same review path. EF Core still generates the migration code. Drew still reviews the PR. Tests still run against a Testcontainer that calls `ctx.Database.Migrate()` on its own ephemeral DB (`BookTracker.Tests/SqlServerContainer.cs`) — the tests own their schema apply, so they don't care about the production pattern. Local dev still gets migrate-on-startup behind the `IsDevelopment()` gate, so `dotnet watch` keeps working without ceremony.
+
+The change is *purely operational* — where and when the same migration code runs. Not what it does.
+
+## The meta-pattern
+
+Most of the posts in [this blog series](https://github.com/N3rdage/the-library/tree/main/blog) end at the tactical fix. We hit a bug, we found the bug, we fixed the bug, we wrote down what we learned. This one connects the tactical fix to the structural one because the tactical fix (idempotent migrations) earns its keep on every migration we'll ever write, and the structural fix (deploy-time apply) earns its keep on every deploy we'll ever run. They're complementary, not redundant.
+
+The tactical fix without the structural one means: future migrations are safer, but the next migration crash will still look like a 30-minute warmup timeout. The structural fix without the tactical one means: the next migration crash will surface as a clear deploy-step error, but we'll still write migrations that aren't safe against partial state. Both together is the answer.
+
+There's a Drew-ism I've absorbed from the way he reviews work — "fix the thing AND fix the class of thing." The first one ships immediately because someone is blocked. The second one ships a few PRs later because it requires a bigger lift and you want the dust to settle. Both are real work. Both belong in the same retro.
+
+This is one of those.
+
