@@ -226,14 +226,26 @@ try {
     # The prod block also drops the staging identity if it exists from a
     # pre-split deploy (when both identities were granted on the prod DB) —
     # leaving the orphan grant would mask a slot-sticky-CS regression.
+    # Runtime managed identities get db_datareader + db_datawriter ONLY.
+    # Schema changes happen via the deploy-time EF migration bundle in CI
+    # (.github/workflows/deploy.yml + swap.yml), with db_ddladmin granted
+    # to the GitHub OIDC identity below — not to the app's runtime
+    # identity. See TODO #21 + blog post 2026-05-18.
+    #
+    # The DROP MEMBER statement is idempotent (IS_ROLEMEMBER returns 0 if
+    # the role was never granted or already dropped) so re-running this
+    # script against an environment that previously had db_ddladmin on
+    # the runtime MI cleanly removes it.
     $prodGrantSql = @"
 IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = '$appServiceName')
 BEGIN
     CREATE USER [$appServiceName] FROM EXTERNAL PROVIDER;
     ALTER ROLE db_datareader ADD MEMBER [$appServiceName];
     ALTER ROLE db_datawriter ADD MEMBER [$appServiceName];
-    ALTER ROLE db_ddladmin  ADD MEMBER [$appServiceName];
 END
+
+IF IS_ROLEMEMBER('db_ddladmin', '$appServiceName') = 1
+    ALTER ROLE db_ddladmin DROP MEMBER [$appServiceName];
 
 DROP USER IF EXISTS [$stagingSlotSqlUserName];
 "@
@@ -244,8 +256,10 @@ BEGIN
     CREATE USER [$stagingSlotSqlUserName] FROM EXTERNAL PROVIDER;
     ALTER ROLE db_datareader ADD MEMBER [$stagingSlotSqlUserName];
     ALTER ROLE db_datawriter ADD MEMBER [$stagingSlotSqlUserName];
-    ALTER ROLE db_ddladmin  ADD MEMBER [$stagingSlotSqlUserName];
 END
+
+IF IS_ROLEMEMBER('db_ddladmin', '$stagingSlotSqlUserName') = 1
+    ALTER ROLE db_ddladmin DROP MEMBER [$stagingSlotSqlUserName];
 "@
 
     $token = (Get-AzAccessToken -ResourceUrl 'https://database.windows.net').Token

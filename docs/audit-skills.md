@@ -75,5 +75,5 @@ Full retro: `.claude-memory/retros/retro_security_audit_skill_poc.md`.
 Each skill's report ends with a "Next-run reminder" tailored to its findings. General guidance:
 
 - **After material changes to the audited surface** — e.g. re-run `security-audit` after merging a PR that touches infra / auth / new endpoints; re-run `scale-audit` after merging a PR that adds new EF queries / list pages / background services.
-- **After a related TODO lands** that would retire a documented concession (e.g. when TODO #21 deploy-time migrations lands, the `db_ddladmin` concession in `security-audit` retires).
+- **After a related TODO lands** that would retire a documented concession (e.g. TODO #21 deploy-time migrations shipped 2026-05-18, retiring the `db_ddladmin` concession in `security-audit`).
 - **On a 30-day cadence** as a baseline catch for drift that wouldn't otherwise trigger a re-run.

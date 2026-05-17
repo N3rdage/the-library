@@ -18,7 +18,7 @@ All tagged with `Client = Drew` and `Environment = Production`.
 | System-assigned managed identities | on prod + staging slots | — | granted SQL DB roles + Key Vault Secrets User + Cognitive Services User on OpenAI |
 | Azure SQL logical server | `booktracker-sql-<hash>` | `australiaeast` | **AAD-only auth**; `publicNetworkAccess = Disabled` by default |
 | Azure SQL database (prod) | `booktracker` | `australiaeast` | Standard S0, 10 DTU; reached by the prod slot only |
-| Azure SQL database (staging) | `booktracker-staging` | `australiaeast` | Standard S0, 10 DTU; reached by the staging slot only. Empty on first deploy — migrate-on-startup creates the schema. |
+| Azure SQL database (staging) | `booktracker-staging` | `australiaeast` | Standard S0, 10 DTU; reached by the staging slot only. Empty on first deploy — the deploy-time migration bundle creates the schema (see `.github/workflows/deploy.yml`). |
 | Azure SQL Private Endpoint | `booktracker-sql-<hash>-pe` | `australiaeast` | in primary `private-endpoints` subnet; serves both DBs |
 | Key Vault | `booktracker-kv-<hash>` | `australiaeast` | Standard, RBAC auth, `defaultAction = Deny`; holds AuthClientSecret + AI keys |
 | Key Vault Private Endpoint | `booktracker-kv-<hash>-pe` | `australiaeast` | in primary `private-endpoints` subnet |
@@ -91,14 +91,14 @@ Reason: swap-then-redeploy-without-the-key previously let the Anthropic key drif
 Prod and staging hit **separate databases** (`booktracker` vs `booktracker-staging` on the same SQL server). Each slot's managed identity is granted only on its own DB. Implications:
 
 - Schema migrations are tested on staging *before* they hit prod data — the `swap.yml` slot-swap is now a real rollback story for code, not a fictional one against a shared DB.
-- Staging starts **empty** on first deploy of this change; migrate-on-startup builds the schema. Empty staging catches schema syntax errors but **misses every data-shape failure** (NOT NULL with existing nulls, unique-index dedup violations, FK orphans, type-conversion failures, performance-on-real-data). For migrations tagged `review:` the safe pattern is to refresh staging from prod first — see `TODO.md` for the bacpac-sync follow-up.
+- Staging starts **empty** on first deploy of this change; the deploy-time migration bundle (TODO #21 — see `.github/workflows/deploy.yml`) builds the schema. Empty staging catches schema syntax errors but **misses every data-shape failure** (NOT NULL with existing nulls, unique-index dedup violations, FK orphans, type-conversion failures, performance-on-real-data). For migrations tagged `review:` the safe pattern is to refresh staging from prod first — see `TODO.md` for the bacpac-sync follow-up.
 
 ### Order of operations after this lands
 
 The first time this Bicep runs against an existing deployment:
 
 1. **Run `deploy.ps1`** — Bicep creates `booktracker-staging`, repoints the staging slot's connection string at it, marks the CS slot-sticky, and `deploy.ps1` grants the staging managed identity on the new DB (and drops the orphan staging-identity grant from the prod DB).
-2. **Redeploy the app** to staging (push to `main`, or restart the staging slot) so migrate-on-startup runs against the empty staging DB and creates the schema.
+2. **Redeploy the app** to staging (push to `main`) so the deploy-time migration bundle in `deploy.yml` runs against the empty staging DB and creates the schema before the slot deploy step.
 3. **Verify staging URL** loads — empty library, but the app should be alive.
 4. Prod is unaffected throughout — the prod slot's CS still points at the prod DB.
 
@@ -137,14 +137,14 @@ What the script does:
 3. Rotates a 2-year client secret for Easy Auth.
 4. Runs `main.bicep` at subscription scope (creates the RG + everything else).
 5. Registers the App Service's Easy Auth callback URL on the app registration.
-6. Temporarily flips SQL `publicNetworkAccess` on, opens a temp firewall rule for the script's public IP, connects with AAD auth, grants the prod managed identity `db_datareader/writer/ddladmin` on the prod DB and the staging managed identity the same on the staging DB (each identity only sees its own DB; the prod-DB grant also drops any orphan staging-identity grant from a pre-split deploy), then restores SQL back to private.
+6. Temporarily flips SQL `publicNetworkAccess` on, opens a temp firewall rule for the script's public IP, connects with AAD auth, grants the prod managed identity `db_datareader/writer` on the prod DB and the staging managed identity the same on the staging DB (each identity only sees its own DB; the prod-DB grant also drops any orphan staging-identity grant from a pre-split deploy; idempotent revoke removes any pre-2026-05-18 `db_ddladmin` grant), then restores SQL back to private. If `-GitHubOidcAppName` is supplied, the script also grants that identity `db_datareader/writer/ddladmin` on both DBs — that's the identity the deploy-time migration bundle authenticates as.
 
 ### Local EF migrations after the cutover
 
 With SQL on a Private Endpoint by default, `dotnet ef database update` from a developer laptop won't reach the server. Two options:
 
 - Re-run `deploy.ps1` with `-DevClientIp <your.ipv4>`. This both creates a `DevClient` firewall rule and flips `publicNetworkAccess` to `Enabled`. Re-run without the flag later to seal it back up.
-- Or let CI run migrations (the existing on-startup `MigrateAsync` path still works since the App Service hits SQL through the PE).
+- Or let CI apply the migration — push to `main`, the `deploy.yml` workflow's deploy-time bundle step (`dotnet ef migrations bundle` + apply against `booktracker-staging` via AAD auth) handles it.
 
 ### Refresh the local dev DB with a copy of prod
 
@@ -229,11 +229,11 @@ The KV role assignment and app-reg ownership require the KV + app reg to already
 
 Workflows under `.github/workflows/`:
 - `ci.yml` — build on PRs.
-- `deploy.yml` — on push to `main`: build, publish, deploy to the **staging** slot.
-- `swap.yml` — manual: `az webapp deployment slot swap staging -> production`. (Adding a GitHub Environment with required reviewers is tracked in `TODO.md`.)
+- `deploy.yml` — on push to `main`: build, **apply pending EF migrations to `booktracker-staging` via the deploy-time bundle** (`dotnet ef migrations bundle` + AAD-auth apply behind a temp firewall rule), then publish + deploy to the **staging** slot. Migration apply failure blocks the slot deploy — clean fail signal, no startup-probe ambiguity.
+- `swap.yml` — manual: **apply pending EF migrations to `booktracker` via the same bundle pattern**, then `az webapp deployment slot swap staging -> production`. Migration apply failure aborts the swap (prod stays on old code + old schema). (Adding a GitHub Environment with required reviewers is tracked in `TODO.md`.)
 - `rotate-easy-auth-secret.yml` — cron (twice yearly, 1st of every 6th month at 02:00 UTC) + manual dispatch: generates a new password on the `Library-Patrons` app registration, writes it to KV, trims old passwords to keep the latest 2. App Service picks up the new secret via the KV reference within ~24h. Manual dispatch: `gh workflow run rotate-easy-auth-secret.yml`.
 
-Schema migrations currently run on app startup via `db.Database.MigrateAsync()`. Fine for a single-instance app; switching to a deploy-time migration bundle is tracked in `TODO.md`.
+Schema migrations apply via the deploy-time bundle in `deploy.yml` / `swap.yml` (TODO #21, shipped 2026-05-18 in PR #275 + PR B). Local dev keeps `db.Database.MigrateAsync()` at startup under the `IsDevelopment` gate in `Program.cs` so `dotnet watch` Just Works without a separate `dotnet ef database update`.
 
 ## Post-deploy
 
