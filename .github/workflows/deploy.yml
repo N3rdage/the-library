@@ -33,13 +33,19 @@ jobs:
         # runs --no-build and would not pick up a property added there.
         run: dotnet build BookTracker.slnx --configuration Release --no-restore /p:SourceRevisionId=${{ github.sha }}
 
-      - name: Publish
-        run: dotnet publish BookTracker.Web/BookTracker.Web.csproj --configuration Release --no-build -o ./publish
-
-      - name: Zip publish output
+      - name: Build migration bundle
+        # Self-contained linux-x64 binary that applies pending migrations against a
+        # passed --connection string. Same model the app's Database.MigrateAsync()
+        # used at startup, just packaged into a deploy-time step. See TODO #21.
         run: |
-          cd publish
-          zip -r ../app.zip .
+          dotnet ef migrations bundle \
+            --project BookTracker.Data \
+            --startup-project BookTracker.Web \
+            --configuration Release \
+            --self-contained \
+            -r linux-x64 \
+            --output ./migrate \
+            --force
 
       - name: Azure login (OIDC)
         uses: azure/login@v2
@@ -47,6 +53,84 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve SQL server + open temp firewall
+        id: sql-fw
+        env:
+          AZURE_RG: ${{ vars.AZURE_RG }}
+        run: |
+          set -euo pipefail
+          SQL_SERVER=$(az sql server list \
+            --resource-group "$AZURE_RG" \
+            --query "[?starts_with(name, 'booktracker-sql-')].name | [0]" -o tsv)
+          if [ -z "$SQL_SERVER" ]; then
+            echo "::error::No SQL server matching booktracker-sql-* in $AZURE_RG"
+            exit 1
+          fi
+          echo "sql_server=$SQL_SERVER" >> "$GITHUB_OUTPUT"
+          echo "sql_fqdn=$SQL_SERVER.database.windows.net" >> "$GITHUB_OUTPUT"
+
+          PUBLIC_ACCESS_WAS=$(az sql server show \
+            --resource-group "$AZURE_RG" --name "$SQL_SERVER" \
+            --query "publicNetworkAccess" -o tsv)
+          echo "public_access_was=$PUBLIC_ACCESS_WAS" >> "$GITHUB_OUTPUT"
+
+          if [ "$PUBLIC_ACCESS_WAS" != "Enabled" ]; then
+            az sql server update \
+              --resource-group "$AZURE_RG" --name "$SQL_SERVER" \
+              --set publicNetworkAccess=Enabled --output none
+          fi
+
+          MY_IP=$(curl -fsSL https://api.ipify.org)
+          RULE_NAME="ghactions-deploy-${{ github.run_id }}-${{ github.run_attempt }}"
+          echo "rule_name=$RULE_NAME" >> "$GITHUB_OUTPUT"
+          az sql server firewall-rule create \
+            --resource-group "$AZURE_RG" --server "$SQL_SERVER" \
+            --name "$RULE_NAME" \
+            --start-ip-address "$MY_IP" --end-ip-address "$MY_IP" \
+            --output none
+          # Server-side propagation lags the API response.
+          sleep 10
+
+      - name: Apply migrations to staging DB
+        env:
+          # `Active Directory Default` picks up the OIDC token via
+          # Azure.Identity's WorkloadIdentityCredential — the env vars
+          # azure/login@v2 set (AZURE_CLIENT_ID / AZURE_TENANT_ID /
+          # AZURE_FEDERATED_TOKEN_FILE) provide the chain.
+          STAGING_CONN: Server=tcp:${{ steps.sql-fw.outputs.sql_fqdn }},1433;Database=booktracker-staging;Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False;
+        run: |
+          chmod +x ./migrate
+          ./migrate --connection "$STAGING_CONN"
+
+      - name: Close temp firewall
+        # `if: always()` so a failed migration apply still cleans up
+        # the firewall rule and restores the SQL server's prior
+        # public-network-access state.
+        if: always() && steps.sql-fw.outputs.rule_name != ''
+        env:
+          AZURE_RG: ${{ vars.AZURE_RG }}
+          SQL_SERVER: ${{ steps.sql-fw.outputs.sql_server }}
+          RULE_NAME: ${{ steps.sql-fw.outputs.rule_name }}
+          PUBLIC_ACCESS_WAS: ${{ steps.sql-fw.outputs.public_access_was }}
+        run: |
+          az sql server firewall-rule delete \
+            --resource-group "$AZURE_RG" --server "$SQL_SERVER" \
+            --name "$RULE_NAME" --output none || true
+          if [ "$PUBLIC_ACCESS_WAS" != "Enabled" ]; then
+            az sql server update \
+              --resource-group "$AZURE_RG" --name "$SQL_SERVER" \
+              --set publicNetworkAccess="$PUBLIC_ACCESS_WAS" \
+              --output none || true
+          fi
+
+      - name: Publish
+        run: dotnet publish BookTracker.Web/BookTracker.Web.csproj --configuration Release --no-build -o ./publish
+
+      - name: Zip publish output
+        run: |
+          cd publish
+          zip -r ../app.zip .
 
       - name: Deploy to staging slot
         uses: azure/webapps-deploy@v3

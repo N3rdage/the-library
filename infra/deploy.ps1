@@ -26,7 +26,14 @@ param(
     # Optional Trove (National Library of Australia) API key. Used as a
     # third-line ISBN lookup provider for titles Open Library and Google
     # Books don't index. Same storage pattern as AnthropicApiKey.
-    [string] $TroveApiKey = ''
+    [string] $TroveApiKey = '',
+    # Optional: display name (in this tenant) of the Azure AD app
+    # registration / SP that GitHub Actions OIDC authenticates as.
+    # When supplied, the script grants that identity db_ddladmin on both
+    # databases so the deploy.yml / swap.yml workflows can apply EF
+    # migrations against staging + prod via the deploy-time bundle (see
+    # TODO #21). Leave blank to skip the CI grant on this run.
+    [string] $GitHubOidcAppName = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -246,6 +253,30 @@ END
     Invoke-Sqlcmd -ServerInstance $sqlFqdn -Database $sqlDb -AccessToken $token -Query $prodGrantSql -Encrypt Mandatory
     Write-Host "  Granting staging identity on '$stagingSqlDb'..."
     Invoke-Sqlcmd -ServerInstance $sqlFqdn -Database $stagingSqlDb -AccessToken $token -Query $stagingGrantSql -Encrypt Mandatory
+
+    # GitHub Actions OIDC identity (TODO #21 — deploy-time migrations).
+    # Grants db_ddladmin so the deploy.yml/swap.yml workflows can apply
+    # the EF migration bundle. The runtime managed identities above will
+    # eventually downgrade to db_datareader + db_datawriter (PR B of the
+    # TODO #21 arc); for now they retain db_ddladmin while migrate-on-
+    # startup is still gated to local-dev only.
+    if ($GitHubOidcAppName) {
+        $ghGrantSql = @"
+IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = '$GitHubOidcAppName')
+BEGIN
+    CREATE USER [$GitHubOidcAppName] FROM EXTERNAL PROVIDER;
+    ALTER ROLE db_datareader ADD MEMBER [$GitHubOidcAppName];
+    ALTER ROLE db_datawriter ADD MEMBER [$GitHubOidcAppName];
+    ALTER ROLE db_ddladmin  ADD MEMBER [$GitHubOidcAppName];
+END
+"@
+        Write-Host "  Granting GitHub OIDC identity '$GitHubOidcAppName' on '$sqlDb'..."
+        Invoke-Sqlcmd -ServerInstance $sqlFqdn -Database $sqlDb -AccessToken $token -Query $ghGrantSql -Encrypt Mandatory
+        Write-Host "  Granting GitHub OIDC identity '$GitHubOidcAppName' on '$stagingSqlDb'..."
+        Invoke-Sqlcmd -ServerInstance $sqlFqdn -Database $stagingSqlDb -AccessToken $token -Query $ghGrantSql -Encrypt Mandatory
+    } else {
+        Write-Host "  Skipping GitHub OIDC identity grant (-GitHubOidcAppName not supplied)."
+    }
 }
 finally {
     Write-Host "  Removing temporary SQL firewall rule..."
