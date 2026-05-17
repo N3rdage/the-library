@@ -139,7 +139,7 @@ No `innerHTML`-style JS methods are exposed to the Blazor side. No user strings 
 
 ## 10. Azure resource RBAC scoping
 
-**Verdict:** **Pass, with one accepted trade-off.**
+**Verdict:** **Pass.**
 
 Managed-identity role assignments (Bicep + deploy-time SQL grants):
 
@@ -147,14 +147,13 @@ Managed-identity role assignments (Bicep + deploy-time SQL grants):
 |---|---|---|---|
 | App Service prod MI | Key Vault Secrets User | KV | Read-only data plane |
 | App Service prod MI | Cognitive Services User | OpenAI account | Inference only, no model management |
-| App Service prod MI | SQL `db_datareader/writer/ddladmin` | Azure SQL DB | `db_ddladmin` needed for migrate-on-startup; could drop once deploy-time migrations land (TODO #20) |
+| App Service prod MI | SQL `db_datareader/writer` | Azure SQL DB | Data plane only — `db_ddladmin` dropped 2026-05-18 (TODO #21 PR B) once deploy-time migrations landed |
 | Staging slot MI | Same three roles | (mirrored) | |
 | `booktracker-ci` OIDC SP | Contributor | Resource group | For artifact deploys + Bicep ops |
 | `booktracker-ci` OIDC SP | Key Vault Secrets Officer | KV | For secret-rotation workflow |
 | `booktracker-ci` OIDC SP | Owner of `Library-Patrons` app reg | AAD | For secret-rotation workflow |
 | `booktracker-ci` OIDC SP | Graph `Application.ReadWrite.OwnedBy` | Graph | Narrow — apps it owns only |
-
-Trade-off accepted: `db_ddladmin` on the App Service MI is broader than strict data plane but required for the migrate-on-startup pattern. Tightening to `db_datareader`/`db_datawriter` is blocked behind the "deploy-time migrations" TODO (#20).
+| `booktracker-ci` OIDC SP | SQL `db_datareader/writer/ddladmin` | Azure SQL DB | Used by the deploy-time EF migration bundle (`.github/workflows/deploy.yml` + `swap.yml`). `db_ddladmin` lives here now, scoped to CI workflow runs only. |
 
 No role assignments at subscription or management-group scope.
 
@@ -182,7 +181,7 @@ No role assignments at subscription or management-group scope.
 
 - **Nonce-based CSP middleware** — replace `'unsafe-inline'` / `'unsafe-eval'` with a per-request nonce threaded through Blazor's framework inlines. Real XSS tightening; non-trivial implementation work.
 - **Scrub user-typed search queries from `BookLookupService` log lines** — optional hardening; low priority given single-user deployment.
-- **Drop `db_ddladmin`** from App Service MI SQL grants — unblocked once `dotnet ef migrations bundle` replaces migrate-on-startup (already-tracked TODO #20).
+- ~~**Drop `db_ddladmin`** from App Service MI SQL grants — unblocked once `dotnet ef migrations bundle` replaces migrate-on-startup~~ **Resolved 2026-05-18** by [PR #275](https://github.com/N3rdage/the-library/pull/275) (deploy-time migration bundle) + PR B (this PR — runtime MI dropped to `db_datareader/writer`, GH OIDC SP holds the new `db_ddladmin` scoped to CI runs only). See §10.
 
 ## Monthly review process
 

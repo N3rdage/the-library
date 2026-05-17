@@ -18,16 +18,6 @@ The security audit skill should treat `SECURITY-AUDIT.md` as cross-reference mat
 
 ---
 
-## Suppress: AZRE-003 (sub-finding — db_ddladmin grant)
-
-The skill's AZRE-003 rule flags broad database role grants. BookTracker grants both managed identities `db_ddladmin` (in addition to `db_datareader` / `db_datawriter`) on their respective DBs.
-
-**Why:** This grant is required because the app runs `Database.MigrateAsync()` at startup — schema-changing migrations need DDL permissions. A future TODO (`Replace migrate-on-startup with deploy-time migrations`, currently open) would let us drop `db_ddladmin` from the app's runtime identity and shift migrations to a deploy-time identity. Until that lands, the broader grant is the deliberate trade-off documented in `SECURITY-AUDIT.md` §10.
-
-The skill should still report this as "Areas verified clean — accepted trade-off" rather than silently dropping it from the report; the suppression-with-rationale stays visible.
-
----
-
 ## BOOK-001 — Migration safety on schema changes
 
 **Category:** infra
