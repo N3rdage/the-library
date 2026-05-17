@@ -207,7 +207,22 @@ Free-form labels on Books (not Works). Distinct from Genre — tags are user-def
 | `Name` | string (≤100, **unique**, required) | |
 | `Books` | List | M:N via `BookTag`. |
 
-Seeded with one row: `follow-up` (Id = 1) — used to flag books needing later attention.
+Seeded rows:
+
+| Id | Name | Purpose |
+|----|------|---------|
+| 1 | `follow-up` | Flag books needing later attention. |
+| 2 | `format:graphic-novel` | Format indicator — replaces the former `Graphic Novels` genre. |
+| 3 | `format:short-stories` | Format indicator — replaces the former `Short Story Collections` genre. |
+
+### Tag conventions
+
+Two prefix conventions are reserved by convention (not enforced by constraint):
+
+- **`format:*`** — physical-or-structural format indicators that aren't genres. Currently `format:graphic-novel` and `format:short-stories`. Applied at the Book level even though the constituent Works carry the *thematic* genres (e.g. a Christie short-story compendium has `format:short-stories` on the Book + `Mystery` genre on each Work).
+- **`shelf:*`** — physical-shelf membership. **Not yet shipped** — captured in TODO #9 as part of the shelf-organisation work. When it ships, exactly one `shelf:*` tag per Book (convention, not constraint).
+
+Any other tag is free-form user attention markers (e.g. `follow-up`).
 
 ---
 
