@@ -71,6 +71,12 @@
                                  Label="Add author" />
             </div>
 
+            <div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Other contributors (optional)</MudText>
+                <MudContributorPicker Contributors="contributors"
+                                      ContributorsChanged="list => contributors = list" />
+            </div>
+
             <MudTextField T="string"
                           @bind-Value="subtitle"
                           Label="Subtitle (optional)"
@@ -113,6 +119,7 @@
 
     private string? title;
     private List<string> authors = [];
+    private List<ContributorEntry> contributors = [];
     private string? subtitle;
     private string? firstPublishedDate;
     private List<int> selectedGenreIds = [];
@@ -180,7 +187,8 @@
                 authors,
                 subtitle,
                 firstPublishedDate,
-                selectedGenreIds);
+                selectedGenreIds,
+                contributors);
 
             if (workId is int)
             {

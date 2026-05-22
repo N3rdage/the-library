@@ -1,0 +1,153 @@
+@* Sibling of MudAuthorPicker for non-Author contributors (editor /
+   translator / illustrator / etc.). Each chip carries a Name AND a Role.
+   Used on every Work-editing surface alongside MudAuthorPicker —
+   MudAuthorPicker handles the dominant single-Author-role case (zero
+   extra clicks); MudContributorPicker handles the rarer "this reference
+   work was edited by Doug Mauss" case.
+
+   Shape difference from MudAuthorPicker:
+     - Each chip = Name (role) display
+     - Pending row = [name autocomplete] + [role select] + [+ button]
+     - No Enter/comma keyboard shortcut — explicit + button click is
+       fine for the rare-case surface, and a role must be picked
+       deliberately anyway. *@
+
+@inject IDbContextFactory<BookTrackerDbContext> DbFactory
+
+<MudPaper Outlined="true" Class="pa-2">
+    @if (Contributors.Count > 0)
+    {
+        <div class="d-flex flex-wrap gap-1 mb-2">
+            @foreach (var entry in Contributors)
+            {
+                var captured = entry;
+                <MudChip T="string"
+                         Text="@($"{captured.Name} ({RoleLabel(captured.Role)})")"
+                         Variant="Variant.Filled"
+                         Color="Color.Secondary"
+                         Size="Size.Small"
+                         OnClose="@(() => RemoveAsync(captured))" />
+            }
+        </div>
+    }
+    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap">
+        <div style="flex: 1 1 200px; min-width: 0;">
+            <MudAutocomplete @ref="autocompleteRef"
+                             T="string"
+                             Value="@pendingName"
+                             ValueChanged="@(v => pendingName = v)"
+                             SearchFunc="SearchAsync"
+                             Label="Name"
+                             Variant="Variant.Outlined"
+                             Margin="Margin.Dense"
+                             CoerceValue="true"
+                             CoerceText="true"
+                             ResetValueOnEmptyText="false"
+                             MinCharacters="0"
+                             ShowProgressIndicator="true" />
+        </div>
+        <div style="flex: 0 0 160px;">
+            <MudSelect T="AuthorRole"
+                       @bind-Value="pendingRole"
+                       Label="Role"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense">
+                @foreach (var role in NonAuthorRoles)
+                {
+                    <MudSelectItem T="AuthorRole" Value="@role">@RoleLabelCapitalised(role)</MudSelectItem>
+                }
+            </MudSelect>
+        </div>
+        <MudButton OnClick="AddAsync"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="@(string.IsNullOrWhiteSpace(pendingName))">
+            Add
+        </MudButton>
+    </MudStack>
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2 d-block">
+        Editor, translator, illustrator, etc. — Author goes in the picker above.
+    </MudText>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public List<ContributorEntry> Contributors { get; set; } = [];
+    [Parameter] public EventCallback<List<ContributorEntry>> ContributorsChanged { get; set; }
+
+    private string? pendingName;
+    private AuthorRole pendingRole = AuthorRole.Editor;
+    private MudAutocomplete<string>? autocompleteRef;
+
+    private static readonly AuthorRole[] NonAuthorRoles =
+    [
+        AuthorRole.Editor,
+        AuthorRole.Translator,
+        AuthorRole.Illustrator,
+        AuthorRole.Adaptor,
+        AuthorRole.Compiler,
+        AuthorRole.Foreword,
+        AuthorRole.Contributor,
+    ];
+
+    private async Task<IEnumerable<string>> SearchAsync(string query, CancellationToken ct)
+    {
+        // Mirror MudAuthorPicker's case-insensitive substring match.
+        var q = (query ?? "").Trim().ToLower();
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var matches = db.Authors.AsQueryable();
+        if (!string.IsNullOrEmpty(q))
+        {
+            matches = matches.Where(a => a.Name.ToLower().Contains(q));
+        }
+        return await matches
+            .OrderBy(a => a.Name)
+            .Select(a => a.Name)
+            .Take(20)
+            .ToListAsync(ct);
+    }
+
+    private async Task AddAsync()
+    {
+        var trimmed = pendingName?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return;
+
+        // De-dup by (Name case-insensitive, Role) — typing an already-chipped
+        // pair is a no-op.
+        if (!Contributors.Any(c => c.Name.Equals(trimmed, StringComparison.OrdinalIgnoreCase)
+                                   && c.Role == pendingRole))
+        {
+            Contributors.Add(new ContributorEntry(trimmed, pendingRole));
+            await ContributorsChanged.InvokeAsync(Contributors);
+        }
+        pendingName = null;
+        if (autocompleteRef is not null)
+        {
+            await autocompleteRef.ClearAsync();
+        }
+    }
+
+    private async Task RemoveAsync(ContributorEntry entry)
+    {
+        Contributors.RemoveAll(c => c.Name.Equals(entry.Name, StringComparison.OrdinalIgnoreCase)
+                                    && c.Role == entry.Role);
+        await ContributorsChanged.InvokeAsync(Contributors);
+    }
+
+    private static string RoleLabel(AuthorRole role) => role switch
+    {
+        AuthorRole.Editor      => "editor",
+        AuthorRole.Translator  => "translator",
+        AuthorRole.Illustrator => "illustrator",
+        AuthorRole.Adaptor     => "adaptor",
+        AuthorRole.Compiler    => "compiler",
+        AuthorRole.Foreword    => "foreword",
+        AuthorRole.Contributor => "contributor",
+        _                      => role.ToString().ToLowerInvariant(),
+    };
+
+    private static string RoleLabelCapitalised(AuthorRole role)
+    {
+        var lower = RoleLabel(role);
+        return char.ToUpperInvariant(lower[0]) + lower[1..];
+    }
+}

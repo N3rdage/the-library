@@ -542,7 +542,12 @@ public class BookAddViewModel(
                 // the committed DB, missing pending entities in the change
                 // tracker).
                 var allNames = SingleAuthor ? SharedAuthors : newRows.SelectMany(r => r.Authors);
-                var allAuthors = await AuthorResolver.FindOrCreateAllAsync(allNames, db);
+                // Union the contributor names into the same FindOrCreateAll pass
+                // so a person credited as Author in one row and Editor in another
+                // resolves to a single Author entity (the existence check queries
+                // committed rows only — per-row FindOrCreate would insert dupes).
+                var contributorNames = newRows.SelectMany(r => r.Contributors.Select(c => c.Name));
+                var allAuthors = await AuthorResolver.FindOrCreateAllAsync(allNames.Concat(contributorNames), db);
                 var byName = allAuthors.ToDictionary(a => a.Name, StringComparer.OrdinalIgnoreCase);
 
                 // Resolve the union of distinct genre ids across new-work
@@ -588,6 +593,10 @@ public class BookAddViewModel(
                     {
                         throw new InvalidOperationException($"Each work in the collection needs at least one author (work \"{row.Title}\" had none).");
                     }
+                    var rowContributors = row.Contributors
+                        .Where(c => !string.IsNullOrWhiteSpace(c.Name) && byName.ContainsKey(c.Name.Trim()))
+                        .Select(c => (Person: byName[c.Name.Trim()], c.Role))
+                        .ToList();
                     var rowGenres = GenresFor(row)
                         .Distinct()
                         .Where(genresById.ContainsKey)
@@ -602,7 +611,7 @@ public class BookAddViewModel(
                         FirstPublishedDatePrecision = rowFirstPub.Precision,
                         Genres = rowGenres,
                     };
-                    AuthorResolver.AssignAuthors(w, rowAuthors);
+                    AuthorResolver.AssignAuthors(w, rowAuthors, rowContributors);
                     works.Add(w);
                 }
             }
@@ -613,6 +622,7 @@ public class BookAddViewModel(
                 {
                     throw new InvalidOperationException("At least one author is required to save a Work.");
                 }
+                var contributors = await ResolveContributorsAsync(WorkInput.Contributors, db);
                 var firstPub = PartialDateParser.TryParse(WorkInput.FirstPublishedDate) ?? PartialDate.Empty;
                 var work = new Work
                 {
@@ -622,10 +632,7 @@ public class BookAddViewModel(
                     FirstPublishedDatePrecision = firstPub.Precision,
                     Genres = selectedGenres,
                 };
-                // Dual-write: Work.Author = lead chip (legacy FK compat); Work.WorkAuthors
-                // = all chips with Order ascending. PR2 will drop Author/AuthorId and
-                // switch reads to the join.
-                AuthorResolver.AssignAuthors(work, authors);
+                AuthorResolver.AssignAuthors(work, authors, contributors);
 
                 // Attach to the accepted series, if any. AcceptedSeriesId points at
                 // an existing local Series row; AcceptedSeriesName (without an Id)
@@ -691,5 +698,23 @@ public class BookAddViewModel(
         {
             Saving = false;
         }
+    }
+
+    // Resolve non-Author contributor entries through FindOrCreateAsync so
+    // brand-new names get an Author row, and pair each with its picked Role.
+    // Blank-name rows are skipped silently — the picker permits an empty
+    // pending row to coexist with chips.
+    private static async Task<List<(Author Person, AuthorRole Role)>> ResolveContributorsAsync(
+        List<ContributorEntry> entries,
+        BookTrackerDbContext db)
+    {
+        var result = new List<(Author, AuthorRole)>();
+        foreach (var entry in entries)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Name)) continue;
+            var author = await AuthorResolver.FindOrCreateAsync(entry.Name, db);
+            result.Add((author, entry.Role));
+        }
+        return result;
     }
 }

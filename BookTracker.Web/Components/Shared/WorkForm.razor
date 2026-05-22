@@ -46,6 +46,11 @@
                               Variant="Variant.Outlined"
                               Margin="Margin.Dense" />
             </MudItem>
+            <MudItem xs="12">
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Other contributors (optional)</MudText>
+                <MudContributorPicker Contributors="Input.Contributors"
+                                      ContributorsChanged="list => Input.Contributors = list" />
+            </MudItem>
         </MudGrid>
     </MudCardContent>
 </MudCard>
