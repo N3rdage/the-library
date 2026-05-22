@@ -424,8 +424,8 @@ public class CatalogCache : ICatalogCache
         var result = new List<BookSnapshot>();
         foreach (var b in books)
         {
-            var all = JsonSerializer.Deserialize<List<string>>(b.AllAuthorsJson) ?? [];
-            if (all.Any(n => nameSet.Contains(n)))
+            var all = JsonSerializer.Deserialize<List<AuthorContribution>>(b.AllAuthorsJson) ?? [];
+            if (all.Any(c => nameSet.Contains(c.Name)))
             {
                 result.Add(await ToSnapshotAsync(b, all));
             }
@@ -621,11 +621,11 @@ public class CatalogCache : ICatalogCache
 
     private async Task<BookSnapshot> ToSnapshotAsync(CachedBook book)
     {
-        var all = JsonSerializer.Deserialize<List<string>>(book.AllAuthorsJson) ?? [];
+        var all = JsonSerializer.Deserialize<List<AuthorContribution>>(book.AllAuthorsJson) ?? [];
         return await ToSnapshotAsync(book, all);
     }
 
-    private async Task<BookSnapshot> ToSnapshotAsync(CachedBook book, List<string> allAuthors)
+    private async Task<BookSnapshot> ToSnapshotAsync(CachedBook book, List<AuthorContribution> allAuthors)
     {
         var isbns = await Db.Table<CachedBookIsbn>()
             .Where(r => r.BookId == book.Id)

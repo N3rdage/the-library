@@ -37,7 +37,15 @@ public record BookSnapshot(
     int Id,
     string Title,
     string PrimaryAuthor,
-    IReadOnlyList<string> AllAuthors,
+    // Every credited contributor on the Book (across all constituent Works
+    // and roles — Author / Editor / Translator / Illustrator / etc.).
+    // Field shape changed 2026-05-23 (snapshot v2): was IReadOnlyList<string>
+    // of names only; now carries Role per row so non-Author contributions
+    // (editors of reference works, translators of classical texts) round-
+    // trip to consumers. Bookshelf cache consumers parsing the OLD shape
+    // (a JSON array of strings) will need updating in the same version
+    // window — see CatalogCache.PopulateAsync.
+    IReadOnlyList<AuthorContribution> AllAuthors,
     string Status,
     int Rating,
     IReadOnlyList<string> Isbns,
@@ -90,11 +98,41 @@ public record EditionSnapshot(
 public record WorkSnapshot(
     int Id,
     string Title,
-    // Lowest-Order WorkAuthor's name. Same convention as
-    // BookSnapshot.PrimaryAuthor but scoped to this specific Work
-    // — a compendium's Asimov-Bradbury-King anthology shows the
-    // per-Work attribution rather than the Book-wide rollup.
-    string PrimaryAuthor);
+    // Lowest-Order WorkAuthor (Role = Author) name. Same convention as
+    // BookSnapshot.PrimaryAuthor but scoped to this specific Work — a
+    // compendium's Asimov-Bradbury-King anthology shows the per-Work
+    // attribution rather than the Book-wide rollup. Empty string when
+    // the Work has no Author-role contributor (rare; e.g. a translated
+    // classical text where only the translator is in our DB).
+    string PrimaryAuthor,
+    // Every credited contributor on this Work, with Role. New in
+    // snapshot v2 (2026-05-23). Nullable for back-compat with older
+    // positional WorkSnapshot constructions; new consumers should treat
+    // null as "no enrichment from this server version" and fall back
+    // to PrimaryAuthor alone.
+    IReadOnlyList<AuthorContribution>? Contributors = null);
+
+// One credited person on a Work, with the role they played. The Role
+// field is the AuthorRole enum's string name (Author / Editor /
+// Translator / Illustrator / Adaptor / Compiler / Foreword /
+// Contributor) — the DTO record stays free of the BookTracker.Data
+// dependency, so Role is exposed as a string rather than the enum
+// type. Same convention as BookSnapshot.Status (string for BookStatus)
+// and SeriesSnapshot.Type (string for SeriesType).
+public record AuthorContribution(
+    string Name,
+    string Role)
+{
+    // Implicit conversion from string => AuthorContribution(name, "Author").
+    // Matches the dominant case (Author is the default role across the system)
+    // and keeps test fixture constructions concise — a Book's
+    // `AllAuthors: ["Asimov"]` shorthand still compiles. Production code paths
+    // that need an explicit non-Author role construct the record positionally;
+    // there is no scenario where a string-typed name should silently become
+    // an Editor / Translator contribution.
+    public static implicit operator AuthorContribution(string name) =>
+        new(name, "Author");
+}
 
 public record AuthorSnapshot(
     int Id,

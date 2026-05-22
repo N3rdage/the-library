@@ -32,7 +32,7 @@ public class CatalogSnapshotServiceTests
         var book = Assert.Single(snapshot.Books);
         Assert.Equal("Foundation", book.Title);
         Assert.Equal("Isaac Asimov", book.PrimaryAuthor);
-        Assert.Equal(["Isaac Asimov"], book.AllAuthors);
+        Assert.Equal([new AuthorContribution("Isaac Asimov", "Author")], book.AllAuthors);
     }
 
     [Fact]
@@ -64,7 +64,11 @@ public class CatalogSnapshotServiceTests
 
         var book = Assert.Single(snapshot.Books);
         Assert.Equal("Isaac Asimov", book.PrimaryAuthor);
-        Assert.Equal(["Isaac Asimov", "Stephen King", "Ray Bradbury"], book.AllAuthors);
+        Assert.Equal([
+            new AuthorContribution("Isaac Asimov", "Author"),
+            new AuthorContribution("Stephen King", "Author"),
+            new AuthorContribution("Ray Bradbury", "Author"),
+        ], book.AllAuthors);
     }
 
     [Fact]
