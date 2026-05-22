@@ -71,6 +71,7 @@ public class CatalogSnapshotService(
                     wa.Author.Name,
                     WorkId = w.Id,
                     wa.Order,
+                    wa.Role,
                 })).ToList(),
                 Isbns = b.Editions
                     .Where(e => e.Isbn != null && e.Isbn != "")
@@ -102,9 +103,14 @@ public class CatalogSnapshotService(
                     {
                         w.Id,
                         w.Title,
-                        WorkAuthors = w.WorkAuthors
-                            .OrderBy(wa => wa.Order)
-                            .Select(wa => wa.Author.Name)
+                        // Every contributor on this Work with their role.
+                        // Server emits the full list; per-Work PrimaryAuthor
+                        // is computed downstream by filtering Role=Author.
+                        WorkContributors = w.WorkAuthors
+                            .OrderBy(wa => wa.Role == AuthorRole.Author ? 0 : 1)
+                            .ThenBy(wa => (int)wa.Role)
+                            .ThenBy(wa => wa.Order)
+                            .Select(wa => new { wa.Author.Name, wa.Role })
                             .ToList(),
                     })
                     .ToList(),
@@ -123,16 +129,25 @@ public class CatalogSnapshotService(
             .Select(b => new BookSnapshot(
                 b.Id,
                 b.Title,
-                // Primary author = lowest-Order WorkAuthor of the first
-                // Work (by Work.Id). Single-Work books are unambiguous;
-                // compendiums get the primary of whichever Work sorts
-                // first. Same shape as the library-grouping-respects-
-                // author-filter fix uses.
-                b.Authors.OrderBy(a => a.WorkId).ThenBy(a => a.Order).Select(a => a.Name).FirstOrDefault() ?? "(unknown)",
-                // All credited authors, in (Work.Id, Order) sequence,
-                // distinct by name. Renders as the result-card subtitle
-                // when the book is shown in bookshop mode.
-                b.Authors.OrderBy(a => a.WorkId).ThenBy(a => a.Order).Select(a => a.Name).Distinct().ToList(),
+                // Primary author = lowest-Order Author-role WorkAuthor of
+                // the first Work (by Work.Id). Single-Work books are
+                // unambiguous; compendiums get the primary of whichever
+                // Work sorts first. Filtered to Role=Author so a translator
+                // with Order=0 never wins the "by Name" line.
+                b.Authors.Where(a => a.Role == AuthorRole.Author).OrderBy(a => a.WorkId).ThenBy(a => a.Order).Select(a => a.Name).FirstOrDefault() ?? "(unknown)",
+                // All credited contributors with their role, in (Work.Id,
+                // Role, Order) sequence — Author-role first, then other
+                // roles in enum order. Distinct by (Name, Role) so a
+                // single person credited as both Author and Illustrator on
+                // the same Book shows up once per role.
+                b.Authors
+                    .OrderBy(a => a.WorkId)
+                    .ThenBy(a => a.Role == AuthorRole.Author ? 0 : 1)
+                    .ThenBy(a => (int)a.Role)
+                    .ThenBy(a => a.Order)
+                    .Select(a => new AuthorContribution(a.Name, a.Role.ToString()))
+                    .DistinctBy(c => (c.Name, c.Role))
+                    .ToList(),
                 b.Status.ToString(),
                 b.Rating,
                 b.Isbns.Distinct().ToList(),
@@ -146,7 +161,16 @@ public class CatalogSnapshotService(
                     .Select(w => new WorkSnapshot(
                         w.Id,
                         w.Title,
-                        w.WorkAuthors.FirstOrDefault() ?? "(unknown)"))
+                        // Per-Work PrimaryAuthor = first Author-role
+                        // contributor on this Work. The pre-projection
+                        // already sorted Author-role first then by Order,
+                        // so the first WorkContributor whose Role is
+                        // "Author" is the lead.
+                        w.WorkContributors.FirstOrDefault(c => c.Role == AuthorRole.Author)?.Name ?? "(unknown)",
+                        // Full contributor list with role per entry.
+                        Contributors: w.WorkContributors
+                            .Select(c => new AuthorContribution(c.Name, c.Role.ToString()))
+                            .ToList()))
                     .ToList()))
             .OrderBy(b => b.Title)
             .ToList();
