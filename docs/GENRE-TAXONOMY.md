@@ -105,7 +105,10 @@ Reference
 ├── Atlases
 ├── Field Guides
 ├── Style Guides
-└── Language Learning
+├── Language Learning
+├── Popular Science
+├── Memoir
+└── Philosophy
 
 Art
 ├── Art History
@@ -121,6 +124,8 @@ Religion & Spirituality
 ├── Theology
 ├── Comparative Religion
 └── Mythology
+
+Poetry                       (top-level, no sub-genres yet)
 ```
 
 ---
@@ -134,6 +139,7 @@ Religion & Spirituality
 | Reference + Art + Religion & Spirituality (all three branches and their sub-genres) | Non-fiction starter set | `20260422090308_SeedNonFictionReferenceArtReligion` |
 | Science Fiction sub-tree (Hard SF / Space Opera / Cyberpunk / Military SF / Time Travel / First Contact / Post-Apocalyptic / Dystopian SF / Alternate History / Young Adult SF) + Horror sub-tree extension (Cosmic Horror / Gothic Horror / Supernatural / Psychological Horror / Splatterpunk / Folk Horror / Body Horror) | Genre-restructure pass (PR 1) | `20260516233131_SeedGenreExpansion` |
 | `Graphic Novels` + `Short Story Collections` removed from the tree (moved to `format:*` Tag convention); `format:graphic-novel` + `format:short-stories` Tag rows seeded | Genre-restructure pass (PR 2) | `20260517041346_RemoveFormatGenres` |
+| Reference sub-genres (Popular Science / Memoir / Philosophy) + top-level Poetry | Genre-restructure round 2 (this PR) | `20260522023150_SeedNonFictionSubGenresAndPoetry` |
 
 User-added genres (created via the Add page typeahead's free-text fall-through, if that surface allows it — currently the picker is closed-list against `GenreSeed.All`) would *not* be in `GenreSeed.cs` but would live in the DB. If you see a Genre row in the snapshot that's not in this file, it's either a stale row from a withdrawn seed, an out-of-band insert, or this file is behind. As of this writing, the picker is closed-list, so the DB and `GenreSeed.cs` should match exactly.
 
@@ -144,9 +150,8 @@ User-added genres (created via the Add page typeahead's free-text fall-through, 
 The original comment in `GenreSeed.cs` flags non-fiction expansion as deliberate future work — branches that are missing today and would be the obvious next additions:
 
 - **History** (Ancient / Medieval / Modern / Military / Local-regional)
-- **Biography** (Memoir / Autobiography / Authorised / Unauthorised)
-- **Science** (Popular / Mathematics / Physics / Biology / Earth-science / etc.)
-- **Poetry**
+- **Biography** (Autobiography / Authorised / Unauthorised — `Memoir` was seeded under Reference in the 2026-05-22 round-2 pass; a sibling `Biography` branch may earn its keep if the corpus demands the distinction)
+- **Science** (Mathematics / Physics / Biology / Earth-science / etc. — `Popular Science` was seeded under Reference in the 2026-05-22 round-2 pass as the catch-all for trade-press science writing)
 - **Cookery / Cookbooks** (currently no home — cookbooks tagged today go under Reference or unclassified)
 - **Travel writing**
 - **Essays / Letters**

@@ -92,8 +92,11 @@ public static class GenreSeed
 
 
         // Non-fiction starter set — reference, art, and religious books.
-        // Further non-fiction branches (History, Biography, Science,
-        // Poetry, etc.) are left for a follow-up expansion.
+        // Further non-fiction branches (History, Biography, etc.) are
+        // left for a future expansion; the 2026-05-22 round-2 work
+        // added Popular Science, Memoir, Philosophy as Reference
+        // children and Poetry as a top-level (see Provenance in
+        // GENRE-TAXONOMY.md).
         new("Reference", null),
         new("Dictionaries", "Reference"),
         new("Encyclopedias", "Reference"),
@@ -101,6 +104,11 @@ public static class GenreSeed
         new("Field Guides", "Reference"),
         new("Style Guides", "Reference"),
         new("Language Learning", "Reference"),
+        new("Popular Science", "Reference"),
+        new("Memoir", "Reference"),
+        new("Philosophy", "Reference"),
+
+        new("Poetry", null),
 
         new("Art", null),
         new("Art History", "Art"),
