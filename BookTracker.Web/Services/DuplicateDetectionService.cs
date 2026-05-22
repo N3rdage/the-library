@@ -286,10 +286,10 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
                 CopyCount = b.Editions.SelectMany(e => e.Copies).Count(),
                 WorkIds = b.Works.Select(w => w.Id).ToList(),
                 FirstAuthorId = b.Works
-                    .SelectMany(w => w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => (int?)wa.AuthorId))
+                    .SelectMany(w => w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => (int?)wa.AuthorId))
                     .FirstOrDefault(),
                 FirstAuthorName = b.Works
-                    .SelectMany(w => w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name))
+                    .SelectMany(w => w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.Author.Name))
                     .FirstOrDefault()
             })
             .ToListAsync(ct);

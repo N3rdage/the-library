@@ -1,4 +1,5 @@
 using BookTracker.Data;
+using BookTracker.Data.Models;
 using BookTracker.Shared.Catalog;
 using Microsoft.EntityFrameworkCore;
 
@@ -168,9 +169,12 @@ public class CatalogSnapshotService(
         // Distinct (canonical_id, book_id) pairs across the whole
         // WorkAuthor graph. Group-by canonical gives the rolled-up
         // count without double-counting books credited to both
-        // canonical and alias.
+        // canonical and alias. Filtered to Role = Author so the snapshot's
+        // BookCount stays a true "books this person wrote" rollup —
+        // matches the /authors and Home top-authors semantics.
         var canonicalBookPairs = await db.WorkAuthors
             .AsNoTracking()
+            .Where(wa => wa.Role == AuthorRole.Author)
             .SelectMany(wa => wa.Work.Books.Select(b => new
             {
                 CanonicalId = wa.Author.CanonicalAuthorId ?? wa.AuthorId,

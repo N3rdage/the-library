@@ -464,7 +464,7 @@ public class BookDetailViewModel(
         WorkAuthorshipFormatter.Display(w),
         // LeadAuthorId is the first WorkAuthor entry's Author — used by the
         // BookDetail '+author' link to deep-link into the /authors page.
-        w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.AuthorId).FirstOrDefault(),
+        w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.AuthorId).FirstOrDefault(),
         PartialDateParser.Format(w.FirstPublishedDate, w.FirstPublishedDatePrecision),
         w.Genres.OrderBy(g => g.Name).Select(g => g.Name).ToList(),
         w.Series is null ? null : new SeriesInfo(w.Series.Id, w.Series.Name, w.Series.Type, w.SeriesOrder));

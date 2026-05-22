@@ -46,7 +46,7 @@ public class AIAssistantViewModel(
                 // Lead author name only — the AI prompt context is per-Work, and
                 // the genre suggestion service still takes a single author string.
                 // Multi-author surfaces use the formatter; this row is internal.
-                b.Works.FirstOrDefault()!.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name).FirstOrDefault() ?? "",
+                b.Works.FirstOrDefault()!.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.Author.Name).FirstOrDefault() ?? "",
                 b.Works.SelectMany(w => w.Genres).Select(g => g.Name).Distinct().ToList()))
             .ToListAsync();
 
@@ -173,7 +173,7 @@ public class AIAssistantViewModel(
             .ToListAsync();
 
         var authorNames = matchedBooks
-            .SelectMany(b => b.Works.SelectMany(w => w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name)))
+            .SelectMany(b => b.Works.SelectMany(w => w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.Author.Name)))
             .Distinct()
             .ToList();
         if (authorNames.Count == 1)

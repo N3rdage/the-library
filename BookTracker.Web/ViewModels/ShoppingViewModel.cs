@@ -221,7 +221,7 @@ public class ShoppingViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     private static string PrimaryAuthor(Book book)
     {
         var names = book.Works
-            .SelectMany(w => w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author?.Name))
+            .SelectMany(w => w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.Author?.Name))
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .Distinct()
             .ToList();

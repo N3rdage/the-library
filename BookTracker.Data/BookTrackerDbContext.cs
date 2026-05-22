@@ -161,8 +161,10 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .OnDelete(DeleteBehavior.SetNull);
 
         // Work ↔ Author is many-to-many through the WorkAuthor join entity.
-        // Composite PK on (WorkId, AuthorId) — the same Author can't appear
-        // twice on a single Work. Cascade on Work delete (the join row only
+        // Composite PK on (WorkId, AuthorId, Role) — the same Author can't
+        // appear twice on a single Work in the same role, but CAN hold
+        // multiple roles (Tolkien is Author + Illustrator on *The Hobbit*).
+        // Cascade on Work delete (the join row only
         // exists as long as the Work does); Restrict on Author delete (don't
         // allow deleting an Author that's still credited on a Work).
         //
@@ -182,7 +184,11 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
                       .WithMany(w => w.WorkAuthors)
                       .HasForeignKey(wa => wa.WorkId)
                       .OnDelete(DeleteBehavior.Cascade),
-                j => j.HasKey(wa => new { wa.WorkId, wa.AuthorId }));
+                j =>
+                {
+                    j.HasKey(wa => new { wa.WorkId, wa.AuthorId, wa.Role });
+                    j.Property(wa => wa.Role).HasDefaultValue(AuthorRole.Author);
+                });
 
         modelBuilder.Entity<Author>()
             .HasIndex(a => a.Name)

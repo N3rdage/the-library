@@ -1,4 +1,5 @@
 using BookTracker.Data;
+using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.Services;
@@ -62,7 +63,7 @@ public class WorkSearchService(IDbContextFactory<BookTrackerDbContext> dbFactory
                 // Lead-author name only — the search dropdown row is tight, so
                 // co-authors are elided here. The full multi-author display
                 // appears once the user picks the work and lands on BookDetail.
-                AuthorName = w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name).FirstOrDefault() ?? "",
+                AuthorName = w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.Author.Name).FirstOrDefault() ?? "",
                 Year = (int?)(w.FirstPublishedDate == null ? null : (int?)w.FirstPublishedDate.Value.Year),
                 BookCount = w.Books.Count,
                 TitleLower = w.Title.ToLower()

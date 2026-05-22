@@ -1,4 +1,5 @@
 using BookTracker.Data;
+using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
@@ -29,7 +30,11 @@ public class HomeViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
         // WorkAuthor row contributes one tally — co-authored works contribute
         // to BOTH credited authors (post-PR2 behaviour change vs the lead-only
         // legacy where Preston + Child only counted toward the lead).
+        // Default Top-Authors filter: Role = Author. Editor/Translator/
+        // Illustrator contributions are intentionally excluded so the
+        // headline doesn't get polluted by reference-work translators.
         var authorTotals = await db.WorkAuthors
+            .Where(wa => wa.Role == AuthorRole.Author)
             .GroupBy(wa => wa.Author.CanonicalAuthorId ?? wa.AuthorId)
             .Select(g => new { CanonicalId = g.Key, Count = g.Count() })
             .OrderByDescending(x => x.Count)

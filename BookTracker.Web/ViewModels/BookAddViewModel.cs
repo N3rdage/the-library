@@ -273,7 +273,7 @@ public class BookAddViewModel(
                         existing.Id,
                         existing.Book.Title,
                         string.Join(", ", existing.Book.Works
-                            .SelectMany(w => w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name))
+                            .SelectMany(w => w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.Author.Name))
                             .Distinct()),
                         existing.Copies.Count);
                     LookupMessage = null;

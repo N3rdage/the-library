@@ -459,7 +459,7 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         // than the prettier "Preston & Child" — list views stay uniform; the
         // " & " formatter is reserved for single-book / single-Work surfaces
         // (BookDetail, dialogs).
-        string.Join(", ", b.Works.SelectMany(w => w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name)).Distinct()),
+        string.Join(", ", b.Works.SelectMany(w => w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.Author.Name)).Distinct()),
         b.DefaultCoverArtUrl,
         b.Status,
         b.Rating,
