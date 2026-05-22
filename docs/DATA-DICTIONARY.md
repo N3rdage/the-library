@@ -214,12 +214,19 @@ Seeded rows:
 | 1 | `follow-up` | Flag books needing later attention. |
 | 2 | `format:graphic-novel` | Format indicator — replaces the former `Graphic Novels` genre. |
 | 3 | `format:short-stories` | Format indicator — replaces the former `Short Story Collections` genre. |
+| 4 | `format:reference` | Reference works (dictionaries, encyclopaedias, atlases, field guides). Signals `Status` is semantically irrelevant — reporting should exclude from "unread queue" counts (see TODO #51). |
+| 5 | `format:notebook` | Primary-source notebooks / journals / lecture notes (e.g. Darwin's *Beagle* journal, Einstein's lectures). Genre carries the *subject*; this tag carries the *form*. |
+| 6 | `format:script` | Published play / screenplay / teleplay scripts. Applied to Books whose Works carry the Performing Arts genre. |
+| 7 | `format:textbook` | Academic / instructional volumes — CS manuals, anatomy texts, learn-to-play. Distinguishes textbook treatment from popular treatment of the same topic. |
+| 8 | `format:illustrated` | Significant illustration content beyond decorative covers — Horrible Histories, illustrated children's reference, illustrated atlases. |
+
+Tag ID 9 is reserved for the eventual `shelf:*` work (TODO #9) — start that block from ID 9 or later when it ships.
 
 ### Tag conventions
 
 Two prefix conventions are reserved by convention (not enforced by constraint):
 
-- **`format:*`** — physical-or-structural format indicators that aren't genres. Currently `format:graphic-novel` and `format:short-stories`. Applied at the Book level even though the constituent Works carry the *thematic* genres (e.g. a Christie short-story compendium has `format:short-stories` on the Book + `Mystery` genre on each Work).
+- **`format:*`** — physical-or-structural format indicators that aren't genres. Currently `format:graphic-novel`, `format:short-stories`, `format:reference`, `format:notebook`, `format:script`, `format:textbook`, `format:illustrated`. Applied at the Book level even though the constituent Works carry the *thematic* genres (e.g. a Christie short-story compendium has `format:short-stories` on the Book + `Mystery` genre on each Work). Tags within this convention are **additive** — a Book may carry multiple `format:*` tags where applicable (e.g. an illustrated atlas = `format:reference` + `format:illustrated`).
 - **`shelf:*`** — physical-shelf membership. **Not yet shipped** — captured in TODO #9 as part of the shelf-organisation work. When it ships, exactly one `shelf:*` tag per Book (convention, not constraint).
 
 Any other tag is free-form user attention markers (e.g. `follow-up`).
