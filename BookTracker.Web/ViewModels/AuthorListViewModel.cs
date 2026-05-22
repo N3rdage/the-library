@@ -1,4 +1,5 @@
 using BookTracker.Data;
+using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
@@ -61,7 +62,12 @@ public class AuthorListViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
             .OrderBy(a => a.Name)
             .ToListAsync();
 
+        // Default rollup: Role = Author only. Editor/Translator/Illustrator
+        // contributions are intentionally excluded from the headline "books
+        // by X" count so reference-work translators don't pollute the list.
+        // Per-author drilldowns showing all contributions are a future opt-in.
         var workAuthors = await db.WorkAuthors
+            .Where(wa => wa.Role == AuthorRole.Author)
             .Select(wa => new { wa.AuthorId, wa.WorkId })
             .ToListAsync();
 

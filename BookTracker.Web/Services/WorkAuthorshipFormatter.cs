@@ -12,17 +12,24 @@ namespace BookTracker.Web.Services;
 // for co-authored books on covers; comma-list for three+ matches what
 // anthology spines do.
 //
+// Post-2026-05-23 Role support: when a Work has non-Author contributors
+// (Editor / Translator / Illustrator / etc.) they render after the
+// Author-role contributors with a role suffix:
+//   "Doug Mauss (editor); Sergio Cariello (illustrator)"
+// Author-role contributors lead with no suffix; non-Author contributors
+// follow, semicolon-separated, with the lowercase role name in
+// parentheses.
+//
 // Sites: BookListViewModel, BookDetailViewModel, AuthorListViewModel,
 // SeriesEditViewModel, ShoppingViewModel, HomeViewModel, the Library
 // list / BookDetail / Shopping Razor surfaces, and the merge dialogs.
-// Anywhere that previously read `work.Author.Name` reads through this
-// helper post-cutover.
 public static class WorkAuthorshipFormatter
 {
     /// <summary>
-    /// Format an ordered sequence of author names for display.
-    /// Empty input returns "(unknown author)" — defensive; shouldn't happen
-    /// post-cutover because every Work has at least one WorkAuthor row.
+    /// Format an ordered sequence of author names (Author-role only) for
+    /// display. Kept as the simple-string overload for callers that don't
+    /// need Role awareness (e.g. plain author rollups). Empty input
+    /// returns "(unknown author)".
     /// </summary>
     public static string Display(IEnumerable<string> names)
     {
@@ -37,10 +44,49 @@ public static class WorkAuthorshipFormatter
     }
 
     /// <summary>
-    /// Convenience overload: pull names directly from a Work's WorkAuthors
-    /// collection in Order ascending. Caller is responsible for having
-    /// loaded WorkAuthors + Author.
+    /// Role-aware overload. Author-role contributors render with the
+    /// standard "Preston & Child" treatment; non-Author contributors
+    /// append after with a "; Name (role)" suffix.
+    /// </summary>
+    public static string Display(IEnumerable<(string Name, AuthorRole Role)> contributors)
+    {
+        var ordered = (contributors ?? [])
+            .Where(c => !string.IsNullOrWhiteSpace(c.Name))
+            .ToList();
+
+        var authors = ordered.Where(c => c.Role == AuthorRole.Author).Select(c => c.Name).ToList();
+        var others  = ordered.Where(c => c.Role != AuthorRole.Author).ToList();
+
+        var authorPart = Display(authors);
+        if (others.Count == 0) return authorPart;
+
+        var otherPart = string.Join("; ", others.Select(c => $"{c.Name} ({RoleLabel(c.Role)})"));
+        return authors.Count == 0 ? otherPart : $"{authorPart}; {otherPart}";
+    }
+
+    /// <summary>
+    /// Convenience overload: pull contributors directly from a Work's
+    /// WorkAuthors collection, sorted by (Role, Order) so Author-role
+    /// contributors come first then other roles each in their own Order
+    /// sequence. Caller is responsible for having loaded WorkAuthors +
+    /// Author.
     /// </summary>
     public static string Display(Work work) =>
-        Display(work.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name));
+        Display(work.WorkAuthors
+            .OrderBy(wa => wa.Role == AuthorRole.Author ? 0 : 1) // Author first
+            .ThenBy(wa => (int)wa.Role)                          // then other roles in enum order
+            .ThenBy(wa => wa.Order)
+            .Select(wa => (wa.Author.Name, wa.Role)));
+
+    private static string RoleLabel(AuthorRole role) => role switch
+    {
+        AuthorRole.Editor      => "editor",
+        AuthorRole.Translator  => "translator",
+        AuthorRole.Illustrator => "illustrator",
+        AuthorRole.Adaptor     => "adaptor",
+        AuthorRole.Compiler    => "compiler",
+        AuthorRole.Foreword    => "foreword",
+        AuthorRole.Contributor => "contributor",
+        _                      => role.ToString().ToLowerInvariant(),
+    };
 }

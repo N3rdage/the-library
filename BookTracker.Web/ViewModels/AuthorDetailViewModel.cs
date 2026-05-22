@@ -74,11 +74,14 @@ public class AuthorDetailViewModel(IDbContextFactory<BookTrackerDbContext> dbFac
             ids.AddRange(author.Aliases.Select(a => a.Id));
         }
 
+        // Default drilldown: only Works where this author is in an
+        // Author role. Editor/translator/illustrator contributions can be
+        // shown via a future opt-in toggle.
         var works = await db.Works
             .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .Include(w => w.Books)
             .Include(w => w.Series)
-            .Where(w => w.WorkAuthors.Any(wa => ids.Contains(wa.AuthorId)))
+            .Where(w => w.WorkAuthors.Any(wa => ids.Contains(wa.AuthorId) && wa.Role == AuthorRole.Author))
             .OrderBy(w => w.SeriesId == null)
             .ThenBy(w => w.Series!.Name)
             .ThenBy(w => w.SeriesOrder ?? int.MaxValue)
@@ -92,9 +95,13 @@ public class AuthorDetailViewModel(IDbContextFactory<BookTrackerDbContext> dbFac
             // "Written as" tag only on canonical drill-downs; alias rows always
             // are themselves so the label would be redundant.
             isCanonical
-                ? w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author).FirstOrDefault() is { } leadAuthor && leadAuthor.Id != author.Id
-                    ? leadAuthor.Name
-                    : null
+                ? w.WorkAuthors
+                    .Where(wa => wa.Role == AuthorRole.Author)
+                    .OrderBy(wa => wa.Order)
+                    .Select(wa => wa.Author)
+                    .FirstOrDefault() is { } leadAuthor && leadAuthor.Id != author.Id
+                        ? leadAuthor.Name
+                        : null
                 : null,
             PartialDateParser.Format(w.FirstPublishedDate, w.FirstPublishedDatePrecision),
             w.Series?.Name,

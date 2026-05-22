@@ -153,7 +153,7 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
             .Select(w => new WorkSearchResult(
                 w.Id,
                 w.Title,
-                w.WorkAuthors.OrderBy(wa => wa.Order).Select(wa => wa.Author.Name).FirstOrDefault() ?? "",
+                w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.Author.Name).FirstOrDefault() ?? "",
                 w.SeriesId))
             .ToListAsync();
     }
