@@ -91,12 +91,15 @@ public static class GenreSeed
         // RemoveFormatGenres migration and DATA-DICTIONARY.md §Tag.
 
 
-        // Non-fiction starter set — reference, art, and religious books.
-        // Further non-fiction branches (History, Biography, etc.) are
-        // left for a future expansion; the 2026-05-22 round-2 work
-        // added Popular Science, Memoir, Philosophy as Reference
-        // children and Poetry as a top-level (see Provenance in
-        // GENRE-TAXONOMY.md).
+        // Non-fiction. Reference/Art/Religion were the April starter set; the
+        // 2026-05-22 round-2 work added Popular Science, Memoir, Philosophy as
+        // Reference children and Poetry as a top-level. Round 3 (2026-05-23)
+        // re-parented Memoir under Biography and Popular Science under Science
+        // now that those parents exist, and added the rest of the non-fiction
+        // tree (History, Biography, Science, Psychology & Self-help, Travel
+        // Writing, Politics & Current Affairs, Media Studies) plus Performing
+        // Arts as a fiction-side branch for plays/screenplays. See Provenance
+        // in GENRE-TAXONOMY.md for the migration trail.
         new("Reference", null),
         new("Dictionaries", "Reference"),
         new("Encyclopedias", "Reference"),
@@ -104,9 +107,10 @@ public static class GenreSeed
         new("Field Guides", "Reference"),
         new("Style Guides", "Reference"),
         new("Language Learning", "Reference"),
-        new("Popular Science", "Reference"),
-        new("Memoir", "Reference"),
         new("Philosophy", "Reference"),
+        new("Cookery", "Reference"),
+        new("Travel Guides", "Reference"),
+        new("How-to & Instruction", "Reference"),
 
         new("Poetry", null),
 
@@ -117,6 +121,7 @@ public static class GenreSeed
         new("Photography", "Art"),
         new("Architecture", "Art"),
         new("Design", "Art"),
+        new("Music", "Art"),
 
         new("Religion & Spirituality", null),
         new("Sacred Texts", "Religion & Spirituality"),
@@ -124,5 +129,45 @@ public static class GenreSeed
         new("Theology", "Religion & Spirituality"),
         new("Comparative Religion", "Religion & Spirituality"),
         new("Mythology", "Religion & Spirituality"),
+
+        new("History", null),
+        new("Ancient History", "History"),
+        new("Medieval History", "History"),
+        new("Modern History", "History"),
+        new("Military History", "History"),
+        new("Local & Regional History", "History"),
+        new("Social & Cultural History", "History"),
+        new("Popular History", "History"),
+
+        new("Biography", null),
+        new("Memoir", "Biography"),
+        new("Autobiography", "Biography"),
+        new("Authorised Biography", "Biography"),
+        new("Unauthorised Biography", "Biography"),
+        new("Letters & Diaries", "Biography"),
+
+        new("Science", null),
+        new("Popular Science", "Science"),
+        new("Mathematics", "Science"),
+        new("Physics & Astronomy", "Science"),
+        new("Biology & Natural History", "Science"),
+        new("Earth & Environmental Science", "Science"),
+        new("Medicine & Anatomy", "Science"),
+        new("Computer Science", "Science"),
+
+        new("Psychology & Self-help", null),
+        new("Cognitive Science", "Psychology & Self-help"),
+        new("Clinical & Therapeutic", "Psychology & Self-help"),
+        new("Social Psychology", "Psychology & Self-help"),
+        new("Self-help & Productivity", "Psychology & Self-help"),
+        new("Philosophy of Mind", "Psychology & Self-help"),
+
+        new("Travel Writing", null),
+        new("Politics & Current Affairs", null),
+        new("Media Studies", null),
+
+        new("Performing Arts", null),
+        new("Stage Plays", "Performing Arts"),
+        new("Screenplays & TV Scripts", "Performing Arts"),
     };
 }

@@ -92,7 +92,13 @@ Utopian                      (top-level, no sub-genres yet)
 Magical Realism              (top-level, no sub-genres yet)
 Biographical Fiction         (top-level, no sub-genres yet)
 Western                      (top-level, no sub-genres yet)
+
+Performing Arts
+├── Stage Plays
+└── Screenplays & TV Scripts
 ```
+
+> **Performing Arts is on the fiction side** — a play or screenplay is a creative work in the same sense as a novel. Shakespeare, Aristophanes, sitcom scripts, comedy stand-up scripts all land here. Books *about* productions (making-of, behind-the-scenes, theatre history / criticism) go under **Media Studies** on the non-fiction side, not here.
 
 > `Graphic Novels` and `Short Story Collections` were removed 2026-05-17 — they're format indicators, not genres. They now live as `format:graphic-novel` / `format:short-stories` Tags on the Book. See [`DATA-DICTIONARY.md`](DATA-DICTIONARY.md) §Tag conventions.
 
@@ -106,9 +112,10 @@ Reference
 ├── Field Guides
 ├── Style Guides
 ├── Language Learning
-├── Popular Science
-├── Memoir
-└── Philosophy
+├── Philosophy
+├── Cookery
+├── Travel Guides
+└── How-to & Instruction
 
 Art
 ├── Art History
@@ -116,7 +123,8 @@ Art
 ├── Art Theory
 ├── Photography
 ├── Architecture
-└── Design
+├── Design
+└── Music
 
 Religion & Spirituality
 ├── Sacred Texts
@@ -125,8 +133,45 @@ Religion & Spirituality
 ├── Comparative Religion
 └── Mythology
 
+History
+├── Ancient History
+├── Medieval History
+├── Modern History
+├── Military History
+├── Local & Regional History
+├── Social & Cultural History
+└── Popular History
+
+Biography
+├── Memoir
+├── Autobiography
+├── Authorised Biography
+├── Unauthorised Biography
+└── Letters & Diaries
+
+Science
+├── Popular Science
+├── Mathematics
+├── Physics & Astronomy
+├── Biology & Natural History
+├── Earth & Environmental Science
+├── Medicine & Anatomy
+└── Computer Science
+
+Psychology & Self-help
+├── Cognitive Science
+├── Clinical & Therapeutic
+├── Social Psychology
+├── Self-help & Productivity
+└── Philosophy of Mind
+
 Poetry                       (top-level, no sub-genres yet)
+Travel Writing               (top-level, no sub-genres yet — distinct from Reference → Travel Guides; this is Bryson-style narrative, not Lonely-Planet practical)
+Politics & Current Affairs   (top-level, no sub-genres yet)
+Media Studies                (top-level, no sub-genres yet)
 ```
+
+> **Memoir** was originally seeded under Reference (2026-05-22, round 2) as a stopgap; it lives under Biography from the 2026-05-23 non-fiction expansion. Same story for **Popular Science** (originally under Reference, now under Science). Existing Works tagged Memoir or Popular Science retain those tags through the re-parent — the Genre row IDs didn't change.
 
 ---
 
@@ -140,6 +185,7 @@ Poetry                       (top-level, no sub-genres yet)
 | Science Fiction sub-tree (Hard SF / Space Opera / Cyberpunk / Military SF / Time Travel / First Contact / Post-Apocalyptic / Dystopian SF / Alternate History / Young Adult SF) + Horror sub-tree extension (Cosmic Horror / Gothic Horror / Supernatural / Psychological Horror / Splatterpunk / Folk Horror / Body Horror) | Genre-restructure pass (PR 1) | `20260516233131_SeedGenreExpansion` |
 | `Graphic Novels` + `Short Story Collections` removed from the tree (moved to `format:*` Tag convention); `format:graphic-novel` + `format:short-stories` Tag rows seeded | Genre-restructure pass (PR 2) | `20260517041346_RemoveFormatGenres` |
 | Reference sub-genres (Popular Science / Memoir / Philosophy) + top-level Poetry | Genre-restructure round 2 (this PR) | `20260522023150_SeedNonFictionSubGenresAndPoetry` |
+| Non-fiction expansion — History / Biography / Science / Psychology & Self-help / Travel Writing / Politics & Current Affairs / Media Studies sub-trees, plus Performing Arts (fiction-side), plus Cookery / Travel Guides / How-to & Instruction (under Reference), plus Music (under Art); re-parent of Memoir under Biography and Popular Science under Science; five `format:*` Tags (`reference` / `notebook` / `script` / `textbook` / `illustrated`) | Non-fiction expansion (this PR) | `20260522052911_SeedNonFictionExpansion` |
 
 User-added genres (created via the Add page typeahead's free-text fall-through, if that surface allows it — currently the picker is closed-list against `GenreSeed.All`) would *not* be in `GenreSeed.cs` but would live in the DB. If you see a Genre row in the snapshot that's not in this file, it's either a stale row from a withdrawn seed, an out-of-band insert, or this file is behind. As of this writing, the picker is closed-list, so the DB and `GenreSeed.cs` should match exactly.
 
@@ -147,16 +193,20 @@ User-added genres (created via the Add page typeahead's free-text fall-through, 
 
 ## Branches *not* yet seeded
 
-The original comment in `GenreSeed.cs` flags non-fiction expansion as deliberate future work — branches that are missing today and would be the obvious next additions:
+The original comment in `GenreSeed.cs` flagged non-fiction expansion as deliberate future work. Most of the obvious branches are now seeded:
 
-- **History** (Ancient / Medieval / Modern / Military / Local-regional)
-- **Biography** (Autobiography / Authorised / Unauthorised — `Memoir` was seeded under Reference in the 2026-05-22 round-2 pass; a sibling `Biography` branch may earn its keep if the corpus demands the distinction)
-- **Science** (Mathematics / Physics / Biology / Earth-science / etc. — `Popular Science` was seeded under Reference in the 2026-05-22 round-2 pass as the catch-all for trade-press science writing)
-- **Cookery / Cookbooks** (currently no home — cookbooks tagged today go under Reference or unclassified)
-- **Travel writing**
-- **Essays / Letters**
-- **Self-help / Productivity**
-- **Politics / Current affairs**
+- ~~**History** (Ancient / Medieval / Modern / Military / Local-regional)~~ ✓ seeded 2026-05-23 (`SeedNonFictionExpansion`)
+- ~~**Biography** (Memoir / Autobiography / Authorised / Unauthorised)~~ ✓ seeded 2026-05-23 (`SeedNonFictionExpansion`) — Memoir re-parented from Reference at the same time
+- ~~**Science** (Popular / Mathematics / Physics / Biology / Earth-science / etc.)~~ ✓ seeded 2026-05-23 (`SeedNonFictionExpansion`) — Popular Science re-parented from Reference at the same time
+- ~~**Cookery / Cookbooks**~~ ✓ seeded 2026-05-23 under Reference (`SeedNonFictionExpansion`)
+- ~~**Travel writing**~~ ✓ seeded 2026-05-23 as top-level (`SeedNonFictionExpansion`); see also Reference → Travel Guides for the practical sibling
+- ~~**Self-help / Productivity**~~ ✓ seeded 2026-05-23 under Psychology & Self-help (`SeedNonFictionExpansion`)
+- ~~**Politics / Current affairs**~~ ✓ seeded 2026-05-23 as top-level (`SeedNonFictionExpansion`)
+
+Still open:
+
+- **Essays / Letters** — *Letters & Diaries* now exists under Biography (2026-05-23), which absorbs the *letters* half. A standalone *Essays* branch is still deferred — no clear separation from Literary Fiction yet without a corpus signal.
+- **Institutional authorship** — Encyclopaedia Britannica, OUP, etc. as Author. Separate concern from this taxonomy work.
 
 If a brainstorming session proposes adding a branch, the addition is:
 1. New `new("Branch Name", null)` (or with parent) entries in `GenreSeed.cs`.
@@ -177,7 +227,7 @@ If a brainstorming session proposes adding a branch, the addition is:
 
 ## Open questions worth flagging in restructuring brainstorms
 
-1. **Where do cookbooks go?** Currently nowhere clean — Reference subtree was scoped to dictionaries / encyclopaedias / atlases / field guides / style guides / language learning. A new top-level "Cookery" or sub-branch under Reference would resolve it. Surfaced because reference book capture is the next planned wave (TODO #51).
+1. ~~**Where do cookbooks go?**~~ **Resolved 2026-05-23** by `SeedNonFictionExpansion` — `Reference → Cookery` added.
 2. ~~**Sci-fi has no sub-genres yet** despite being one of the largest fiction branches.~~ **Resolved 2026-05-17** by `SeedGenreExpansion` — 10 sub-genres added including `Dystopian SF`. The existing top-level `Dystopian` is kept for non-SF dystopias (literary, near-future thriller) per the genre-restructure brief.
 3. ~~**`Short Story Collections` as a top-level genre is structurally odd** — it's a *format* indicator, not a genre.~~ **Resolved 2026-05-17** by `RemoveFormatGenres` — moved to `format:short-stories` Tag on the Book. Constituent Works keep their thematic genre (e.g. Mystery for a Christie collection).
 4. ~~**`Graphic Novels` similar concern** — format or genre? Currently treated as genre.~~ **Resolved 2026-05-17** by `RemoveFormatGenres` — moved to `format:graphic-novel` Tag on the Book.
