@@ -30,3 +30,7 @@
 - [Add/View/Edit polish arc retro](retros/retro_add_view_edit_polish_arc.md) — six PRs decommissioning `/edit`; three durable patterns + one accepted papercut (MudAutocomplete portaled popover stays open after free-text Enter, Esc dismisses).
 - [sqlite-net-pcl schema backfill](feedback_sqlite_net_pcl_schema_backfill.md) — adding a queryable column to `Cached*` entities silently breaks queries for existing rows (CreateTableAsync ALTERs but doesn't populate); always pair with a one-shot UPDATE in `CatalogCache.InitAsync`.
 - [Runbook: Bookshelf Clear data kills the app](runbook_bookshelf_clear_data_kills_app.md) — Android Settings → Clear data prevents Bookshelf from launching afterwards (2026-05-14). Use uninstall + reinstall instead; root cause not yet diagnosed.
+- [Dogfood data cleanup via UI](feedback_dogfood_data_cleanup.md) — default to manual UI cleanup for judgement-per-row work; only script uniform bulk transforms. Drew wants to feel the same friction users will.
+- [Runbook: prod SQL access](runbook_prod_sql_access.md) — prod Azure SQL needs temp firewall rule + public-access toggle + Entra auth; canonical pattern in `infra/refresh-local-db.ps1`.
+- [DBNull in Invoke-Sqlcmd](feedback_dbnull_in_invoke_sqlcmd.md) — SQL NULLs come back as `[DBNull]`, which is truthy in PowerShell; explicit `-is [System.DBNull]` check before any string coercion.
+- [Disposable scripts in .debug/](feedback_disposable_scripts_in_debug.md) — one-off data cleanups go in `.debug/*.ps1` (gitignored), not a `BookTracker.Tools.*` csproj.
