@@ -27,11 +27,14 @@
                               Margin="Margin.Dense" />
                 <div>
                     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Author(s)</MudText>
-                    @* Multi-author chip list. Lead chip = legacy AuthorId during
-                       the PR1/PR2 cutover. *@
                     <MudAuthorPicker Authors="VM.AuthorNames"
                                      AuthorsChanged="list => VM.AuthorNames = list"
                                      Label="Add author" />
+                </div>
+                <div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Other contributors (optional)</MudText>
+                    <MudContributorPicker Contributors="VM.Contributors"
+                                          ContributorsChanged="list => VM.Contributors = list" />
                 </div>
                 <MudTextField T="string"
                               @bind-Value="VM.FirstPublishedDate"

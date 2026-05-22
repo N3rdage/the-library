@@ -335,7 +335,8 @@ public class BookDetailViewModel(
         IReadOnlyList<string> authorNames,
         string? subtitle,
         string? firstPublishedDate,
-        IReadOnlyList<int> genreIds)
+        IReadOnlyList<int> genreIds,
+        IReadOnlyList<ContributorEntry>? contributors = null)
     {
         if (Book is null) return null;
         if (string.IsNullOrWhiteSpace(title)) return null;
@@ -346,6 +347,17 @@ public class BookDetailViewModel(
 
         var authors = await AuthorResolver.FindOrCreateAllAsync(authorNames, db);
         if (authors.Count == 0) return null;
+
+        var resolvedContributors = new List<(Author Person, AuthorRole Role)>();
+        if (contributors is not null)
+        {
+            foreach (var entry in contributors)
+            {
+                if (string.IsNullOrWhiteSpace(entry.Name)) continue;
+                var person = await AuthorResolver.FindOrCreateAsync(entry.Name, db);
+                resolvedContributors.Add((person, entry.Role));
+            }
+        }
 
         var firstPub = PartialDateParser.TryParse(firstPublishedDate) ?? PartialDate.Empty;
 
@@ -361,7 +373,7 @@ public class BookDetailViewModel(
             FirstPublishedDatePrecision = firstPub.Precision,
             Genres = genres,
         };
-        AuthorResolver.AssignAuthors(work, authors);
+        AuthorResolver.AssignAuthors(work, authors, resolvedContributors);
 
         book.Works.Add(work);
         await db.SaveChangesAsync();

@@ -70,16 +70,25 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
             // check for direct URL hits. Both Works must credit the same set
             // of authors (post-PR2 multi-author cutover); a single mismatch
             // anywhere blocks the merge with the same message as before.
-            var lowerAuthorIds = await db.WorkAuthors
+            // Compare the SET of distinct AuthorIds, not the full row list —
+            // post-Phase-A a Work can credit the same Author in multiple roles
+            // (Tolkien as Author + Illustrator on *The Hobbit*), and that
+            // shouldn't make the merge incompatible with a Work that credits
+            // Tolkien just as Author.
+            var lowerAuthorIds = (await db.WorkAuthors
                 .Where(wa => wa.WorkId == lowerId)
                 .Select(wa => wa.AuthorId)
+                .Distinct()
+                .ToListAsync(ct))
                 .OrderBy(id => id)
-                .ToListAsync(ct);
-            var higherAuthorIds = await db.WorkAuthors
+                .ToList();
+            var higherAuthorIds = (await db.WorkAuthors
                 .Where(wa => wa.WorkId == higherId)
                 .Select(wa => wa.AuthorId)
+                .Distinct()
+                .ToListAsync(ct))
                 .OrderBy(id => id)
-                .ToListAsync(ct);
+                .ToList();
             if (!lowerAuthorIds.SequenceEqual(higherAuthorIds))
             {
                 incompatibility = "Works belong to different authors. Merge the authors on /duplicates first, then come back.";
@@ -117,12 +126,13 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
             return Failure("One or both Works could not be found — they may already have been merged or deleted.");
         }
 
-        // Author sets must match — two Works with different authorship can'\''t
+        // Author sets must match — two Works with different authorship can't
         // be merged into one (the result would conflate distinct creative
-        // credits). User'\''s expected to merge authors first if pen-name aliases
-        // are involved.
-        var winnerAuthorIds = winner.WorkAuthors.Select(wa => wa.AuthorId).OrderBy(id => id).ToList();
-        var loserAuthorIds = loser.WorkAuthors.Select(wa => wa.AuthorId).OrderBy(id => id).ToList();
+        // credits). User's expected to merge authors first if pen-name aliases
+        // are involved. Distinct so multi-role rows (Tolkien as Author +
+        // Illustrator) don't fail the SequenceEqual.
+        var winnerAuthorIds = winner.WorkAuthors.Select(wa => wa.AuthorId).Distinct().OrderBy(id => id).ToList();
+        var loserAuthorIds = loser.WorkAuthors.Select(wa => wa.AuthorId).Distinct().OrderBy(id => id).ToList();
         if (!winnerAuthorIds.SequenceEqual(loserAuthorIds))
         {
             return Failure("Works belong to different authors. Merge the authors first on /duplicates.");

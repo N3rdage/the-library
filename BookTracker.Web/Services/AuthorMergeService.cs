@@ -96,32 +96,36 @@ public class AuthorMergeService(IDbContextFactory<BookTrackerDbContext> dbFactor
         }
 
         // Reassign every WorkAuthor row from loser to winner. Composite PK
-        // (WorkId, AuthorId) means we can'\''t UPDATE the AuthorId column —
-        // delete + add. If winner is already credited on the same Work, drop
-        // the loser row to avoid a duplicate composite key (the merge
-        // collapses both into one credit).
+        // (WorkId, AuthorId, Role) means we can't UPDATE the AuthorId column
+        // — delete + add. Dedup by (WorkId, Role): if winner is already
+        // credited on the same Work in the same Role, drop the loser row;
+        // otherwise re-add as winner so distinct roles survive (e.g. winner
+        // is Author of Work X, loser is Translator of Work X — both should
+        // exist post-merge under winner).
         var loserWorkAuthors = await db.WorkAuthors
             .Where(wa => wa.AuthorId == loser.Id)
             .ToListAsync(ct);
 
-        var winnerCreditedWorkIds = (await db.WorkAuthors
+        var winnerCreditedByWorkAndRole = (await db.WorkAuthors
             .Where(wa => wa.AuthorId == winner.Id)
-            .Select(wa => wa.WorkId)
+            .Select(wa => new { wa.WorkId, wa.Role })
             .ToListAsync(ct))
+            .Select(x => (x.WorkId, x.Role))
             .ToHashSet();
 
         foreach (var wa in loserWorkAuthors)
         {
             db.WorkAuthors.Remove(wa);
-            if (!winnerCreditedWorkIds.Contains(wa.WorkId))
+            if (!winnerCreditedByWorkAndRole.Contains((wa.WorkId, wa.Role)))
             {
                 db.WorkAuthors.Add(new WorkAuthor
                 {
                     WorkId = wa.WorkId,
                     AuthorId = winner.Id,
                     Order = wa.Order,
+                    Role = wa.Role,
                 });
-                winnerCreditedWorkIds.Add(wa.WorkId);
+                winnerCreditedByWorkAndRole.Add((wa.WorkId, wa.Role));
             }
         }
         var worksReassignedCount = loserWorkAuthors.Count;

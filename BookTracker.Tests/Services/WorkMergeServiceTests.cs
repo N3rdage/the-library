@@ -298,6 +298,43 @@ public class WorkMergeServiceTests
         Assert.Equal(3, reloaded.Genres.Count);
     }
 
+    // ─── Role-aware (Phase G) ─────────────────────────────────────────
+
+    [Fact]
+    public async Task MergeAsync_allows_merge_when_author_set_matches_distinctly_but_roles_differ()
+    {
+        // Winner credits Tolkien as Author AND Illustrator (two WorkAuthor rows,
+        // same AuthorId). Loser credits Tolkien just as Author (one row). The
+        // distinct author set is {Tolkien} on both sides — the merge should
+        // proceed, not be rejected as "different authors".
+        using var db = _factory.CreateDbContext();
+        var tolkien = new Author { Name = "Tolkien" };
+        db.Authors.Add(tolkien);
+        await db.SaveChangesAsync();
+
+        var winner = new Work
+        {
+            Title = "The Hobbit",
+            WorkAuthors =
+            [
+                new WorkAuthor { Author = tolkien, Order = 0, Role = AuthorRole.Author },
+                new WorkAuthor { Author = tolkien, Order = 0, Role = AuthorRole.Illustrator },
+            ],
+        };
+        var loser = new Work
+        {
+            Title = "Hobbit",
+            WorkAuthors = [new WorkAuthor { Author = tolkien, Order = 0, Role = AuthorRole.Author }],
+        };
+        db.Books.Add(new Book { Title = "Winner Book", Works = [winner] });
+        db.Books.Add(new Book { Title = "Loser Book", Works = [loser] });
+        await db.SaveChangesAsync();
+
+        var result = await CreateService().MergeAsync(winner.Id, loser.Id);
+
+        Assert.True(result.Success);
+    }
+
     // ─── Helpers ──────────────────────────────────────────────────────
 
     private async Task<(int winnerId, int loserId, int otherId)> SeedTwoWorksInSeparateBooksAsync(

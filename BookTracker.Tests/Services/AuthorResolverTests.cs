@@ -94,4 +94,96 @@ public class AuthorResolverTests
         var work = new Work { Title = "x" };
         Assert.Throws<ArgumentException>(() => AuthorResolver.AssignAuthors(work, []));
     }
+
+    [Fact]
+    public void AssignAuthors_appends_contributors_with_per_role_order_starting_at_zero()
+    {
+        var work = new Work { Title = "The Hobbit" };
+        var tolkien = new Author { Name = "Tolkien" };
+        var sergio = new Author { Name = "Sergio Cariello" };
+        var mauss  = new Author { Name = "Doug Mauss" };
+
+        AuthorResolver.AssignAuthors(
+            work,
+            authors: [tolkien],
+            additionalContributors:
+            [
+                (sergio, AuthorRole.Illustrator),
+                (mauss,  AuthorRole.Editor),
+            ]);
+
+        // 1 Author row + 2 non-Author rows = 3 total.
+        Assert.Equal(3, work.WorkAuthors.Count);
+
+        var author = work.WorkAuthors.Single(wa => wa.Role == AuthorRole.Author);
+        Assert.Equal(tolkien, author.Author);
+        Assert.Equal(0, author.Order);
+
+        var illustrator = work.WorkAuthors.Single(wa => wa.Role == AuthorRole.Illustrator);
+        Assert.Equal(sergio, illustrator.Author);
+        Assert.Equal(0, illustrator.Order); // per-role Order resets to 0
+
+        var editor = work.WorkAuthors.Single(wa => wa.Role == AuthorRole.Editor);
+        Assert.Equal(mauss, editor.Author);
+        Assert.Equal(0, editor.Order); // per-role Order resets to 0
+    }
+
+    [Fact]
+    public void AssignAuthors_allows_same_person_in_multiple_roles()
+    {
+        // Tolkien is both Author and Illustrator on *The Hobbit* — the
+        // composite PK (WorkId, AuthorId, Role) makes this legal, and the
+        // resolver should write both rows.
+        var work = new Work { Title = "The Hobbit" };
+        var tolkien = new Author { Name = "Tolkien" };
+
+        AuthorResolver.AssignAuthors(
+            work,
+            authors: [tolkien],
+            additionalContributors: [(tolkien, AuthorRole.Illustrator)]);
+
+        Assert.Equal(2, work.WorkAuthors.Count);
+        Assert.Contains(work.WorkAuthors, wa => wa.Role == AuthorRole.Author && wa.Author == tolkien);
+        Assert.Contains(work.WorkAuthors, wa => wa.Role == AuthorRole.Illustrator && wa.Author == tolkien);
+    }
+
+    [Fact]
+    public void AssignAuthors_dedups_contributor_pairs_within_role()
+    {
+        // Same (Person, Role) pair appearing twice — should write one row.
+        var work = new Work { Title = "x" };
+        var asimov = new Author { Name = "Asimov" };
+        var pohl = new Author { Name = "Pohl" };
+
+        AuthorResolver.AssignAuthors(
+            work,
+            authors: [asimov],
+            additionalContributors:
+            [
+                (pohl, AuthorRole.Editor),
+                (pohl, AuthorRole.Editor), // duplicate of above
+                (pohl, AuthorRole.Translator), // different role, kept
+            ]);
+
+        Assert.Single(work.WorkAuthors, wa => wa.Author == pohl && wa.Role == AuthorRole.Editor);
+        Assert.Single(work.WorkAuthors, wa => wa.Author == pohl && wa.Role == AuthorRole.Translator);
+    }
+
+    [Fact]
+    public void AssignAuthors_skips_contributors_with_role_author()
+    {
+        // Role=Author in the contributors list is a no-op (belongs in the
+        // main authors list). The resolver silently skips so callers don't
+        // accidentally double-write the lead author.
+        var work = new Work { Title = "x" };
+        var asimov = new Author { Name = "Asimov" };
+
+        AuthorResolver.AssignAuthors(
+            work,
+            authors: [asimov],
+            additionalContributors: [(asimov, AuthorRole.Author)]);
+
+        Assert.Single(work.WorkAuthors);
+        Assert.Equal(AuthorRole.Author, work.WorkAuthors[0].Role);
+    }
 }

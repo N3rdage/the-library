@@ -206,6 +206,79 @@ public class AuthorMergeServiceTests
         Assert.NotNull(result.ErrorMessage);
     }
 
+    // ─── MergeAsync — Role-aware (Phase G) ────────────────────────────
+
+    [Fact]
+    public async Task MergeAsync_preserves_loser_role_when_winner_has_different_role_on_same_work()
+    {
+        // Winner is credited as Author on Work X; loser is credited as
+        // Translator on the same Work. Post-merge, winner must hold BOTH
+        // roles on Work X — the loser's Translator credit should NOT be
+        // dropped just because winner exists on that Work.
+        using var db = _factory.CreateDbContext();
+        var winner = new Author { Name = "Winner" };
+        var loser = new Author { Name = "Loser" };
+        db.Authors.AddRange(winner, loser);
+        await db.SaveChangesAsync();
+
+        var work = new Work
+        {
+            Title = "Work X",
+            WorkAuthors =
+            [
+                new WorkAuthor { Author = winner, Order = 0, Role = AuthorRole.Author },
+                new WorkAuthor { Author = loser,  Order = 0, Role = AuthorRole.Translator },
+            ],
+        };
+        db.Books.Add(new Book { Title = "Book X", Works = [work] });
+        await db.SaveChangesAsync();
+
+        var result = await CreateService().MergeAsync(winner.Id, loser.Id);
+
+        Assert.True(result.Success);
+
+        using var verify = _factory.CreateDbContext();
+        var rows = verify.WorkAuthors.Where(wa => wa.WorkId == work.Id).ToList();
+        Assert.Equal(2, rows.Count);
+        Assert.Contains(rows, r => r.AuthorId == winner.Id && r.Role == AuthorRole.Author);
+        Assert.Contains(rows, r => r.AuthorId == winner.Id && r.Role == AuthorRole.Translator);
+    }
+
+    [Fact]
+    public async Task MergeAsync_dedupes_loser_role_when_winner_already_has_same_role()
+    {
+        // Both winner and loser are credited as Author on Work X. Post-merge,
+        // winner has exactly one Author row on Work X (no duplicate composite-
+        // PK violation, no doubled-up credit).
+        using var db = _factory.CreateDbContext();
+        var winner = new Author { Name = "Winner" };
+        var loser = new Author { Name = "Loser" };
+        db.Authors.AddRange(winner, loser);
+        await db.SaveChangesAsync();
+
+        var work = new Work
+        {
+            Title = "Work X",
+            WorkAuthors =
+            [
+                new WorkAuthor { Author = winner, Order = 0, Role = AuthorRole.Author },
+                new WorkAuthor { Author = loser,  Order = 1, Role = AuthorRole.Author },
+            ],
+        };
+        db.Books.Add(new Book { Title = "Book X", Works = [work] });
+        await db.SaveChangesAsync();
+
+        var result = await CreateService().MergeAsync(winner.Id, loser.Id);
+
+        Assert.True(result.Success);
+
+        using var verify = _factory.CreateDbContext();
+        var rows = verify.WorkAuthors.Where(wa => wa.WorkId == work.Id).ToList();
+        Assert.Single(rows);
+        Assert.Equal(winner.Id, rows[0].AuthorId);
+        Assert.Equal(AuthorRole.Author, rows[0].Role);
+    }
+
     // ─── Helpers ──────────────────────────────────────────────────────
 
     private async Task<List<int>> SeedAuthorsWithWorksAsync(params (string Name, string[] WorkTitles)[] data)

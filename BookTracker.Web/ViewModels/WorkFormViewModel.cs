@@ -23,6 +23,12 @@ public class WorkFormViewModel
         // validated at save time rather than via the validator.
         public List<string> Authors { get; set; } = [];
 
+        // Non-Author contributors (editor / translator / illustrator / etc.)
+        // — populated by MudContributorPicker. Optional; empty for the
+        // common single-Author case. Save path appends one WorkAuthor row
+        // per entry alongside the Author rows resolved from Authors.
+        public List<ContributorEntry> Contributors { get; set; } = [];
+
         // Free-form text — accepts "1973", "Oct 1973", "12 Oct 1973",
         // "1973-10", "1973-10-12". Parsed into Work.FirstPublishedDate +
         // Work.FirstPublishedDatePrecision at save time.

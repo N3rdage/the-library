@@ -16,10 +16,12 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
 
     public string Title { get; set; } = "";
     public string? Subtitle { get; set; }
-    // Multi-author chip list — populated from WorkAuthors on init, dual-
-    // written on save. Lead = AuthorNames[0] for legacy Work.AuthorId compat
-    // during the PR1/PR2 cutover.
+    // Multi-author chip list — populated from WorkAuthors (Role=Author only)
+    // on init, replaced on save via AuthorResolver.AssignAuthors.
     public List<string> AuthorNames { get; set; } = [];
+    // Non-Author contributors (Role != Author) — populated alongside
+    // AuthorNames at init, written via AssignAuthors' contributors parameter.
+    public List<ContributorEntry> Contributors { get; set; } = [];
     public string FirstPublishedDate { get; set; } = "";
     public int? SelectedSeriesId { get; set; }
     public int? SeriesOrder { get; set; }
@@ -41,10 +43,18 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
         Title = work.Title;
         Subtitle = work.Subtitle;
         // Order ascending so the lead author shows first in the chip list.
-        // Every Work has at least one WorkAuthor post-PR1 backfill.
+        // Every Work has at least one WorkAuthor (Role=Author) post-Phase-A
+        // default-value migration.
         AuthorNames = work.WorkAuthors
+            .Where(wa => wa.Role == AuthorRole.Author)
             .OrderBy(wa => wa.Order)
             .Select(wa => wa.Author.Name)
+            .ToList();
+        Contributors = work.WorkAuthors
+            .Where(wa => wa.Role != AuthorRole.Author)
+            .OrderBy(wa => (int)wa.Role)
+            .ThenBy(wa => wa.Order)
+            .Select(wa => new ContributorEntry(wa.Author.Name, wa.Role))
             .ToList();
         FirstPublishedDate = PartialDateParser.Format(work.FirstPublishedDate, work.FirstPublishedDatePrecision);
         SelectedSeriesId = work.SeriesId;
@@ -93,7 +103,14 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
 
         var authors = await AuthorResolver.FindOrCreateAllAsync(AuthorNames, db);
         if (authors.Count == 0) return;
-        AuthorResolver.AssignAuthors(work, authors);
+        var contributors = new List<(Author Person, AuthorRole Role)>();
+        foreach (var entry in Contributors)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Name)) continue;
+            var person = await AuthorResolver.FindOrCreateAsync(entry.Name, db);
+            contributors.Add((person, entry.Role));
+        }
+        AuthorResolver.AssignAuthors(work, authors, contributors);
 
         var parsed = PartialDateParser.TryParse(FirstPublishedDate) ?? PartialDate.Empty;
         work.FirstPublishedDate = parsed.Date;
