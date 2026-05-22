@@ -30,8 +30,8 @@
             }
         </div>
     }
-    <MudGrid Spacing="2" Class="align-end">
-        <MudItem xs="12" sm="6">
+    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap">
+        <div style="flex: 1 1 200px; min-width: 0;">
             <MudAutocomplete @ref="autocompleteRef"
                              T="string"
                              Value="@pendingName"
@@ -44,10 +44,9 @@
                              CoerceText="true"
                              ResetValueOnEmptyText="false"
                              MinCharacters="0"
-                             ShowProgressIndicator="true"
-                             HelperText="Editor, translator, illustrator, etc. — Author goes in the picker above." />
-        </MudItem>
-        <MudItem xs="7" sm="4">
+                             ShowProgressIndicator="true" />
+        </div>
+        <div style="flex: 0 0 160px;">
             <MudSelect T="AuthorRole"
                        @bind-Value="pendingRole"
                        Label="Role"
@@ -58,17 +57,17 @@
                     <MudSelectItem T="AuthorRole" Value="@role">@RoleLabelCapitalised(role)</MudSelectItem>
                 }
             </MudSelect>
-        </MudItem>
-        <MudItem xs="5" sm="2">
-            <MudButton OnClick="AddAsync"
-                       Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       FullWidth="true"
-                       Disabled="@(string.IsNullOrWhiteSpace(pendingName))">
-                Add
-            </MudButton>
-        </MudItem>
-    </MudGrid>
+        </div>
+        <MudButton OnClick="AddAsync"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="@(string.IsNullOrWhiteSpace(pendingName))">
+            Add
+        </MudButton>
+    </MudStack>
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2 d-block">
+        Editor, translator, illustrator, etc. — Author goes in the picker above.
+    </MudText>
 </MudPaper>
 
 @code {
