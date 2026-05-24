@@ -89,10 +89,33 @@ public class AuthorResolverTests
     }
 
     [Fact]
-    public void AssignAuthors_EmptyList_Throws()
+    public void AssignAuthors_NoAuthorsAndNoContributors_Throws()
     {
+        // Editor-only Works are legal (dictionaries, anthologies), but a Work
+        // with zero contributors of any role is not.
         var work = new Work { Title = "x" };
         Assert.Throws<ArgumentException>(() => AuthorResolver.AssignAuthors(work, []));
+        Assert.Throws<ArgumentException>(() =>
+            AuthorResolver.AssignAuthors(work, [], additionalContributors: []));
+    }
+
+    [Fact]
+    public void AssignAuthors_EditorOnly_NoAuthors_WritesContributorRow()
+    {
+        // Dictionary / Oxford Companion case — no Author, just an Editor.
+        // Previously rejected; the relax in 2026-05-24 made this legal.
+        var work = new Work { Title = "Oxford Companion to Wine" };
+        var robinson = new Author { Name = "Jancis Robinson" };
+
+        AuthorResolver.AssignAuthors(
+            work,
+            authors: [],
+            additionalContributors: [(robinson, AuthorRole.Editor)]);
+
+        var sole = Assert.Single(work.WorkAuthors);
+        Assert.Equal(AuthorRole.Editor, sole.Role);
+        Assert.Equal(robinson, sole.Author);
+        Assert.Equal(0, sole.Order);
     }
 
     [Fact]

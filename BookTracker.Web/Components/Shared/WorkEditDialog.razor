@@ -26,13 +26,13 @@
                               Variant="Variant.Outlined"
                               Margin="Margin.Dense" />
                 <div>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Author(s)</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Author(s) — leave blank for edited works (dictionaries, anthologies, etc.)</MudText>
                     <MudAuthorPicker Authors="VM.AuthorNames"
                                      AuthorsChanged="list => VM.AuthorNames = list"
                                      Label="Add author" />
                 </div>
                 <div>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Other contributors (optional)</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Other contributors — editor, translator, illustrator, etc.</MudText>
                     <MudContributorPicker Contributors="VM.Contributors"
                                           ContributorsChanged="list => VM.Contributors = list" />
                 </div>
@@ -76,7 +76,7 @@
         <MudButton OnClick="Cancel">Cancel</MudButton>
         <MudButton Color="Color.Primary"
                    Variant="Variant.Filled"
-                   Disabled="@(VM.NotFound || string.IsNullOrWhiteSpace(VM.Title) || VM.AuthorNames.Count == 0 || saving)"
+                   Disabled="@(VM.NotFound || string.IsNullOrWhiteSpace(VM.Title) || (VM.AuthorNames.Count == 0 && VM.Contributors.Count == 0) || saving)"
                    OnClick="SaveAsync">
             @(saving ? "Saving..." : "Save")
         </MudButton>

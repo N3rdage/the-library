@@ -102,7 +102,6 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
         work.Subtitle = string.IsNullOrWhiteSpace(Subtitle) ? null : Subtitle.Trim();
 
         var authors = await AuthorResolver.FindOrCreateAllAsync(AuthorNames, db);
-        if (authors.Count == 0) return;
         var contributors = new List<(Author Person, AuthorRole Role)>();
         foreach (var entry in Contributors)
         {
@@ -110,6 +109,7 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
             var person = await AuthorResolver.FindOrCreateAsync(entry.Name, db);
             contributors.Add((person, entry.Role));
         }
+        if (authors.Count == 0 && contributors.Count == 0) return;
         AuthorResolver.AssignAuthors(work, authors, contributors);
 
         var parsed = PartialDateParser.TryParse(FirstPublishedDate) ?? PartialDate.Empty;

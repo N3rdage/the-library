@@ -76,15 +76,19 @@ public static class AuthorResolver
     /// their role bucket. Caller is responsible for ensuring authors and
     /// contributor people come from FindOrCreate* (so brand-new ones are
     /// already attached to the DbContext) and for SaveChangesAsync.
+    /// Editor-only Works (e.g. dictionaries) are valid — at least one
+    /// contributor of any role must be supplied across the two lists.
     /// </summary>
     public static void AssignAuthors(
         Work work,
         IReadOnlyList<Author> authors,
         IReadOnlyList<(Author Person, AuthorRole Role)>? additionalContributors = null)
     {
-        if (authors.Count == 0)
+        var hasNonAuthor = additionalContributors is { Count: > 0 }
+            && additionalContributors.Any(c => c.Role != AuthorRole.Author);
+        if (authors.Count == 0 && !hasNonAuthor)
         {
-            throw new ArgumentException("At least one author required.", nameof(authors));
+            throw new ArgumentException("At least one contributor required (author, editor, or other role).", nameof(authors));
         }
 
         work.WorkAuthors.Clear();

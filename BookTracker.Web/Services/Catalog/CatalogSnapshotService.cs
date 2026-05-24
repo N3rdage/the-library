@@ -132,9 +132,16 @@ public class CatalogSnapshotService(
                 // Primary author = lowest-Order Author-role WorkAuthor of
                 // the first Work (by Work.Id). Single-Work books are
                 // unambiguous; compendiums get the primary of whichever
-                // Work sorts first. Filtered to Role=Author so a translator
-                // with Order=0 never wins the "by Name" line.
-                b.Authors.Where(a => a.Role == AuthorRole.Author).OrderBy(a => a.WorkId).ThenBy(a => a.Order).Select(a => a.Name).FirstOrDefault() ?? "(unknown)",
+                // Work sorts first. For editor-only Works (dictionaries,
+                // anthologies) with no Author-role contributor, falls
+                // back to the lowest-Order non-Author with role suffix
+                // — e.g. "Doug Mauss (editor)" — via DisplayPrimary.
+                WorkAuthorshipFormatter.DisplayPrimary(b.Authors
+                    .OrderBy(a => a.WorkId)
+                    .ThenBy(a => a.Role == AuthorRole.Author ? 0 : 1)
+                    .ThenBy(a => (int)a.Role)
+                    .ThenBy(a => a.Order)
+                    .Select(a => (a.Name, a.Role))),
                 // All credited contributors with their role, in (Work.Id,
                 // Role, Order) sequence — Author-role first, then other
                 // roles in enum order. Distinct by (Name, Role) so a
@@ -162,11 +169,14 @@ public class CatalogSnapshotService(
                         w.Id,
                         w.Title,
                         // Per-Work PrimaryAuthor = first Author-role
-                        // contributor on this Work. The pre-projection
-                        // already sorted Author-role first then by Order,
-                        // so the first WorkContributor whose Role is
-                        // "Author" is the lead.
-                        w.WorkContributors.FirstOrDefault(c => c.Role == AuthorRole.Author)?.Name ?? "(unknown)",
+                        // contributor on this Work, or for editor-only
+                        // Works the first non-Author contributor with
+                        // role suffix (e.g. "Doug Mauss (editor)"). The
+                        // pre-projection already sorted Author-role first
+                        // then by (Role, Order), so DisplayPrimary just
+                        // picks the head of the list.
+                        WorkAuthorshipFormatter.DisplayPrimary(
+                            w.WorkContributors.Select(c => (c.Name, c.Role))),
                         // Full contributor list with role per entry.
                         Contributors: w.WorkContributors
                             .Select(c => new AuthorContribution(c.Name, c.Role.ToString()))

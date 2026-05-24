@@ -328,8 +328,8 @@ public class BookDetailViewModel(
     /// to this Book — used by AddWorkDialog when the user typed a title
     /// that didn't match any existing Work and filled out the form. Returns
     /// the new Work id, or null when the input is invalid (no Book,
-    /// missing title, no authors). Refreshes the snapshot so the page
-    /// shows the new Work without a hard reload.</summary>
+    /// missing title, no contributors of any role). Refreshes the
+    /// snapshot so the page shows the new Work without a hard reload.</summary>
     public async Task<int?> CreateAndAttachWorkAsync(
         string title,
         IReadOnlyList<string> authorNames,
@@ -346,7 +346,6 @@ public class BookDetailViewModel(
         if (book is null) return null;
 
         var authors = await AuthorResolver.FindOrCreateAllAsync(authorNames, db);
-        if (authors.Count == 0) return null;
 
         var resolvedContributors = new List<(Author Person, AuthorRole Role)>();
         if (contributors is not null)
@@ -358,6 +357,8 @@ public class BookDetailViewModel(
                 resolvedContributors.Add((person, entry.Role));
             }
         }
+
+        if (authors.Count == 0 && resolvedContributors.Count == 0) return null;
 
         var firstPub = PartialDateParser.TryParse(firstPublishedDate) ?? PartialDate.Empty;
 

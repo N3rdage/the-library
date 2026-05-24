@@ -756,10 +756,12 @@ public class BookDetailViewModelTests
     }
 
     [Fact]
-    public async Task CreateAndAttachWorkAsync_NoAuthors_ReturnsNullWithoutSaving()
+    public async Task CreateAndAttachWorkAsync_NoContributorsOfAnyRole_ReturnsNullWithoutSaving()
     {
-        // Defensive guard — the dialog'\''s Save button is disabled while
-        // authors.Count == 0, but the VM enforces it independently.
+        // Defensive guard — the dialog's Save button is disabled while
+        // both contributor lists are empty, but the VM enforces it
+        // independently. Editor-only is legal (see the editor-only test
+        // below); the no-contributor-at-all case still no-ops.
         var factory = new TestDbContextFactory();
         int bookId;
         using (var db = factory.CreateDbContext())
@@ -782,10 +784,52 @@ public class BookDetailViewModelTests
             authorNames: [],
             subtitle: null,
             firstPublishedDate: null,
-            genreIds: []);
+            genreIds: [],
+            contributors: []);
 
         Assert.Null(workId);
         Assert.Single(vm.Book!.Works);
+    }
+
+    [Fact]
+    public async Task CreateAndAttachWorkAsync_EditorOnly_NoAuthors_Saves()
+    {
+        // Editor-only Work attaches and persists — the row carries a
+        // WorkAuthor with Role=Editor and no Author-role row.
+        var factory = new TestDbContextFactory();
+        int bookId;
+        using (var db = factory.CreateDbContext())
+        {
+            var author = new Author { Name = "Author" };
+            db.Books.Add(new Book
+            {
+                Title = "Anthology",
+                Works = [new Work { Title = "Original", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]
+            });
+            await db.SaveChangesAsync();
+            bookId = db.Books.Single().Id;
+        }
+
+        var vm = CreateVm(factory);
+        await vm.InitializeAsync(bookId);
+
+        var workId = await vm.CreateAndAttachWorkAsync(
+            title: "Edited Companion",
+            authorNames: [],
+            subtitle: null,
+            firstPublishedDate: null,
+            genreIds: [],
+            contributors: [new ContributorEntry { Name = "Jane Editor", Role = AuthorRole.Editor }]);
+
+        Assert.NotNull(workId);
+
+        using var verify = factory.CreateDbContext();
+        var work = await verify.Works
+            .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
+            .FirstAsync(w => w.Id == workId);
+        var sole = Assert.Single(work.WorkAuthors);
+        Assert.Equal(AuthorRole.Editor, sole.Role);
+        Assert.Equal("Jane Editor", sole.Author.Name);
     }
 
     [Fact]
