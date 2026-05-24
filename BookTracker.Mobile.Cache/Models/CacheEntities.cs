@@ -91,6 +91,13 @@ internal class CachedBookWork
     public int WorkId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string PrimaryAuthor { get; set; } = string.Empty;
+    /// <summary>JSON-encoded list of every credited contributor on the
+    /// Work with their Role (Author / Editor / Translator / Illustrator
+    /// / etc.). Mirrors CachedBook.AllAuthorsJson but scoped per-Work
+    /// so a compendium's per-story attribution survives the cache
+    /// round-trip. Empty list (`"[]"`) for legacy rows + back-compat
+    /// with older servers that don't ship WorkSnapshot.Contributors.</summary>
+    public string ContributorsJson { get; set; } = "[]";
 }
 
 [Table("authors")]

@@ -876,6 +876,109 @@ public class CatalogCacheTests
     }
 
     [Fact]
+    public async Task GetBookEnrichedDetailAsync_ReturnsPerWorkContributors()
+    {
+        // Compendium where one Work has role-tagged contributors
+        // (Tolkien author + Cariello illustrator). The cache must
+        // round-trip the Contributors list so ScanPage's per-Work
+        // by-line can show "Title — Tolkien; Cariello (illustrator)".
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Illustrated Hobbit", "Tolkien", ["Tolkien"], "Read", 5, [],
+                    null, null, null,
+                    Editions: [],
+                    Works:
+                    [
+                        new WorkSnapshot(201, "The Hobbit", "Tolkien",
+                            Contributors:
+                            [
+                                new AuthorContribution("Tolkien", "Author"),
+                                new AuthorContribution("Sergio Cariello", "Illustrator"),
+                            ]),
+                    ]),
+            ]));
+
+        var detail = await cache.GetBookEnrichedDetailAsync(1);
+        Assert.NotNull(detail);
+        var work = Assert.Single(detail!.Works);
+        Assert.NotNull(work.Contributors);
+        Assert.Equal(2, work.Contributors!.Count);
+        Assert.Contains(work.Contributors, c => c.Name == "Tolkien" && c.Role == "Author");
+        Assert.Contains(work.Contributors, c => c.Name == "Sergio Cariello" && c.Role == "Illustrator");
+    }
+
+    [Fact]
+    public async Task GetBookEnrichedDetailAsync_ContributorsEmptyList_WhenServerOmitsField()
+    {
+        // Back-compat: older server that ships WorkSnapshot without
+        // Contributors (the field defaults to null). Cache stores `[]`
+        // and round-trips as an empty list — never null — so callers
+        // can iterate without a null check.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Foundation", "Asimov", ["Asimov"], "Read", 5, [],
+                    null, null, null,
+                    Editions: [],
+                    Works: [new WorkSnapshot(201, "Foundation", "Asimov")]),
+            ]));
+
+        var detail = await cache.GetBookEnrichedDetailAsync(1);
+        var work = Assert.Single(detail!.Works);
+        Assert.NotNull(work.Contributors);
+        Assert.Empty(work.Contributors!);
+    }
+
+    [Fact]
+    public async Task ApplyDeltaAsync_ReplacesWorkContributors()
+    {
+        // Server-side role change (e.g. someone re-keyed a "translator"
+        // who was first captured as an Author) — the next delta must
+        // overwrite the cached contributor row, not append a duplicate
+        // or stick with stale roles.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Foundation", "Asimov", ["Asimov"], "Read", 5, [],
+                    null, null, null,
+                    Editions: [],
+                    Works:
+                    [
+                        new WorkSnapshot(201, "Foundation", "Asimov",
+                            Contributors: [new AuthorContribution("Asimov", "Author")]),
+                    ]),
+            ],
+            latestUpdatedAt: new DateTime(2026, 5, 24, 8, 0, 0, DateTimeKind.Utc)));
+
+        await cache.ApplyDeltaAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Foundation", "Asimov", ["Asimov"], "Read", 5, [],
+                    null, null, null,
+                    Editions: [],
+                    Works:
+                    [
+                        new WorkSnapshot(201, "Foundation", "Asimov",
+                            Contributors:
+                            [
+                                new AuthorContribution("Asimov", "Author"),
+                                new AuthorContribution("Janny Wurts", "Foreword"),
+                            ]),
+                    ]),
+            ],
+            latestUpdatedAt: new DateTime(2026, 5, 24, 9, 0, 0, DateTimeKind.Utc)));
+
+        var detail = await cache.GetBookEnrichedDetailAsync(1);
+        var work = Assert.Single(detail!.Works);
+        Assert.Equal(2, work.Contributors!.Count);
+        Assert.Contains(work.Contributors, c => c.Name == "Janny Wurts" && c.Role == "Foreword");
+    }
+
+    [Fact]
     public async Task GetBookEnrichedDetailAsync_EmptyListsWhenServerOmitsEnrichedFields()
     {
         // Back-compat: an older server that doesn't ship Editions/Works
