@@ -495,7 +495,8 @@ public class BookDetailViewModel(
             .OrderBy(c => c.DateAcquired ?? DateTime.MaxValue)
             .ThenBy(c => c.Id)
             .Select(c => new CopyDetail(c.Id, c.Condition, c.DateAcquired, c.Notes))
-            .ToList());
+            .ToList(),
+        e.EditionNumber);
 
     public record BookDetail(
         int Id,
@@ -533,7 +534,8 @@ public class BookDetailViewModel(
         string DatePrintedDisplay,
         string? CoverUrl,
         bool IsUserSupplied,
-        IReadOnlyList<CopyDetail> Copies);
+        IReadOnlyList<CopyDetail> Copies,
+        int? EditionNumber = null);
 
     public record CopyDetail(int Id, BookCondition Condition, DateTime? DateAcquired, string? Notes);
 

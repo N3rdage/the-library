@@ -31,6 +31,11 @@ public class EditionFormViewModel(IDbContextFactory<BookTrackerDbContext> dbFact
 
         public BookFormat Format { get; set; } = BookFormat.TradePaperback;
 
+        // Revision number — 1st ed., 2nd ed., etc. Nullable because most
+        // editions don't surface this. Range guard: positive integer.
+        [Range(1, 99, ErrorMessage = "Edition number must be 1 or higher.")]
+        public int? EditionNumber { get; set; }
+
         // Free-form text — accepts "1973", "Oct 1973", "12 Oct 1973",
         // "1973-10", "1973-10-12". Parsed into Edition.DatePrinted +
         // Edition.DatePrintedPrecision at save time.

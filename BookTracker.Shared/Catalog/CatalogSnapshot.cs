@@ -93,7 +93,13 @@ public record EditionSnapshot(
     // Edition-level cover URL — distinct from BookSnapshot.CoverUrl
     // which is the Book-level default. Nullable when no cover has
     // been captured for this specific edition.
-    string? CoverUrl);
+    string? CoverUrl,
+    // Revision number (1 for first edition, 2 for revised second, etc.)
+    // — drives "3rd ed." rendering on per-Edition rows. Nullable for
+    // editions where the revision isn't surfaced (most fiction
+    // reprints). Default null for positional back-compat with older
+    // server / client constructions.
+    int? EditionNumber = null);
 
 public record WorkSnapshot(
     int Id,

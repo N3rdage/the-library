@@ -71,6 +71,12 @@ internal class CachedBookEdition
     public string? Isbn { get; set; }
     public string Format { get; set; } = string.Empty;
     public string? CoverUrl { get; set; }
+    /// <summary>Revision number (1 = first edition, 2 = revised second,
+    /// etc.). Nullable on the wire and here. Drives the "3rd ed."
+    /// suffix on ScanPage's per-Edition row. NULL is the correct
+    /// default for legacy rows — no Init backfill needed (unlike the
+    /// string columns which would blow up Deserialize).</summary>
+    public int? EditionNumber { get; set; }
 }
 
 // One row per (Book, Work) pair — Book ↔ Work is many-to-many on the

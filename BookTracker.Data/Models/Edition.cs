@@ -17,6 +17,16 @@ public class Edition
 
     public BookFormat Format { get; set; } = BookFormat.TradePaperback;
 
+    /// <summary>
+    /// Edition revision number — 1 for first edition, 2 for the revised
+    /// second, etc. Lets the catalogue distinguish e.g. *Joy of Cooking
+    /// 3rd ed. (1975)* from *Joy of Cooking 8th ed. (2019)*, which are
+    /// materially different content despite sharing a Work. Nullable
+    /// because most editions don't surface this on the cover (mass-
+    /// market fiction reprints, pre-numbered classics).
+    /// </summary>
+    public int? EditionNumber { get; set; }
+
     public DateOnly? DatePrinted { get; set; }
 
     /// <summary>How precise <see cref="DatePrinted"/> is — drives display formatting.</summary>

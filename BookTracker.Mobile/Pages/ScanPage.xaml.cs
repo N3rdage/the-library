@@ -298,9 +298,16 @@ public partial class ScanPage : ContentPage
             Children = { coverPlaceholder, coverImage },
         };
 
+        // "Hardcover · 3rd ed." when EditionNumber is set; just the
+        // format name otherwise. The ordinal suffix is local because
+        // the only other consumer (Detail.razor) has its own copy —
+        // not worth a shared helper for 6 lines.
+        var formatText = edition.EditionNumber is int n
+            ? $"{FormatPrettyName(edition.Format)} · {FormatOrdinalEdition(n)}"
+            : FormatPrettyName(edition.Format);
         var formatLabel = new Label
         {
-            Text = FormatPrettyName(edition.Format),
+            Text = formatText,
             FontSize = 13,
             FontAttributes = FontAttributes.Bold,
             TextColor = Color.FromArgb("#2C2416"),
@@ -383,6 +390,9 @@ public partial class ScanPage : ContentPage
         }
         return sb.ToString();
     }
+
+    private static string FormatOrdinalEdition(int n) =>
+        BookTracker.Shared.Formatting.OrdinalFormatter.OrdinalEdition(n);
 
     private async Task LoadCoverAsync(int bookId, CancellationToken ct)
     {

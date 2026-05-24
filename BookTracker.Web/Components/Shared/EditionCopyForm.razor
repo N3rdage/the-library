@@ -43,7 +43,21 @@
                               Variant="Variant.Outlined"
                               Margin="Margin.Dense" />
             </MudItem>
-            <MudItem xs="12" md="3">
+            <MudItem xs="6" md="2">
+                @* Revision number — 1st ed., 2nd ed., etc. Leave blank
+                   for editions where it isn't surfaced on the cover. *@
+                <MudNumericField T="int?"
+                                 @bind-Value="EditionInput.EditionNumber"
+                                 For="@(() => EditionInput.EditionNumber)"
+                                 Label="Edition #"
+                                 Placeholder="3"
+                                 HelperText="1st, 2nd, 3rd..."
+                                 Min="1"
+                                 Max="99"
+                                 Variant="Variant.Outlined"
+                                 Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="6" md="3">
                 <MudSelect T="BookCondition"
                            @bind-Value="CopyInput.Condition"
                            Label="Condition"
