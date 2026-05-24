@@ -15,7 +15,7 @@
 - [TODO tracking](feedback_todo_tracking.md) — all TODOs in TODO.md; "sync TODOs" reconciles memory + code + TODO.md AND probes each Open row against the codebase for shipped-but-not-moved drift.
 - [Memory excluded from PRs](feedback_memory_commits.md) — don't stage .claude-memory/ in feature commits; flag changes for a separate commit.
 - [Keep ARCHITECTURE.md updated](feedback_architecture_doc.md) — update when structural changes are made (entities, pages, services, patterns).
-- [Blog post backlog](blog_post_backlog.md) — corpus-derived candidate posts mineable from existing retros + `patterns.md`. 7 shipped + 7 strong / 6 possible candidates remaining from the 2026-04-28 catch-up mine.
+- [Blog post backlog](blog_post_backlog.md) — corpus-derived candidate posts mineable from existing retros + `patterns.md`. 11 shipped (4 since the 2026-04-28 catch-up — cold-start, mobile-took-20-hours, migrate-on-startup, compile-clean-ToString-garbage); 12 strong + 6 possible candidates remaining.
 - [Security-audit skill chassis pilot](retros/retro_security_audit_skill_poc.md) — two-stack validation worked; three durable lessons (relocate audit-rules/ out of `.claude/`, add Blazor JS interop rule, formalise "no applicable surface yet" as a pass-with-evidence shape).
 - [Mobile companion arc retro](retros/retro_mobile_companion_arc.md) — six PRs / ~20 hours; speed came from the Web having paid every design tax already (DTOs, debounce, AAD, alias rollup, JSON conventions).
 - [Parallelise docs during CI waits](feedback_parallel_docs.md) — branch off main for retros/blog/TODO work while a code PR waits on CI; non-conflicting docs and code don't collide.
