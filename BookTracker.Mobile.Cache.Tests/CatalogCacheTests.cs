@@ -876,6 +876,36 @@ public class CatalogCacheTests
     }
 
     [Fact]
+    public async Task GetBookEnrichedDetailAsync_RoundTripsEditionNumber()
+    {
+        // Joy of Cooking 1975 (3rd ed.) vs 2019 (9th ed.) shape — the
+        // EditionNumber must survive Populate + GetBookEnrichedDetailAsync
+        // so ScanPage can render "Hardcover · 3rd ed." on the per-Edition
+        // row. NULL EditionNumber must come back as null, not zero.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Joy of Cooking", "Rombauer", ["Rombauer"], "Read", 5, [],
+                    null, null, null,
+                    Editions:
+                    [
+                        new EditionSnapshot(101, "9780672517501", "Hardcover", null, 3),
+                        new EditionSnapshot(102, "9781501169714", "Hardcover", null, 9),
+                        new EditionSnapshot(103, "9999999999999", "Hardcover", null, null),
+                    ],
+                    Works: []),
+            ]));
+
+        var detail = await cache.GetBookEnrichedDetailAsync(1);
+        Assert.NotNull(detail);
+        Assert.Equal(3, detail!.Editions.Count);
+        Assert.Equal(3, detail.Editions.Single(e => e.Id == 101).EditionNumber);
+        Assert.Equal(9, detail.Editions.Single(e => e.Id == 102).EditionNumber);
+        Assert.Null(detail.Editions.Single(e => e.Id == 103).EditionNumber);
+    }
+
+    [Fact]
     public async Task GetBookEnrichedDetailAsync_ReturnsPerWorkContributors()
     {
         // Compendium where one Work has role-tagged contributors

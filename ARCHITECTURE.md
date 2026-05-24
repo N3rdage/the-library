@@ -35,7 +35,7 @@ All projects target `net10.0` (the Mobile project adds `net10.0-android`).
 ```
 Book                                                ← physical-object grouping
   Title, Category (Fiction/NonFiction),
-  Status (Unread/Reading/Read), Rating (0-5),
+  Status (Unread/Reading/Read/Reference), Rating (0-5),
   Notes, DateAdded, DefaultCoverArtUrl,
   UpdatedAt (DATETIME2, default GETUTCDATE(), indexed),
   DeletedAt (nullable, filtered index, soft-delete tombstone)
@@ -46,7 +46,8 @@ Book                                                ← physical-object grouping
   │     └── Series (many-to-1, optional) + SeriesOrder
   ├── Editions (1-to-many)
   │     ISBN (filtered unique, nullable for pre-ISBN books),
-  │     Format, DatePrinted, CoverUrl
+  │     Format, EditionNumber (nullable — "3rd ed."),
+  │     DatePrinted, CoverUrl
   │     ├── Copies (1-to-many)
   │     │     Condition (AsNew..Poor), DateAcquired, Notes
   │     └── Publisher (many-to-1, optional)

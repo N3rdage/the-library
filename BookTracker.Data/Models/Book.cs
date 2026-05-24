@@ -6,7 +6,14 @@ public enum BookStatus
 {
     Unread,
     Reading,
-    Read
+    Read,
+    // Reference rows (dictionaries, encyclopaedias, field guides, style
+    // guides, monographs) — opted out of the linear Unread/Reading/Read
+    // arc since "Read" doesn't describe a dictionary. Still rateable
+    // because a security reference or art monograph can absolutely be
+    // better or worse than another. Home page "to read" counts skip
+    // this status.
+    Reference,
 }
 
 public enum BookCategory

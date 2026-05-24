@@ -503,6 +503,7 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         BookStatus.Reading => "bg-primary",
         BookStatus.Read => "bg-success",
         BookStatus.Unread => "bg-secondary",
+        BookStatus.Reference => "bg-info",
         _ => "bg-secondary"
     };
 

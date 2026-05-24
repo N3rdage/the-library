@@ -681,6 +681,7 @@ public class BookAddViewModel(
                     {
                         Isbn = string.IsNullOrWhiteSpace(EditionInput.Isbn) ? null : EditionInput.Isbn.Trim(),
                         Format = EditionInput.Format,
+                        EditionNumber = EditionInput.EditionNumber,
                         DatePrinted = datePrinted.Date,
                         DatePrintedPrecision = datePrinted.Precision,
                         Publisher = publisher,

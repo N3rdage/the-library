@@ -190,6 +190,25 @@ public class BookDetailViewModelTests
     }
 
     [Fact]
+    public async Task SetStatusAsync_ReferenceStatus_PersistsAndRoundTrips()
+    {
+        // Dictionaries / reference rows opt out of the Unread/Reading/Read
+        // arc — a fourth enum value (Reference) introduced 2026-05-24.
+        // Locks the column round-trip so a future enum-shape change
+        // (e.g. dropping the value, renaming) surfaces here.
+        var factory = new TestDbContextFactory();
+        var bookId = await SeedSimpleBookAsync(factory, status: BookStatus.Unread);
+
+        var vm = CreateVm(factory);
+        await vm.InitializeAsync(bookId);
+        await vm.SetStatusAsync(BookStatus.Reference);
+
+        Assert.Equal(BookStatus.Reference, vm.CurrentStatus);
+        using var db = factory.CreateDbContext();
+        Assert.Equal(BookStatus.Reference, db.Books.Single(b => b.Id == bookId).Status);
+    }
+
+    [Fact]
     public async Task SaveNotesAsync_OnlyPersistsWhenDirty()
     {
         var factory = new TestDbContextFactory();

@@ -89,6 +89,7 @@ public class CatalogSnapshotService(
                         e.Isbn,
                         e.Format,
                         e.CoverUrl,
+                        e.EditionNumber,
                     })
                     .ToList(),
                 // Per-Work detail for compendiums. PrimaryAuthor per
@@ -162,7 +163,7 @@ public class CatalogSnapshotService(
                 b.FirstWorkSeries?.SeriesOrder,
                 b.DefaultCoverArtUrl,
                 Editions: b.Editions
-                    .Select(e => new EditionSnapshot(e.Id, e.Isbn, e.Format.ToString(), e.CoverUrl))
+                    .Select(e => new EditionSnapshot(e.Id, e.Isbn, e.Format.ToString(), e.CoverUrl, e.EditionNumber))
                     .ToList(),
                 Works: b.Works
                     .Select(w => new WorkSnapshot(

@@ -218,6 +218,49 @@ public class BookAddViewModelTests
     }
 
     [Fact]
+    public async Task SaveAsync_EditionNumberPersistsOnEdition()
+    {
+        // Capture flow lock: typing "3" into the Edition # field on
+        // EditionCopyForm must round-trip onto Edition.EditionNumber.
+        // Backs the Joy of Cooking 3rd ed. vs 9th ed. disambiguation
+        // that motivated the column.
+        var vm = CreateVm();
+        vm.BookInput.Title = "Joy of Cooking";
+        vm.WorkInput.Title = "Joy of Cooking";
+        vm.WorkInput.Authors = ["Irma Rombauer"];
+        vm.EditionInput.Format = BookFormat.Hardcover;
+        vm.EditionInput.EditionNumber = 3;
+
+        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+
+        Assert.NotNull(bookId);
+        await using var db = _factory.CreateDbContext();
+        var edition = await db.Editions.SingleAsync(e => e.BookId == bookId);
+        Assert.Equal(3, edition.EditionNumber);
+    }
+
+    [Fact]
+    public async Task SaveAsync_NullEditionNumberLeavesColumnNull()
+    {
+        // The common case — fiction reprints, mass-market paperbacks
+        // where the edition number isn't on the cover. Field stays blank,
+        // column stays null.
+        var vm = CreateVm();
+        vm.BookInput.Title = "Foundation";
+        vm.WorkInput.Title = "Foundation";
+        vm.WorkInput.Authors = ["Isaac Asimov"];
+        vm.EditionInput.Format = BookFormat.MassMarketPaperback;
+        // EditionInput.EditionNumber left as default (null).
+
+        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+
+        Assert.NotNull(bookId);
+        await using var db = _factory.CreateDbContext();
+        var edition = await db.Editions.SingleAsync(e => e.BookId == bookId);
+        Assert.Null(edition.EditionNumber);
+    }
+
+    [Fact]
     public async Task SaveAsync_SingleAuthorMode_AppliesSharedAuthorsToEveryWork()
     {
         // Single-Author mode is the "King's Different Seasons" shape —

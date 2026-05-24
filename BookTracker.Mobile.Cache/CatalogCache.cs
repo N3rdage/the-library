@@ -175,6 +175,7 @@ public class CatalogCache : ICatalogCache
                         Isbn = edition.Isbn,
                         Format = edition.Format ?? "",
                         CoverUrl = edition.CoverUrl,
+                        EditionNumber = edition.EditionNumber,
                     });
                 }
                 foreach (var work in book.Works ?? [])
@@ -316,6 +317,7 @@ public class CatalogCache : ICatalogCache
                         Isbn = edition.Isbn,
                         Format = edition.Format ?? "",
                         CoverUrl = edition.CoverUrl,
+                        EditionNumber = edition.EditionNumber,
                     });
                 }
                 conn.Execute("DELETE FROM book_works WHERE BookId = ?", book.Id);
@@ -586,7 +588,7 @@ public class CatalogCache : ICatalogCache
             // Isbn so two paperback rows don't randomise on each read.
             .OrderBy(e => e.Format, StringComparer.OrdinalIgnoreCase)
             .ThenBy(e => e.Isbn ?? "", StringComparer.OrdinalIgnoreCase)
-            .Select(e => new EditionSnapshot(e.EditionId, e.Isbn, e.Format, e.CoverUrl))
+            .Select(e => new EditionSnapshot(e.EditionId, e.Isbn, e.Format, e.CoverUrl, e.EditionNumber))
             .ToList();
         var works = workRows
             // Server projects in OrderBy(w => w.Id) — preserve that
