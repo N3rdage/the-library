@@ -982,7 +982,7 @@ public class BookAddViewModelTests
     }
 
     [Fact]
-    public async Task SaveAsync_NonCollection_NoAuthors_ThrowsWithUserFacingMessage()
+    public async Task SaveAsync_NonCollection_NoContributors_ThrowsWithUserFacingMessage()
     {
         // Drew's 2026-05-12 testing-feedback bug repro: Enter on the ISBN
         // field submits the EditForm before lookup runs, which calls SaveAsync
@@ -990,14 +990,44 @@ public class BookAddViewModelTests
         // InvalidOperationException with a user-facing message — the Add page
         // catch block relies on that exception type to distinguish
         // validation-style errors (show .Message) from genuine crashes
-        // (log + generic message). Lock the contract.
+        // (log + generic message). Lock the contract. Post-2026-05-24 the
+        // check is "at least one contributor of any role" so editor-only
+        // Works save (see SaveAsync_NonCollection_EditorOnly_Saves below).
         var vm = CreateVm();
         vm.BookInput.Title = "Untitled";
-        // No authors on WorkInput.
+        // No authors AND no contributors on WorkInput.
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => vm.SaveAsync(new List<int>()));
-        Assert.Contains("author", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("contributor", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SaveAsync_NonCollection_EditorOnly_Saves()
+    {
+        // Dictionary / Oxford Companion case — Work has an editor but no
+        // author. Should save successfully; the resulting Work carries one
+        // WorkAuthor row with Role=Editor and no Author-role row.
+        var vm = CreateVm();
+        vm.BookInput.Title = "Concise Oxford English Dictionary";
+        vm.WorkInput.Title = "Concise Oxford English Dictionary";
+        vm.WorkInput.Authors = [];
+        vm.WorkInput.Contributors =
+        [
+            new ContributorEntry { Name = "Catherine Soanes", Role = AuthorRole.Editor },
+        ];
+
+        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+
+        Assert.NotNull(bookId);
+        await using var verify = _factory.CreateDbContext();
+        var book = await verify.Books
+            .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
+            .FirstAsync(b => b.Id == bookId);
+        var work = Assert.Single(book.Works);
+        var sole = Assert.Single(work.WorkAuthors);
+        Assert.Equal(AuthorRole.Editor, sole.Role);
+        Assert.Equal("Catherine Soanes", sole.Author.Name);
     }
 
     [Fact]

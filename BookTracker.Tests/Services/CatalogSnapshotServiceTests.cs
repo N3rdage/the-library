@@ -484,6 +484,41 @@ public class CatalogSnapshotServiceTests
         Assert.Contains(book.Works, w => w.Title == "King story" && w.PrimaryAuthor == "Stephen King");
     }
 
+    [Fact]
+    public async Task GetSnapshotAsync_EditorOnlyWork_PrimaryAuthor_FallsBackToEditorWithRoleSuffix()
+    {
+        // Dictionary / Oxford Companion case — Work has an editor but no
+        // author. BookSnapshot.PrimaryAuthor and WorkSnapshot.PrimaryAuthor
+        // should both display the editor name with role suffix (not
+        // "(unknown)") so the by-line conveys "edited by X".
+        using (var db = _factory.CreateDbContext())
+        {
+            var editor = new Author { Name = "Catherine Soanes" };
+            db.Authors.Add(editor);
+            db.Books.Add(new Book
+            {
+                Title = "Concise Oxford English Dictionary",
+                Works =
+                [
+                    new Work
+                    {
+                        Title = "Concise Oxford English Dictionary",
+                        WorkAuthors = [new WorkAuthor { Author = editor, Order = 0, Role = AuthorRole.Editor }]
+                    }
+                ]
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var snapshot = await CreateService().GetSnapshotAsync();
+        var book = Assert.Single(snapshot.Books);
+
+        Assert.Equal("Catherine Soanes (editor)", book.PrimaryAuthor);
+        var work = Assert.Single(book.Works!);
+        Assert.Equal("Catherine Soanes (editor)", work.PrimaryAuthor);
+        Assert.Equal([new AuthorContribution("Catherine Soanes", "Editor")], book.AllAuthors);
+    }
+
     // ---- Soft-delete + deletedIds tombstones ----
 
     [Fact]

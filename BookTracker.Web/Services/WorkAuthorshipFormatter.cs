@@ -78,6 +78,26 @@ public static class WorkAuthorshipFormatter
             .ThenBy(wa => wa.Order)
             .Select(wa => (wa.Author.Name, wa.Role)));
 
+    /// <summary>
+    /// Single-string "primary contributor" for snapshot / rollup surfaces
+    /// that want one by-line per Book or Work. Returns the lead Author-
+    /// role contributor's bare name, or for editor-only Works (dictionaries
+    /// etc.) the lowest-Order non-Author contributor with role suffix —
+    /// e.g. "Doug Mauss (editor)" — so the by-line conveys "edited by X"
+    /// rather than a misleading "(unknown)". Caller passes the
+    /// contributors pre-sorted Author-first then by (Role, Order); this
+    /// helper just picks the head.
+    /// </summary>
+    public static string DisplayPrimary(IEnumerable<(string Name, AuthorRole Role)> sortedContributors)
+    {
+        var first = (sortedContributors ?? [])
+            .FirstOrDefault(c => !string.IsNullOrWhiteSpace(c.Name));
+        if (string.IsNullOrWhiteSpace(first.Name)) return "(unknown)";
+        return first.Role == AuthorRole.Author
+            ? first.Name
+            : $"{first.Name} ({RoleLabel(first.Role)})";
+    }
+
     private static string RoleLabel(AuthorRole role) => role switch
     {
         AuthorRole.Editor      => "editor",

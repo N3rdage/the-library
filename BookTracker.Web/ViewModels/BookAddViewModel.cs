@@ -589,14 +589,14 @@ public class BookAddViewModel(
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .Select(n => byName[n!])
                         .ToList();
-                    if (rowAuthors.Count == 0)
-                    {
-                        throw new InvalidOperationException($"Each work in the collection needs at least one author (work \"{row.Title}\" had none).");
-                    }
                     var rowContributors = row.Contributors
                         .Where(c => !string.IsNullOrWhiteSpace(c.Name) && byName.ContainsKey(c.Name.Trim()))
                         .Select(c => (Person: byName[c.Name.Trim()], c.Role))
                         .ToList();
+                    if (rowAuthors.Count == 0 && rowContributors.Count == 0)
+                    {
+                        throw new InvalidOperationException($"Each work in the collection needs at least one contributor (work \"{row.Title}\" had none).");
+                    }
                     var rowGenres = GenresFor(row)
                         .Distinct()
                         .Where(genresById.ContainsKey)
@@ -618,11 +618,11 @@ public class BookAddViewModel(
             else
             {
                 var authors = await AuthorResolver.FindOrCreateAllAsync(WorkInput.Authors, db);
-                if (authors.Count == 0)
-                {
-                    throw new InvalidOperationException("At least one author is required to save a Work.");
-                }
                 var contributors = await ResolveContributorsAsync(WorkInput.Contributors, db);
+                if (authors.Count == 0 && contributors.Count == 0)
+                {
+                    throw new InvalidOperationException("At least one contributor (author, editor, or other role) is required to save a Work.");
+                }
                 var firstPub = PartialDateParser.TryParse(WorkInput.FirstPublishedDate) ?? PartialDate.Empty;
                 var work = new Work
                 {

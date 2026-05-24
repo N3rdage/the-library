@@ -24,7 +24,7 @@
                    lead author (Work.AuthorId for legacy compat in PR1).
                    Validation lives in the save path because DataAnnotations
                    doesn't map "non-empty list of non-empty strings" cleanly. *@
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Author(s)</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Author(s) — leave blank for edited works (dictionaries, anthologies, etc.)</MudText>
                 <MudAuthorPicker Authors="Input.Authors"
                                  AuthorsChanged="list => Input.Authors = list"
                                  Label="Add author" />
@@ -47,7 +47,7 @@
                               Margin="Margin.Dense" />
             </MudItem>
             <MudItem xs="12">
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Other contributors (optional)</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Other contributors — editor, translator, illustrator, etc.</MudText>
                 <MudContributorPicker Contributors="Input.Contributors"
                                       ContributorsChanged="list => Input.Contributors = list" />
             </MudItem>

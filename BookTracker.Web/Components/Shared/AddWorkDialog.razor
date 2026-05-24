@@ -65,14 +65,14 @@
             </div>
 
             <div>
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Author(s)</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Author(s) — leave blank for edited works (dictionaries, anthologies, etc.)</MudText>
                 <MudAuthorPicker Authors="authors"
                                  AuthorsChanged="list => authors = list"
                                  Label="Add author" />
             </div>
 
             <div>
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Other contributors (optional)</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Other contributors — editor, translator, illustrator, etc.</MudText>
                 <MudContributorPicker Contributors="contributors"
                                       ContributorsChanged="list => contributors = list" />
             </div>
@@ -101,7 +101,7 @@
         <MudButton OnClick="Cancel">Cancel</MudButton>
         <MudButton Color="Color.Primary"
                    Variant="Variant.Filled"
-                   Disabled="@(saving || string.IsNullOrWhiteSpace(title) || authors.Count == 0)"
+                   Disabled="@(saving || string.IsNullOrWhiteSpace(title) || (authors.Count == 0 && contributors.Count == 0))"
                    OnClick="SaveNewAsync">
             @(saving ? "Saving..." : "Save (create new)")
         </MudButton>
@@ -177,7 +177,7 @@
 
     private async Task SaveNewAsync()
     {
-        if (string.IsNullOrWhiteSpace(title) || authors.Count == 0) return;
+        if (string.IsNullOrWhiteSpace(title) || (authors.Count == 0 && contributors.Count == 0)) return;
 
         saving = true;
         try
@@ -197,7 +197,7 @@
             }
             else
             {
-                Snackbar.Add("Couldn't save the work — check that you provided a title and at least one author.", Severity.Warning);
+                Snackbar.Add("Couldn't save the work — check that you provided a title and at least one contributor.", Severity.Warning);
             }
         }
         finally
