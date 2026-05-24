@@ -21,9 +21,9 @@ Drew's call 2026-05-24: skip the parser, revisit only if hand-typing roles becom
 
 The original parser plan (coverage-sampling pass shape from the 2026-05-08 TOC investigation, then DTO + OL parser + Add Book pre-populate + suggestion banner) stays in TODO #52 with a deferral note for if/when it's reopened.
 
-## Bucket 2 — WorkAuthor cutover Phases D + E (Mobile)
+## Bucket 2 — WorkAuthor cutover Phases D + E (Mobile) — **SHIPPED 2026-05-24**
 
-Deferred from PR 2d's scope. Phase D extends `CachedBook` / `BookSnapshot` consumption on the Bookshelf side to handle the new role-tagged `Contributors` array. Phase E surfaces non-Author roles on the MAUI `ScanPage` Book card. Both touch the cache schema (PR 2d ships `AuthorContribution` on the wire but the cache only deserialises the flat `AllAuthors` shape today) so [[sqlite-net-pcl-schema-backfill]] applies — column ALTER needs paired one-shot UPDATE in `CatalogCache.InitAsync`. Sized M as a pair.
+Single PR (`feat/mobile-contributor-roles`). Phase D added `CachedBookWork.ContributorsJson` + write paths in `PopulateAsync` / `ApplyDeltaAsync` / `GetBookEnrichedDetailAsync`, paired with the [[sqlite-net-pcl-schema-backfill]] `UPDATE ... WHERE ContributorsJson IS NULL OR ''` in `InitAsync` so existing rows survive the deserialise. Phase E added `BookTracker.Mobile.Cache.ContributorFormatter.Format` (mirror of Web's `WorkAuthorshipFormatter.Display`, kept in Mobile.Cache for unit-testability without the MAUI runtime) and rewired `ScanPage.FoundAuthors` + `BuildWorkRow` to use it. Surprise during implementation: the existing `string.Join(", ", book.AllAuthors)` had been silently broken since the 2026-05-23 wire rename — it was invoking record `ToString` and rendering "AuthorContribution { Name = ..., Role = ... }, ..." on every multi-author scan. That fix shipped in this PR too, fortuitously. 11 new tests (8 formatter + 3 cache round-trip). 459 + 57 green.
 
 ## Bucket 3 — Pre-reference data-model wins (subset of TODO #51)
 
