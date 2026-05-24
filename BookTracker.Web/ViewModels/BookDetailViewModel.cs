@@ -383,6 +383,149 @@ public class BookDetailViewModel(
         return work.Id;
     }
 
+    /// <summary>Attach a batch of new + existing Works to this Book in
+    /// one transaction. Mirrors <see cref="BookAddViewModel.SaveAsync"/>'s
+    /// collection-mode branch (single-name-resolution pass, attach-by-id
+    /// for existing rows, build-from-fields for new rows) but the Book
+    /// already exists. Used by AddMultipleWorksDialog on the View page
+    /// to escape the single-Work / save / re-load loop when a captured
+    /// Book turns out to be a compendium of N Works.
+    ///
+    /// Rows must each be either an attach-existing row
+    /// (<see cref="WorkFormViewModel.WorkFormInput.AttachedWorkId"/>
+    /// non-null) or a populated new-work row (title + at least one
+    /// contributor across <c>Authors</c> / <c>Contributors</c>, or
+    /// covered by <c>SharedAuthors</c> when <paramref name="singleAuthor"/>
+    /// is true). Empty rows are silently dropped; if no usable rows
+    /// remain after filtering, throws <see cref="InvalidOperationException"/>
+    /// with a user-facing message.
+    ///
+    /// Returns the count of Works actually attached (excludes already-
+    /// attached existing rows, which are silently skipped — matches the
+    /// "may already be on this book" semantic from the single-attach
+    /// path). Refreshes the snapshot on success.</summary>
+    public async Task<int> AttachMultipleWorksAsync(
+        IReadOnlyList<WorkFormViewModel.WorkFormInput> rows,
+        bool singleAuthor,
+        bool singleGenre,
+        IReadOnlyList<string> sharedAuthors,
+        IReadOnlyList<int> sharedGenreIds)
+    {
+        if (Book is null) return 0;
+        ArgumentNullException.ThrowIfNull(rows);
+
+        // Author / genre source per row depends on the toggle. Existing-
+        // attach rows ignore both (existing Works carry their own).
+        List<string> AuthorsFor(WorkFormViewModel.WorkFormInput row) =>
+            singleAuthor ? sharedAuthors.ToList() : row.Authors;
+        List<int> GenresFor(WorkFormViewModel.WorkFormInput row) =>
+            singleGenre ? sharedGenreIds.ToList() : row.GenreIds;
+
+        // Filter to rows that carry usable content. Empty title + no
+        // attach + no authors = blank row, skip silently. A row with
+        // a title but no contributors and no attach goes through to
+        // the validation throw below where the per-row error names
+        // the title so the user sees which row is the problem.
+        var orderedRows = rows
+            .Where(r => r.AttachedWorkId is not null
+                        || !string.IsNullOrWhiteSpace(r.Title))
+            .ToList();
+        if (orderedRows.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Add at least one work — type a title for a new work, or pick an existing one from the dropdown.");
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var book = await db.Books
+            .Include(b => b.Works)
+            .FirstOrDefaultAsync(b => b.Id == Book.Id);
+        if (book is null) return 0;
+
+        var alreadyAttachedIds = book.Works.Select(w => w.Id).ToHashSet();
+
+        var newRows = orderedRows.Where(r => r.AttachedWorkId is null).ToList();
+        var attachIds = orderedRows
+            .Where(r => r.AttachedWorkId is int)
+            .Select(r => r.AttachedWorkId!.Value)
+            .Distinct()
+            .ToList();
+
+        // Single-pass author + contributor name resolution so a person
+        // credited as Author on one row and Editor on another resolves
+        // to a single Author entity (mirrors BookAddViewModel:539).
+        var allNames = (singleAuthor ? sharedAuthors : newRows.SelectMany(r => r.Authors))
+            .Concat(newRows.SelectMany(r => r.Contributors.Select(c => c.Name)));
+        var allAuthors = await AuthorResolver.FindOrCreateAllAsync(allNames, db);
+        var byName = allAuthors.ToDictionary(a => a.Name, StringComparer.OrdinalIgnoreCase);
+
+        // Single-query genre resolution.
+        var allGenreIds = (singleGenre ? sharedGenreIds : newRows.SelectMany(r => r.GenreIds))
+            .Distinct()
+            .ToList();
+        var collectionGenres = allGenreIds.Count == 0
+            ? new List<Genre>()
+            : await db.Genres.Where(g => allGenreIds.Contains(g.Id)).ToListAsync();
+        var genresById = collectionGenres.ToDictionary(g => g.Id);
+
+        // Single-query existing-Work fetch.
+        var attachedWorks = attachIds.Count == 0
+            ? new List<Work>()
+            : await db.Works.Where(w => attachIds.Contains(w.Id)).ToListAsync();
+        var attachedById = attachedWorks.ToDictionary(w => w.Id);
+
+        var attachedCount = 0;
+        foreach (var row in orderedRows)
+        {
+            if (row.AttachedWorkId is int existingId)
+            {
+                if (alreadyAttachedIds.Contains(existingId)) continue; // already on this book — silent skip
+                if (!attachedById.TryGetValue(existingId, out var existing)) continue; // deleted between pick + save
+                book.Works.Add(existing);
+                alreadyAttachedIds.Add(existingId);
+                attachedCount++;
+                continue;
+            }
+
+            var rowAuthors = AuthorsFor(row)
+                .Select(n => n?.Trim())
+                .Where(n => !string.IsNullOrEmpty(n))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(n => byName[n!])
+                .ToList();
+            var rowContributors = row.Contributors
+                .Where(c => !string.IsNullOrWhiteSpace(c.Name) && byName.ContainsKey(c.Name.Trim()))
+                .Select(c => (Person: byName[c.Name.Trim()], c.Role))
+                .ToList();
+            if (rowAuthors.Count == 0 && rowContributors.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Work \"{row.Title}\" needs at least one contributor (author, editor, or other role).");
+            }
+            var rowGenres = GenresFor(row)
+                .Distinct()
+                .Where(genresById.ContainsKey)
+                .Select(id => genresById[id])
+                .ToList();
+            var rowFirstPub = PartialDateParser.TryParse(row.FirstPublishedDate) ?? PartialDate.Empty;
+            var work = new Work
+            {
+                Title = row.Title!.Trim(),
+                Subtitle = string.IsNullOrWhiteSpace(row.Subtitle) ? null : row.Subtitle!.Trim(),
+                FirstPublishedDate = rowFirstPub.Date,
+                FirstPublishedDatePrecision = rowFirstPub.Precision,
+                Genres = rowGenres,
+            };
+            AuthorResolver.AssignAuthors(work, rowAuthors, rowContributors);
+            book.Works.Add(work);
+            attachedCount++;
+        }
+
+        await db.SaveChangesAsync();
+        await InitializeAsync(Book.Id);
+        return attachedCount;
+    }
+
     /// <summary>Remove a Work from this Book. If the Work isn'\''t attached
     /// to any other Book it'\''s deleted outright (orphan Works are noise);
     /// otherwise just detaches the join row so the Work continues to live

@@ -16,41 +16,20 @@ public class BookAddViewModelTests
         new(_factory, _lookup, new SeriesMatchService(_factory), new WorkSearchService(_factory));
 
     [Fact]
-    public void AddCollectionWorkRow_InheritsAuthorsFromMostRecentPopulatedRow()
+    public void AddCollectionWorkRow_StartsEmpty_RegardlessOfPreviousRowAuthors()
     {
-        // Single-author compendium case (King's Different Seasons, Christie
-        // collections): typing the author once on row 1 should propagate to
-        // subsequently-added rows so the 13-works capture flow doesn't need
-        // 13 author chip entries.
-        var vm = CreateVm();
-        vm.IsCollection = true;
-        // Default constructor seeds 1 empty starter row.
-        vm.CollectionWorks[0].Authors = new List<string> { "Stephen King" };
-
-        vm.AddCollectionWorkRow();
-
-        // The newly-added row inherits row 0's authors — the most recent
-        // populated row walking backwards.
-        Assert.Equal(new[] { "Stephen King" }, vm.CollectionWorks[1].Authors);
-    }
-
-    [Fact]
-    public void AddCollectionWorkRow_AuthorInheritanceIsACopyNotAReference()
-    {
-        // Each row owns its author list — editing one row's authors must
-        // not mutate another row's list (would otherwise corrupt the
-        // capture state when MudAuthorPicker mutates the bound list).
+        // Inheritance was killed 2026-05-24 — the SingleAuthor toggle is
+        // now the explicit signal for "same author across all rows."
+        // Without the toggle, the user has flagged "different authors per
+        // row" and a new row inheriting the previous row's authors is
+        // exactly the wrong default (forces remove-then-add on every row).
         var vm = CreateVm();
         vm.IsCollection = true;
         vm.CollectionWorks[0].Authors = new List<string> { "Stephen King" };
 
         vm.AddCollectionWorkRow();
 
-        var newRow = vm.CollectionWorks[^1];
-        newRow.Authors.Add("Richard Bachman");
-
-        Assert.Single(vm.CollectionWorks[0].Authors);
-        Assert.Equal("Stephen King", vm.CollectionWorks[0].Authors[0]);
+        Assert.Empty(vm.CollectionWorks[1].Authors);
     }
 
     [Fact]
@@ -318,38 +297,18 @@ public class BookAddViewModelTests
     }
 
     [Fact]
-    public void AddCollectionWorkRow_InheritsGenresFromMostRecentPopulatedRow()
+    public void AddCollectionWorkRow_StartsEmpty_RegardlessOfPreviousRowGenres()
     {
-        // Same shape as the author inheritance, but for genres: typing a
-        // genre on row 1 (SF say) propagates to subsequently-added rows so
-        // a 20-work "mostly SF" anthology only needs the genre picked once.
-        // The one outlier row can clear / replace per row.
+        // Mirror of the author inheritance kill — the SingleGenre toggle
+        // is now the explicit signal for "same genre across all rows."
+        // Without it, the user wants per-row genres, not inheritance.
         var vm = CreateVm();
         vm.IsCollection = true;
         vm.CollectionWorks[0].GenreIds = new List<int> { 7 };
 
         vm.AddCollectionWorkRow();
 
-        Assert.Equal(new[] { 7 }, vm.CollectionWorks[1].GenreIds);
-    }
-
-    [Fact]
-    public void AddCollectionWorkRow_GenreInheritanceIsACopyNotAReference()
-    {
-        // Each row owns its genre list — editing one row's GenreIds must
-        // not mutate another row's list (same hazard as authors when the
-        // bound list is mutated by the picker).
-        var vm = CreateVm();
-        vm.IsCollection = true;
-        vm.CollectionWorks[0].GenreIds = new List<int> { 7 };
-
-        vm.AddCollectionWorkRow();
-
-        var newRow = vm.CollectionWorks[^1];
-        newRow.GenreIds.Add(9);
-
-        Assert.Single(vm.CollectionWorks[0].GenreIds);
-        Assert.Equal(7, vm.CollectionWorks[0].GenreIds[0]);
+        Assert.Empty(vm.CollectionWorks[1].GenreIds);
     }
 
     [Fact]

@@ -1,0 +1,185 @@
+@using BookTracker.Web.Services
+@using BookTracker.Web.ViewModels
+
+@* Repeatable Work-input row for collection-mode capture. Used on
+   /books/add (page-level capture of a new Book) and on
+   AddMultipleWorksDialog (Book Detail capture of new Works for an
+   existing Book). Each row carries Title + Authors + Contributors +
+   Subtitle + First published + Genres, with conditional rendering
+   for SingleAuthor / SingleGenre toggles.
+
+   JS interop wiring (book-form-keys.js) lives on the host — this
+   component just renders the data-collection-work-title wrapper.
+   The host's [JSInvokable] OnCollectionTitleEnter receives Enter
+   and decides whether to add another row / focus next / no-op. *@
+
+@if (Work.AttachedWorkId is int)
+{
+    @* Attach-existing summary card. Editable fields hidden; the existing Work
+       carries its own authors / subtitle / first-published / genres. "Edit as new"
+       reverts to the new-work shape preserving whatever title was typed. *@
+    <MudPaper Outlined="true" Class="pa-3 mb-3" Style="background: var(--mud-palette-background-grey);">
+        <MudStack Row="true" Spacing="2" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+            <div class="flex-grow-1" style="min-width: 0;">
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-1" Wrap="Wrap.Wrap">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default">Existing work</MudChip>
+                    <strong style="word-break: break-word;">@Work.Title</strong>
+                </MudStack>
+                @if (!string.IsNullOrEmpty(Work.AttachedWorkAuthor))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@Work.AttachedWorkAuthor</MudText>
+                }
+            </div>
+            <MudStack Row="true" Spacing="1" Class="flex-shrink-0">
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="OnDetach">Edit as new</MudButton>
+                @if (TotalRows > 1)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="OnRemove">Remove</MudButton>
+                }
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+}
+else
+{
+    <MudPaper Outlined="true" Class="pa-3 mb-3">
+        <MudStack Row="true" Spacing="2" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+            <strong>Work @(Index + 1)</strong>
+            @if (TotalRows > 1)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="OnRemove">Remove</MudButton>
+            }
+        </MudStack>
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="@(SingleAuthor ? 12 : 7)">
+                @* MudAutocomplete<WorkSearchResult> — as the user types, existing
+                   Works appear in the dropdown. Picking one fires ValueChanged →
+                   host's OnExistingWorkPicked, which flips the row to attach-
+                   existing mode via the VM. Free-text Enter (no dropdown highlight)
+                   falls through to book-form-keys.js → host's [JSInvokable]
+                   OnCollectionTitleEnter, which adds a new row / focuses next.
+                   The wrapper div carries data-collection-work-title="@Index" so
+                   the JS doc-level keydown listener can route the event correctly. *@
+                <div data-collection-work-title="@Index">
+                    <MudAutocomplete T="WorkSearchResult"
+                                     Value="null"
+                                     ValueChanged="HandleExistingPickedAsync"
+                                     Text="@Work.Title"
+                                     TextChanged="@(t => Work.Title = t ?? string.Empty)"
+                                     SearchFunc="@((q, ct) => SearchExistingWorks(q, ct))"
+                                     ToStringFunc="@(r => r?.Title ?? string.Empty)"
+                                     Label="Title"
+                                     Placeholder="Type to search existing or capture new..."
+                                     Variant="Variant.Outlined"
+                                     Margin="Margin.Dense"
+                                     MinCharacters="2"
+                                     DebounceInterval="250"
+                                     CoerceValue="false"
+                                     CoerceText="false"
+                                     ResetValueOnEmptyText="false"
+                                     ShowProgressIndicator="true">
+                        <ItemTemplate Context="r">
+                            <MudStack Spacing="0" Style="min-width: 0;">
+                                <MudText Typo="Typo.body2" Style="word-break: break-word;">
+                                    @r.Title@(r.FirstPublishedYear is int y ? $" ({y})" : "")
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @r.AuthorName · in @r.BookCount @(r.BookCount == 1 ? "book" : "books")
+                                </MudText>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                </div>
+            </MudItem>
+            @if (!SingleAuthor)
+            {
+                <MudItem xs="12" md="5">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-1">Author(s)</MudText>
+                    <MudAuthorPicker Authors="Work.Authors"
+                                     AuthorsChanged="list => Work.Authors = list"
+                                     Label="Add author" />
+                </MudItem>
+            }
+            <MudItem xs="12">
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-1">Other contributors — editor, translator, illustrator, etc.</MudText>
+                <MudContributorPicker Contributors="Work.Contributors"
+                                      ContributorsChanged="list => Work.Contributors = list" />
+            </MudItem>
+            <MudItem xs="12" md="7">
+                <MudTextField T="string"
+                              @bind-Value="Work.Subtitle"
+                              Label="Subtitle (optional)"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" md="5">
+                <MudTextField T="string"
+                              @bind-Value="Work.FirstPublishedDate"
+                              Label="First published (optional)"
+                              Placeholder="e.g. 1934"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense" />
+            </MudItem>
+            @if (!SingleGenre)
+            {
+                <MudItem xs="12">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-1">Genre(s)</MudText>
+                    <MudGenrePicker SelectedGenreIds="Work.GenreIds"
+                                    SelectedGenreIdsChanged="ids => Work.GenreIds = ids" />
+                </MudItem>
+            }
+        </MudGrid>
+    </MudPaper>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public WorkFormViewModel.WorkFormInput Work { get; set; } = default!;
+
+    /// <summary>Zero-based position of this row in the parent's row list.
+    /// Used for the "Work @(Index + 1)" label and (via the
+    /// data-collection-work-title wrapper) for JS-side Enter routing.</summary>
+    [Parameter, EditorRequired]
+    public int Index { get; set; }
+
+    /// <summary>Total number of rows the parent is rendering — drives whether
+    /// the Remove button shows (single-row capture has no remove).</summary>
+    [Parameter] public int TotalRows { get; set; } = 1;
+
+    /// <summary>When true, the per-row Author picker is hidden; parent owns
+    /// a shared SharedAuthors list used for every row at save time.</summary>
+    [Parameter] public bool SingleAuthor { get; set; }
+
+    /// <summary>When true, the per-row Genre picker is hidden; parent owns
+    /// a shared SharedGenreIds list used for every row at save time.</summary>
+    [Parameter] public bool SingleGenre { get; set; }
+
+    /// <summary>Title autocomplete search delegate — parent owns the
+    /// IWorkSearchService and any filtering (e.g. excluding Works already
+    /// attached to the Book on Book Detail).</summary>
+    [Parameter, EditorRequired]
+    public Func<string?, CancellationToken, Task<IEnumerable<WorkSearchResult>>> SearchExistingWorks { get; set; } = default!;
+
+    /// <summary>Fires when the user picks an existing Work from the
+    /// autocomplete dropdown. Parent flips the row to attach-existing mode
+    /// via its VM. The Index is implicit (each row has its own component
+    /// instance) so parent reads its own captured index.</summary>
+    [Parameter]
+    public EventCallback<WorkSearchResult> OnExistingWorkPicked { get; set; }
+
+    /// <summary>Fires when the user clicks "Edit as new" on an attach-
+    /// existing summary card to revert to new-work mode.</summary>
+    [Parameter]
+    public EventCallback OnDetach { get; set; }
+
+    /// <summary>Fires when the user clicks "Remove" to drop this row from
+    /// the parent's collection.</summary>
+    [Parameter]
+    public EventCallback OnRemove { get; set; }
+
+    private async Task HandleExistingPickedAsync(WorkSearchResult? picked)
+    {
+        if (picked is null) return;
+        await OnExistingWorkPicked.InvokeAsync(picked);
+    }
+}

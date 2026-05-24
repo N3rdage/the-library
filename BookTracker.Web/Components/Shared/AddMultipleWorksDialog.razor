@@ -1,0 +1,236 @@
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@using BookTracker.Web.Services
+@using BookTracker.Web.ViewModels
+
+@* Batch capture dialog on the View page. Mirrors /books/add's
+   collection-mode UX (Single-Author / Single-Genre toggles + repeatable
+   CollectionWorkRow components + per-row attach-existing typeahead) but
+   attaches all the captured Works to the existing Book in one
+   transaction. Used when a Book turned out to be a compendium of N
+   Works after capture — escapes the single-Work / save / re-load loop
+   that AddWorkDialog (singular) forces on a 12-story anthology. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width: 360px;">
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Add one or more works to this book. Each title row searches
+                existing Works as you type — pick from the dropdown to attach,
+                or Enter on free text to add another new-work row.
+            </MudText>
+
+            @* Toggles — same pattern as Add page. SingleAuthor hides the
+               per-row author picker and uses the shared list. Same for
+               SingleGenre. *@
+            <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap">
+                <MudSwitch T="bool"
+                           @bind-Value="singleAuthor"
+                           Color="Color.Primary"
+                           Label="Same author(s) for all works" />
+                <MudSwitch T="bool"
+                           @bind-Value="singleGenre"
+                           Color="Color.Primary"
+                           Label="Same genre(s) for all works" />
+            </MudStack>
+
+            @if (singleAuthor)
+            {
+                <div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Shared author(s)</MudText>
+                    <MudAuthorPicker Authors="sharedAuthors"
+                                     AuthorsChanged="list => sharedAuthors = list"
+                                     Label="Add author" />
+                </div>
+            }
+            @if (singleGenre)
+            {
+                <div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Shared genre(s)</MudText>
+                    <MudGenrePicker SelectedGenreIds="sharedGenreIds"
+                                    SelectedGenreIdsChanged="ids => sharedGenreIds = ids" />
+                </div>
+            }
+
+            @for (var i = 0; i < rows.Count; i++)
+            {
+                var index = i;
+                var row = rows[i];
+                <CollectionWorkRow Work="row"
+                                   Index="index"
+                                   TotalRows="rows.Count"
+                                   SingleAuthor="singleAuthor"
+                                   SingleGenre="singleGenre"
+                                   SearchExistingWorks="@(async (q, ct) => await SearchAsync(q, ct))"
+                                   OnExistingWorkPicked="@(picked => OnExistingPickedAsync(picked, index))"
+                                   OnDetach="@(() => DetachRow(index))"
+                                   OnRemove="@(() => RemoveRow(index))" />
+            }
+
+            <div>
+                <MudButton Size="Size.Small"
+                           Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           OnClick="AddRow">
+                    + Add another work
+                </MudButton>
+            </div>
+
+            @if (!string.IsNullOrEmpty(error))
+            {
+                <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Dense="true">@error</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Disabled="@(saving || !HasUsableRow)"
+                   OnClick="SaveAsync">
+            @(saving ? "Saving..." : $"Save {rows.Count(r => r.AttachedWorkId is not null || !string.IsNullOrWhiteSpace(r.Title))} work(s)")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    // Pass the page's initialised VM in via DialogParameters — the
+    // Blazor dialog VM lifetime trap (an @inject BookDetailViewModel
+    // here would hand a fresh Transient instance with Book=null,
+    // silently breaking the attach + search paths). Same pattern as
+    // AddWorkDialog + EditionCoverUploadDialog before it.
+    [Parameter, EditorRequired] public BookDetailViewModel VM { get; set; } = default!;
+
+    private bool singleAuthor;
+    private bool singleGenre;
+    private List<string> sharedAuthors = [];
+    private List<int> sharedGenreIds = [];
+    private List<WorkFormViewModel.WorkFormInput> rows = [new()];
+    private bool saving;
+    private string? error;
+    private DotNetObjectReference<AddMultipleWorksDialog>? _selfRef;
+
+    private bool HasUsableRow => rows.Any(r =>
+        r.AttachedWorkId is not null || !string.IsNullOrWhiteSpace(r.Title));
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Bind the capture-phase Enter suppression listener so the
+            // CollectionWorkRow autocompletes inside this dialog get the
+            // same "free-text Enter adds a row / navigated Enter attaches"
+            // semantics as the /books/add collection rows. The
+            // [JSInvokable] OnCollectionTitleEnter below is the row-add
+            // entry point.
+            _selfRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("bookFormKeys.bindEnterSuppression", _selfRef);
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _selfRef?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+
+    private Task<IEnumerable<WorkSearchResult>> SearchAsync(string? query, CancellationToken ct) =>
+        WrapSearchAsync(query, ct);
+
+    private async Task<IEnumerable<WorkSearchResult>> WrapSearchAsync(string? query, CancellationToken ct)
+    {
+        try { return await VM.SearchAttachableWorksAsync(query ?? "", ct); }
+        catch { return []; }
+    }
+
+    private Task OnExistingPickedAsync(WorkSearchResult picked, int index)
+    {
+        if (index < 0 || index >= rows.Count) return Task.CompletedTask;
+        var row = rows[index];
+        row.AttachedWorkId = picked.Id;
+        row.AttachedWorkAuthor = picked.AuthorName;
+        row.Title = picked.Title;
+        // Grow the list when attaching on the last row so the user can
+        // keep adding without an explicit + click — matches the /books/add
+        // collection-row attach UX.
+        if (index == rows.Count - 1)
+        {
+            rows.Add(new WorkFormViewModel.WorkFormInput());
+        }
+        return Task.CompletedTask;
+    }
+
+    private void DetachRow(int index)
+    {
+        if (index < 0 || index >= rows.Count) return;
+        var row = rows[index];
+        row.AttachedWorkId = null;
+        row.AttachedWorkAuthor = null;
+        // Keep the typed title; clearing AttachedWorkId is enough to
+        // flip the row back to editable mode.
+    }
+
+    private void AddRow() => rows.Add(new WorkFormViewModel.WorkFormInput());
+
+    private void RemoveRow(int index)
+    {
+        if (index < 0 || index >= rows.Count) return;
+        rows.RemoveAt(index);
+        if (rows.Count == 0) rows.Add(new WorkFormViewModel.WorkFormInput());
+    }
+
+    /// <summary>JS-invokable Enter handler for the per-row title
+    /// autocomplete. Free-text Enter (no navigation, no auto-pick) routes
+    /// here via book-form-keys.js. On the last row it adds another row;
+    /// elsewhere it's a no-op (the user can Tab to the next row).</summary>
+    [JSInvokable]
+    public Task OnCollectionTitleEnter(int index)
+    {
+        if (index < 0 || index >= rows.Count) return Task.CompletedTask;
+        if (index == rows.Count - 1)
+        {
+            AddRow();
+            StateHasChanged();
+        }
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveAsync()
+    {
+        error = null;
+        saving = true;
+        try
+        {
+            var added = await VM.AttachMultipleWorksAsync(
+                rows,
+                singleAuthor,
+                singleGenre,
+                sharedAuthors,
+                sharedGenreIds);
+
+            if (added == 0)
+            {
+                error = "Nothing to add — every row was either empty or already attached to this book.";
+            }
+            else
+            {
+                Snackbar.Add($"Added {added} work{(added == 1 ? "" : "s")} to the book.", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

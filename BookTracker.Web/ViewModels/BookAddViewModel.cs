@@ -126,28 +126,17 @@ public class BookAddViewModel(
 
     public void AddCollectionWorkRow()
     {
-        // Inherit authors from the most recent row that has authors so
-        // repetitive single-author compendiums (e.g. King's "Different
-        // Seasons", Christie collections) only need authors entered once.
-        // User can clear / replace per row. If no row has authors yet —
-        // including the first-time case before anything is typed — the
-        // new row starts empty as before. Genres inherit the same way so
-        // a "mostly SF" anthology only needs the genre picked on row 1.
-        var seedAuthors = CollectionWorks
-            .AsEnumerable()
-            .Reverse()
-            .FirstOrDefault(w => w.Authors.Count > 0)?.Authors
-            .ToList() ?? [];
-        var seedGenres = CollectionWorks
-            .AsEnumerable()
-            .Reverse()
-            .FirstOrDefault(w => w.GenreIds.Count > 0)?.GenreIds
-            .ToList() ?? [];
-        CollectionWorks.Add(new WorkFormViewModel.WorkFormInput
-        {
-            Authors = seedAuthors,
-            GenreIds = seedGenres,
-        });
+        // New rows start empty. The previous behaviour (inherit from the
+        // most recent populated row) predated the SingleAuthor /
+        // SingleGenre toggles and is wrong now that those exist:
+        //   - SingleAuthor ON  -> per-row Author field doesn't render;
+        //     inheritance is irrelevant.
+        //   - SingleAuthor OFF -> user has explicitly flagged "different
+        //     author per row"; inheritance is exactly the wrong default
+        //     (every new row carries the previous author and the user
+        //     must remove-then-add).
+        // Same shape for SingleGenre / GenreIds.
+        CollectionWorks.Add(new WorkFormViewModel.WorkFormInput());
     }
 
     public void RemoveCollectionWorkRow(int index)
