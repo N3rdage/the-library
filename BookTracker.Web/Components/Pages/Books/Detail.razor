@@ -126,6 +126,14 @@
                                Size="Size.Small">
                         Add work
                     </MudButton>
+                    <MudButton OnClick="OpenAddMultipleWorksDialog"
+                               Disabled="@dialogOpening"
+                               Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.LibraryAdd"
+                               Size="Size.Small">
+                        Add multiple works
+                    </MudButton>
                     <MudButton OnClick="ConfirmDeleteBookAsync"
                                Disabled="@dialogOpening"
                                Variant="Variant.Text"
@@ -722,6 +730,22 @@
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
         var dialog = await DialogService.ShowAsync<AddWorkDialog>("Add work", parameters, options);
+        await dialog.Result;
+    });
+
+    private Task OpenAddMultipleWorksDialog() => OpenDialogGuardedAsync(async () =>
+    {
+        if (VM.Book is null) return;
+        // Same VM-pass-through pattern as OpenAddWorkDialog. The dialog
+        // calls VM.AttachMultipleWorksAsync, which refreshes the page
+        // snapshot on success — by the time the result returns the
+        // Works list already reflects the new attachments.
+        var parameters = new DialogParameters<AddMultipleWorksDialog>
+        {
+            { x => x.VM, VM },
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<AddMultipleWorksDialog>("Add multiple works", parameters, options);
         await dialog.Result;
     });
 

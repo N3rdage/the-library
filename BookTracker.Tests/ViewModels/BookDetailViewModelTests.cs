@@ -852,6 +852,256 @@ public class BookDetailViewModelTests
     }
 
     [Fact]
+    public async Task AttachMultipleWorksAsync_NewWorks_CreatesAndAttachesAll()
+    {
+        // The motivating case: a Book captured via Bulk Add as a single
+        // Work turns out to be a 4-story anthology. AttachMultipleWorks
+        // takes the four titles + per-row authors and creates four new
+        // Works attached to the existing Book in one save.
+        var factory = new TestDbContextFactory();
+        int bookId;
+        using (var db = factory.CreateDbContext())
+        {
+            var author = new Author { Name = "Stephen King" };
+            db.Books.Add(new Book
+            {
+                Title = "Different Seasons",
+                Works = [new Work { Title = "Different Seasons", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+            });
+            await db.SaveChangesAsync();
+            bookId = db.Books.Single().Id;
+        }
+
+        var vm = CreateVm(factory);
+        await vm.InitializeAsync(bookId);
+
+        var rows = new List<WorkFormViewModel.WorkFormInput>
+        {
+            new() { Title = "Rita Hayworth and Shawshank Redemption", Authors = ["Stephen King"] },
+            new() { Title = "Apt Pupil", Authors = ["Stephen King"] },
+            new() { Title = "The Body", Authors = ["Stephen King"] },
+            new() { Title = "The Breathing Method", Authors = ["Stephen King"] },
+        };
+
+        var added = await vm.AttachMultipleWorksAsync(rows,
+            singleAuthor: false, singleGenre: false,
+            sharedAuthors: [], sharedGenreIds: []);
+
+        Assert.Equal(4, added);
+        using var verify = factory.CreateDbContext();
+        var book = await verify.Books.Include(b => b.Works).FirstAsync(b => b.Id == bookId);
+        Assert.Equal(5, book.Works.Count); // original + 4 new
+        Assert.Contains(book.Works, w => w.Title == "Apt Pupil");
+    }
+
+    [Fact]
+    public async Task AttachMultipleWorksAsync_SingleAuthorMode_AppliesSharedAuthors()
+    {
+        // Single-Author mode is the "13 stories, all King" path — the
+        // shared author list applies to every new row at save time.
+        var factory = new TestDbContextFactory();
+        int bookId;
+        using (var db = factory.CreateDbContext())
+        {
+            var seed = new Author { Name = "Seed" };
+            db.Books.Add(new Book
+            {
+                Title = "Christie Mysteries",
+                Works = [new Work { Title = "Seed Work", WorkAuthors = [new WorkAuthor { Author = seed, Order = 0 }] }],
+            });
+            await db.SaveChangesAsync();
+            bookId = db.Books.Single().Id;
+        }
+
+        var vm = CreateVm(factory);
+        await vm.InitializeAsync(bookId);
+
+        var rows = new List<WorkFormViewModel.WorkFormInput>
+        {
+            new() { Title = "And Then There Were None", Authors = [] },
+            new() { Title = "Murder on the Orient Express", Authors = [] },
+        };
+
+        var added = await vm.AttachMultipleWorksAsync(rows,
+            singleAuthor: true, singleGenre: false,
+            sharedAuthors: ["Agatha Christie"], sharedGenreIds: []);
+
+        Assert.Equal(2, added);
+        using var verify = factory.CreateDbContext();
+        var book = await verify.Books
+            .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
+            .FirstAsync(b => b.Id == bookId);
+        var christies = book.Works.Where(w => w.Title != "Seed Work").ToList();
+        Assert.All(christies, w =>
+        {
+            Assert.Single(w.WorkAuthors);
+            Assert.Equal("Agatha Christie", w.WorkAuthors[0].Author.Name);
+        });
+    }
+
+    [Fact]
+    public async Task AttachMultipleWorksAsync_MixedNewAndExisting_AttachesExistingByIdAndCreatesNew()
+    {
+        // Compendium overlap — Drew is adding "Four Past Midnight" which
+        // contains "The Library Policeman" (new) and also wants to attach
+        // the existing "Apt Pupil" Work (from Different Seasons). Mixed
+        // rows must work in one save.
+        var factory = new TestDbContextFactory();
+        int targetBookId, existingWorkId;
+        using (var db = factory.CreateDbContext())
+        {
+            var king = new Author { Name = "Stephen King" };
+            var existing = new Work
+            {
+                Title = "Apt Pupil",
+                WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }],
+            };
+            var sourceBook = new Book { Title = "Different Seasons", Works = [existing] };
+            var targetBook = new Book
+            {
+                Title = "Four Past Midnight",
+                Works = [new Work { Title = "Four Past Midnight", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }],
+            };
+            db.Books.AddRange(sourceBook, targetBook);
+            await db.SaveChangesAsync();
+            targetBookId = targetBook.Id;
+            existingWorkId = existing.Id;
+        }
+
+        var vm = CreateVm(factory);
+        await vm.InitializeAsync(targetBookId);
+
+        var rows = new List<WorkFormViewModel.WorkFormInput>
+        {
+            new() { Title = "The Library Policeman", Authors = ["Stephen King"] },
+            new() { Title = "Apt Pupil", AttachedWorkId = existingWorkId, AttachedWorkAuthor = "Stephen King" },
+        };
+
+        var added = await vm.AttachMultipleWorksAsync(rows,
+            singleAuthor: false, singleGenre: false,
+            sharedAuthors: [], sharedGenreIds: []);
+
+        Assert.Equal(2, added);
+        using var verify = factory.CreateDbContext();
+        var book = await verify.Books.Include(b => b.Works).FirstAsync(b => b.Id == targetBookId);
+        Assert.Equal(3, book.Works.Count); // original + 1 new + 1 attached
+        Assert.Contains(book.Works, w => w.Id == existingWorkId);
+        Assert.Contains(book.Works, w => w.Title == "The Library Policeman");
+    }
+
+    [Fact]
+    public async Task AttachMultipleWorksAsync_RowWithNoContributors_ThrowsWithUserFacingMessage()
+    {
+        // A row with a title but no authors AND no contributors is a
+        // validation failure — the dialog's catch surfaces the .Message
+        // verbatim. Lock the message shape.
+        var factory = new TestDbContextFactory();
+        int bookId;
+        using (var db = factory.CreateDbContext())
+        {
+            var seed = new Author { Name = "Seed" };
+            db.Books.Add(new Book
+            {
+                Title = "Some Compendium",
+                Works = [new Work { Title = "Seed", WorkAuthors = [new WorkAuthor { Author = seed, Order = 0 }] }],
+            });
+            await db.SaveChangesAsync();
+            bookId = db.Books.Single().Id;
+        }
+
+        var vm = CreateVm(factory);
+        await vm.InitializeAsync(bookId);
+
+        var rows = new List<WorkFormViewModel.WorkFormInput>
+        {
+            new() { Title = "Untitled Story", Authors = [] },
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            vm.AttachMultipleWorksAsync(rows, false, false, [], []));
+        Assert.Contains("contributor", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Untitled Story", ex.Message);
+    }
+
+    [Fact]
+    public async Task AttachMultipleWorksAsync_AllBlankRows_ThrowsWithUserFacingMessage()
+    {
+        // Every row blank (no title, no attach) is a dialog-state error —
+        // surface the "add at least one work" message rather than silently
+        // closing the dialog with zero saves.
+        var factory = new TestDbContextFactory();
+        int bookId;
+        using (var db = factory.CreateDbContext())
+        {
+            var seed = new Author { Name = "Seed" };
+            db.Books.Add(new Book
+            {
+                Title = "X",
+                Works = [new Work { Title = "Seed", WorkAuthors = [new WorkAuthor { Author = seed, Order = 0 }] }],
+            });
+            await db.SaveChangesAsync();
+            bookId = db.Books.Single().Id;
+        }
+
+        var vm = CreateVm(factory);
+        await vm.InitializeAsync(bookId);
+
+        var rows = new List<WorkFormViewModel.WorkFormInput>
+        {
+            new() { Title = null, Authors = [] },
+            new() { Title = "   ", Authors = [] },
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            vm.AttachMultipleWorksAsync(rows, false, false, [], []));
+        Assert.Contains("at least one work", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AttachMultipleWorksAsync_AlreadyAttachedExistingWork_SilentlySkipsAndCountsOthers()
+    {
+        // If the user picks an existing Work that's already on this Book
+        // (the dialog's search filter should normally prevent this, but
+        // stale state can leak through), the row is skipped silently —
+        // attachedCount reflects only newly-attached rows.
+        var factory = new TestDbContextFactory();
+        int bookId, existingWorkId;
+        using (var db = factory.CreateDbContext())
+        {
+            var king = new Author { Name = "King" };
+            var existing = new Work
+            {
+                Title = "Already On Book",
+                WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }],
+            };
+            db.Books.Add(new Book
+            {
+                Title = "Test Compendium",
+                Works = [existing],
+            });
+            await db.SaveChangesAsync();
+            bookId = db.Books.Single().Id;
+            existingWorkId = existing.Id;
+        }
+
+        var vm = CreateVm(factory);
+        await vm.InitializeAsync(bookId);
+
+        var rows = new List<WorkFormViewModel.WorkFormInput>
+        {
+            new() { Title = "Already On Book", AttachedWorkId = existingWorkId, AttachedWorkAuthor = "King" },
+            new() { Title = "A New One", Authors = ["King"] },
+        };
+
+        var added = await vm.AttachMultipleWorksAsync(rows, false, false, [], []);
+
+        Assert.Equal(1, added); // only the new one counted
+        using var verify = factory.CreateDbContext();
+        var book = await verify.Books.Include(b => b.Works).FirstAsync(b => b.Id == bookId);
+        Assert.Equal(2, book.Works.Count); // existing + new
+    }
+
+    [Fact]
     public async Task RemoveWorkFromBookAsync_WorkOnMultipleBooks_OnlyDetachesFromCurrent()
     {
         // Shared Work between two Books (Drew's Lovecraft case) — removing

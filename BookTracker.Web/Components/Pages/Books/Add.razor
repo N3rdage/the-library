@@ -320,128 +320,15 @@
                         {
                             var index = i;
                             var work = VM.CollectionWorks[i];
-                            @if (work.AttachedWorkId is int)
-                            {
-                                @* Attach-existing summary card. Editable fields hidden; the existing Work
-                                   carries its own authors / subtitle / first-published / genres. "Edit as new"
-                                   reverts to the new-work shape preserving whatever title was typed. *@
-                                <MudPaper Outlined="true" Class="pa-3 mb-3" Style="background: var(--mud-palette-background-grey);">
-                                    <MudStack Row="true" Spacing="2" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
-                                        <div class="flex-grow-1" style="min-width: 0;">
-                                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-1" Wrap="Wrap.Wrap">
-                                                <MudChip T="string" Size="Size.Small" Color="Color.Default">Existing work</MudChip>
-                                                <strong style="word-break: break-word;">@work.Title</strong>
-                                            </MudStack>
-                                            @if (!string.IsNullOrEmpty(work.AttachedWorkAuthor))
-                                            {
-                                                <MudText Typo="Typo.caption" Color="Color.Secondary">@work.AttachedWorkAuthor</MudText>
-                                            }
-                                        </div>
-                                        <MudStack Row="true" Spacing="1" Class="flex-shrink-0">
-                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="() => VM.DetachRow(index)">Edit as new</MudButton>
-                                            @if (VM.CollectionWorks.Count > 1)
-                                            {
-                                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => VM.RemoveCollectionWorkRow(index)">Remove</MudButton>
-                                            }
-                                        </MudStack>
-                                    </MudStack>
-                                </MudPaper>
-                            }
-                            else
-                            {
-                                <MudPaper Outlined="true" Class="pa-3 mb-3">
-                                    <MudStack Row="true" Spacing="2" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
-                                        <strong>Work @(index + 1)</strong>
-                                        @if (VM.CollectionWorks.Count > 1)
-                                        {
-                                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="() => VM.RemoveCollectionWorkRow(index)">Remove</MudButton>
-                                        }
-                                    </MudStack>
-                                    <MudGrid Spacing="2">
-                                        <MudItem xs="12" md="@(VM.SingleAuthor ? 12 : 7)">
-                                            @* MudAutocomplete<WorkSearchResult> — as the user types, existing
-                                               Works appear in the dropdown. Picking one fires ValueChanged →
-                                               OnExistingWorkPickedAsync, flipping the row to attach-existing
-                                               mode. Free-text Enter (no dropdown highlight) falls through to
-                                               book-form-keys.js → page [JSInvokable] OnCollectionTitleEnter,
-                                               which adds a new row / focuses next. The wrapper div carries
-                                               data-collection-work-title="@index" so the JS doc-level keydown
-                                               listener can route the event correctly — MudAutocomplete renders
-                                               its <input> deep inside, so we can't put the data-attribute
-                                               directly on the input. *@
-                                            <div data-collection-work-title="@index">
-                                                @* CoerceText="false" so Esc / un-picked dropdown close doesn't
-                                                   revert work.Title to the (null) Value's display string —
-                                                   the typed text needs to survive for the "captured as new"
-                                                   flow. Paired with the book-form-keys.js capture-phase
-                                                   listener that tracks user navigation (Down/Up) per input
-                                                   and only defers to MudAutocomplete's auto-pick when the
-                                                   user has explicitly arrow-keyed. *@
-                                                <MudAutocomplete T="WorkSearchResult"
-                                                                 Value="null"
-                                                                 ValueChanged="@(picked => OnExistingWorkPickedAsync(picked, index))"
-                                                                 Text="@work.Title"
-                                                                 TextChanged="@(t => work.Title = t ?? string.Empty)"
-                                                                 SearchFunc="@(async (q, ct) => await SearchExistingWorksAsync(q, ct))"
-                                                                 ToStringFunc="@(r => r?.Title ?? string.Empty)"
-                                                                 Label="Title"
-                                                                 Placeholder="Type to search existing or capture new..."
-                                                                 Variant="Variant.Outlined"
-                                                                 Margin="Margin.Dense"
-                                                                 MinCharacters="2"
-                                                                 DebounceInterval="250"
-                                                                 CoerceValue="false"
-                                                                 CoerceText="false"
-                                                                 ResetValueOnEmptyText="false"
-                                                                 ShowProgressIndicator="true">
-                                                    <ItemTemplate Context="r">
-                                                        <MudStack Spacing="0" Style="min-width: 0;">
-                                                            <MudText Typo="Typo.body2" Style="word-break: break-word;">
-                                                                @r.Title@(r.FirstPublishedYear is int y ? $" ({y})" : "")
-                                                            </MudText>
-                                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                                @r.AuthorName · in @r.BookCount @(r.BookCount == 1 ? "book" : "books")
-                                                            </MudText>
-                                                        </MudStack>
-                                                    </ItemTemplate>
-                                                </MudAutocomplete>
-                                            </div>
-                                        </MudItem>
-                                        @if (!VM.SingleAuthor)
-                                        {
-                                            <MudItem xs="12" md="5">
-                                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-1">Author(s)</MudText>
-                                                <MudAuthorPicker Authors="work.Authors"
-                                                                 AuthorsChanged="list => work.Authors = list"
-                                                                 Label="Add author" />
-                                            </MudItem>
-                                        }
-                                        <MudItem xs="12" md="7">
-                                            <MudTextField T="string"
-                                                          @bind-Value="work.Subtitle"
-                                                          Label="Subtitle (optional)"
-                                                          Variant="Variant.Outlined"
-                                                          Margin="Margin.Dense" />
-                                        </MudItem>
-                                        <MudItem xs="12" md="5">
-                                            <MudTextField T="string"
-                                                          @bind-Value="work.FirstPublishedDate"
-                                                          Label="First published (optional)"
-                                                          Placeholder="e.g. 1934"
-                                                          Variant="Variant.Outlined"
-                                                          Margin="Margin.Dense" />
-                                        </MudItem>
-                                        @if (!VM.SingleGenre)
-                                        {
-                                            <MudItem xs="12">
-                                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-1">Genre(s)</MudText>
-                                                <MudGenrePicker SelectedGenreIds="work.GenreIds"
-                                                                SelectedGenreIdsChanged="ids => work.GenreIds = ids" />
-                                            </MudItem>
-                                        }
-                                    </MudGrid>
-                                </MudPaper>
-                            }
+                            <CollectionWorkRow Work="work"
+                                               Index="index"
+                                               TotalRows="VM.CollectionWorks.Count"
+                                               SingleAuthor="VM.SingleAuthor"
+                                               SingleGenre="VM.SingleGenre"
+                                               SearchExistingWorks="@(async (q, ct) => await SearchExistingWorksAsync(q, ct))"
+                                               OnExistingWorkPicked="@(picked => OnExistingWorkPickedAsync(picked, index))"
+                                               OnDetach="@(() => VM.DetachRow(index))"
+                                               OnRemove="@(() => VM.RemoveCollectionWorkRow(index))" />
                         }
                         <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" OnClick="VM.AddCollectionWorkRow">
                             + Add another work
