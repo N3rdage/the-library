@@ -171,9 +171,14 @@ public partial class ScanPage : ContentPage
         {
             StatusLabel.Text = "Scanned ✓";
             FoundTitle.Text = book.Title;
-            FoundAuthors.Text = (book.AllAuthors is { Count: > 1 })
-                ? string.Join(", ", book.AllAuthors)
-                : book.PrimaryAuthor;
+            // Mirror the Web's WorkAuthorshipFormatter output:
+            //   "Tolkien & Child; Sergio Cariello (illustrator)"
+            // Falls back to PrimaryAuthor when AllAuthors is empty
+            // (older server / malformed snapshot).
+            var formatted = ContributorFormatter.Format(book.AllAuthors);
+            FoundAuthors.Text = string.IsNullOrEmpty(formatted)
+                ? book.PrimaryAuthor
+                : formatted;
             FoundStatusRating.Text = FormatStatusRating(book);
             FoundIsbn.Text = $"ISBN: {isbn}";
             OpenInAppButton.CommandParameter = book.Id;
@@ -242,17 +247,29 @@ public partial class ScanPage : ContentPage
     private static View BuildWorkRow(WorkSnapshot work)
     {
         // "Title — Author" per work; tight 13px so a 12-work compendium
-        // doesn't overflow the FoundFrame visually.
+        // doesn't overflow the FoundFrame visually. When the Work
+        // carries non-Author contributors (illustrator on a co-authored
+        // story, translator on a classic) the line surfaces them via
+        // FormatContributors so the compendium row reads
+        // "Title — Tolkien; Sergio Cariello (illustrator)". Falls back
+        // to PrimaryAuthor when Contributors is null (older server) or
+        // when the formatter yields nothing.
+        var byline = work.Contributors is { Count: > 0 }
+            ? ContributorFormatter.Format(work.Contributors)
+            : null;
+        if (string.IsNullOrEmpty(byline)) byline = work.PrimaryAuthor;
+
         return new Label
         {
-            Text = string.IsNullOrWhiteSpace(work.PrimaryAuthor)
+            Text = string.IsNullOrWhiteSpace(byline)
                 ? work.Title
-                : $"{work.Title} — {work.PrimaryAuthor}",
+                : $"{work.Title} — {byline}",
             FontSize = 13,
             TextColor = Color.FromArgb("#2C2416"),
             LineBreakMode = LineBreakMode.WordWrap,
         };
     }
+
 
     private View BuildEditionRow(EditionSnapshot edition)
     {

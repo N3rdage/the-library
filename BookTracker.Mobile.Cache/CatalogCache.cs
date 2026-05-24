@@ -86,6 +86,16 @@ public class CatalogCache : ICatalogCache
         await _db.ExecuteAsync(
             "UPDATE books SET TitleLower = LOWER(Title) WHERE TitleLower IS NULL OR TitleLower = ''");
 
+        // Same backfill discipline for the per-Work ContributorsJson
+        // column (added 2026-05-24 alongside the role-tagged
+        // WorkSnapshot.Contributors wire field). CreateTableAsync ALTERs
+        // the table but leaves existing rows NULL; downstream
+        // JsonSerializer.Deserialize would blow up on those. Stamp `[]`
+        // so the deserialiser sees a valid empty list until the next
+        // PopulateAsync / ApplyDeltaAsync writes the real contributors.
+        await _db.ExecuteAsync(
+            "UPDATE book_works SET ContributorsJson = '[]' WHERE ContributorsJson IS NULL OR ContributorsJson = ''");
+
         // Covers live alongside the DB file by convention — Mobile's
         // FileSystem.AppDataDirectory holds both. Single dbPath
         // parameter keeps the public Init surface narrow; tests get
@@ -175,6 +185,7 @@ public class CatalogCache : ICatalogCache
                         WorkId = work.Id,
                         Title = work.Title ?? "",
                         PrimaryAuthor = work.PrimaryAuthor ?? "",
+                        ContributorsJson = JsonSerializer.Serialize(work.Contributors ?? []),
                     });
                 }
             }
@@ -316,6 +327,7 @@ public class CatalogCache : ICatalogCache
                         WorkId = work.Id,
                         Title = work.Title ?? "",
                         PrimaryAuthor = work.PrimaryAuthor ?? "",
+                        ContributorsJson = JsonSerializer.Serialize(work.Contributors ?? []),
                     });
                 }
             }
@@ -583,7 +595,11 @@ public class CatalogCache : ICatalogCache
             // rollups elsewhere. Order by WorkId (the server-side Id),
             // not RowId (the local surrogate, insertion-order).
             .OrderBy(w => w.WorkId)
-            .Select(w => new WorkSnapshot(w.WorkId, w.Title, w.PrimaryAuthor))
+            .Select(w => new WorkSnapshot(
+                w.WorkId,
+                w.Title,
+                w.PrimaryAuthor,
+                Contributors: JsonSerializer.Deserialize<List<AuthorContribution>>(w.ContributorsJson) ?? []))
             .ToList();
 
         return new BookEnrichedDetail(editions, works);
