@@ -38,11 +38,11 @@ public static class ProgramSetup
 
     public static async Task RunMigrationsAsync(WebApplication app)
     {
-        // TODO: replace migrate-on-startup with a dedicated deploy-time
-        // migration step (e.g. `dotnet ef migrations bundle` run from the
-        // GitHub Actions workflow) once the app goes multi-instance or
-        // needs zero-downtime deploys. For now, the single-instance App
-        // Service makes this simple and safe.
+        // Dev-only convenience — Program.cs gates this on IsDevelopment
+        // so `dotnet watch` doesn't need a separate `dotnet ef database
+        // update` step. Staging + prod deploys apply migrations via the
+        // `dotnet ef migrations bundle` step in deploy.yml / swap.yml
+        // (TODO #21 / PR #275).
         using var scope = app.Services.CreateScope();
         var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<BookTrackerDbContext>>();
         await using var db = await dbFactory.CreateDbContextAsync();
