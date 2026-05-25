@@ -1,0 +1,394 @@
+@page "/wishlist"
+@page "/shopping"
+@inject WishlistViewModel VM
+@inject NavigationManager Nav
+
+@* Wishlist page — books Drew is looking for. Formerly /shopping.
+   The "Do I have this?" card was here too until 2026-05-25; it was
+   fully duplicated by /bookshop's scan flow and the Bookshelf
+   ScanPage, so it shipped out in PR A of the wishlist rework arc.
+   `/shopping` stays as a secondary @page route so old bookmarks /
+   external links keep working. PR B (this PR) added the
+   search-and-add card at the top — Open Library / Google Books /
+   Trove lookup feeds the wishlist with title + author + cover +
+   known ISBNs. *@
+
+<PageTitle>Wishlist - Bookcase</PageTitle>
+
+<h1 class="mb-3">Wishlist</h1>
+
+@* Search and add — populate the wishlist from external lookups. *@
+<div class="card mb-4">
+    <div class="card-header bg-white">
+        <h2 class="h5 mb-0">Find a book to add</h2>
+    </div>
+    <div class="card-body">
+        @if (!VM.AdvancedSearchOpen)
+        {
+            <div class="input-group mb-2">
+                <input type="text" class="form-control" placeholder="ISBN, or title and / or author"
+                       @bind="VM.SearchQuery" @bind:event="oninput"
+                       @onkeyup="HandleSearchKeyUp" />
+                <button type="button" class="btn btn-primary" @onclick="SearchAsync"
+                        disabled="@(VM.Searching || string.IsNullOrWhiteSpace(VM.SearchQuery))">
+                    @if (VM.Searching)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        <span>Searching…</span>
+                    }
+                    else
+                    {
+                        <span>Search</span>
+                    }
+                </button>
+                @if (VM.SearchedOnce)
+                {
+                    <button type="button" class="btn btn-outline-secondary" @onclick="VM.ClearSearch" disabled="@VM.Searching">
+                        Clear
+                    </button>
+                }
+            </div>
+            <div class="form-text mb-2 d-flex flex-wrap gap-3 align-items-center">
+                <span>Type a 10- or 13-digit ISBN for a precise hit, or words from a title / author for up to ten candidates.</span>
+                <button type="button" class="btn btn-link btn-sm p-0 align-baseline" @onclick="() => VM.AdvancedSearchOpen = true">
+                    Advanced search ▾
+                </button>
+            </div>
+        }
+        else
+        {
+            @* Field-scoped search — Title / Author / ISBN as separate
+               inputs. Solves Open Library's title-vs-author ambiguity
+               (e.g. searching "Martin Grant" the author surfaced books
+               with "Martin" / "Grant" in the title under the simple
+               query, because the upstream wrapper put everything in
+               the title field). ISBN field wins if filled. *@
+            <div class="row g-2 mb-2">
+                <div class="col-12 col-md-5">
+                    <label class="form-label small mb-1">Title</label>
+                    <input type="text" class="form-control form-control-sm"
+                           @bind="VM.AdvancedTitle" @bind:event="oninput"
+                           @onkeyup="HandleAdvancedKeyUp" />
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label small mb-1">Author</label>
+                    <input type="text" class="form-control form-control-sm"
+                           @bind="VM.AdvancedAuthor" @bind:event="oninput"
+                           @onkeyup="HandleAdvancedKeyUp" />
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label small mb-1">ISBN</label>
+                    <input type="text" class="form-control form-control-sm"
+                           @bind="VM.AdvancedIsbn" @bind:event="oninput"
+                           @onkeyup="HandleAdvancedKeyUp" />
+                </div>
+            </div>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                <button type="button" class="btn btn-primary btn-sm" @onclick="SearchAdvancedAsync"
+                        disabled="@(VM.Searching || AdvancedAllEmpty)">
+                    @if (VM.Searching)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        <span>Searching…</span>
+                    }
+                    else
+                    {
+                        <span>Search</span>
+                    }
+                </button>
+                @if (VM.SearchedOnce || !AdvancedAllEmpty)
+                {
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="VM.ClearSearch" disabled="@VM.Searching">
+                        Clear
+                    </button>
+                }
+                <button type="button" class="btn btn-link btn-sm p-0 align-self-center" @onclick="() => VM.AdvancedSearchOpen = false">
+                    Hide advanced ▴
+                </button>
+            </div>
+            <div class="form-text mb-2">
+                ISBN wins if filled. Otherwise the typed Title + Author go to Open Library as separate fields — useful when an author's name is also common title words.
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(VM.SearchError))
+        {
+            <div class="alert alert-warning py-2 mb-0 small">@VM.SearchError</div>
+        }
+        else if (VM.SearchedOnce && VM.SearchCandidates.Count == 0 && !VM.Searching)
+        {
+            <p class="text-muted small mb-0">No matches found. Try a different query, or use Quick add below.</p>
+        }
+        else if (VM.SearchCandidates.Count > 0)
+        {
+            <div class="list-group">
+                @foreach (var c in VM.SearchCandidates)
+                {
+                    <div class="list-group-item d-flex gap-3 align-items-center">
+                        @if (!string.IsNullOrWhiteSpace(c.CoverUrl))
+                        {
+                            <img src="@c.CoverUrl" alt="" loading="lazy" decoding="async"
+                                 class="rounded flex-shrink-0"
+                                 style="width: 48px; height: 68px; object-fit: cover;" />
+                        }
+                        else
+                        {
+                            <div class="rounded bg-light d-flex align-items-center justify-content-center flex-shrink-0"
+                                 style="width: 48px; height: 68px;">
+                                <span class="text-muted small">--</span>
+                            </div>
+                        }
+                        <div class="flex-grow-1 min-width-0">
+                            <div class="fw-semibold text-truncate">@(c.Title ?? "(no title)")</div>
+                            <div class="text-muted small text-truncate">@(c.Author ?? "(no author)")</div>
+                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                @foreach (var isbn in c.Isbns)
+                                {
+                                    <span class="badge bg-light text-dark border font-monospace">@isbn</span>
+                                }
+                                <span class="badge bg-light text-dark border">@c.Source</span>
+                                @if (c.AlreadyOwnedBookId is int ownedId)
+                                {
+                                    <a href="@($"/books/{ownedId}")" class="badge bg-warning text-dark text-decoration-none">
+                                        Already in your library — View
+                                    </a>
+                                }
+                                @if (c.AlreadyWishlistedItemId is not null)
+                                {
+                                    <span class="badge bg-info text-dark">Already on your wishlist</span>
+                                }
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-success btn-sm flex-shrink-0"
+                                @onclick="@(() => AddCandidateAsync(c))">
+                            Add
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@* Series gaps — incomplete series where you're missing books *@
+<div class="card mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h2 class="h5 mb-0">Series gaps</h2>
+        @if (!VM.GapsLoaded)
+        {
+            <button type="button" class="btn btn-outline-primary btn-sm" @onclick="VM.LoadSeriesGapsAsync">
+                Check gaps
+            </button>
+        }
+    </div>
+    <div class="card-body">
+        @if (!VM.GapsLoaded)
+        {
+            <p class="text-muted small mb-0">Tap "Check gaps" to see which numbered series you're missing books from.</p>
+        }
+        else if (VM.SeriesGaps.Count == 0)
+        {
+            <p class="text-muted small mb-0">No gaps found — all your numbered series are complete!</p>
+        }
+        else
+        {
+            @foreach (var gap in VM.SeriesGaps)
+            {
+                <div class="mb-3 @(gap != VM.SeriesGaps.Last() ? "pb-3 border-bottom" : "")">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <a href="@($"/series/{gap.SeriesId}")" class="fw-semibold text-decoration-none">@gap.SeriesName</a>
+                            @if (gap.Author is not null)
+                            {
+                                <span class="text-muted small ms-1">by @gap.Author</span>
+                            }
+                        </div>
+                        <span class="badge bg-warning text-dark">@gap.OwnedCount / @gap.ExpectedCount</span>
+                    </div>
+                    @if (gap.MissingPositions.Count > 0)
+                    {
+                        <div class="mt-1 small">
+                            <span class="text-muted">Missing:</span>
+                            @foreach (var pos in gap.MissingPositions)
+                            {
+                                <span class="badge bg-danger me-1">#@pos</span>
+                            }
+                        </div>
+                    }
+                    <details class="mt-1">
+                        <summary class="small text-muted" style="cursor: pointer;">You have @gap.OwnedBooks.Count books</summary>
+                        <ul class="list-unstyled small mt-1 mb-0 ms-2">
+                            @foreach (var book in gap.OwnedBooks)
+                            {
+                                <li>
+                                    @if (book.SeriesOrder.HasValue)
+                                    {
+                                        <span class="text-muted">#@book.SeriesOrder</span>
+                                    }
+                                    <a href="@($"/books/{book.Id}")" class="text-decoration-none">@book.Title</a>
+                                </li>
+                            }
+                        </ul>
+                    </details>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@* Wishlist items — books Drew is looking for *@
+<div class="card mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h2 class="h5 mb-0">Wishlist</h2>
+        <div class="d-flex gap-2">
+            @if (VM.WishlistLoaded)
+            {
+                <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => VM.ShowingQuickAdd = !VM.ShowingQuickAdd">
+                    @(VM.ShowingQuickAdd ? "Cancel" : "Quick add")
+                </button>
+            }
+            else
+            {
+                <button type="button" class="btn btn-outline-primary btn-sm" @onclick="VM.LoadWishlistAsync">
+                    Load list
+                </button>
+            }
+        </div>
+    </div>
+    <div class="card-body">
+        @if (!VM.WishlistLoaded)
+        {
+            <p class="text-muted small mb-0">Tap "Load list" to see books you're looking for.</p>
+        }
+        else
+        {
+            @if (VM.ShowingQuickAdd)
+            {
+                <div class="p-3 bg-light rounded mb-3">
+                    <div class="form-text mb-2">
+                        Use Quick add for books the lookup search can't find — out-of-print, self-published, or anything not on Open Library / Google Books / Trove.
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-12 col-md-4">
+                            <input type="text" class="form-control form-control-sm" placeholder="Title" @bind="VM.QuickAdd.Title" />
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <input type="text" class="form-control form-control-sm" placeholder="Author" @bind="VM.QuickAdd.Author" />
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <input type="text" class="form-control form-control-sm" placeholder="ISBN (optional)" @bind="VM.QuickAdd.Isbn" />
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <select class="form-select form-select-sm" @bind="VM.QuickAdd.Priority">
+                                @foreach (var p in Enum.GetValues<WishlistPriority>())
+                                {
+                                    <option value="@p">@p</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-1">
+                            <button type="button" class="btn btn-success btn-sm w-100" @onclick="VM.AddManualAsync">Add</button>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if (VM.Wishlist.Count == 0)
+            {
+                <p class="text-muted small mb-0">Your wishlist is empty. Search for a book above to add one.</p>
+            }
+            else
+            {
+                @foreach (var item in VM.Wishlist)
+                {
+                    <div class="d-flex gap-3 align-items-center py-2 @(item != VM.Wishlist.Last() ? "border-bottom" : "")">
+                        @if (!string.IsNullOrWhiteSpace(item.CoverUrl))
+                        {
+                            <img src="@item.CoverUrl" alt="" loading="lazy" decoding="async"
+                                 class="rounded flex-shrink-0"
+                                 style="width: 40px; height: 56px; object-fit: cover;" />
+                        }
+                        else
+                        {
+                            <div class="rounded bg-light d-flex align-items-center justify-content-center flex-shrink-0"
+                                 style="width: 40px; height: 56px;">
+                                <span class="text-muted small">--</span>
+                            </div>
+                        }
+                        <div class="flex-grow-1 min-width-0">
+                            <div class="fw-semibold text-truncate">@item.Title</div>
+                            <div class="text-muted small">@item.Author</div>
+                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                <span class="badge @WishlistViewModel.PriorityBadgeClass(item.Priority)">@item.Priority</span>
+                                @if (item.Isbn is not null)
+                                {
+                                    <span class="badge bg-light text-dark border font-monospace">@item.Isbn</span>
+                                }
+                                @if (item.SeriesName is not null)
+                                {
+                                    <span class="badge bg-light text-dark border">
+                                        @item.SeriesName
+                                        @if (item.SeriesOrder.HasValue)
+                                        {
+                                            <span> #@item.SeriesOrder</span>
+                                        }
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                        <div class="d-flex flex-column gap-1 flex-shrink-0">
+                            <button type="button" class="btn btn-success btn-sm" @onclick="() => BoughtAsync(item)" title="Mark as bought — adds to library with follow-up tag">
+                                Bought
+                            </button>
+                            <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => VM.RemoveFromWishlistAsync(item.Id)" title="Remove from list">
+                                Remove
+                            </button>
+                        </div>
+                    </div>
+                }
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private bool AdvancedAllEmpty =>
+        string.IsNullOrWhiteSpace(VM.AdvancedTitle)
+        && string.IsNullOrWhiteSpace(VM.AdvancedAuthor)
+        && string.IsNullOrWhiteSpace(VM.AdvancedIsbn);
+
+    private async Task HandleSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SearchAsync();
+    }
+
+    private async Task HandleAdvancedKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !AdvancedAllEmpty) await SearchAdvancedAsync();
+    }
+
+    private Task SearchAsync() => VM.SearchAsync();
+
+    private Task SearchAdvancedAsync() => VM.SearchAdvancedAsync();
+
+    private async Task AddCandidateAsync(WishlistViewModel.WishlistCandidate candidate)
+    {
+        // Auto-load the wishlist if it hasn't been opened yet so the
+        // newly-added row appears under the list rather than going
+        // invisible until the user taps Load list.
+        if (!VM.WishlistLoaded)
+        {
+            await VM.LoadWishlistAsync();
+        }
+        await VM.AddCandidateAsync(candidate);
+    }
+
+    private async Task BoughtAsync(WishlistViewModel.WishlistRow item)
+    {
+        var bookId = await VM.MarkAsBoughtAsync(item);
+        if (bookId.HasValue)
+        {
+            Nav.NavigateTo($"/books/{bookId}");
+        }
+    }
+}

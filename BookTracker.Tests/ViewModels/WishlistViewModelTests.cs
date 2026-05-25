@@ -1,0 +1,482 @@
+using BookTracker.Data.Models;
+using BookTracker.Web.Services;
+using BookTracker.Web.ViewModels;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
+
+namespace BookTracker.Tests.ViewModels;
+
+[Trait("Category", TestCategories.Integration)]
+public class WishlistViewModelTests
+{
+    private readonly TestDbContextFactory _factory = new();
+    private readonly IBookLookupService _lookup = Substitute.For<IBookLookupService>();
+
+    private WishlistViewModel CreateVm() =>
+        new(_factory, _lookup, NullLogger<WishlistViewModel>.Instance);
+
+    [Fact]
+    public async Task SearchAsync_IsbnShapedQuery_CallsIsbnLookupAndPopulatesSingleCandidate()
+    {
+        // 13-digit numeric query routes to LookupByIsbnAsync (single
+        // candidate or null) rather than the title/author search.
+        _lookup.LookupByIsbnAsync("9780552131063", Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: "9780552131063",
+                Title: "Mort",
+                Subtitle: null,
+                Author: "Terry Pratchett",
+                Publisher: "Corgi",
+                GenreCandidates: [],
+                DatePrinted: null,
+                CoverUrl: "https://covers.example/mort.jpg",
+                Source: "Open Library",
+                Series: null,
+                SeriesNumber: null,
+                SeriesNumberRaw: null));
+
+        var vm = CreateVm();
+        vm.SearchQuery = "9780552131063";
+        await vm.SearchAsync();
+
+        var candidate = Assert.Single(vm.SearchCandidates);
+        Assert.Equal("Mort", candidate.Title);
+        Assert.Equal("Terry Pratchett", candidate.Author);
+        Assert.Equal("https://covers.example/mort.jpg", candidate.CoverUrl);
+        Assert.Equal("9780552131063", Assert.Single(candidate.Isbns));
+
+        // Title/author search must NOT have been called for an ISBN-shaped query.
+        await _lookup.DidNotReceive().SearchByTitleAuthorAsync(
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SearchAsync_TextQuery_CallsTitleAuthorSearchAndPopulatesCandidates()
+    {
+        // Non-ISBN-shaped query routes to SearchByTitleAuthorAsync —
+        // up to 10 candidates. ISBNs come back empty (BookSearchCandidate
+        // is work-level; ISBN-less wishlist entries are still valid).
+        _lookup.SearchByTitleAuthorAsync("Foundation", null, Arg.Any<CancellationToken>())
+            .Returns([
+                new BookSearchCandidate(
+                    WorkKey: "/works/OL1W",
+                    Title: "Foundation",
+                    Author: "Isaac Asimov",
+                    FirstPublishYear: 1951,
+                    EditionCount: 50,
+                    CoverUrl: "https://covers.example/foundation.jpg",
+                    OpenLibraryUrl: null),
+                new BookSearchCandidate(
+                    WorkKey: "/works/OL2W",
+                    Title: "Foundation and Empire",
+                    Author: "Isaac Asimov",
+                    FirstPublishYear: 1952,
+                    EditionCount: 30,
+                    CoverUrl: null,
+                    OpenLibraryUrl: null),
+            ]);
+
+        var vm = CreateVm();
+        vm.SearchQuery = "Foundation";
+        await vm.SearchAsync();
+
+        Assert.Equal(2, vm.SearchCandidates.Count);
+        Assert.All(vm.SearchCandidates, c => Assert.Empty(c.Isbns));
+        Assert.Contains(vm.SearchCandidates, c => c.Title == "Foundation");
+    }
+
+    [Fact]
+    public async Task SearchAsync_IsbnAlreadyOwned_FlagsCandidateWithBookIdAndDoesNotBlockAdd()
+    {
+        // Drew's case 2026-05-25: ISBN search for a book he already owns
+        // should warn before he adds it to the wishlist (still allows the
+        // add — backup-copy intent is legitimate — just surfaces the
+        // duplicate so it's a conscious choice).
+        int bookId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var author = new Author { Name = "Tolkien" };
+            var book = new Book
+            {
+                Title = "The Hobbit",
+                Works = [new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+                Editions = [new Edition { Isbn = "9780261103252", Format = BookFormat.Hardcover }],
+            };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            bookId = book.Id;
+        }
+
+        _lookup.LookupByIsbnAsync("9780261103252", Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: "9780261103252",
+                Title: "The Hobbit",
+                Subtitle: null, Author: "Tolkien", Publisher: null,
+                GenreCandidates: [], DatePrinted: null,
+                CoverUrl: null, Source: "Open Library",
+                Series: null, SeriesNumber: null, SeriesNumberRaw: null));
+
+        var vm = CreateVm();
+        vm.SearchQuery = "9780261103252";
+        await vm.SearchAsync();
+
+        var candidate = Assert.Single(vm.SearchCandidates);
+        Assert.Equal(bookId, candidate.AlreadyOwnedBookId);
+        Assert.Null(candidate.AlreadyWishlistedItemId);
+    }
+
+    [Fact]
+    public async Task SearchAsync_IsbnAlreadyOnWishlist_FlagsCandidateWithWishlistItemId()
+    {
+        // Same shape but the ISBN matches an existing wishlist row
+        // (either the legacy single column or the new ISBN table — this
+        // test seeds via the new table to cover the union branch).
+        int wishlistId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var item = new WishlistItem
+            {
+                Title = "Foundation",
+                Author = "Asimov",
+                Isbns = [new WishlistItemIsbn { Isbn = "9780553293357" }],
+            };
+            db.WishlistItems.Add(item);
+            await db.SaveChangesAsync();
+            wishlistId = item.Id;
+        }
+
+        _lookup.LookupByIsbnAsync("9780553293357", Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: "9780553293357",
+                Title: "Foundation",
+                Subtitle: null, Author: "Asimov", Publisher: null,
+                GenreCandidates: [], DatePrinted: null,
+                CoverUrl: null, Source: "Open Library",
+                Series: null, SeriesNumber: null, SeriesNumberRaw: null));
+
+        var vm = CreateVm();
+        vm.SearchQuery = "9780553293357";
+        await vm.SearchAsync();
+
+        var candidate = Assert.Single(vm.SearchCandidates);
+        Assert.Null(candidate.AlreadyOwnedBookId);
+        Assert.Equal(wishlistId, candidate.AlreadyWishlistedItemId);
+    }
+
+    [Fact]
+    public async Task SearchAsync_IsbnNeitherOwnedNorWishlisted_LeavesBothFlagsNull()
+    {
+        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: "9789999999999",
+                Title: "Unowned",
+                Subtitle: null, Author: "Nobody", Publisher: null,
+                GenreCandidates: [], DatePrinted: null,
+                CoverUrl: null, Source: "Open Library",
+                Series: null, SeriesNumber: null, SeriesNumberRaw: null));
+
+        var vm = CreateVm();
+        vm.SearchQuery = "9789999999999";
+        await vm.SearchAsync();
+
+        var candidate = Assert.Single(vm.SearchCandidates);
+        Assert.Null(candidate.AlreadyOwnedBookId);
+        Assert.Null(candidate.AlreadyWishlistedItemId);
+    }
+
+    [Fact]
+    public async Task SearchAsync_LookupThrows_SetsErrorMessageAndLeavesCandidatesEmpty()
+    {
+        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns<BookLookupResult?>(_ => throw new HttpRequestException("upstream down"));
+
+        var vm = CreateVm();
+        vm.SearchQuery = "9780552131063";
+        await vm.SearchAsync();
+
+        Assert.NotNull(vm.SearchError);
+        Assert.Empty(vm.SearchCandidates);
+        Assert.True(vm.SearchedOnce);
+    }
+
+    [Fact]
+    public async Task SearchAsync_EmptyQuery_NoOps()
+    {
+        // Defensive — the page's Search button is disabled while empty,
+        // but the VM is the single source of truth.
+        var vm = CreateVm();
+        vm.SearchQuery = "   ";
+        await vm.SearchAsync();
+
+        Assert.False(vm.SearchedOnce);
+        Assert.Empty(vm.SearchCandidates);
+        await _lookup.DidNotReceive().LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _lookup.DidNotReceive().SearchByTitleAuthorAsync(
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SearchAdvancedAsync_TitleAndAuthor_CallsSearchByTitleAuthorWithBothFields()
+    {
+        // The motivating case: "Martin Grant" the author surfaced books
+        // with "Martin" / "Grant" in the title under the simple query
+        // because the wrapper put everything in the title field. With
+        // the advanced expander the author field is scoped on its own.
+        _lookup.SearchByTitleAuthorAsync("mutant", "Martin Grant", Arg.Any<CancellationToken>())
+            .Returns([
+                new BookSearchCandidate(
+                    WorkKey: "/works/OL1W",
+                    Title: "Mutant Trooper",
+                    Author: "Martin Grant",
+                    FirstPublishYear: null, EditionCount: null,
+                    CoverUrl: null, OpenLibraryUrl: null),
+            ]);
+
+        var vm = CreateVm();
+        vm.AdvancedSearchOpen = true;
+        vm.AdvancedTitle = "mutant";
+        vm.AdvancedAuthor = "Martin Grant";
+        await vm.SearchAdvancedAsync();
+
+        await _lookup.Received(1).SearchByTitleAuthorAsync(
+            "mutant", "Martin Grant", Arg.Any<CancellationToken>());
+        Assert.Single(vm.SearchCandidates);
+    }
+
+    [Fact]
+    public async Task SearchAdvancedAsync_AuthorOnly_PassesNullForTitle()
+    {
+        _lookup.SearchByTitleAuthorAsync(null, "Martin Grant", Arg.Any<CancellationToken>())
+            .Returns([
+                new BookSearchCandidate(
+                    WorkKey: "/works/OL1W",
+                    Title: "Mutant Trooper",
+                    Author: "Martin Grant",
+                    FirstPublishYear: null, EditionCount: null,
+                    CoverUrl: null, OpenLibraryUrl: null),
+            ]);
+
+        var vm = CreateVm();
+        vm.AdvancedSearchOpen = true;
+        vm.AdvancedAuthor = "Martin Grant";
+        await vm.SearchAdvancedAsync();
+
+        await _lookup.Received(1).SearchByTitleAuthorAsync(
+            null, "Martin Grant", Arg.Any<CancellationToken>());
+        Assert.Single(vm.SearchCandidates);
+    }
+
+    [Fact]
+    public async Task SearchAdvancedAsync_IsbnFieldFilled_WinsOverTitleAndAuthor()
+    {
+        // The ISBN field is the more specific identifier; if filled it
+        // takes priority and routes to LookupByIsbnAsync with the same
+        // duplicate-detection treatment as the simple-box ISBN path.
+        _lookup.LookupByIsbnAsync("9780261103252", Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: "9780261103252",
+                Title: "The Hobbit",
+                Subtitle: null, Author: "Tolkien", Publisher: null,
+                GenreCandidates: [], DatePrinted: null,
+                CoverUrl: null, Source: "Open Library",
+                Series: null, SeriesNumber: null, SeriesNumberRaw: null));
+
+        var vm = CreateVm();
+        vm.AdvancedSearchOpen = true;
+        vm.AdvancedTitle = "Something Else";
+        vm.AdvancedAuthor = "Someone Else";
+        vm.AdvancedIsbn = "9780261103252";
+        await vm.SearchAdvancedAsync();
+
+        await _lookup.Received(1).LookupByIsbnAsync("9780261103252", Arg.Any<CancellationToken>());
+        await _lookup.DidNotReceive().SearchByTitleAuthorAsync(
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        var candidate = Assert.Single(vm.SearchCandidates);
+        Assert.Equal("The Hobbit", candidate.Title);
+    }
+
+    [Fact]
+    public async Task SearchAdvancedAsync_AllFieldsEmpty_NoOps()
+    {
+        var vm = CreateVm();
+        vm.AdvancedSearchOpen = true;
+        await vm.SearchAdvancedAsync();
+
+        Assert.False(vm.SearchedOnce);
+        Assert.Empty(vm.SearchCandidates);
+        await _lookup.DidNotReceive().LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _lookup.DidNotReceive().SearchByTitleAuthorAsync(
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SearchAdvancedAsync_InvalidIsbn_SetsErrorMessage()
+    {
+        // ISBN field with non-ISBN content (e.g. user typed a title there
+        // by mistake) surfaces a validation error instead of routing to
+        // either lookup path.
+        var vm = CreateVm();
+        vm.AdvancedSearchOpen = true;
+        vm.AdvancedIsbn = "not an isbn";
+        await vm.SearchAdvancedAsync();
+
+        Assert.NotNull(vm.SearchError);
+        Assert.Empty(vm.SearchCandidates);
+        await _lookup.DidNotReceive().LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ClearSearch_AlsoClearsAdvancedFields()
+    {
+        var vm = CreateVm();
+        vm.AdvancedTitle = "x";
+        vm.AdvancedAuthor = "y";
+        vm.AdvancedIsbn = "9780000000001";
+        vm.SearchQuery = "simple";
+
+        vm.ClearSearch();
+
+        Assert.Equal("", vm.SearchQuery);
+        Assert.Equal("", vm.AdvancedTitle);
+        Assert.Equal("", vm.AdvancedAuthor);
+        Assert.Equal("", vm.AdvancedIsbn);
+    }
+
+    [Fact]
+    public async Task AddCandidateAsync_PersistsCoverUrlAndIsbnsInBothColumns()
+    {
+        // Candidate from an ISBN lookup populates the legacy single
+        // Isbn column (for back-compat row display) AND the new
+        // WishlistItemIsbn table (for PR D's scan-flag lookup).
+        var vm = CreateVm();
+        var candidate = new WishlistViewModel.WishlistCandidate(
+            Title: "The Hobbit",
+            Author: "Tolkien",
+            Isbns: ["9780261103252"],
+            CoverUrl: "https://covers.example/hobbit.jpg",
+            Source: "Open Library");
+
+        var row = await vm.AddCandidateAsync(candidate);
+
+        Assert.NotNull(row);
+        Assert.Equal("The Hobbit", row!.Title);
+        Assert.Equal("https://covers.example/hobbit.jpg", row.CoverUrl);
+        Assert.Equal("9780261103252", row.Isbn);
+
+        using var verify = _factory.CreateDbContext();
+        var saved = await verify.WishlistItems
+            .Include(w => w.Isbns)
+            .SingleAsync();
+        Assert.Equal("Tolkien", saved.Author);
+        Assert.Equal("https://covers.example/hobbit.jpg", saved.CoverUrl);
+        Assert.Equal("9780261103252", saved.Isbn); // legacy column
+        var isbnRow = Assert.Single(saved.Isbns);   // new table
+        Assert.Equal("9780261103252", isbnRow.Isbn);
+    }
+
+    [Fact]
+    public async Task AddCandidateAsync_NoIsbns_PersistsWithoutIsbnRows()
+    {
+        // Title/author search candidates have no ISBNs. Wishlist row
+        // saves anyway; PR D's scan-flag simply won't fire for them.
+        var vm = CreateVm();
+        var candidate = new WishlistViewModel.WishlistCandidate(
+            Title: "Some Pre-ISBN Book",
+            Author: "Author",
+            Isbns: [],
+            CoverUrl: null,
+            Source: "Open Library");
+
+        var row = await vm.AddCandidateAsync(candidate);
+
+        Assert.NotNull(row);
+        Assert.Null(row!.Isbn);
+
+        using var verify = _factory.CreateDbContext();
+        var saved = await verify.WishlistItems.Include(w => w.Isbns).SingleAsync();
+        Assert.Null(saved.Isbn);
+        Assert.Empty(saved.Isbns);
+    }
+
+    [Fact]
+    public async Task AddCandidateAsync_NoTitle_ReturnsNullWithoutSaving()
+    {
+        var vm = CreateVm();
+        var candidate = new WishlistViewModel.WishlistCandidate(
+            Title: null,
+            Author: "Author",
+            Isbns: ["9780000000001"],
+            CoverUrl: null,
+            Source: "Open Library");
+
+        var row = await vm.AddCandidateAsync(candidate);
+
+        Assert.Null(row);
+        using var verify = _factory.CreateDbContext();
+        Assert.Empty(verify.WishlistItems);
+    }
+
+    [Fact]
+    public async Task AddManualAsync_WithIsbn_AlsoWritesToWishlistItemIsbns()
+    {
+        // QuickAdd populates the new ISBN table too so PR D's scan-flag
+        // catches manually-entered wishlist rows the same way it catches
+        // search-and-add ones.
+        var vm = CreateVm();
+        vm.QuickAdd.Title = "Manual Title";
+        vm.QuickAdd.Author = "Manual Author";
+        vm.QuickAdd.Isbn = "9781234567897";
+
+        await vm.AddManualAsync();
+
+        using var verify = _factory.CreateDbContext();
+        var saved = await verify.WishlistItems.Include(w => w.Isbns).SingleAsync();
+        Assert.Equal("9781234567897", saved.Isbn);
+        Assert.Equal("9781234567897", Assert.Single(saved.Isbns).Isbn);
+    }
+
+    [Fact]
+    public async Task AddManualAsync_NoIsbn_LeavesNewTableEmpty()
+    {
+        var vm = CreateVm();
+        vm.QuickAdd.Title = "Manual Title";
+        vm.QuickAdd.Author = "Manual Author";
+        vm.QuickAdd.Isbn = null;
+
+        await vm.AddManualAsync();
+
+        using var verify = _factory.CreateDbContext();
+        var saved = await verify.WishlistItems.Include(w => w.Isbns).SingleAsync();
+        Assert.Null(saved.Isbn);
+        Assert.Empty(saved.Isbns);
+    }
+
+    [Fact]
+    public async Task RemoveFromWishlistAsync_CascadesIsbns()
+    {
+        // FK cascade from WishlistItem → WishlistItemIsbn means removing
+        // the parent cleans up the child ISBN rows. Locks the migration's
+        // OnDelete behaviour.
+        var vm = CreateVm();
+        await vm.AddCandidateAsync(new WishlistViewModel.WishlistCandidate(
+            Title: "X",
+            Author: "Y",
+            Isbns: ["9780000000001", "9780000000002"],
+            CoverUrl: null,
+            Source: "test"));
+
+        int itemId;
+        using (var db = _factory.CreateDbContext())
+        {
+            itemId = db.WishlistItems.Single().Id;
+            Assert.Equal(2, db.WishlistItemIsbns.Count());
+        }
+
+        await vm.RemoveFromWishlistAsync(itemId);
+
+        using var verify = _factory.CreateDbContext();
+        Assert.Empty(verify.WishlistItems);
+        Assert.Empty(verify.WishlistItemIsbns);
+    }
+}

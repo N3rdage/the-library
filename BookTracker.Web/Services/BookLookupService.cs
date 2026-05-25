@@ -50,14 +50,33 @@ public partial class BookLookupService(
 
         try
         {
-            var query = new List<string>();
-            if (t.Length > 0) query.Add($"title={Uri.EscapeDataString(t)}");
-            if (a.Length > 0) query.Add($"author={Uri.EscapeDataString(a)}");
-            // limit=10 keeps the UI manageable; fields= trims the response
-            // payload (Open Library's default includes hundreds of fields
-            // per row).
-            query.Add("limit=10");
-            query.Add("fields=key,title,author_name,first_publish_year,edition_count,cover_i");
+            // Build a Lucene field-scoped query through the `q=` parameter.
+            // The simpler `title=`/`author=` URL parameters do loose
+            // word-by-word matching — `author=Martin Grant` matches any
+            // document with "Martin" OR "Grant" in the author field, so
+            // searching for an author called "Martin Grant" surfaces a
+            // flood of unrelated authors with either name. The `q=`
+            // parameter accepts Lucene syntax including `field:"phrase"`
+            // for phrase matching, which is what users actually want
+            // when typing a person's name. Caveat: single-word phrases
+            // still behave like substring matches against the field
+            // (e.g. `author:"Grant"` matches "Hugh Grant" AND "Martin
+            // Grant") — phrase only constrains positional order, not
+            // word boundaries.
+            var qParts = new List<string>();
+            if (t.Length > 0) qParts.Add($"title:\"{EscapeLuceneValue(t)}\"");
+            if (a.Length > 0) qParts.Add($"author:\"{EscapeLuceneValue(a)}\"");
+            var q = string.Join(" AND ", qParts);
+
+            var query = new List<string>
+            {
+                $"q={Uri.EscapeDataString(q)}",
+                // limit=10 keeps the UI manageable; fields= trims the response
+                // payload (Open Library's default includes hundreds of fields
+                // per row).
+                "limit=10",
+                "fields=key,title,author_name,first_publish_year,edition_count,cover_i",
+            };
 
             var url = $"https://openlibrary.org/search.json?{string.Join("&", query)}";
             var doc = await http.GetFromJsonAsync<OpenLibrarySearchResponse>(url, ct);
@@ -81,6 +100,16 @@ public partial class BookLookupService(
             return [];
         }
     }
+
+    /// <summary>Escape the two characters Lucene treats specially *inside*
+    /// a phrase: backslash and double-quote. Other Lucene metacharacters
+    /// (parentheses, plus, minus, braces, brackets, asterisk, question,
+    /// colon, caret, tilde, pipe, ampersand, bang) lose their special
+    /// meaning inside double-quoted phrases, so they don't need escaping
+    /// here. Names of real authors / titles rarely contain `"` or `\`,
+    /// but defensive escaping costs us nothing.</summary>
+    private static string EscapeLuceneValue(string value) =>
+        value.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
     private async Task<BookLookupResult?> TryOpenLibraryAsync(string isbn, CancellationToken ct)
     {

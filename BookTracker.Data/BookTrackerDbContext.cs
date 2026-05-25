@@ -14,6 +14,7 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
     public DbSet<Series> Series => Set<Series>();
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<WishlistItem> WishlistItems => Set<WishlistItem>();
+    public DbSet<WishlistItemIsbn> WishlistItemIsbns => Set<WishlistItemIsbn>();
     public DbSet<MaintenanceLog> MaintenanceLogs => Set<MaintenanceLog>();
     public DbSet<Work> Works => Set<Work>();
     public DbSet<Author> Authors => Set<Author>();
@@ -127,6 +128,15 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
 
         modelBuilder.Entity<WishlistItem>()
             .HasIndex(w => w.Isbn);
+
+        modelBuilder.Entity<WishlistItemIsbn>()
+            .HasOne(i => i.WishlistItem)
+            .WithMany(w => w.Isbns)
+            .HasForeignKey(i => i.WishlistItemId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<WishlistItemIsbn>()
+            .HasIndex(i => i.Isbn);
 
         modelBuilder.Entity<Tag>()
             .HasIndex(t => t.Name)
