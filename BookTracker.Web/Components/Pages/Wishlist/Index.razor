@@ -23,32 +23,93 @@
         <h2 class="h5 mb-0">Find a book to add</h2>
     </div>
     <div class="card-body">
-        <div class="input-group mb-2">
-            <input type="text" class="form-control" placeholder="ISBN, or title and / or author"
-                   @bind="VM.SearchQuery" @bind:event="oninput"
-                   @onkeyup="HandleSearchKeyUp" />
-            <button type="button" class="btn btn-primary" @onclick="SearchAsync"
-                    disabled="@(VM.Searching || string.IsNullOrWhiteSpace(VM.SearchQuery))">
-                @if (VM.Searching)
-                {
-                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
-                    <span>Searching…</span>
-                }
-                else
-                {
-                    <span>Search</span>
-                }
-            </button>
-            @if (VM.SearchedOnce)
-            {
-                <button type="button" class="btn btn-outline-secondary" @onclick="VM.ClearSearch" disabled="@VM.Searching">
-                    Clear
+        @if (!VM.AdvancedSearchOpen)
+        {
+            <div class="input-group mb-2">
+                <input type="text" class="form-control" placeholder="ISBN, or title and / or author"
+                       @bind="VM.SearchQuery" @bind:event="oninput"
+                       @onkeyup="HandleSearchKeyUp" />
+                <button type="button" class="btn btn-primary" @onclick="SearchAsync"
+                        disabled="@(VM.Searching || string.IsNullOrWhiteSpace(VM.SearchQuery))">
+                    @if (VM.Searching)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        <span>Searching…</span>
+                    }
+                    else
+                    {
+                        <span>Search</span>
+                    }
                 </button>
-            }
-        </div>
-        <div class="form-text mb-2">
-            Type a 10- or 13-digit ISBN for a precise hit, or words from a title / author for up to ten candidates.
-        </div>
+                @if (VM.SearchedOnce)
+                {
+                    <button type="button" class="btn btn-outline-secondary" @onclick="VM.ClearSearch" disabled="@VM.Searching">
+                        Clear
+                    </button>
+                }
+            </div>
+            <div class="form-text mb-2 d-flex flex-wrap gap-3 align-items-center">
+                <span>Type a 10- or 13-digit ISBN for a precise hit, or words from a title / author for up to ten candidates.</span>
+                <button type="button" class="btn btn-link btn-sm p-0 align-baseline" @onclick="() => VM.AdvancedSearchOpen = true">
+                    Advanced search ▾
+                </button>
+            </div>
+        }
+        else
+        {
+            @* Field-scoped search — Title / Author / ISBN as separate
+               inputs. Solves Open Library's title-vs-author ambiguity
+               (e.g. searching "Martin Grant" the author surfaced books
+               with "Martin" / "Grant" in the title under the simple
+               query, because the upstream wrapper put everything in
+               the title field). ISBN field wins if filled. *@
+            <div class="row g-2 mb-2">
+                <div class="col-12 col-md-5">
+                    <label class="form-label small mb-1">Title</label>
+                    <input type="text" class="form-control form-control-sm"
+                           @bind="VM.AdvancedTitle" @bind:event="oninput"
+                           @onkeyup="HandleAdvancedKeyUp" />
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label small mb-1">Author</label>
+                    <input type="text" class="form-control form-control-sm"
+                           @bind="VM.AdvancedAuthor" @bind:event="oninput"
+                           @onkeyup="HandleAdvancedKeyUp" />
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label small mb-1">ISBN</label>
+                    <input type="text" class="form-control form-control-sm"
+                           @bind="VM.AdvancedIsbn" @bind:event="oninput"
+                           @onkeyup="HandleAdvancedKeyUp" />
+                </div>
+            </div>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                <button type="button" class="btn btn-primary btn-sm" @onclick="SearchAdvancedAsync"
+                        disabled="@(VM.Searching || AdvancedAllEmpty)">
+                    @if (VM.Searching)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        <span>Searching…</span>
+                    }
+                    else
+                    {
+                        <span>Search</span>
+                    }
+                </button>
+                @if (VM.SearchedOnce || !AdvancedAllEmpty)
+                {
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="VM.ClearSearch" disabled="@VM.Searching">
+                        Clear
+                    </button>
+                }
+                <button type="button" class="btn btn-link btn-sm p-0 align-self-center" @onclick="() => VM.AdvancedSearchOpen = false">
+                    Hide advanced ▴
+                </button>
+            </div>
+            <div class="form-text mb-2">
+                ISBN wins if filled. Otherwise the typed Title + Author go to Open Library as separate fields — useful when an author's name is also common title words.
+            </div>
+        }
 
         @if (!string.IsNullOrEmpty(VM.SearchError))
         {
@@ -291,12 +352,24 @@
 </div>
 
 @code {
+    private bool AdvancedAllEmpty =>
+        string.IsNullOrWhiteSpace(VM.AdvancedTitle)
+        && string.IsNullOrWhiteSpace(VM.AdvancedAuthor)
+        && string.IsNullOrWhiteSpace(VM.AdvancedIsbn);
+
     private async Task HandleSearchKeyUp(KeyboardEventArgs e)
     {
         if (e.Key == "Enter") await SearchAsync();
     }
 
+    private async Task HandleAdvancedKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !AdvancedAllEmpty) await SearchAdvancedAsync();
+    }
+
     private Task SearchAsync() => VM.SearchAsync();
+
+    private Task SearchAdvancedAsync() => VM.SearchAdvancedAsync();
 
     private async Task AddCandidateAsync(WishlistViewModel.WishlistCandidate candidate)
     {

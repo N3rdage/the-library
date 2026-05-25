@@ -30,6 +30,17 @@ public class WishlistViewModel(
     public bool Searching { get; private set; }
     public string? SearchError { get; private set; }
 
+    /// <summary>True when the user has toggled the field-scoped search
+    /// expander. While open, the simple single-box query is hidden in
+    /// favour of separate Title / Author / ISBN inputs — solves the
+    /// "Martin Grant" ambiguity (Open Library's relevance ranks title
+    /// hits before author hits when both fields could match).</summary>
+    public bool AdvancedSearchOpen { get; set; }
+
+    public string AdvancedTitle { get; set; } = "";
+    public string AdvancedAuthor { get; set; } = "";
+    public string AdvancedIsbn { get; set; } = "";
+
     /// <summary>Candidates from the most recent search. Empty before any
     /// search has run; empty + SearchedOnce=true means the search ran
     /// and found nothing.</summary>
@@ -113,6 +124,81 @@ public class WishlistViewModel(
         }
     }
 
+    /// <summary>Field-scoped variant of SearchAsync. ISBN field wins if
+    /// filled (single-result lookup with the same duplicate-detection as
+    /// SearchAsync's ISBN branch); otherwise the typed Title + Author go
+    /// to SearchByTitleAuthorAsync as separate fields — distinguishing
+    /// "Martin Grant" the title-substring match from "Martin Grant" the
+    /// author. At least one field must be non-empty.</summary>
+    public async Task SearchAdvancedAsync(CancellationToken ct = default)
+    {
+        var title = (AdvancedTitle ?? "").Trim();
+        var author = (AdvancedAuthor ?? "").Trim();
+        var rawIsbn = (AdvancedIsbn ?? "").Trim();
+        if (string.IsNullOrEmpty(title) && string.IsNullOrEmpty(author) && string.IsNullOrEmpty(rawIsbn)) return;
+
+        Searching = true;
+        SearchError = null;
+        SearchCandidates = [];
+        try
+        {
+            if (!string.IsNullOrEmpty(rawIsbn))
+            {
+                var cleaned = new string(rawIsbn.Where(c => char.IsLetterOrDigit(c)).ToArray());
+                var isIsbn = cleaned.Length is >= 10 and <= 13
+                    && cleaned.All(c => char.IsDigit(c) || c is 'X' or 'x');
+                if (!isIsbn)
+                {
+                    SearchError = "ISBN must be 10 or 13 digits (optional trailing X for ISBN-10).";
+                    return;
+                }
+                var hit = await lookup.LookupByIsbnAsync(cleaned, ct);
+                if (hit is not null)
+                {
+                    var (ownedBookId, wishlistedItemId) =
+                        await FindDuplicateMatchesAsync(cleaned, ct);
+                    SearchCandidates = [new WishlistCandidate(
+                        Title: hit.Title,
+                        Author: hit.Author,
+                        Isbns: string.IsNullOrWhiteSpace(hit.Isbn) ? [] : [hit.Isbn],
+                        CoverUrl: hit.CoverUrl,
+                        Source: hit.Source,
+                        AlreadyOwnedBookId: ownedBookId,
+                        AlreadyWishlistedItemId: wishlistedItemId)];
+                }
+            }
+            else
+            {
+                // Both title + author land as separate fields on Open Library's
+                // structured search — solves the simple-box ambiguity for the
+                // "Martin Grant" case (author-scoped query no longer competes
+                // with title hits for "Martin" / "Grant").
+                var hits = await lookup.SearchByTitleAuthorAsync(
+                    string.IsNullOrEmpty(title) ? null : title,
+                    string.IsNullOrEmpty(author) ? null : author,
+                    ct);
+                SearchCandidates = hits
+                    .Select(c => new WishlistCandidate(
+                        Title: c.Title,
+                        Author: c.Author,
+                        Isbns: [],
+                        CoverUrl: c.CoverUrl,
+                        Source: "Open Library"))
+                    .ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Advanced wishlist search failed (Title={Title}, Author={Author}, Isbn={Isbn})", title, author, rawIsbn);
+            SearchError = "Search failed — the lookup service didn't respond. Try again, or use Quick add below.";
+        }
+        finally
+        {
+            Searching = false;
+            SearchedOnce = true;
+        }
+    }
+
     /// <summary>Returns (existing Book.Id if owned, existing WishlistItem.Id
     /// if wishlisted) for the given ISBN, or (null, null) for neither.
     /// Owned check hits Edition.Isbn (filtered-unique index → seek). Wishlist
@@ -139,6 +225,9 @@ public class WishlistViewModel(
     public void ClearSearch()
     {
         SearchQuery = "";
+        AdvancedTitle = "";
+        AdvancedAuthor = "";
+        AdvancedIsbn = "";
         SearchCandidates = [];
         SearchedOnce = false;
         SearchError = null;

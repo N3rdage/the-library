@@ -217,6 +217,133 @@ public class WishlistViewModelTests
     }
 
     [Fact]
+    public async Task SearchAdvancedAsync_TitleAndAuthor_CallsSearchByTitleAuthorWithBothFields()
+    {
+        // The motivating case: "Martin Grant" the author surfaced books
+        // with "Martin" / "Grant" in the title under the simple query
+        // because the wrapper put everything in the title field. With
+        // the advanced expander the author field is scoped on its own.
+        _lookup.SearchByTitleAuthorAsync("mutant", "Martin Grant", Arg.Any<CancellationToken>())
+            .Returns([
+                new BookSearchCandidate(
+                    WorkKey: "/works/OL1W",
+                    Title: "Mutant Trooper",
+                    Author: "Martin Grant",
+                    FirstPublishYear: null, EditionCount: null,
+                    CoverUrl: null, OpenLibraryUrl: null),
+            ]);
+
+        var vm = CreateVm();
+        vm.AdvancedSearchOpen = true;
+        vm.AdvancedTitle = "mutant";
+        vm.AdvancedAuthor = "Martin Grant";
+        await vm.SearchAdvancedAsync();
+
+        await _lookup.Received(1).SearchByTitleAuthorAsync(
+            "mutant", "Martin Grant", Arg.Any<CancellationToken>());
+        Assert.Single(vm.SearchCandidates);
+    }
+
+    [Fact]
+    public async Task SearchAdvancedAsync_AuthorOnly_PassesNullForTitle()
+    {
+        _lookup.SearchByTitleAuthorAsync(null, "Martin Grant", Arg.Any<CancellationToken>())
+            .Returns([
+                new BookSearchCandidate(
+                    WorkKey: "/works/OL1W",
+                    Title: "Mutant Trooper",
+                    Author: "Martin Grant",
+                    FirstPublishYear: null, EditionCount: null,
+                    CoverUrl: null, OpenLibraryUrl: null),
+            ]);
+
+        var vm = CreateVm();
+        vm.AdvancedSearchOpen = true;
+        vm.AdvancedAuthor = "Martin Grant";
+        await vm.SearchAdvancedAsync();
+
+        await _lookup.Received(1).SearchByTitleAuthorAsync(
+            null, "Martin Grant", Arg.Any<CancellationToken>());
+        Assert.Single(vm.SearchCandidates);
+    }
+
+    [Fact]
+    public async Task SearchAdvancedAsync_IsbnFieldFilled_WinsOverTitleAndAuthor()
+    {
+        // The ISBN field is the more specific identifier; if filled it
+        // takes priority and routes to LookupByIsbnAsync with the same
+        // duplicate-detection treatment as the simple-box ISBN path.
+        _lookup.LookupByIsbnAsync("9780261103252", Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: "9780261103252",
+                Title: "The Hobbit",
+                Subtitle: null, Author: "Tolkien", Publisher: null,
+                GenreCandidates: [], DatePrinted: null,
+                CoverUrl: null, Source: "Open Library",
+                Series: null, SeriesNumber: null, SeriesNumberRaw: null));
+
+        var vm = CreateVm();
+        vm.AdvancedSearchOpen = true;
+        vm.AdvancedTitle = "Something Else";
+        vm.AdvancedAuthor = "Someone Else";
+        vm.AdvancedIsbn = "9780261103252";
+        await vm.SearchAdvancedAsync();
+
+        await _lookup.Received(1).LookupByIsbnAsync("9780261103252", Arg.Any<CancellationToken>());
+        await _lookup.DidNotReceive().SearchByTitleAuthorAsync(
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        var candidate = Assert.Single(vm.SearchCandidates);
+        Assert.Equal("The Hobbit", candidate.Title);
+    }
+
+    [Fact]
+    public async Task SearchAdvancedAsync_AllFieldsEmpty_NoOps()
+    {
+        var vm = CreateVm();
+        vm.AdvancedSearchOpen = true;
+        await vm.SearchAdvancedAsync();
+
+        Assert.False(vm.SearchedOnce);
+        Assert.Empty(vm.SearchCandidates);
+        await _lookup.DidNotReceive().LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _lookup.DidNotReceive().SearchByTitleAuthorAsync(
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SearchAdvancedAsync_InvalidIsbn_SetsErrorMessage()
+    {
+        // ISBN field with non-ISBN content (e.g. user typed a title there
+        // by mistake) surfaces a validation error instead of routing to
+        // either lookup path.
+        var vm = CreateVm();
+        vm.AdvancedSearchOpen = true;
+        vm.AdvancedIsbn = "not an isbn";
+        await vm.SearchAdvancedAsync();
+
+        Assert.NotNull(vm.SearchError);
+        Assert.Empty(vm.SearchCandidates);
+        await _lookup.DidNotReceive().LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ClearSearch_AlsoClearsAdvancedFields()
+    {
+        var vm = CreateVm();
+        vm.AdvancedTitle = "x";
+        vm.AdvancedAuthor = "y";
+        vm.AdvancedIsbn = "9780000000001";
+        vm.SearchQuery = "simple";
+
+        vm.ClearSearch();
+
+        Assert.Equal("", vm.SearchQuery);
+        Assert.Equal("", vm.AdvancedTitle);
+        Assert.Equal("", vm.AdvancedAuthor);
+        Assert.Equal("", vm.AdvancedIsbn);
+    }
+
+    [Fact]
     public async Task AddCandidateAsync_PersistsCoverUrlAndIsbnsInBothColumns()
     {
         // Candidate from an ISBN lookup populates the legacy single
