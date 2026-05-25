@@ -35,4 +35,5 @@
 - [Runbook: prod SQL access](runbook_prod_sql_access.md) — prod Azure SQL needs temp firewall rule + public-access toggle + Entra auth; canonical pattern in `infra/refresh-local-db.ps1`.
 - [DBNull in Invoke-Sqlcmd](feedback_dbnull_in_invoke_sqlcmd.md) — SQL NULLs come back as `[DBNull]`, which is truthy in PowerShell; explicit `-is [System.DBNull]` check before any string coercion.
 - [Disposable scripts in .debug/](feedback_disposable_scripts_in_debug.md) — one-off data cleanups go in `.debug/*.ps1` (gitignored), not a `BookTracker.Tools.*` csproj.
-- [Pre-reference-capture arc](project_pre_reference_capture_arc.md) — ordered work queue after PR 2d (#290) and before reference-book mass capture: lookup-side contributors (#52), then Phases D+E mobile, then EditionNumber + BookStatus.Reference. Pick from top next session.
+- [Pre-reference-capture arc](project_pre_reference_capture_arc.md) — all three buckets closed 2026-05-24 (#292/#295/#297); flagged for retirement on next sync.
+- [Wishlist rework arc](project_wishlist_rework_arc.md) — four-PR arc splitting /shopping into bookcase-capture + bookshelf-consumption. PR A shipped 2026-05-25; PRs B (search-and-add), C (series-driven), D (Bookshelf surface + scan-flag) pending in order.
