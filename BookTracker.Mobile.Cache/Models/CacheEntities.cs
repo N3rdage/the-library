@@ -135,3 +135,45 @@ internal class CachedMeta
     [PrimaryKey] public string Key { get; set; } = string.Empty;
     public string Value { get; set; } = string.Empty;
 }
+
+// One row per wishlist item from the server snapshot. Same Id as the
+// server's WishlistItem.Id so local-bought references stay stable
+// across catalog refreshes. CoverUrl + Priority + DateAdded land here
+// as the WishlistPage display fields; the per-ISBN scan-flag lookup
+// goes via CachedWishlistItemIsbn (1:N).
+[Table("wishlist_items")]
+internal class CachedWishlistItem
+{
+    [PrimaryKey] public int Id { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string Author { get; set; } = string.Empty;
+    public string Priority { get; set; } = string.Empty;
+    public string? CoverUrl { get; set; }
+    public int? SeriesId { get; set; }
+    public int? SeriesOrder { get; set; }
+    public DateTime DateAdded { get; set; }
+}
+
+// One row per (WishlistItemId, Isbn). Indexed on Isbn so the ScanPage
+// scan-flag lookup is a B-tree seek. The server's WishlistSnapshotService
+// already unions legacy + per-row ISBNs into one list; the cache just
+// stores the flat shape.
+[Table("wishlist_item_isbns")]
+internal class CachedWishlistItemIsbn
+{
+    [PrimaryKey, AutoIncrement] public int RowId { get; set; }
+    [Indexed] public int WishlistItemId { get; set; }
+    [Indexed] public string Isbn { get; set; } = string.Empty;
+}
+
+// Local-only "bought" toggle state. Survives catalog refreshes —
+// orphan-tolerant: if a server wishlist row goes away (Drew captured
+// the book), the bought-local entry becomes harmless (the join
+// against CachedWishlistItem yields nothing). PR D's WishlistPage
+// filters out any CachedWishlistItem whose Id appears in this table.
+[Table("wishlist_bought_local")]
+internal class WishlistBoughtLocal
+{
+    [PrimaryKey] public int WishlistItemId { get; set; }
+    public DateTime MarkedAt { get; set; }
+}

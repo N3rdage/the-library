@@ -1,4 +1,5 @@
 using BookTracker.Shared.Catalog;
+using BookTracker.Shared.Wishlist;
 
 namespace BookTracker.Mobile.Cache;
 
@@ -95,6 +96,40 @@ public interface ICatalogCache
     /// mocked HttpMessageHandler.
     /// </summary>
     Task<string?> EnsureCoverCachedAsync(int bookId, HttpClient http, CancellationToken ct = default);
+
+    /// <summary>Wipes existing wishlist rows and rewrites from the
+    /// snapshot. Same wipe-and-rewrite shape as Authors / Series on the
+    /// catalog snapshot — the wishlist is small enough that delta-sync
+    /// adds complexity without payoff. WishlistBoughtLocal entries are
+    /// preserved across the rewrite (orphan-tolerant — entries whose
+    /// server row is gone become harmless no-ops).</summary>
+    Task PopulateWishlistAsync(WishlistSnapshot snapshot);
+
+    /// <summary>Returns the wishlist rows the user hasn't tapped
+    /// "bought" yet. Sort is server-side (priority desc, then date).
+    /// Backs the Bookshelf WishlistPage display. Cover URLs come back
+    /// as-is — caller fetches the bytes via HttpClient (lightweight,
+    /// not via the per-Book disk cache used for the catalog).</summary>
+    Task<IReadOnlyList<WishlistItemSnapshot>> GetWishlistAsync();
+
+    /// <summary>Marks a wishlist row as locally bought. Survives catalog
+    /// refresh — entries whose server row is gone (Drew captured the
+    /// book) become harmless. <see cref="GetWishlistAsync"/> excludes
+    /// any row whose Id is in this table.</summary>
+    Task MarkBoughtLocallyAsync(int wishlistItemId);
+
+    /// <summary>Undo a local "bought" mark — the row reappears in
+    /// <see cref="GetWishlistAsync"/>. Idempotent: no-op if the row
+    /// wasn't bought-marked.</summary>
+    Task UnmarkBoughtLocallyAsync(int wishlistItemId);
+
+    /// <summary>True when the given ISBN matches any wishlisted ISBN
+    /// (across all rows, including legacy single-Isbn rows and the new
+    /// per-row Isbns from PR B's WishlistItemIsbn table — the server
+    /// unions them at the snapshot layer). Bought-local rows are
+    /// excluded so a book the user just marked bought doesn't keep
+    /// flagging on subsequent scans. Backs ScanPage's wishlist badge.</summary>
+    Task<bool> IsWishlistedIsbnAsync(string isbn);
 }
 
 /// <summary>One series the user owns part of but not all of. Backs the

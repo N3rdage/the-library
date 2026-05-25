@@ -27,10 +27,33 @@ public class WishlistSnapshotService(
         // "what to buy next" semantics — high-priority items the user
         // added a while ago bubble to the top. Mobile UI can re-sort
         // client-side if it wants other orderings.
-        var items = await db.WishlistItems
+        //
+        // CoverUrl + Isbns added 2026-05-25 alongside PR B's schema
+        // additions. Isbns unions the legacy single Isbn column with
+        // the per-item WishlistItemIsbn rows (deduped, case-insensitive)
+        // so both shapes of wishlist row work the same way for the
+        // Bookshelf scan-flag.
+        var raw = await db.WishlistItems
             .AsNoTracking()
+            .Include(w => w.Isbns)
             .OrderByDescending(w => w.Priority)
             .ThenBy(w => w.DateAdded)
+            .Select(w => new
+            {
+                w.Id,
+                w.Title,
+                w.Author,
+                w.Priority,
+                w.Isbn,
+                w.SeriesId,
+                w.SeriesOrder,
+                w.DateAdded,
+                w.CoverUrl,
+                IsbnRows = w.Isbns.Select(i => i.Isbn).ToList(),
+            })
+            .ToListAsync(ct);
+
+        var items = raw
             .Select(w => new WishlistItemSnapshot(
                 w.Id,
                 w.Title,
@@ -39,12 +62,29 @@ public class WishlistSnapshotService(
                 w.Isbn,
                 w.SeriesId,
                 w.SeriesOrder,
-                w.DateAdded))
-            .ToListAsync(ct);
+                w.DateAdded,
+                CoverUrl: w.CoverUrl,
+                Isbns: UnionIsbns(w.Isbn, w.IsbnRows)))
+            .ToList();
 
         return new WishlistSnapshot(
             BuildInfo.ShortSha ?? "dev",
             DateTime.UtcNow,
             items);
+    }
+
+    /// <summary>Union the legacy single-Isbn column with the per-row
+    /// WishlistItemIsbn entries, deduped case-insensitively. Both
+    /// shapes of wishlist row (QuickAdd legacy + search-and-add
+    /// post-PR-B) flow through the same `Isbns` list on the wire.</summary>
+    private static IReadOnlyList<string> UnionIsbns(string? legacy, IReadOnlyList<string> rows)
+    {
+        var union = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(legacy)) union.Add(legacy);
+        foreach (var r in rows)
+        {
+            if (!string.IsNullOrWhiteSpace(r)) union.Add(r);
+        }
+        return union.ToList();
     }
 }

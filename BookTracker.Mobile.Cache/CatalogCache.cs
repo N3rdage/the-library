@@ -1,6 +1,7 @@
 using System.Text.Json;
 using BookTracker.Mobile.Cache.Models;
 using BookTracker.Shared.Catalog;
+using BookTracker.Shared.Wishlist;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SkiaSharp;
@@ -71,6 +72,14 @@ public class CatalogCache : ICatalogCache
         await _db.CreateTableAsync<CachedAuthor>();
         await _db.CreateTableAsync<CachedSeries>();
         await _db.CreateTableAsync<CachedMeta>();
+        // Wishlist tables — landed 2026-05-25 with PR D of the wishlist
+        // rework arc. CachedWishlistItem + CachedWishlistItemIsbn back
+        // the WishlistPage + ScanPage scan-flag; WishlistBoughtLocal
+        // is the local-only "user tapped bought" toggle that survives
+        // catalog refresh.
+        await _db.CreateTableAsync<CachedWishlistItem>();
+        await _db.CreateTableAsync<CachedWishlistItemIsbn>();
+        await _db.CreateTableAsync<WishlistBoughtLocal>();
 
         // Schema-evolution backfill: sqlite-net-pcl's CreateTableAsync
         // ALTERs an existing table to add new columns, but doesn't
@@ -807,4 +816,125 @@ public class CatalogCache : ICatalogCache
             return (Math.Max(1, scaled), longEdge);
         }
     }
+
+    // ---- Wishlist (PR D of the rework arc) ----
+
+    public async Task PopulateWishlistAsync(WishlistSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        // Wipe + rewrite atomically. Bought-local entries are NOT
+        // touched — they survive catalog refresh and become orphan-
+        // tolerant if a server row is removed (the join in
+        // GetWishlistAsync yields nothing for the missing row).
+        await Db.RunInTransactionAsync(conn =>
+        {
+            conn.DeleteAll<CachedWishlistItem>();
+            conn.DeleteAll<CachedWishlistItemIsbn>();
+
+            foreach (var item in snapshot.Items ?? [])
+            {
+                conn.Insert(new CachedWishlistItem
+                {
+                    Id = item.Id,
+                    Title = item.Title ?? "",
+                    Author = item.Author ?? "",
+                    Priority = item.Priority ?? "",
+                    CoverUrl = item.CoverUrl,
+                    SeriesId = item.SeriesId,
+                    SeriesOrder = item.SeriesOrder,
+                    DateAdded = item.DateAdded,
+                });
+
+                // Server unions legacy single Isbn + per-row Isbns into
+                // `Item.Isbns`. Mobile cache just stores the flat list.
+                foreach (var isbn in item.Isbns ?? [])
+                {
+                    if (string.IsNullOrWhiteSpace(isbn)) continue;
+                    conn.Insert(new CachedWishlistItemIsbn
+                    {
+                        WishlistItemId = item.Id,
+                        Isbn = isbn,
+                    });
+                }
+            }
+        });
+    }
+
+    public async Task<IReadOnlyList<WishlistItemSnapshot>> GetWishlistAsync()
+    {
+        var bought = (await Db.Table<WishlistBoughtLocal>().ToListAsync())
+            .Select(b => b.WishlistItemId)
+            .ToHashSet();
+
+        var items = await Db.Table<CachedWishlistItem>().ToListAsync();
+        var allIsbns = await Db.Table<CachedWishlistItemIsbn>().ToListAsync();
+        var isbnsByItem = allIsbns
+            .GroupBy(i => i.WishlistItemId)
+            .ToDictionary(g => g.Key, g => g.Select(i => i.Isbn).ToList());
+
+        return items
+            .Where(i => !bought.Contains(i.Id))
+            .OrderByDescending(i => PriorityRank(i.Priority))
+            .ThenBy(i => i.DateAdded)
+            .Select(i => new WishlistItemSnapshot(
+                i.Id,
+                i.Title,
+                i.Author,
+                i.Priority,
+                Isbn: null, // legacy single-column meaningless on the cache side
+                i.SeriesId,
+                i.SeriesOrder,
+                i.DateAdded,
+                CoverUrl: i.CoverUrl,
+                Isbns: isbnsByItem.GetValueOrDefault(i.Id, new List<string>())))
+            .ToList();
+    }
+
+    public async Task MarkBoughtLocallyAsync(int wishlistItemId)
+    {
+        // InsertOrReplace so re-marking is idempotent (updates the
+        // MarkedAt timestamp). PrimaryKey on WishlistItemId means one
+        // row per wishlist item.
+        await Db.InsertOrReplaceAsync(new WishlistBoughtLocal
+        {
+            WishlistItemId = wishlistItemId,
+            MarkedAt = DateTime.UtcNow,
+        });
+    }
+
+    public async Task UnmarkBoughtLocallyAsync(int wishlistItemId)
+    {
+        await Db.DeleteAsync<WishlistBoughtLocal>(wishlistItemId);
+    }
+
+    public async Task<bool> IsWishlistedIsbnAsync(string isbn)
+    {
+        if (string.IsNullOrWhiteSpace(isbn)) return false;
+
+        // Match the scanned ISBN against any cached wishlist ISBN row.
+        // Bought-local rows are excluded so a book the user just marked
+        // bought doesn't keep flagging on subsequent scans.
+        var match = await Db.Table<CachedWishlistItemIsbn>()
+            .Where(i => i.Isbn == isbn)
+            .FirstOrDefaultAsync();
+        if (match is null) return false;
+
+        var boughtCount = await Db.Table<WishlistBoughtLocal>()
+            .Where(b => b.WishlistItemId == match.WishlistItemId)
+            .CountAsync();
+        return boughtCount == 0;
+    }
+
+    /// <summary>Priority comparator — High > Medium > Low. Stable for
+    /// unknown values (returns 0). Used to mirror the server's
+    /// OrderByDescending(Priority) ranking without taking a direct
+    /// dependency on the BookTracker.Data enum (kept out of Shared).</summary>
+    private static int PriorityRank(string priority) => priority switch
+    {
+        "High" => 2,
+        "Medium" => 1,
+        "Low" => 0,
+        _ => 0,
+    };
 }

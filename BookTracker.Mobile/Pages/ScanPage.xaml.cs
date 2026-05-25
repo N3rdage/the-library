@@ -134,6 +134,7 @@ public partial class ScanPage : ContentPage
         StatusLabel.Text = $"Looking up {isbn}…";
         FoundFrame.IsVisible = false;
         MissingFrame.IsVisible = false;
+        WishlistFlag.IsVisible = false;
         // Reset the cover slot + the enriched-detail sections before
         // any new lookup — keeps stale content from the previous scan
         // off the new card while we wait for the new fetches (or
@@ -156,6 +157,21 @@ public partial class ScanPage : ContentPage
         {
             StatusLabel.Text = $"Lookup failed: {ex.GetType().Name} — {ex.Message}";
             return;
+        }
+
+        // Wishlist scan-flag — independent of whether the book is in
+        // the library cache. Most useful in the MissingFrame branch
+        // ("not owned, but on your wishlist — buy this!") but shown
+        // in both branches for completeness. Best-effort: an error
+        // here doesn't block the rest of the lookup.
+        try
+        {
+            WishlistFlag.IsVisible = await _cache.IsWishlistedIsbnAsync(isbn);
+        }
+        catch
+        {
+            // Silent — the flag is gravy. The found/missing frame is
+            // the load-bearing UI.
         }
 
         if (book is null)
