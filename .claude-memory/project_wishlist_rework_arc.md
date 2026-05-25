@@ -38,22 +38,22 @@ Stubs each carry `Title="{SeriesName} #{order}"` + `Author = Series.Author ?? "U
 
 VM additions: `AddSeriesSlotsToWishlistAsync(seriesId, slots) → int addedCount`; `LoadSeriesGapsAsync` extended to also populate `OpenSeriesList: List<OpenSeries>`. 6 new VM tests. 488/488 main + 79/79 cache.
 
-## PR D — Bookshelf wishlist surface + scan-flag (M)
+## PR D — Bookshelf wishlist surface + scan-flag — **SHIPPED 2026-05-25**
 
-Closes TODO #48 (backend `/api/wishlist-snapshot` already shipped 2026-05-13 — verified during the 2026-05-24 TODO sync). Two pieces:
+Single PR (`feat/wishlist-bookshelf-and-scan-flag`). Closes TODO #48. Three pieces:
 
-- New `WishlistPage` on Bookshelf MAUI — list view backed by `/api/wishlist-snapshot`. Local SQLite `WishlistBoughtLocal` table for the "bought" toggle (self-heals on next catalog refresh: server-side wishlist row gone = local-bought entry becomes a no-op).
-- **ScanPage scan-flag** — when the scanned ISBN matches any wishlisted ISBN (looked up via the new `WishlistItemIsbn` table from PR B), the result card highlights with "On your wishlist" badge.
+- **Snapshot DTO + service extension** — `WishlistItemSnapshot` gained `CoverUrl: string?` + `Isbns: IReadOnlyList<string>?`. `WishlistSnapshotService` projects `CoverUrl` directly and unions the legacy `WishlistItem.Isbn` single column with the per-row `WishlistItemIsbn` rows (PR B), deduped case-insensitively. Legacy rows (pre-PR-B) still surface their ISBN in the flat `Isbns` list — scan-flag covers them without a data migration.
+- **Mobile cache + ApiClient** — three new tables (`CachedWishlistItem`, `CachedWishlistItemIsbn`, `WishlistBoughtLocal`); five new `ICatalogCache` methods (`PopulateWishlistAsync`, `GetWishlistAsync`, `MarkBoughtLocallyAsync`, `UnmarkBoughtLocallyAsync`, `IsWishlistedIsbnAsync`). Bought-local entries survive catalog refresh — orphan-tolerant. `ApiClient.GetWishlistSnapshotAsync` mirrors the catalog path.
+- **Bookshelf MAUI surface** — new `WishlistPage` (cover thumbnail + title/author/priority badge + Bought button per row), MainPage `WishlistButton` (brass in-bookshop CTA), and `ScanPage.WishlistFlag` border (visible above FoundFrame / MissingFrame when scanned ISBN is wishlisted). Web `/bookshop` wishlist tab dropped from scope — Drew can revisit if it surfaces.
 
-Optional in same PR: parallel wishlist tab on Web `/bookshop` (the sub-piece (c) from the original TODO #28 plan).
+12 new tests (10 cache + 2 snapshot service). 490/490 main + 89/89 cache.
+
+## Arc closed — **RETIRE AFTER NEXT SYNC**
+
+All four PRs shipped. `/shopping` is `/wishlist` on the Web; Bookshelf surfaces the wishlist offline; scan-flag answers "am I looking for this?" in real time. The deferred items below remain open for their own conversations.
 
 ## Deferred from this arc (explicitly out of scope)
 
 - **Book-level Editor model** — separate from this arc; held under TODO #51's "full editor model" sub-row, still needs its own planning session.
-- **Auto-resolve wishlist hit → Book on save.** When a wishlisted ISBN is later scanned + added via Add Book, the wishlist row could auto-resolve as "bought" rather than needing a manual mark. Tempting but cross-cutting; defer to its own decision after PR D ships and Drew has the surface in real use.
-
-## What this memory is NOT
-
-Not a list of all open work — TODO.md is the master. This memory is just the load-bearing PR ordering + the design calls Drew named upfront (`N=10` default, separate `WishlistItemIsbn` table, etc.) so the next session picks up where this one left off.
-
-Retire after PR D ships.
+- **Auto-resolve wishlist hit → Book on save.** When a wishlisted ISBN is later scanned + added via Add Book, the wishlist row could auto-resolve as "bought" rather than needing a manual mark. Tempting but cross-cutting; defer until Drew has the surface in real use.
+- **Web `/bookshop` wishlist tab** (TODO #28 sub-piece (c)) — out of PR D scope; the Bookshelf MAUI surface covers the in-shop case. Revisit if Drew finds he wants the same view on the PWA too.
