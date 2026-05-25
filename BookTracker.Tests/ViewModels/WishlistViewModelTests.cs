@@ -453,6 +453,156 @@ public class WishlistViewModelTests
     }
 
     [Fact]
+    public async Task AddSeriesSlotsToWishlistAsync_CreatesStubsWithSeriesBadgeAndOrder()
+    {
+        // Finite-series Add-selected flow: each picked slot becomes one
+        // wishlist row stubbed as "{SeriesName} #{slot}" with the
+        // series's display author. SeriesId + SeriesOrder set so the
+        // row renders with the series badge and lines up against gap
+        // detection.
+        int seriesId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var series = new Series { Name = "Foundation", Author = "Isaac Asimov", Type = SeriesType.Series, ExpectedCount = 7 };
+            db.Series.Add(series);
+            await db.SaveChangesAsync();
+            seriesId = series.Id;
+        }
+
+        var vm = CreateVm();
+        var added = await vm.AddSeriesSlotsToWishlistAsync(seriesId, [4, 6, 7]);
+
+        Assert.Equal(3, added);
+        using var verify = _factory.CreateDbContext();
+        var rows = await verify.WishlistItems.OrderBy(w => w.SeriesOrder).ToListAsync();
+        Assert.Equal(3, rows.Count);
+        Assert.Equal("Foundation #4", rows[0].Title);
+        Assert.Equal("Isaac Asimov", rows[0].Author);
+        Assert.Equal(seriesId, rows[0].SeriesId);
+        Assert.Equal(4, rows[0].SeriesOrder);
+        Assert.Equal("Foundation #7", rows[2].Title);
+    }
+
+    [Fact]
+    public async Task AddSeriesSlotsToWishlistAsync_SkipsAlreadyWishlistedSlots()
+    {
+        // Idempotent re-runs: asking for slots 4–6 when slot 4 is
+        // already wishlisted adds only 5 and 6. Lets the user re-tick
+        // a set without spinning up duplicates.
+        int seriesId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var series = new Series { Name = "Foundation", Type = SeriesType.Series, ExpectedCount = 7 };
+            db.Series.Add(series);
+            await db.SaveChangesAsync();
+            seriesId = series.Id;
+            db.WishlistItems.Add(new WishlistItem
+            {
+                Title = "Foundation #4",
+                Author = "Asimov",
+                SeriesId = seriesId,
+                SeriesOrder = 4,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var vm = CreateVm();
+        var added = await vm.AddSeriesSlotsToWishlistAsync(seriesId, [4, 5, 6]);
+
+        Assert.Equal(2, added);
+        using var verify = _factory.CreateDbContext();
+        Assert.Equal(3, verify.WishlistItems.Count()); // existing + 2 new
+        Assert.DoesNotContain(
+            verify.WishlistItems.Where(w => w.SeriesOrder == 4),
+            w => w.Title == "Foundation #4 duplicate");
+    }
+
+    [Fact]
+    public async Task AddSeriesSlotsToWishlistAsync_NullSeriesAuthor_FallsBackToUnknown()
+    {
+        // Series.Author is optional. Stubs need a non-empty Author per
+        // the WishlistItem schema; fallback string keeps the row valid.
+        int seriesId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var series = new Series { Name = "Mystery Series", Type = SeriesType.Series, ExpectedCount = 5, Author = null };
+            db.Series.Add(series);
+            await db.SaveChangesAsync();
+            seriesId = series.Id;
+        }
+
+        var vm = CreateVm();
+        await vm.AddSeriesSlotsToWishlistAsync(seriesId, [1]);
+
+        using var verify = _factory.CreateDbContext();
+        var row = await verify.WishlistItems.SingleAsync();
+        Assert.Equal("Unknown", row.Author);
+    }
+
+    [Fact]
+    public async Task AddSeriesSlotsToWishlistAsync_UnknownSeriesId_ReturnsZero()
+    {
+        var vm = CreateVm();
+        var added = await vm.AddSeriesSlotsToWishlistAsync(9999, [1, 2]);
+        Assert.Equal(0, added);
+    }
+
+    [Fact]
+    public async Task LoadSeriesGapsAsync_PopulatesOpenSeriesList_WithNullExpectedCountAndOwnedBooks()
+    {
+        // Open-ended series — no ExpectedCount, owns at least one book.
+        // Surfaces in OpenSeriesList for the "Add next N" flow.
+        using (var db = _factory.CreateDbContext())
+        {
+            var author = new Author { Name = "Terry Pratchett" };
+            var discworld = new Series { Name = "Discworld", Author = "Terry Pratchett", Type = SeriesType.Series, ExpectedCount = null };
+            db.Series.Add(discworld);
+            await db.SaveChangesAsync();
+
+            var book = new Book
+            {
+                Title = "Mort",
+                Works = [new Work
+                {
+                    Title = "Mort",
+                    SeriesId = discworld.Id,
+                    SeriesOrder = 4,
+                    WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
+                }],
+            };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+        }
+
+        var vm = CreateVm();
+        await vm.LoadSeriesGapsAsync();
+
+        var open = Assert.Single(vm.OpenSeriesList);
+        Assert.Equal("Discworld", open.SeriesName);
+        Assert.Equal("Terry Pratchett", open.Author);
+        Assert.Equal(1, open.OwnedCount);
+        Assert.Equal(4, open.HighestOwnedOrder);
+        Assert.Equal([4], open.OwnedOrders);
+    }
+
+    [Fact]
+    public async Task LoadSeriesGapsAsync_OpenSeriesList_EmptyWhenSeriesHasNoOwnedBooks()
+    {
+        // A standalone Series row (no Works) shouldn't surface in
+        // OpenSeriesList — the user has nothing to extrapolate from.
+        using (var db = _factory.CreateDbContext())
+        {
+            db.Series.Add(new Series { Name = "Empty Series", Type = SeriesType.Series, ExpectedCount = null });
+            await db.SaveChangesAsync();
+        }
+
+        var vm = CreateVm();
+        await vm.LoadSeriesGapsAsync();
+
+        Assert.Empty(vm.OpenSeriesList);
+    }
+
+    [Fact]
     public async Task RemoveFromWishlistAsync_CascadesIsbns()
     {
         // FK cascade from WishlistItem → WishlistItemIsbn means removing
