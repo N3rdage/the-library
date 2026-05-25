@@ -18,4 +18,13 @@ public record WishlistItemSnapshot(
     string? Isbn,
     int? SeriesId,
     int? SeriesOrder,
-    DateTime DateAdded);
+    DateTime DateAdded,
+    // CoverUrl: upstream cover image from the search-and-add flow
+    // (PR B). Lightweight — not mirrored to blob storage. Null for
+    // legacy QuickAdd rows + series-driven stubs (PR C).
+    string? CoverUrl = null,
+    // Isbns: every known ISBN for this wishlisted book. Unions the
+    // legacy single Isbn column with the PR B WishlistItemIsbn rows,
+    // deduped. Backs the Bookshelf scan-flag — ANY matching ISBN
+    // means "on your wishlist".
+    IReadOnlyList<string>? Isbns = null);

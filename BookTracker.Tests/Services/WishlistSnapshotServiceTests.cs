@@ -96,4 +96,70 @@ public class WishlistSnapshotServiceTests
         Assert.NotNull(item.SeriesId);
         Assert.Equal(5, item.SeriesOrder);
     }
+
+    [Fact]
+    public async Task GetSnapshotAsync_ProjectsCoverUrlAndUnionsIsbnsAcrossLegacyAndNewTable()
+    {
+        // PR D shape — CoverUrl + Isbns added to the snapshot DTO so
+        // the Bookshelf scan-flag can match any known ISBN, and the
+        // WishlistPage can show a cover thumbnail. Isbns is a server-
+        // side union of the legacy single column and the per-row
+        // WishlistItemIsbn rows (PR B's schema addition), deduped
+        // case-insensitively.
+        using (var db = _factory.CreateDbContext())
+        {
+            db.WishlistItems.Add(new WishlistItem
+            {
+                Title = "Foundation",
+                Author = "Asimov",
+                Priority = WishlistPriority.High,
+                Isbn = "9780553293357", // legacy single column
+                CoverUrl = "https://covers.example/foundation.jpg",
+                Isbns =
+                [
+                    // New table — overlaps with legacy on the first; the
+                    // union should de-dupe to three.
+                    new WishlistItemIsbn { Isbn = "9780553293357" },
+                    new WishlistItemIsbn { Isbn = "9780553382570" },
+                    new WishlistItemIsbn { Isbn = "9780586010822" },
+                ],
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var snapshot = await CreateService().GetSnapshotAsync();
+        var item = Assert.Single(snapshot.Items);
+
+        Assert.Equal("https://covers.example/foundation.jpg", item.CoverUrl);
+        Assert.NotNull(item.Isbns);
+        Assert.Equal(3, item.Isbns!.Count);
+        Assert.Contains("9780553293357", item.Isbns);
+        Assert.Contains("9780553382570", item.Isbns);
+        Assert.Contains("9780586010822", item.Isbns);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_LegacyOnlyIsbn_LandsInIsbnsList()
+    {
+        // Existing wishlist rows captured before PR B's schema (legacy
+        // single column populated, no WishlistItemIsbn rows) still
+        // surface their ISBN in the new `Isbns` list so the Bookshelf
+        // scan-flag covers them without a data migration.
+        using (var db = _factory.CreateDbContext())
+        {
+            db.WishlistItems.Add(new WishlistItem
+            {
+                Title = "Legacy Row",
+                Author = "Pre-PR-B",
+                Priority = WishlistPriority.Medium,
+                Isbn = "9781234567897",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var snapshot = await CreateService().GetSnapshotAsync();
+        var item = Assert.Single(snapshot.Items);
+        Assert.NotNull(item.Isbns);
+        Assert.Equal("9781234567897", Assert.Single(item.Isbns!));
+    }
 }

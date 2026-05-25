@@ -1,11 +1,10 @@
 using BookTracker.Shared.Catalog;
+using BookTracker.Shared.Wishlist;
 
 namespace BookTracker.Mobile.Services;
 
 // Thin HTTP wrapper that calls /api/* with a bearer token from
-// IAuthService. PR 3 only exposes one method — the smoke-test catalog
-// fetch — but the shape generalises to the future ICatalogCache the
-// MAUI app will populate from this output (PR 4 of the mobile arc).
+// IAuthService.
 public interface IApiClient
 {
     /// <summary>Calls GET /api/catalog-snapshot with the cached
@@ -20,4 +19,11 @@ public interface IApiClient
     /// <c>DeletedAt &gt; since</c>. When null, the response is a
     /// full snapshot.</summary>
     Task<CatalogSnapshot> GetCatalogSnapshotAsync(DateTime? since = null, CancellationToken ct = default);
+
+    /// <summary>Calls GET /api/wishlist-snapshot with the cached
+    /// bearer token. Returns the full wishlist as a flat list
+    /// (no delta semantics — the wishlist is small enough that a
+    /// full refresh every time is cheap). Used by the Bookshelf
+    /// WishlistPage and by the scan-flag lookup on ScanPage.</summary>
+    Task<WishlistSnapshot> GetWishlistSnapshotAsync(CancellationToken ct = default);
 }

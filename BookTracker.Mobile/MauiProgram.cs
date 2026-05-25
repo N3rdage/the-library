@@ -60,6 +60,7 @@ public static class MauiProgram
         // visit gets fresh state.
         builder.Services.AddTransient<TitleSearchPage>();
         builder.Services.AddTransient<SeriesGapsPage>();
+        builder.Services.AddTransient<WishlistPage>();
 
 #if DEBUG
         builder.Logging.AddDebug();

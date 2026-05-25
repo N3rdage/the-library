@@ -126,6 +126,22 @@
                         HorizontalOptions="Fill"
                         IsVisible="False" />
 
+                <!-- Wishlist — books Drew is actively looking for.
+                     In-bookshop CTA so brass-coloured (highlighted)
+                     because it surfaces a "do I want this?" answer
+                     the same way Scan ISBN surfaces "do I have this?". -->
+                <Button x:Name="WishlistButton"
+                        Text="⭐  Wishlist"
+                        Clicked="OnWishlistClicked"
+                        HeightRequest="56"
+                        BackgroundColor="#A67B3A"
+                        TextColor="#2C2416"
+                        FontSize="16"
+                        FontAttributes="Bold"
+                        CornerRadius="8"
+                        HorizontalOptions="Fill"
+                        IsVisible="False" />
+
                 <!-- Cache stats panel — passive info card that surfaces
                      "what's stashed locally" so it isn't buried in
                      StatusLabel text. Brass border on aged-parchment

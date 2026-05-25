@@ -232,6 +232,15 @@ public partial class MainPage : ContentPage
         await Navigation.PushAsync(page);
     }
 
+    private async void OnWishlistClicked(object? sender, EventArgs e)
+    {
+        var services = Microsoft.Maui.Controls.Application.Current?.Handler?.MauiContext?.Services
+            ?? throw new InvalidOperationException("ServiceProvider not available.");
+        var page = services.GetService(typeof(WishlistPage)) as WishlistPage
+            ?? throw new InvalidOperationException("WishlistPage not registered.");
+        await Navigation.PushAsync(page);
+    }
+
     private async Task RefreshMetaAsync()
     {
         try
@@ -271,6 +280,14 @@ public partial class MainPage : ContentPage
         FindByTitleButton.IsEnabled = !_busy && _signedIn && hasCache;
         SeriesGapsButton.IsVisible = _signedIn;
         SeriesGapsButton.IsEnabled = !_busy && _signedIn && hasCache;
+        WishlistButton.IsVisible = _signedIn;
+        // Wishlist enables independently of catalog cache — it has its
+        // own wishlist cache, populated by the Refresh button on the
+        // page itself. A signed-in user with no catalog yet still gets
+        // to manage their wishlist (e.g. fresh install, sign in,
+        // open Wishlist to see what they're looking for before they
+        // need the full library).
+        WishlistButton.IsEnabled = !_busy && _signedIn;
 
         // Cache stats panel: passive info, only when we have data.
         // Renders independently of signed-in state — cached data
