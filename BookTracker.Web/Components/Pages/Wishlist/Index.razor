@@ -17,6 +17,14 @@
 
 <h1 class="mb-3">Wishlist</h1>
 
+@if (!string.IsNullOrEmpty(_notice))
+{
+    <div class="alert alert-success py-2 d-flex justify-content-between align-items-center" role="alert">
+        <span>@_notice</span>
+        <button type="button" class="btn-close" aria-label="Close" @onclick="() => _notice = null"></button>
+    </div>
+}
+
 @* Search and add — populate the wishlist from external lookups. *@
 <div class="card mb-4">
     <div class="card-header bg-white">
@@ -207,11 +215,37 @@
                     </div>
                     @if (gap.MissingPositions.Count > 0)
                     {
-                        <div class="mt-1 small">
-                            <span class="text-muted">Missing:</span>
+                        <div class="mt-1 small d-flex flex-wrap gap-1 align-items-center">
+                            <span class="text-muted me-1">Missing — tap to select:</span>
                             @foreach (var pos in gap.MissingPositions)
                             {
-                                <span class="badge bg-danger me-1">#@pos</span>
+                                var slot = pos;
+                                var selected = IsSlotSelected(gap.SeriesId, slot);
+                                <button type="button"
+                                        class="@(selected ? "badge bg-primary border-0" : "badge bg-light text-dark border")"
+                                        style="cursor: pointer;"
+                                        @onclick="() => ToggleSlot(gap.SeriesId, slot)">
+                                    #@slot
+                                </button>
+                            }
+                            @if (SelectedSlotCount(gap.SeriesId) > 0)
+                            {
+                                <button type="button" class="btn btn-success btn-sm ms-2"
+                                        @onclick="() => AddSelectedSlotsAsync(gap.SeriesId)"
+                                        disabled="@_addingSlots">
+                                    Add @SelectedSlotCount(gap.SeriesId) to wishlist
+                                </button>
+                                <button type="button" class="btn btn-link btn-sm p-0 ms-1"
+                                        @onclick="() => ClearSelected(gap.SeriesId)">
+                                    Clear
+                                </button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-link btn-sm p-0 ms-2"
+                                        @onclick="() => SelectAllSlots(gap.SeriesId, gap.MissingPositions)">
+                                    Select all
+                                </button>
                             }
                         </div>
                     }
@@ -235,6 +269,57 @@
         }
     </div>
 </div>
+
+@* Open-ended series — numbered series with no ExpectedCount set
+   where the user owns at least one book. The "Add next N" flow
+   seeds the wishlist with stub rows for the following slots; the
+   user enriches title/cover later from the search-and-add card. *@
+@if (VM.GapsLoaded && VM.OpenSeriesList.Count > 0)
+{
+    <div class="card mb-4">
+        <div class="card-header bg-white">
+            <h2 class="h5 mb-0">Open-ended series</h2>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-3">
+                Numbered series with no expected total. Pick how many forward slots to add to your wishlist as stubs — search-and-add later to fill in real titles + covers.
+            </p>
+            @foreach (var open in VM.OpenSeriesList)
+            {
+                var n = GetOpenN(open.SeriesId);
+                <div class="mb-3 @(open != VM.OpenSeriesList.Last() ? "pb-3 border-bottom" : "")">
+                    <div class="d-flex justify-content-between align-items-start mb-1 flex-wrap gap-1">
+                        <div>
+                            <a href="@($"/series/{open.SeriesId}")" class="fw-semibold text-decoration-none">@open.SeriesName</a>
+                            @if (open.Author is not null)
+                            {
+                                <span class="text-muted small ms-1">by @open.Author</span>
+                            }
+                            <span class="text-muted small ms-1">— you own @open.OwnedCount</span>
+                            @if (open.HighestOwnedOrder > 0)
+                            {
+                                <span class="text-muted small ms-1">(highest #@open.HighestOwnedOrder)</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 align-items-center small">
+                        <span class="text-muted">Add the next</span>
+                        <input type="number" min="1" max="100"
+                               class="form-control form-control-sm" style="width: 70px;"
+                               value="@n"
+                               @onchange="(e) => SetOpenN(open.SeriesId, e.Value)" />
+                        <span class="text-muted">missing slots, starting from #@(open.HighestOwnedOrder + 1)</span>
+                        <button type="button" class="btn btn-success btn-sm"
+                                @onclick="() => AddNextOpenSeriesAsync(open)"
+                                disabled="@_addingSlots">
+                            Add to wishlist
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
 
 @* Wishlist items — books Drew is looking for *@
 <div class="card mb-4">
@@ -352,10 +437,113 @@
 </div>
 
 @code {
+    // Per-series state for the Series gaps card: which missing slots
+    // the user has tapped to select for "Add to wishlist." Keyed by
+    // SeriesId so multiple series can have independent selections.
+    private readonly Dictionary<int, HashSet<int>> _selectedSlots = new();
+
+    // Per-series "Add next N" input on the Open-ended series card.
+    // Defaults to 10 (the locked design call from the arc memory).
+    private readonly Dictionary<int, int> _openN = new();
+    private const int DefaultOpenN = 10;
+
+    private bool _addingSlots;
+    private string? _notice;
+
     private bool AdvancedAllEmpty =>
         string.IsNullOrWhiteSpace(VM.AdvancedTitle)
         && string.IsNullOrWhiteSpace(VM.AdvancedAuthor)
         && string.IsNullOrWhiteSpace(VM.AdvancedIsbn);
+
+    // ---- Selection helpers for finite-series checkbox grid ----
+
+    private bool IsSlotSelected(int seriesId, int slot) =>
+        _selectedSlots.TryGetValue(seriesId, out var set) && set.Contains(slot);
+
+    private int SelectedSlotCount(int seriesId) =>
+        _selectedSlots.TryGetValue(seriesId, out var set) ? set.Count : 0;
+
+    private void ToggleSlot(int seriesId, int slot)
+    {
+        if (!_selectedSlots.TryGetValue(seriesId, out var set))
+        {
+            set = new HashSet<int>();
+            _selectedSlots[seriesId] = set;
+        }
+        if (!set.Add(slot)) set.Remove(slot);
+    }
+
+    private void SelectAllSlots(int seriesId, IReadOnlyList<int> slots)
+    {
+        _selectedSlots[seriesId] = new HashSet<int>(slots);
+    }
+
+    private void ClearSelected(int seriesId) => _selectedSlots.Remove(seriesId);
+
+    private async Task AddSelectedSlotsAsync(int seriesId)
+    {
+        if (!_selectedSlots.TryGetValue(seriesId, out var set) || set.Count == 0) return;
+        var slots = set.OrderBy(s => s).ToList();
+        _addingSlots = true;
+        try
+        {
+            var added = await VM.AddSeriesSlotsToWishlistAsync(seriesId, slots);
+            _selectedSlots.Remove(seriesId);
+            _notice = added == 0
+                ? "Selected slots were already on your wishlist — nothing new added."
+                : $"Added {added} {(added == 1 ? "stub" : "stubs")} to your wishlist.";
+        }
+        finally
+        {
+            _addingSlots = false;
+        }
+    }
+
+    // ---- Open-ended series helpers ----
+
+    private int GetOpenN(int seriesId) =>
+        _openN.TryGetValue(seriesId, out var n) ? n : DefaultOpenN;
+
+    private void SetOpenN(int seriesId, object? raw)
+    {
+        if (raw is null) return;
+        if (int.TryParse(raw.ToString(), out var n) && n >= 1 && n <= 100)
+        {
+            _openN[seriesId] = n;
+        }
+    }
+
+    private async Task AddNextOpenSeriesAsync(WishlistViewModel.OpenSeries open)
+    {
+        var n = GetOpenN(open.SeriesId);
+        if (n <= 0) return;
+        // Compute the next N forward slots starting from highest+1
+        // (or 1 if nothing numbered yet), skipping any the user
+        // already owns. Defensive against the dedup-by-owned case —
+        // VM-side dedup also catches already-wishlisted.
+        var start = open.HighestOwnedOrder + 1;
+        var owned = open.OwnedOrders.ToHashSet();
+        var slots = new List<int>(n);
+        var i = start;
+        while (slots.Count < n)
+        {
+            if (!owned.Contains(i)) slots.Add(i);
+            i++;
+        }
+
+        _addingSlots = true;
+        try
+        {
+            var added = await VM.AddSeriesSlotsToWishlistAsync(open.SeriesId, slots);
+            _notice = added == 0
+                ? $"All {n} slots were already on your wishlist — nothing new added."
+                : $"Added {added} {(added == 1 ? "stub" : "stubs")} from {open.SeriesName} to your wishlist.";
+        }
+        finally
+        {
+            _addingSlots = false;
+        }
+    }
 
     private async Task HandleSearchKeyUp(KeyboardEventArgs e)
     {

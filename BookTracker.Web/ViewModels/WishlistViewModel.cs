@@ -282,6 +282,13 @@ public class WishlistViewModel(
     public List<SeriesGap> SeriesGaps { get; private set; } = [];
     public bool GapsLoaded { get; private set; }
 
+    /// <summary>Open-ended series (no `ExpectedCount` set) where the user
+    /// owns at least one book. Populated alongside <see cref="SeriesGaps"/>
+    /// by <see cref="LoadSeriesGapsAsync"/>. The "Add next N" wishlist
+    /// flow on /wishlist uses these — the user picks how many forward
+    /// slots to seek since the total length is unknown.</summary>
+    public List<OpenSeries> OpenSeriesList { get; private set; } = [];
+
     public async Task LoadSeriesGapsAsync()
     {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -327,7 +334,102 @@ public class WishlistViewModel(
             })
             .ToList();
 
+        // Open-ended series — no ExpectedCount, but the user owns at
+        // least one numbered book. Drive the "add next N missing" flow
+        // on /wishlist. Highest-owned-order seeds the suggestion ("you
+        // own up to #7, add the next 10?"); series with all-null
+        // SeriesOrder still surface (HighestOwnedOrder=0) so the user
+        // can mark the first 10 sought from scratch.
+        var openSeries = await db.Series
+            .Include(s => s.Works)
+            .Where(s => s.Type == SeriesType.Series && s.ExpectedCount == null && s.Works.Any())
+            .ToListAsync();
+
+        OpenSeriesList = openSeries
+            .OrderBy(s => s.Name)
+            .Select(s =>
+            {
+                var orders = s.Works
+                    .Where(w => w.SeriesOrder.HasValue)
+                    .Select(w => w.SeriesOrder!.Value)
+                    .OrderBy(n => n)
+                    .ToList();
+                return new OpenSeries(
+                    s.Id,
+                    s.Name,
+                    s.Author,
+                    s.Works.Count,
+                    orders.Count == 0 ? 0 : orders.Max(),
+                    orders);
+            })
+            .ToList();
+
         GapsLoaded = true;
+    }
+
+    /// <summary>Bulk-add wishlist stubs for missing slots in a series.
+    /// One <see cref="WishlistItem"/> per requested slot, titled
+    /// <c>"{SeriesName} #{slot}"</c> (placeholder — user enriches later
+    /// once they know which volume they're chasing) and authored as the
+    /// series's display author. SeriesId + SeriesOrder are set so the
+    /// row renders with the series badge and lines up against gap
+    /// detection. Existing wishlist rows at the same (SeriesId,
+    /// SeriesOrder) are skipped silently to make re-runs idempotent —
+    /// asking for slots 4–7 twice still ends up with one row per slot.
+    /// Returns the count actually added (excluding the silent skips).</summary>
+    public async Task<int> AddSeriesSlotsToWishlistAsync(int seriesId, IReadOnlyList<int> slots)
+    {
+        ArgumentNullException.ThrowIfNull(slots);
+        var deduped = slots
+            .Where(s => s > 0)
+            .Distinct()
+            .OrderBy(s => s)
+            .ToList();
+        if (deduped.Count == 0) return 0;
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+
+        var series = await db.Series.FindAsync(seriesId);
+        if (series is null)
+        {
+            logger.LogWarning("AddSeriesSlotsToWishlist called with unknown SeriesId {SeriesId}", seriesId);
+            return 0;
+        }
+
+        // Existing wishlist rows for this series + the requested slots —
+        // load in one query so the dedup pass doesn't N+1.
+        var alreadyWishlisted = await db.WishlistItems
+            .Where(w => w.SeriesId == seriesId && w.SeriesOrder != null && deduped.Contains(w.SeriesOrder!.Value))
+            .Select(w => w.SeriesOrder!.Value)
+            .ToListAsync();
+        var alreadySet = alreadyWishlisted.ToHashSet();
+
+        var author = string.IsNullOrWhiteSpace(series.Author) ? "Unknown" : series.Author.Trim();
+        var added = 0;
+        foreach (var slot in deduped)
+        {
+            if (alreadySet.Contains(slot)) continue;
+            db.WishlistItems.Add(new WishlistItem
+            {
+                Title = $"{series.Name} #{slot}",
+                Author = author,
+                Priority = WishlistPriority.Medium,
+                SeriesId = seriesId,
+                SeriesOrder = slot,
+            });
+            added++;
+        }
+
+        if (added == 0) return 0;
+
+        await db.SaveChangesAsync();
+
+        // If the wishlist is already loaded, refresh it so the new
+        // stubs surface immediately. Skip if not loaded — the user
+        // hasn't asked to see the list yet.
+        if (WishlistLoaded) await LoadWishlistAsync();
+
+        return added;
     }
 
     // ---- Wishlist management ----
@@ -492,4 +594,17 @@ public class WishlistViewModel(
         List<OwnedSeriesBook> OwnedBooks);
 
     public record OwnedSeriesBook(int Id, string Title, int? SeriesOrder);
+
+    /// <summary>Series with no ExpectedCount where the user owns at least
+    /// one Work. HighestOwnedOrder seeds the "Add next N missing" flow
+    /// (0 when no Works carry a SeriesOrder yet — UI suggests starting
+    /// from #1). OwnedOrders is the full set so the suggestion can skip
+    /// slots the user already owns when computing the next-N range.</summary>
+    public record OpenSeries(
+        int SeriesId,
+        string SeriesName,
+        string? Author,
+        int OwnedCount,
+        int HighestOwnedOrder,
+        IReadOnlyList<int> OwnedOrders);
 }
