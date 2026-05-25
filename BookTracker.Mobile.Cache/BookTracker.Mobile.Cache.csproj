@@ -32,6 +32,7 @@
     <!-- sqlite-net-pcl: ORM-lite over SQLite. Bundles a managed +
          native SQLite via SQLitePCLRaw; works on Android, iOS, and
          desktop with no manual native-library hookup. -->
+    <PackageReference Include="SkiaSharp.NativeAssets.macOS" Version="3.119.4" />
     <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
     <!-- SkiaSharp: cross-platform image decode + resize. Pulls native
          assets for Android (via transitive SkiaSharp.NativeAssets.*)
