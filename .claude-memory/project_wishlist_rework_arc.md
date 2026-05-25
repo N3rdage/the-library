@@ -17,25 +17,26 @@ Drew's framing 2026-05-25 (browsing prompted him to realise "what am I looking f
 
 Prequel cleanup. Card 1 was a duplicate of /bookshop's scan + Bookshelf ScanPage. `/shopping` kept as a secondary `@page` directive so old bookmarks survive. ShoppingViewModel rename + dead-code removal deferred to PR B (touches the VM anyway). Branch: `feat/wishlist-rename-and-drop-card-1`.
 
-## PR B — Search-and-add to wishlist (M, next up)
+## PR B — Search-and-add to wishlist — **SHIPPED 2026-05-25**
 
-Richest single win. New search box on `/wishlist` that reuses `BookLookupService` (the same ISBN/title/author lookup powering Add Book). Pick-from-candidates UX. Wishlist row captures Title, Author, all known ISBNs, and CoverUrl — lightweight, not a full Book/Work entity, just enough metadata to recognise the same book when scanned later on Bookshelf.
+Single PR (`feat/wishlist-search-and-add` → #303). `/wishlist` got the search-and-add card at the top — ISBN-shaped queries route to `LookupByIsbnAsync`, text queries route to `SearchByTitleAuthorAsync`. New `WishlistCandidate` record unifies both shapes. `AddCandidateAsync` persists Title + Author + CoverUrl + ISBNs (both legacy single column + new `WishlistItemIsbn` table). `ShoppingViewModel` → `WishlistViewModel` rename + dead-Card-1 code removal landed in the same PR. Plus three in-PR tweaks based on Drew's testing-feedback while reviewing:
+- ISBN-search duplicate-detection (warning badges on candidate card when book already in library or already wishlisted)
+- Advanced-search expander (Title / Author / ISBN as separate fields) — addresses Open Library's title-vs-author fuzzy match
+- BookLookupService switched to Lucene `q=author:"phrase"` instead of `?author=value` URL param — Open Library's `?author=` does loose word-by-word matching, the `q=` route gives phrase semantics
 
-**Schema additions** (locked 2026-05-25):
-- `WishlistItem.CoverUrl: string? (MaxLength 500)`
-- **Separate `WishlistItemIsbn` table** (not comma-joined) — mirrors `Edition.Isbn` shape, one row per ISBN, clean query path for the scan-flag lookup that PR D will need
-- One migration adding both
+Migration `WishlistCoverAndMultiIsbn` adds `WishlistItem.CoverUrl` + `WishlistItemIsbn` table. Locked design call confirmed: separate table, not comma-joined.
 
-**Out of scope:** the existing `WishlistItem.Isbn` (single column) stays for back-compat; PR B writes new entries to the multi-ISBN table only.
+## PR C — Series-driven wishlist additions — **SHIPPED 2026-05-25**
 
-## PR C — Series-driven wishlist additions (M)
+Single PR (`feat/wishlist-series-driven-additions`). Two flows on /wishlist driven off the existing series-gap detection.
 
-From a Series detail page (or a new tab on /wishlist), "Mark this series as sought" view. Lists missing slots from gap detection. Two flows:
+**Finite series** (`ExpectedCount` set): missing-position badges on the Series gaps card became clickable selectors — tap `#N` to toggle (outlined → filled `bg-primary`), then "Add N to wishlist" per series row creates one stub per slot. Select-all / Clear affordances.
 
-- **Finite series (`ExpectedCount` set):** checkbox-grid of missing slots; "Add selected" creates one `WishlistItem` per slot
-- **Infinite / no ExpectedCount:** offer "Add next N missing" with **N=10 default** (Drew's call 2026-05-25 — round number, low friction, can re-run for more)
+**Open-ended series** (`ExpectedCount` null, ≥1 owned book): new card below. Per series: "{name} ({author}) — you own N (highest #M). Add the next [10] missing slots starting from #(M+1)" with numeric input (default 10 per the locked design call; range 1–100). Forward-only — no gap-filling below highest owned (kept the next-N compute simple; can revisit if Drew finds he wants gap-fill).
 
-The series-add path doesn't have title data for unowned slots without an upstream lookup. v1 approach: capture as stubs ("Foundation #4 — unknown title") and let Drew enrich later from the wishlist surface. Optional follow-on: fire OpenLibrary search-by-series-slot to pre-fill.
+Stubs each carry `Title="{SeriesName} #{order}"` + `Author = Series.Author ?? "Unknown"` + `SeriesId` + `SeriesOrder`. Dedup by `(SeriesId, SeriesOrder)` skips already-wishlisted slots silently — re-runs are idempotent. User enriches title + cover later from the PR B search-and-add card.
+
+VM additions: `AddSeriesSlotsToWishlistAsync(seriesId, slots) → int addedCount`; `LoadSeriesGapsAsync` extended to also populate `OpenSeriesList: List<OpenSeries>`. 6 new VM tests. 488/488 main + 79/79 cache.
 
 ## PR D — Bookshelf wishlist surface + scan-flag (M)
 
