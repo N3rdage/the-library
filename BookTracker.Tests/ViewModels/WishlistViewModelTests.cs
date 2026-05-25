@@ -87,6 +87,105 @@ public class WishlistViewModelTests
     }
 
     [Fact]
+    public async Task SearchAsync_IsbnAlreadyOwned_FlagsCandidateWithBookIdAndDoesNotBlockAdd()
+    {
+        // Drew's case 2026-05-25: ISBN search for a book he already owns
+        // should warn before he adds it to the wishlist (still allows the
+        // add — backup-copy intent is legitimate — just surfaces the
+        // duplicate so it's a conscious choice).
+        int bookId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var author = new Author { Name = "Tolkien" };
+            var book = new Book
+            {
+                Title = "The Hobbit",
+                Works = [new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+                Editions = [new Edition { Isbn = "9780261103252", Format = BookFormat.Hardcover }],
+            };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            bookId = book.Id;
+        }
+
+        _lookup.LookupByIsbnAsync("9780261103252", Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: "9780261103252",
+                Title: "The Hobbit",
+                Subtitle: null, Author: "Tolkien", Publisher: null,
+                GenreCandidates: [], DatePrinted: null,
+                CoverUrl: null, Source: "Open Library",
+                Series: null, SeriesNumber: null, SeriesNumberRaw: null));
+
+        var vm = CreateVm();
+        vm.SearchQuery = "9780261103252";
+        await vm.SearchAsync();
+
+        var candidate = Assert.Single(vm.SearchCandidates);
+        Assert.Equal(bookId, candidate.AlreadyOwnedBookId);
+        Assert.Null(candidate.AlreadyWishlistedItemId);
+    }
+
+    [Fact]
+    public async Task SearchAsync_IsbnAlreadyOnWishlist_FlagsCandidateWithWishlistItemId()
+    {
+        // Same shape but the ISBN matches an existing wishlist row
+        // (either the legacy single column or the new ISBN table — this
+        // test seeds via the new table to cover the union branch).
+        int wishlistId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var item = new WishlistItem
+            {
+                Title = "Foundation",
+                Author = "Asimov",
+                Isbns = [new WishlistItemIsbn { Isbn = "9780553293357" }],
+            };
+            db.WishlistItems.Add(item);
+            await db.SaveChangesAsync();
+            wishlistId = item.Id;
+        }
+
+        _lookup.LookupByIsbnAsync("9780553293357", Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: "9780553293357",
+                Title: "Foundation",
+                Subtitle: null, Author: "Asimov", Publisher: null,
+                GenreCandidates: [], DatePrinted: null,
+                CoverUrl: null, Source: "Open Library",
+                Series: null, SeriesNumber: null, SeriesNumberRaw: null));
+
+        var vm = CreateVm();
+        vm.SearchQuery = "9780553293357";
+        await vm.SearchAsync();
+
+        var candidate = Assert.Single(vm.SearchCandidates);
+        Assert.Null(candidate.AlreadyOwnedBookId);
+        Assert.Equal(wishlistId, candidate.AlreadyWishlistedItemId);
+    }
+
+    [Fact]
+    public async Task SearchAsync_IsbnNeitherOwnedNorWishlisted_LeavesBothFlagsNull()
+    {
+        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: "9789999999999",
+                Title: "Unowned",
+                Subtitle: null, Author: "Nobody", Publisher: null,
+                GenreCandidates: [], DatePrinted: null,
+                CoverUrl: null, Source: "Open Library",
+                Series: null, SeriesNumber: null, SeriesNumberRaw: null));
+
+        var vm = CreateVm();
+        vm.SearchQuery = "9789999999999";
+        await vm.SearchAsync();
+
+        var candidate = Assert.Single(vm.SearchCandidates);
+        Assert.Null(candidate.AlreadyOwnedBookId);
+        Assert.Null(candidate.AlreadyWishlistedItemId);
+    }
+
+    [Fact]
     public async Task SearchAsync_LookupThrows_SetsErrorMessageAndLeavesCandidatesEmpty()
     {
         _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())

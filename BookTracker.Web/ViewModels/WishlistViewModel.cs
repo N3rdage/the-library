@@ -61,12 +61,25 @@ public class WishlistViewModel(
                 var hit = await lookup.LookupByIsbnAsync(cleaned, ct);
                 if (hit is not null)
                 {
+                    // Duplicate-detection for the ISBN path: surface a
+                    // warning badge if the user already owns this ISBN
+                    // (any Edition.Isbn) or has it on the wishlist (legacy
+                    // single column OR the new WishlistItemIsbn table).
+                    // Doesn't block Add — the user might want a backup copy
+                    // on the wishlist or be deliberately re-adding — just
+                    // tells them before they click. Text-search candidates
+                    // don't get this check (no ISBN to match against).
+                    var (ownedBookId, wishlistedItemId) =
+                        await FindDuplicateMatchesAsync(cleaned, ct);
+
                     SearchCandidates = [new WishlistCandidate(
                         Title: hit.Title,
                         Author: hit.Author,
                         Isbns: string.IsNullOrWhiteSpace(hit.Isbn) ? [] : [hit.Isbn],
                         CoverUrl: hit.CoverUrl,
-                        Source: hit.Source)];
+                        Source: hit.Source,
+                        AlreadyOwnedBookId: ownedBookId,
+                        AlreadyWishlistedItemId: wishlistedItemId)];
                 }
             }
             else
@@ -98,6 +111,29 @@ public class WishlistViewModel(
             Searching = false;
             SearchedOnce = true;
         }
+    }
+
+    /// <summary>Returns (existing Book.Id if owned, existing WishlistItem.Id
+    /// if wishlisted) for the given ISBN, or (null, null) for neither.
+    /// Owned check hits Edition.Isbn (filtered-unique index → seek). Wishlist
+    /// check unions the legacy single column with the new WishlistItemIsbn
+    /// table so both shapes of wishlist row are caught.</summary>
+    private async Task<(int? OwnedBookId, int? WishlistedItemId)> FindDuplicateMatchesAsync(
+        string isbn, CancellationToken ct)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+
+        var ownedBookId = await db.Editions
+            .Where(e => e.Isbn == isbn)
+            .Select(e => (int?)e.BookId)
+            .FirstOrDefaultAsync(ct);
+
+        var wishlistedItemId = await db.WishlistItems
+            .Where(w => w.Isbn == isbn || w.Isbns.Any(i => i.Isbn == isbn))
+            .Select(w => (int?)w.Id)
+            .FirstOrDefaultAsync(ct);
+
+        return (ownedBookId, wishlistedItemId);
     }
 
     public void ClearSearch()
@@ -344,13 +380,21 @@ public class WishlistViewModel(
     /// <summary>Unified shape for search candidates from both the ISBN
     /// lookup (BookLookupResult) and the title/author search
     /// (BookSearchCandidate). Carries enough metadata to populate a
-    /// WishlistItem on Add without re-querying.</summary>
+    /// WishlistItem on Add without re-querying.
+    ///
+    /// AlreadyOwnedBookId / AlreadyWishlistedItemId surface duplicate
+    /// matches from the ISBN search path so the UI can warn before
+    /// the user clicks Add. Both default null for text-search candidates
+    /// (no ISBN to match against) and for ISBN candidates that don't
+    /// duplicate anything.</summary>
     public record WishlistCandidate(
         string? Title,
         string? Author,
         IReadOnlyList<string> Isbns,
         string? CoverUrl,
-        string Source);
+        string Source,
+        int? AlreadyOwnedBookId = null,
+        int? AlreadyWishlistedItemId = null);
 
     public record SeriesGap(
         int SeriesId, string SeriesName, string? Author,

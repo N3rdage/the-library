@@ -86,6 +86,16 @@
                                     <span class="badge bg-light text-dark border font-monospace">@isbn</span>
                                 }
                                 <span class="badge bg-light text-dark border">@c.Source</span>
+                                @if (c.AlreadyOwnedBookId is int ownedId)
+                                {
+                                    <a href="@($"/books/{ownedId}")" class="badge bg-warning text-dark text-decoration-none">
+                                        Already in your library — View
+                                    </a>
+                                }
+                                @if (c.AlreadyWishlistedItemId is not null)
+                                {
+                                    <span class="badge bg-info text-dark">Already on your wishlist</span>
+                                }
                             </div>
                         </div>
                         <button type="button" class="btn btn-success btn-sm flex-shrink-0"
