@@ -12,6 +12,19 @@ updates:
       ef-core:
         patterns:
           - "Microsoft.EntityFrameworkCore*"
+      # SkiaSharp 3.x splits the platform native assets into separate
+      # NuGet packages (SkiaSharp + SkiaSharp.NativeAssets.Linux /
+      # .Win32 / .macOS). Their versions ship in lockstep — the main
+      # package's transitive resolution requires the NativeAssets to
+      # match exactly, or the test runner can't load native libs.
+      # Without this grouping, Dependabot opens one PR per package
+      # and merging only some of them leaves the build broken
+      # (encountered 2026-05-26 on the 3.119.2 → 3.119.4 bump). Group
+      # all of them into a single PR so version mismatches are
+      # impossible by construction.
+      skiasharp:
+        patterns:
+          - "SkiaSharp*"
     ignore:
       # Microsoft.ApplicationInsights.AspNetCore 3.x is a full OpenTelemetry
       # rewrite of the classic SDK — ITelemetryInitializer (currently used
