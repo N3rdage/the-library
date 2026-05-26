@@ -44,7 +44,7 @@
          16KB-page-aligned and fail to load on Android 16 devices
          with 16KB pages enabled (the XA0141 build warning). 3.x's
          Resize API replaces SKFilterQuality with SKSamplingOptions. -->
-    <PackageReference Include="SkiaSharp" Version="3.119.2" />
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
   </ItemGroup>
 
   <ItemGroup>
