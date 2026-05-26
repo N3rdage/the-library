@@ -32,7 +32,6 @@
     <!-- sqlite-net-pcl: ORM-lite over SQLite. Bundles a managed +
          native SQLite via SQLitePCLRaw; works on Android, iOS, and
          desktop with no manual native-library hookup. -->
-    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="3.119.4" />
     <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
     <!-- SkiaSharp: cross-platform image decode + resize. Pulls native
          assets for Android (via transitive SkiaSharp.NativeAssets.*)
@@ -44,7 +43,7 @@
          16KB-page-aligned and fail to load on Android 16 devices
          with 16KB pages enabled (the XA0141 build warning). 3.x's
          Resize API replaces SKFilterQuality with SKSamplingOptions. -->
-    <PackageReference Include="SkiaSharp" Version="3.119.2" />
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
   </ItemGroup>
 
   <ItemGroup>
