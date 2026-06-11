@@ -1,0 +1,59 @@
+@* Captures Rating + Notes at the moment a book is marked Read from the
+   Library list. This is the answer to the "set status, then rating, but the
+   row already left the filter" ordering trap: when the target status is Read,
+   the rating/notes are gathered up-front in one dialog and persisted together
+   with the status, so nothing is lost to a mid-edit re-filter. Other statuses
+   (Unread / Reading / Reference) skip this and persist inline. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width: 320px;">
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Marking <strong>@BookTitle</strong> as Read. Add a rating and notes now, or just save.
+            </MudText>
+
+            <div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Rating</MudText>
+                <MudRating @bind-SelectedValue="rating" Size="Size.Medium" />
+            </div>
+
+            <MudTextField T="string"
+                          @bind-Value="notes"
+                          Label="Notes (optional)"
+                          Variant="Variant.Outlined"
+                          Lines="3"
+                          AutoGrow="true" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Success"
+                   Variant="Variant.Filled"
+                   OnClick="Save">
+            Mark Read
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string BookTitle { get; set; } = "";
+    [Parameter] public int InitialRating { get; set; }
+    [Parameter] public string? InitialNotes { get; set; }
+
+    private int rating;
+    private string? notes;
+
+    protected override void OnInitialized()
+    {
+        rating = InitialRating;
+        notes = InitialNotes;
+    }
+
+    private void Save() => MudDialog.Close(DialogResult.Ok(new MarkReadResult(rating, notes)));
+
+    private void Cancel() => MudDialog.Cancel();
+
+    public record MarkReadResult(int Rating, string? Notes);
+}

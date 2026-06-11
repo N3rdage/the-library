@@ -1,6 +1,8 @@
 @page "/books"
 @inject BookListViewModel VM
 @inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 <PageTitle>Library - Bookcase</PageTitle>
 
@@ -108,6 +110,21 @@
                             {
                                 <MudSelectItem Value="@t.Id">@t.Name</MudSelectItem>
                             }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="6" md="2">
+                        <MudSelect T="BookStatus?"
+                                   Value="@VM.SelectedStatus"
+                                   ValueChanged="@OnStatusFilterChanged"
+                                   Label="Status"
+                                   Variant="Variant.Outlined"
+                                   Margin="Margin.Dense"
+                                   Dense="true">
+                            <MudSelectItem T="BookStatus?" Value="@((BookStatus?)null)">All</MudSelectItem>
+                            <MudSelectItem T="BookStatus?" Value="@((BookStatus?)BookStatus.Unread)">Unread</MudSelectItem>
+                            <MudSelectItem T="BookStatus?" Value="@((BookStatus?)BookStatus.Reading)">Reading</MudSelectItem>
+                            <MudSelectItem T="BookStatus?" Value="@((BookStatus?)BookStatus.Read)">Read</MudSelectItem>
+                            <MudSelectItem T="BookStatus?" Value="@((BookStatus?)BookStatus.Reference)">Reference</MudSelectItem>
                         </MudSelect>
                     </MudItem>
                     <MudItem xs="12" md="3">
@@ -266,6 +283,12 @@
         await VM.ApplyFiltersAsync();
     }
 
+    private async Task OnStatusFilterChanged(BookStatus? value)
+    {
+        VM.SelectedStatus = value;
+        await VM.ApplyFiltersAsync();
+    }
+
     private async Task OnAuthorChanged(string value)
     {
         VM.SelectedAuthor = value ?? "";
@@ -298,6 +321,50 @@
     }
 
     private void NavigateToBook(int bookId) => Nav.NavigateTo($"/books/{bookId}");
+
+    private static readonly BookStatus[] StatusOptions =
+        [BookStatus.Unread, BookStatus.Reading, BookStatus.Read, BookStatus.Reference];
+
+    // Inline status set. Moving to Read opens the rating/notes dialog so both
+    // are captured before the row potentially leaves an active status filter;
+    // every other status persists immediately. The row is patched in place by
+    // the VM, so it stays visible until the next explicit reload.
+    private async Task OnStatusPicked(BookListViewModel.BookListItem book, BookStatus status)
+    {
+        if (status == book.Status) return;
+
+        if (status == BookStatus.Read)
+        {
+            await OpenMarkReadDialog(book);
+            return;
+        }
+
+        try { await VM.SetStatusAsync(book.Id, status); }
+        catch (Exception ex) { Snackbar.Add($"Couldn't update status: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task OpenMarkReadDialog(BookListViewModel.BookListItem book)
+    {
+        var parameters = new DialogParameters<MarkReadDialog>
+        {
+            { x => x.BookTitle, book.Title },
+            { x => x.InitialRating, book.Rating },
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<MarkReadDialog>("Mark as Read", parameters, options);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled && result.Data is MarkReadDialog.MarkReadResult r)
+        {
+            try { await VM.SetStatusAsync(book.Id, BookStatus.Read, r.Rating, r.Notes); }
+            catch (Exception ex) { Snackbar.Add($"Couldn't update status: {ex.Message}", Severity.Error); }
+        }
+    }
+
+    private async Task OnRatingPicked(BookListViewModel.BookListItem book, int rating)
+    {
+        try { await VM.SetRatingAsync(book.Id, rating); }
+        catch (Exception ex) { Snackbar.Add($"Couldn't save rating: {ex.Message}", Severity.Error); }
+    }
 
     private RenderFragment RenderEmptyState =>
     @<text>
@@ -365,10 +432,28 @@
                         }
                     </MudTd>
                     <MudTd>
-                        <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">@context.Status.ToString()</MudChip>
+                        @* stopPropagation keeps the status menu from also firing the
+                           row's navigate-to-detail click. *@
+                        <div @onclick:stopPropagation="true">
+                            <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                                <ActivatorContent Context="_menu">
+                                    <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)" Style="cursor: pointer;">@context.Status.ToString()</MudChip>
+                                </ActivatorContent>
+                                <ChildContent>
+                                    @foreach (var s in StatusOptions)
+                                    {
+                                        <MudMenuItem OnClick="@(() => OnStatusPicked(context, s))">@s</MudMenuItem>
+                                    }
+                                </ChildContent>
+                            </MudMenu>
+                        </div>
                     </MudTd>
                     <MudTd>
-                        <MudRating ReadOnly="true" SelectedValue="@context.Rating" MaxValue="5" Size="Size.Small" />
+                        <div @onclick:stopPropagation="true">
+                            <MudRating SelectedValue="@context.Rating"
+                                       SelectedValueChanged="@(v => OnRatingPicked(context, v))"
+                                       MaxValue="5" Size="Size.Small" />
+                        </div>
                     </MudTd>
                 </RowTemplate>
             </MudTable>
@@ -397,8 +482,24 @@
                             <MudText Typo="Typo.caption" Color="Color.Secondary">@book.WorkCount works</MudText>
                         }
                         <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mt-1" Wrap="Wrap.Wrap">
-                            <MudChip T="string" Size="Size.Small" Color="@StatusColor(book.Status)">@book.Status.ToString()</MudChip>
-                            <MudRating ReadOnly="true" SelectedValue="@book.Rating" MaxValue="5" Size="Size.Small" />
+                            <div @onclick:stopPropagation="true">
+                                <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                                    <ActivatorContent>
+                                        <MudChip T="string" Size="Size.Small" Color="@StatusColor(book.Status)" Style="cursor: pointer;">@book.Status.ToString()</MudChip>
+                                    </ActivatorContent>
+                                    <ChildContent>
+                                        @foreach (var s in StatusOptions)
+                                        {
+                                            <MudMenuItem OnClick="@(() => OnStatusPicked(book, s))">@s</MudMenuItem>
+                                        }
+                                    </ChildContent>
+                                </MudMenu>
+                            </div>
+                            <div @onclick:stopPropagation="true">
+                                <MudRating SelectedValue="@book.Rating"
+                                           SelectedValueChanged="@(v => OnRatingPicked(book, v))"
+                                           MaxValue="5" Size="Size.Small" />
+                            </div>
                         </MudStack>
                     </div>
                 </div>

@@ -429,4 +429,156 @@ public class BookListViewModelTests
         Assert.Equal("Mystery", vm.Groups[0].Label);
         Assert.Equal(1, vm.Groups[0].Count);
     }
+
+    // ---- Inline status / rating quick-set (Library worklist) ----------------
+
+    private static async Task<int> SeedSingleBookAsync(
+        TestDbContextFactory factory,
+        BookStatus status = BookStatus.Unread,
+        int rating = 0,
+        string? notes = null)
+    {
+        using var db = factory.CreateDbContext();
+        var author = new Author { Name = "Solo Author" };
+        db.Authors.Add(author);
+        var book = new Book
+        {
+            Title = "The Book",
+            Status = status,
+            Rating = rating,
+            Notes = notes,
+            Works = [new Work { Title = "The Book", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+        };
+        db.Books.Add(book);
+        await db.SaveChangesAsync();
+        return book.Id;
+    }
+
+    [Fact]
+    public async Task StatusFilter_NarrowsFlatList()
+    {
+        var factory = new TestDbContextFactory();
+        using (var db = factory.CreateDbContext())
+        {
+            var a = new Author { Name = "A" };
+            db.Authors.Add(a);
+            db.Books.AddRange(
+                new Book { Title = "Unread One", Status = BookStatus.Unread, Works = [new Work { Title = "Unread One", WorkAuthors = [new WorkAuthor { Author = a, Order = 0 }] }] },
+                new Book { Title = "Read One", Status = BookStatus.Read, Works = [new Work { Title = "Read One", WorkAuthors = [new WorkAuthor { Author = a, Order = 0 }] }] });
+            await db.SaveChangesAsync();
+        }
+
+        var vm = new BookListViewModel(factory)
+        {
+            SelectedGroupBy = LibraryGroupBy.None,
+            SelectedStatus = BookStatus.Unread,
+        };
+        await vm.InitializeAsync();
+
+        Assert.Single(vm.Books);
+        Assert.Equal("Unread One", vm.Books[0].Title);
+    }
+
+    [Fact]
+    public async Task SetStatusAsync_PersistsAndPatchesLoadedRow()
+    {
+        var factory = new TestDbContextFactory();
+        var bookId = await SeedSingleBookAsync(factory, status: BookStatus.Unread);
+
+        var vm = new BookListViewModel(factory) { SelectedGroupBy = LibraryGroupBy.None };
+        await vm.InitializeAsync();
+
+        await vm.SetStatusAsync(bookId, BookStatus.Reading);
+
+        using (var db = factory.CreateDbContext())
+            Assert.Equal(BookStatus.Reading, db.Books.Single(b => b.Id == bookId).Status);
+        // Patched in place — no reload, the row reflects the new status.
+        Assert.Equal(BookStatus.Reading, vm.Books.Single(b => b.Id == bookId).Status);
+    }
+
+    [Fact]
+    public async Task SetStatusAsync_ToRead_WritesStatusRatingAndNotesTogether()
+    {
+        // The Mark-Read dialog supplies rating + notes in the same call so
+        // nothing is lost to a mid-edit re-filter.
+        var factory = new TestDbContextFactory();
+        var bookId = await SeedSingleBookAsync(factory, status: BookStatus.Unread);
+
+        var vm = new BookListViewModel(factory) { SelectedGroupBy = LibraryGroupBy.None };
+        await vm.InitializeAsync();
+
+        await vm.SetStatusAsync(bookId, BookStatus.Read, rating: 4, notes: "Great read");
+
+        using (var db = factory.CreateDbContext())
+        {
+            var book = db.Books.Single(b => b.Id == bookId);
+            Assert.Equal(BookStatus.Read, book.Status);
+            Assert.Equal(4, book.Rating);
+            Assert.Equal("Great read", book.Notes);
+        }
+        var row = vm.Books.Single(b => b.Id == bookId);
+        Assert.Equal(BookStatus.Read, row.Status);
+        Assert.Equal(4, row.Rating);
+    }
+
+    [Fact]
+    public async Task SetStatusAsync_NullNotes_LeavesExistingNotesIntact()
+    {
+        // Leaving the dialog's notes field blank passes null — which must
+        // preserve any existing notes, not wipe them.
+        var factory = new TestDbContextFactory();
+        var bookId = await SeedSingleBookAsync(factory, status: BookStatus.Unread, notes: "keep me");
+
+        var vm = new BookListViewModel(factory) { SelectedGroupBy = LibraryGroupBy.None };
+        await vm.InitializeAsync();
+
+        await vm.SetStatusAsync(bookId, BookStatus.Read, rating: 3, notes: null);
+
+        using var db = factory.CreateDbContext();
+        Assert.Equal("keep me", db.Books.Single(b => b.Id == bookId).Notes);
+    }
+
+    [Fact]
+    public async Task SetStatusAsync_KeepsRowVisibleUnderActiveFilterUntilReload()
+    {
+        // The core worklist guarantee: marking a book out of the active status
+        // filter must NOT make it vanish mid-edit — it stays until the next
+        // explicit reload, which is what lets the user finish (e.g. rate it).
+        var factory = new TestDbContextFactory();
+        var bookId = await SeedSingleBookAsync(factory, status: BookStatus.Unread);
+
+        var vm = new BookListViewModel(factory)
+        {
+            SelectedGroupBy = LibraryGroupBy.None,
+            SelectedStatus = BookStatus.Unread,
+        };
+        await vm.InitializeAsync();
+        Assert.Single(vm.Books);
+
+        await vm.SetStatusAsync(bookId, BookStatus.Reading);
+
+        // Still present, now showing the new status.
+        Assert.Single(vm.Books);
+        Assert.Equal(BookStatus.Reading, vm.Books[0].Status);
+
+        // Only an explicit reload re-applies the (Unread) filter and drops it.
+        await vm.ApplyFiltersAsync();
+        Assert.Empty(vm.Books);
+    }
+
+    [Fact]
+    public async Task SetRatingAsync_PersistsAndPatchesLoadedRow()
+    {
+        var factory = new TestDbContextFactory();
+        var bookId = await SeedSingleBookAsync(factory, rating: 0);
+
+        var vm = new BookListViewModel(factory) { SelectedGroupBy = LibraryGroupBy.None };
+        await vm.InitializeAsync();
+
+        await vm.SetRatingAsync(bookId, 5);
+
+        using (var db = factory.CreateDbContext())
+            Assert.Equal(5, db.Books.Single(b => b.Id == bookId).Rating);
+        Assert.Equal(5, vm.Books.Single(b => b.Id == bookId).Rating);
+    }
 }

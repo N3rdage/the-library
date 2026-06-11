@@ -31,6 +31,9 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     public int SelectedGenreId { get; set; }
     public int SelectedTagId { get; set; }
     public string SelectedAuthor { get; set; } = "";
+    // Null = all statuses. Backs the Library status filter, which doubles as
+    // the re-triage worklist (filter to Unread, work down the list).
+    public BookStatus? SelectedStatus { get; set; }
 
     public List<GenreOption> AllGenres { get; private set; } = [];
     public List<TagOption> AllTags { get; private set; } = [];
@@ -434,6 +437,11 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             query = query.Where(b => b.Tags.Any(t => t.Id == SelectedTagId));
         }
 
+        if (SelectedStatus.HasValue)
+        {
+            query = query.Where(b => b.Status == SelectedStatus.Value);
+        }
+
         if (!string.IsNullOrWhiteSpace(SelectedAuthor))
         {
             var author = SelectedAuthor.Trim();
@@ -480,6 +488,7 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         SelectedGenreId = 0;
         SelectedTagId = 0;
         SelectedAuthor = "";
+        SelectedStatus = null;
         CurrentPage = 1;
         await ReloadAsync();
     }
@@ -496,6 +505,63 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         SelectedGroupBy = newGroupBy;
         CurrentPage = 1;
         await ReloadAsync();
+    }
+
+    /// <summary>Inline status set from the Library row. Optionally also writes
+    /// Rating + Notes in the same save (the Mark-Read dialog supplies both).
+    /// The loaded row is patched in place rather than re-queried, so a book
+    /// the user just moved out of the active status filter doesn't vanish
+    /// mid-interaction — the filter re-applies only on the next explicit
+    /// reload (filter change / paging / navigation).</summary>
+    public async Task SetStatusAsync(int bookId, BookStatus status, int? rating = null, string? notes = null)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var book = await db.Books.FindAsync(bookId);
+        if (book is null) return;
+
+        book.Status = status;
+        if (rating.HasValue) book.Rating = Math.Clamp(rating.Value, 0, 5);
+        if (notes is not null) book.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        await db.SaveChangesAsync();
+
+        PatchLoadedItem(bookId, item => item with
+        {
+            Status = status,
+            Rating = rating ?? item.Rating,
+        });
+    }
+
+    /// <summary>Inline rating set from the Library row (independent of status —
+    /// rating changes never hide a row, since there's no rating filter).</summary>
+    public async Task SetRatingAsync(int bookId, int rating)
+    {
+        rating = Math.Clamp(rating, 0, 5);
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var book = await db.Books.FindAsync(bookId);
+        if (book is null) return;
+
+        book.Rating = rating;
+        await db.SaveChangesAsync();
+
+        PatchLoadedItem(bookId, item => item with { Rating = rating });
+    }
+
+    // Replace the matching row (records are immutable) wherever it's currently
+    // loaded — the flat list and every expanded group share the same id space,
+    // and a book can appear under more than one author group, so patch all.
+    private void PatchLoadedItem(int bookId, Func<BookListItem, BookListItem> transform)
+    {
+        var flatIdx = Books.FindIndex(b => b.Id == bookId);
+        if (flatIdx >= 0) Books[flatIdx] = transform(Books[flatIdx]);
+
+        foreach (var group in LoadedGroups.Values)
+        {
+            for (var i = 0; i < group.Books.Count; i++)
+            {
+                if (group.Books[i].Id == bookId)
+                    group.Books[i] = transform(group.Books[i]);
+            }
+        }
     }
 
     public static string StatusBadgeClass(BookStatus status) => status switch
