@@ -1,6 +1,8 @@
 @page "/books"
 @inject BookListViewModel VM
 @inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 <PageTitle>Library - Bookcase</PageTitle>
 
@@ -108,6 +110,21 @@
                             {
                                 <MudSelectItem Value="@t.Id">@t.Name</MudSelectItem>
                             }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="6" md="2">
+                        <MudSelect T="BookStatus?"
+                                   Value="@VM.SelectedStatus"
+                                   ValueChanged="@OnStatusFilterChanged"
+                                   Label="Status"
+                                   Variant="Variant.Outlined"
+                                   Margin="Margin.Dense"
+                                   Dense="true">
+                            <MudSelectItem T="BookStatus?" Value="@((BookStatus?)null)">All</MudSelectItem>
+                            <MudSelectItem T="BookStatus?" Value="@((BookStatus?)BookStatus.Unread)">Unread</MudSelectItem>
+                            <MudSelectItem T="BookStatus?" Value="@((BookStatus?)BookStatus.Reading)">Reading</MudSelectItem>
+                            <MudSelectItem T="BookStatus?" Value="@((BookStatus?)BookStatus.Read)">Read</MudSelectItem>
+                            <MudSelectItem T="BookStatus?" Value="@((BookStatus?)BookStatus.Reference)">Reference</MudSelectItem>
                         </MudSelect>
                     </MudItem>
                     <MudItem xs="12" md="3">
@@ -266,6 +283,12 @@
         await VM.ApplyFiltersAsync();
     }
 
+    private async Task OnStatusFilterChanged(BookStatus? value)
+    {
+        VM.SelectedStatus = value;
+        await VM.ApplyFiltersAsync();
+    }
+
     private async Task OnAuthorChanged(string value)
     {
         VM.SelectedAuthor = value ?? "";
@@ -299,6 +322,50 @@
 
     private void NavigateToBook(int bookId) => Nav.NavigateTo($"/books/{bookId}");
 
+    private static readonly BookStatus[] StatusOptions =
+        [BookStatus.Unread, BookStatus.Reading, BookStatus.Read, BookStatus.Reference];
+
+    // Inline status set. Moving to Read opens the rating/notes dialog so both
+    // are captured before the row potentially leaves an active status filter;
+    // every other status persists immediately. The row is patched in place by
+    // the VM, so it stays visible until the next explicit reload.
+    private async Task OnStatusPicked(BookListViewModel.BookListItem book, BookStatus status)
+    {
+        if (status == book.Status) return;
+
+        if (status == BookStatus.Read)
+        {
+            await OpenMarkReadDialog(book);
+            return;
+        }
+
+        try { await VM.SetStatusAsync(book.Id, status); }
+        catch (Exception ex) { Snackbar.Add($"Couldn't update status: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task OpenMarkReadDialog(BookListViewModel.BookListItem book)
+    {
+        var parameters = new DialogParameters<MarkReadDialog>
+        {
+            { x => x.BookTitle, book.Title },
+            { x => x.InitialRating, book.Rating },
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<MarkReadDialog>("Mark as Read", parameters, options);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled && result.Data is MarkReadDialog.MarkReadResult r)
+        {
+            try { await VM.SetStatusAsync(book.Id, BookStatus.Read, r.Rating, r.Notes); }
+            catch (Exception ex) { Snackbar.Add($"Couldn't update status: {ex.Message}", Severity.Error); }
+        }
+    }
+
+    private async Task OnRatingPicked(BookListViewModel.BookListItem book, int rating)
+    {
+        try { await VM.SetRatingAsync(book.Id, rating); }
+        catch (Exception ex) { Snackbar.Add($"Couldn't save rating: {ex.Message}", Severity.Error); }
+    }
+
     private RenderFragment RenderEmptyState =>
     @<text>
         <MudStack AlignItems="AlignItems.Center" Class="py-5">
@@ -311,13 +378,14 @@
 
     private RenderFragment RenderBooks(IReadOnlyList<BookListViewModel.BookListItem> books) =>
     @<text>
+        @* Navigation is on the cover + title only (explicit links), NOT the whole
+           row. That keeps the inline status menu / rating editable without a
+           stopPropagation wrapper — which broke MudMenu's popover (the click has
+           to reach the document for the menu to stay open). *@
+
         @* Desktop table — hidden on mobile *@
         <div class="d-none d-md-block">
-            <MudTable Items="@books"
-                      Hover="true"
-                      Elevation="0"
-                      OnRowClick="@((TableRowClickEventArgs<BookListViewModel.BookListItem> e) => NavigateToBook(e.Item!.Id))"
-                      RowStyle="cursor: pointer;">
+            <MudTable Items="@books" Hover="true" Elevation="0">
                 <HeaderContent>
                     <MudTh Style="width: 60px;"></MudTh>
                     <MudTh>Title</MudTh>
@@ -329,18 +397,22 @@
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>
-                        @if (!string.IsNullOrWhiteSpace(context.CoverUrl))
-                        {
-                            <img src="@context.CoverUrl" alt="" loading="lazy" decoding="async" class="rounded" style="width: 40px; height: 56px; object-fit: cover;" />
-                        }
-                        else
-                        {
-                            <div class="rounded d-flex align-items-center justify-content-center" style="width: 40px; height: 56px; background: rgba(0,0,0,0.05);">
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">--</MudText>
-                            </div>
-                        }
+                        <div @onclick="() => NavigateToBook(context.Id)" style="cursor: pointer;">
+                            @if (!string.IsNullOrWhiteSpace(context.CoverUrl))
+                            {
+                                <img src="@context.CoverUrl" alt="" loading="lazy" decoding="async" class="rounded" style="width: 40px; height: 56px; object-fit: cover;" />
+                            }
+                            else
+                            {
+                                <div class="rounded d-flex align-items-center justify-content-center" style="width: 40px; height: 56px; background: rgba(0,0,0,0.05);">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">--</MudText>
+                                </div>
+                            }
+                        </div>
                     </MudTd>
                     <MudTd>
+                        @* Title is plain selectable text — only the cover navigates,
+                           so the title can be copy/pasted without firing a click. *@
                         <MudText Style="font-weight: 500;">@context.Title</MudText>
                         @if (!string.IsNullOrWhiteSpace(context.Subtitle))
                         {
@@ -365,10 +437,26 @@
                         }
                     </MudTd>
                     <MudTd>
-                        <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">@context.Status.ToString()</MudChip>
+                        @* MudMenu's own Label activator — a MudButton in ActivatorContent
+                           stops click propagation (MudBlazor v8+ default), so the menu
+                           never toggles. Letting MudMenu render the button fixes that. *@
+                        <MudMenu Label="@context.Status.ToString()"
+                                 Variant="Variant.Filled"
+                                 Color="@StatusColor(context.Status)"
+                                 Size="Size.Small"
+                                 EndIcon="@Icons.Material.Filled.ArrowDropDown"
+                                 Style="text-transform: none; border-radius: 16px;"
+                                 AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                            @foreach (var s in StatusOptions)
+                            {
+                                <MudMenuItem OnClick="@(() => OnStatusPicked(context, s))">@s</MudMenuItem>
+                            }
+                        </MudMenu>
                     </MudTd>
                     <MudTd>
-                        <MudRating ReadOnly="true" SelectedValue="@context.Rating" MaxValue="5" Size="Size.Small" />
+                        <MudRating SelectedValue="@context.Rating"
+                                   SelectedValueChanged="@(v => OnRatingPicked(context, v))"
+                                   MaxValue="5" Size="Size.Small" />
                     </MudTd>
                 </RowTemplate>
             </MudTable>
@@ -378,18 +466,21 @@
         <div class="d-md-none">
             @foreach (var book in books)
             {
-                <div class="book-card-mobile d-flex gap-3 align-items-start" @onclick="() => NavigateToBook(book.Id)">
-                    @if (!string.IsNullOrWhiteSpace(book.CoverUrl))
-                    {
-                        <img src="@book.CoverUrl" alt="" loading="lazy" decoding="async" class="rounded flex-shrink-0" style="width: 48px; height: 68px; object-fit: cover;" />
-                    }
-                    else
-                    {
-                        <div class="rounded d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 68px; background: rgba(0,0,0,0.05);">
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">--</MudText>
-                        </div>
-                    }
+                <div class="book-card-mobile d-flex gap-3 align-items-start">
+                    <div @onclick="() => NavigateToBook(book.Id)" style="cursor: pointer;" class="flex-shrink-0">
+                        @if (!string.IsNullOrWhiteSpace(book.CoverUrl))
+                        {
+                            <img src="@book.CoverUrl" alt="" loading="lazy" decoding="async" class="rounded" style="width: 48px; height: 68px; object-fit: cover;" />
+                        }
+                        else
+                        {
+                            <div class="rounded d-flex align-items-center justify-content-center" style="width: 48px; height: 68px; background: rgba(0,0,0,0.05);">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">--</MudText>
+                            </div>
+                        }
+                    </div>
                     <div class="flex-grow-1 min-width-0">
+                        @* Title/author are plain selectable text — only the cover navigates. *@
                         <MudText Style="font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">@book.Title</MudText>
                         <MudText Typo="Typo.body2" Color="Color.Secondary">@book.Author</MudText>
                         @if (book.WorkCount > 1)
@@ -397,8 +488,21 @@
                             <MudText Typo="Typo.caption" Color="Color.Secondary">@book.WorkCount works</MudText>
                         }
                         <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mt-1" Wrap="Wrap.Wrap">
-                            <MudChip T="string" Size="Size.Small" Color="@StatusColor(book.Status)">@book.Status.ToString()</MudChip>
-                            <MudRating ReadOnly="true" SelectedValue="@book.Rating" MaxValue="5" Size="Size.Small" />
+                            <MudMenu Label="@book.Status.ToString()"
+                                     Variant="Variant.Filled"
+                                     Color="@StatusColor(book.Status)"
+                                     Size="Size.Small"
+                                     EndIcon="@Icons.Material.Filled.ArrowDropDown"
+                                     Style="text-transform: none; border-radius: 16px;"
+                                     AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                                @foreach (var s in StatusOptions)
+                                {
+                                    <MudMenuItem OnClick="@(() => OnStatusPicked(book, s))">@s</MudMenuItem>
+                                }
+                            </MudMenu>
+                            <MudRating SelectedValue="@book.Rating"
+                                       SelectedValueChanged="@(v => OnRatingPicked(book, v))"
+                                       MaxValue="5" Size="Size.Small" />
                         </MudStack>
                     </div>
                 </div>
