@@ -437,7 +437,15 @@
                         <div @onclick:stopPropagation="true">
                             <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
                                 <ActivatorContent Context="_menu">
-                                    <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)" Style="cursor: pointer;">@context.Status.ToString()</MudChip>
+                                    @* MudButton (not MudChip) as the activator — a click-less
+                                       MudChip swallows the click and the menu never toggles. *@
+                                    <MudButton Variant="Variant.Filled"
+                                               Color="@StatusColor(context.Status)"
+                                               Size="Size.Small"
+                                               EndIcon="@Icons.Material.Filled.ArrowDropDown"
+                                               Style="text-transform: none; border-radius: 16px;">
+                                        @context.Status.ToString()
+                                    </MudButton>
                                 </ActivatorContent>
                                 <ChildContent>
                                     @foreach (var s in StatusOptions)
@@ -485,7 +493,13 @@
                             <div @onclick:stopPropagation="true">
                                 <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
                                     <ActivatorContent>
-                                        <MudChip T="string" Size="Size.Small" Color="@StatusColor(book.Status)" Style="cursor: pointer;">@book.Status.ToString()</MudChip>
+                                        <MudButton Variant="Variant.Filled"
+                                                   Color="@StatusColor(book.Status)"
+                                                   Size="Size.Small"
+                                                   EndIcon="@Icons.Material.Filled.ArrowDropDown"
+                                                   Style="text-transform: none; border-radius: 16px;">
+                                            @book.Status.ToString()
+                                        </MudButton>
                                     </ActivatorContent>
                                     <ChildContent>
                                         @foreach (var s in StatusOptions)
