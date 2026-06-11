@@ -21,7 +21,7 @@ public class BookFormViewModel
 
         public BookCategory Category { get; set; } = BookCategory.Fiction;
 
-        public BookStatus Status { get; set; } = BookStatus.Read;
+        public BookStatus Status { get; set; } = BookStatus.Unread;
 
         [Range(0, 5)]
         public int Rating { get; set; }

@@ -656,6 +656,25 @@ public class BookAddViewModelTests
     }
 
     [Fact]
+    public async Task SaveAsync_DefaultsNewBookToUnread()
+    {
+        // New books default to Unread (the user marks Read as they actually
+        // read them). The Add form never touches BookInput.Status here, so
+        // this asserts the BookFormInput default carries through SaveAsync.
+        var vm = CreateVm();
+        vm.BookInput.Title = "The Hobbit";
+        vm.WorkInput.Title = "The Hobbit";
+        vm.WorkInput.Authors = ["J.R.R. Tolkien"];
+
+        var ok = await vm.SaveAsync(new List<int>());
+
+        Assert.NotNull(ok);
+        using var db = _factory.CreateDbContext();
+        var book = db.Books.Single();
+        Assert.Equal(BookStatus.Unread, book.Status);
+    }
+
+    [Fact]
     public async Task SaveAsync_MultipleAuthors_DualWritesLeadAndJoin()
     {
         // Multi-author cutover PR1: save path sets Work.Author = lead chip
