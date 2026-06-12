@@ -15,7 +15,7 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     // Flat list (used only when GroupBy == None).
     public List<BookListItem> Books { get; private set; } = [];
     public int TotalCount { get; private set; }
-    public int CurrentPage { get; private set; } = 1;
+    public int CurrentPage { get; set; } = 1;
     public int TotalPages { get; private set; }
 
     // Grouped view state. The group list is loaded up front (with counts)
@@ -57,7 +57,7 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         }
     }
 
-    private async Task LoadFilterOptionsAsync()
+    public async Task LoadFilterOptionsAsync()
     {
         await using var db = await dbFactory.CreateDbContextAsync();
 
@@ -474,6 +474,43 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         b.Works.Count,
         b.Works.SelectMany(w => w.Genres).Select(g => g.Name).Distinct().ToList(),
         b.Tags.Select(t => t.Name).ToList());
+
+    // Filter state ⇄ query string. The URL is the source of truth for the
+    // Library view: every filter, the grouping, and the flat-list page live in
+    // the query so a drill into a book + browser Back restores the exact view
+    // (the VM is Transient — without this, every return rebuilds with defaults).
+    // Defaults are omitted from the URL to keep it clean: no `group` means the
+    // default Author grouping; no `page` means page 1.
+    public Dictionary<string, object?> ToQueryParameters() => new()
+    {
+        ["q"] = string.IsNullOrWhiteSpace(SearchTerm) ? null : SearchTerm.Trim(),
+        ["group"] = SelectedGroupBy == LibraryGroupBy.Author ? null : SelectedGroupBy.ToString(),
+        ["category"] = string.IsNullOrEmpty(SelectedCategory) ? null : SelectedCategory,
+        ["genre"] = SelectedGenreId > 0 ? SelectedGenreId : (int?)null,
+        ["tag"] = SelectedTagId > 0 ? SelectedTagId : (int?)null,
+        ["status"] = SelectedStatus?.ToString(),
+        ["author"] = string.IsNullOrWhiteSpace(SelectedAuthor) ? null : SelectedAuthor.Trim(),
+        ["page"] = CurrentPage > 1 ? CurrentPage : (int?)null,
+    };
+
+    // Inverse of ToQueryParameters: hydrate the filter fields from raw query
+    // values. Unparseable / absent values fall back to the same defaults the
+    // serializer omits, so round-tripping an omitted param is lossless.
+    public void ApplyQueryParameters(
+        string? q, string? group, string? category,
+        int? genre, int? tag, string? status, string? author, int? page)
+    {
+        SearchTerm = q ?? "";
+        SelectedGroupBy = Enum.TryParse<LibraryGroupBy>(group, ignoreCase: true, out var g)
+            ? g : LibraryGroupBy.Author;
+        SelectedCategory = category ?? "";
+        SelectedGenreId = genre is > 0 ? genre.Value : 0;
+        SelectedTagId = tag is > 0 ? tag.Value : 0;
+        SelectedStatus = Enum.TryParse<BookStatus>(status, ignoreCase: true, out var s)
+            ? s : null;
+        SelectedAuthor = author ?? "";
+        CurrentPage = page is > 0 ? page.Value : 1;
+    }
 
     public async Task ApplyFiltersAsync()
     {

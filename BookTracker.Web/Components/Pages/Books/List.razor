@@ -43,7 +43,7 @@
                 </MudButton>
             </MudItem>
             <MudItem xs="6" Class="d-md-none">
-                <MudButton OnClick="VM.ClearFiltersAsync"
+                <MudButton OnClick="ClearFilters"
                            Variant="Variant.Outlined"
                            FullWidth="true">
                     Clear
@@ -140,7 +140,7 @@
                                          CoerceValue="true" />
                     </MudItem>
                     <MudItem xs="12" md="1" Class="d-none d-md-flex">
-                        <MudIconButton OnClick="VM.ClearFiltersAsync"
+                        <MudIconButton OnClick="ClearFilters"
                                        Icon="@Icons.Material.Filled.Clear"
                                        title="Clear filters"
                                        Color="Color.Default"
@@ -239,60 +239,107 @@
     private bool showFilters;
     private LibraryGroupBy GroupBySelected { get; set; } = LibraryGroupBy.Author;
 
+    // Filter state lives in the query string so the view is a navigable URL:
+    // drilling into a book and pressing browser Back restores the exact filtered
+    // list (the VM is Transient, so without this every return rebuilds with
+    // defaults). See BookListViewModel.ToQueryParameters / ApplyQueryParameters.
+    [SupplyParameterFromQuery(Name = "q")] public string? QueryTerm { get; set; }
+    [SupplyParameterFromQuery(Name = "group")] public string? QueryGroup { get; set; }
+    [SupplyParameterFromQuery(Name = "category")] public string? QueryCategory { get; set; }
+    [SupplyParameterFromQuery(Name = "genre")] public int? QueryGenre { get; set; }
+    [SupplyParameterFromQuery(Name = "tag")] public int? QueryTag { get; set; }
+    [SupplyParameterFromQuery(Name = "status")] public string? QueryStatus { get; set; }
+    [SupplyParameterFromQuery(Name = "author")] public string? QueryAuthor { get; set; }
+    [SupplyParameterFromQuery(Name = "page")] public int? QueryPage { get; set; }
+
+    private string? loadedSignature;
+
     protected override async Task OnInitializedAsync()
     {
-        await VM.InitializeAsync();
-        GroupBySelected = VM.SelectedGroupBy;
+        // Dropdown options are query-independent — load once for the component's life.
+        await VM.LoadFilterOptionsAsync();
     }
 
-    private async Task OnSearchTermChanged(string value)
+    protected override async Task OnParametersSetAsync()
+    {
+        // Fires on first render and on every same-component query change (filter
+        // edits NavigateTo with replace:true). Guard so we only re-query the DB
+        // when the filter signature actually changed.
+        var signature = $"{QueryTerm}|{QueryGroup}|{QueryCategory}|{QueryGenre}|{QueryTag}|{QueryStatus}|{QueryAuthor}|{QueryPage}";
+        if (signature == loadedSignature) return;
+        loadedSignature = signature;
+
+        VM.ApplyQueryParameters(QueryTerm, QueryGroup, QueryCategory, QueryGenre, QueryTag, QueryStatus, QueryAuthor, QueryPage);
+        GroupBySelected = VM.SelectedGroupBy;
+        await VM.ReloadAsync();
+    }
+
+    // Push the current VM filter state into the URL. replace:true keeps filter
+    // tweaks out of history so Back from a book returns to the last view, not
+    // through every intermediate edit. The navigation re-enters
+    // OnParametersSetAsync, which performs the actual reload.
+    private void NavigateWithState()
+    {
+        var uri = Nav.GetUriWithQueryParameters(VM.ToQueryParameters());
+        Nav.NavigateTo(uri, forceLoad: false, replace: true);
+    }
+
+    // Any filter edit resets to page 1, then serialises to the URL.
+    private void ApplyFilterChange()
+    {
+        VM.CurrentPage = 1;
+        NavigateWithState();
+    }
+
+    private void OnSearchTermChanged(string value)
     {
         // Match the legacy "type updates state, Enter triggers query" UX —
-        // we update SearchTerm on each keystroke (Immediate="true") but
-        // ApplyFiltersAsync is only called from HandleSearchKeyUp on Enter.
+        // update SearchTerm on each keystroke (Immediate="true") but only
+        // navigate (and reload) from HandleSearchKeyUp on Enter.
         VM.SearchTerm = value ?? "";
     }
 
-    private async Task HandleSearchKeyUp(KeyboardEventArgs e)
+    private void HandleSearchKeyUp(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
-            await VM.ApplyFiltersAsync();
+            ApplyFilterChange();
     }
 
-    private async Task OnGroupByChanged(LibraryGroupBy value)
+    private void OnGroupByChanged(LibraryGroupBy value)
     {
         GroupBySelected = value;
-        await VM.ChangeGroupingAsync(value);
+        VM.SelectedGroupBy = value;
+        ApplyFilterChange();
     }
 
-    private async Task OnCategoryChanged(string value)
+    private void OnCategoryChanged(string value)
     {
         VM.SelectedCategory = value ?? "";
-        await VM.ApplyFiltersAsync();
+        ApplyFilterChange();
     }
 
-    private async Task OnGenreChanged(int value)
+    private void OnGenreChanged(int value)
     {
         VM.SelectedGenreId = value;
-        await VM.ApplyFiltersAsync();
+        ApplyFilterChange();
     }
 
-    private async Task OnTagChanged(int value)
+    private void OnTagChanged(int value)
     {
         VM.SelectedTagId = value;
-        await VM.ApplyFiltersAsync();
+        ApplyFilterChange();
     }
 
-    private async Task OnStatusFilterChanged(BookStatus? value)
+    private void OnStatusFilterChanged(BookStatus? value)
     {
         VM.SelectedStatus = value;
-        await VM.ApplyFiltersAsync();
+        ApplyFilterChange();
     }
 
-    private async Task OnAuthorChanged(string value)
+    private void OnAuthorChanged(string value)
     {
         VM.SelectedAuthor = value ?? "";
-        await VM.ApplyFiltersAsync();
+        ApplyFilterChange();
     }
 
     private Task<IEnumerable<string>> SearchAuthors(string value, CancellationToken token)
@@ -306,9 +353,16 @@
                 .Take(20));
     }
 
-    private async Task OnPageChanged(int page)
+    private void OnPageChanged(int page)
     {
-        await VM.GoToPageAsync(page);
+        VM.CurrentPage = page;
+        NavigateWithState();
+    }
+
+    // Clear = navigate to the bare page; OnParametersSetAsync rehydrates defaults.
+    private void ClearFilters()
+    {
+        Nav.NavigateTo("books", forceLoad: false, replace: true);
     }
 
     private async Task OnGroupExpandChanged(bool isExpanded, string key)
