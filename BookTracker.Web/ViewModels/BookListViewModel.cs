@@ -18,13 +18,12 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     public int CurrentPage { get; set; } = 1;
     public int TotalPages { get; private set; }
 
-    // Grouped view state. The group list is loaded up front (with counts)
-    // and rendered as a collapsible accordion. Each group's books are
-    // fetched lazily on first expand and paged independently.
+    // Grouped view state: the group list is loaded up front (with counts) and
+    // rendered as a virtualized list of rows. Clicking a row drills into a flat,
+    // filtered book list (see BuildGroupDrillParameters) rather than expanding
+    // in place.
     public LibraryGroupBy SelectedGroupBy { get; set; } = LibraryGroupBy.Author;
     public List<GroupRow> Groups { get; private set; } = [];
-    public Dictionary<string, GroupBooks> LoadedGroups { get; } = [];
-    public HashSet<string> ExpandedGroupKeys { get; } = [];
 
     public string SearchTerm { get; set; } = "";
     public string SelectedCategory { get; set; } = "";
@@ -134,8 +133,6 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     {
         Loading = true;
         Groups = [];
-        LoadedGroups.Clear();
-        ExpandedGroupKeys.Clear();
 
         await using var db = await dbFactory.CreateDbContextAsync();
         var filtered = ApplyFilters(BookQueryWithIncludes(db));
@@ -152,101 +149,6 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         };
 
         Loading = false;
-    }
-
-    public async Task ToggleGroupAsync(string key)
-    {
-        if (ExpandedGroupKeys.Contains(key))
-        {
-            ExpandedGroupKeys.Remove(key);
-            return;
-        }
-
-        ExpandedGroupKeys.Add(key);
-        if (!LoadedGroups.ContainsKey(key))
-        {
-            await LoadGroupBooksAsync(key, page: 1);
-        }
-    }
-
-    public async Task LoadGroupBooksAsync(string key, int page)
-    {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var filtered = ApplyFilters(BookQueryWithIncludes(db));
-        filtered = ApplyGroupFilter(filtered, key);
-
-        var total = await filtered.CountAsync();
-
-        // Series-aware sort inside a group expand. Two shapes:
-        //   - Collection group: every book in the group belongs to that
-        //     specific series, so sort by the matching Work's SeriesOrder.
-        //     Compendiums take the minimum.
-        //   - Author group: books span any series the author wrote in.
-        //     Cluster series-having books first (alphabetical by series
-        //     name, then SeriesOrder), then standalone books by title.
-        // Genre / (no-series) / (no-genre) buckets fall back to title sort.
-        IQueryable<Book> ordered;
-        if (SelectedGroupBy == LibraryGroupBy.Collection
-            && key != NoneKey
-            && int.TryParse(key, out var seriesIdForSort))
-        {
-            ordered = filtered
-                .OrderBy(b => b.Works
-                    .Where(w => w.SeriesId == seriesIdForSort)
-                    .Min(w => (int?)w.SeriesOrder) ?? int.MaxValue)
-                .ThenBy(b => b.Title);
-        }
-        else if (SelectedGroupBy == LibraryGroupBy.Author && key != NoneKey)
-        {
-            ordered = filtered
-                .OrderBy(b => b.Works.Any(w => w.SeriesId != null) ? 0 : 1)
-                .ThenBy(b => b.Works
-                    .Where(w => w.SeriesId != null)
-                    .Select(w => w.Series!.Name)
-                    .Min())
-                .ThenBy(b => b.Works
-                    .Where(w => w.SeriesId != null)
-                    .Min(w => (int?)w.SeriesOrder) ?? int.MaxValue)
-                .ThenBy(b => b.Title);
-        }
-        else
-        {
-            ordered = filtered.OrderBy(b => b.Title);
-        }
-
-        var raw = await ordered
-            .Skip((page - 1) * PageSize)
-            .Take(PageSize)
-            .ToListAsync();
-
-        var items = raw.Select(ToBookListItem).ToList();
-        LoadedGroups[key] = new GroupBooks(items, page, total);
-    }
-
-    private IQueryable<Book> ApplyGroupFilter(IQueryable<Book> q, string key)
-    {
-        if (key == NoneKey)
-        {
-            return SelectedGroupBy switch
-            {
-                LibraryGroupBy.Genre => q.Where(b => !b.Works.Any(w => w.Genres.Any())),
-                LibraryGroupBy.Collection => q.Where(b => !b.Works.Any(w => w.SeriesId.HasValue)),
-                _ => q, // Author always has a value since Work.AuthorId is non-null
-            };
-        }
-
-        if (!int.TryParse(key, out var id)) return q;
-
-        return SelectedGroupBy switch
-        {
-            // Author key is the CANONICAL author id — match any Work whose
-            // Authors include the canonical OR an alias of it.
-            LibraryGroupBy.Author => q.Where(b => b.Works.Any(w =>
-                w.Authors.Any(a => a.Id == id || a.CanonicalAuthorId == id))),
-            LibraryGroupBy.Genre => q.Where(b => b.Works.Any(w => w.Genres.Any(g => g.Id == id))),
-            LibraryGroupBy.Collection => q.Where(b => b.Works.Any(w => w.SeriesId == id)),
-            _ => q,
-        };
     }
 
     private async Task<List<GroupRow>> GroupByAuthorAsync(BookTrackerDbContext db, IQueryable<Book> filtered)
@@ -584,33 +486,6 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         await ReloadAsync();
     }
 
-    public async Task ClearFiltersAsync()
-    {
-        SearchTerm = "";
-        SelectedCategory = "";
-        SelectedGenreId = 0;
-        SelectedTagId = 0;
-        SelectedSeriesId = 0;
-        SelectedAuthor = "";
-        SelectedStatus = null;
-        CurrentPage = 1;
-        await ReloadAsync();
-    }
-
-    public async Task GoToPageAsync(int page)
-    {
-        if (page < 1 || page > TotalPages) return;
-        CurrentPage = page;
-        await LoadBooksAsync();
-    }
-
-    public async Task ChangeGroupingAsync(LibraryGroupBy newGroupBy)
-    {
-        SelectedGroupBy = newGroupBy;
-        CurrentPage = 1;
-        await ReloadAsync();
-    }
-
     /// <summary>Inline status set from the Library row. Optionally also writes
     /// Rating + Notes in the same save (the Mark-Read dialog supplies both).
     /// The loaded row is patched in place rather than re-queried, so a book
@@ -650,22 +525,12 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         PatchLoadedItem(bookId, item => item with { Rating = rating });
     }
 
-    // Replace the matching row (records are immutable) wherever it's currently
-    // loaded — the flat list and every expanded group share the same id space,
-    // and a book can appear under more than one author group, so patch all.
+    // Replace the matching row in the flat list (records are immutable) so an
+    // inline status/rating change shows immediately without a re-query.
     private void PatchLoadedItem(int bookId, Func<BookListItem, BookListItem> transform)
     {
         var flatIdx = Books.FindIndex(b => b.Id == bookId);
         if (flatIdx >= 0) Books[flatIdx] = transform(Books[flatIdx]);
-
-        foreach (var group in LoadedGroups.Values)
-        {
-            for (var i = 0; i < group.Books.Count; i++)
-            {
-                if (group.Books[i].Id == bookId)
-                    group.Books[i] = transform(group.Books[i]);
-            }
-        }
     }
 
     public static string StatusBadgeClass(BookStatus status) => status switch
@@ -680,10 +545,6 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     public const string NoneKey = "_none";
 
     public record GroupRow(string Key, string Label, int Count);
-    public record GroupBooks(List<BookListItem> Books, int Page, int TotalCount)
-    {
-        public int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
-    }
 
     public record BookListItem(
         int Id, string Title, string? Subtitle, string Author, string? CoverUrl,
