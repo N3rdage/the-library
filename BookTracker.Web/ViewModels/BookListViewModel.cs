@@ -28,8 +28,12 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
 
     public string SearchTerm { get; set; } = "";
     public string SelectedCategory { get; set; } = "";
+    // 0 = all; > 0 = that genre / series; -1 = the "uncategorised" bucket
+    // (books with no genre / no series). The -1 sentinel lets the group
+    // drill-down and the filter dropdowns target uncategorised books.
     public int SelectedGenreId { get; set; }
     public int SelectedTagId { get; set; }
+    public int SelectedSeriesId { get; set; }
     public string SelectedAuthor { get; set; } = "";
     // Null = all statuses. Backs the Library status filter, which doubles as
     // the re-triage worklist (filter to Unread, work down the list).
@@ -37,6 +41,7 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
 
     public List<GenreOption> AllGenres { get; private set; } = [];
     public List<TagOption> AllTags { get; private set; } = [];
+    public List<SeriesOption> AllSeries { get; private set; } = [];
     public List<string> AllAuthors { get; private set; } = [];
 
     public async Task InitializeAsync()
@@ -80,6 +85,11 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             .Select(t => new TagOption(t.Id, t.Name))
             .ToListAsync();
 
+        AllSeries = await db.Series
+            .OrderBy(s => s.Name)
+            .Select(s => new SeriesOption(s.Id, s.Name))
+            .ToListAsync();
+
         // Author dropdown lists every Author entity (including pen names) by
         // name so the user can filter by either the canonical or an alias.
         AllAuthors = await db.Authors
@@ -99,8 +109,19 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         TotalPages = Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
         if (CurrentPage > TotalPages) CurrentPage = TotalPages;
 
-        var raw = await query
-            .OrderByDescending(b => b.DateAdded)
+        // Filtering to a single series (e.g. drilling in from a Collection
+        // group) sorts by that series' reading order rather than DateAdded —
+        // reading order is the whole point of looking at a series. Every other
+        // view keeps newest-first.
+        IQueryable<Book> ordered = SelectedSeriesId > 0
+            ? query
+                .OrderBy(b => b.Works
+                    .Where(w => w.SeriesId == SelectedSeriesId)
+                    .Min(w => (int?)w.SeriesOrder) ?? int.MaxValue)
+                .ThenBy(b => b.Title)
+            : query.OrderByDescending(b => b.DateAdded);
+
+        var raw = await ordered
             .Skip((CurrentPage - 1) * PageSize)
             .Take(PageSize)
             .ToListAsync();
@@ -391,20 +412,16 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
             .Select(s => new { s.Id, s.Name })
             .ToDictionaryAsync(x => x.Id, x => x.Name);
 
-        var groups = raw
+        // No "(no series)" bucket: grouping by series intentionally excludes
+        // seriesless books — that list is long enough to be noise here. Use the
+        // Series filter's "(no series)" option to see them as a flat list.
+        return raw
             .Select(r => new GroupRow(
                 Key: r.SeriesId.ToString(),
                 Label: names.GetValueOrDefault(r.SeriesId) ?? "(unknown)",
                 Count: r.Count))
             .OrderBy(g => g.Label)
             .ToList();
-
-        var unseriesedCount = await filtered.CountAsync(b => !b.Works.Any(w => w.SeriesId.HasValue));
-        if (unseriesedCount > 0)
-        {
-            groups.Add(new GroupRow(NoneKey, "(no series)", unseriesedCount));
-        }
-        return groups;
     }
 
     private IQueryable<Book> BookQueryWithIncludes(BookTrackerDbContext db) => db.Books
@@ -430,6 +447,19 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         if (SelectedGenreId > 0)
         {
             query = query.Where(b => b.Works.Any(w => w.Genres.Any(g => g.Id == SelectedGenreId)));
+        }
+        else if (SelectedGenreId == -1)
+        {
+            query = query.Where(b => !b.Works.Any(w => w.Genres.Any()));
+        }
+
+        if (SelectedSeriesId > 0)
+        {
+            query = query.Where(b => b.Works.Any(w => w.SeriesId == SelectedSeriesId));
+        }
+        else if (SelectedSeriesId == -1)
+        {
+            query = query.Where(b => !b.Works.Any(w => w.SeriesId.HasValue));
         }
 
         if (SelectedTagId > 0)
@@ -486,8 +516,9 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         ["q"] = string.IsNullOrWhiteSpace(SearchTerm) ? null : SearchTerm.Trim(),
         ["group"] = SelectedGroupBy == LibraryGroupBy.Author ? null : SelectedGroupBy.ToString(),
         ["category"] = string.IsNullOrEmpty(SelectedCategory) ? null : SelectedCategory,
-        ["genre"] = SelectedGenreId > 0 ? SelectedGenreId : (int?)null,
+        ["genre"] = SelectedGenreId != 0 ? SelectedGenreId : (int?)null,
         ["tag"] = SelectedTagId > 0 ? SelectedTagId : (int?)null,
+        ["series"] = SelectedSeriesId != 0 ? SelectedSeriesId : (int?)null,
         ["status"] = SelectedStatus?.ToString(),
         ["author"] = string.IsNullOrWhiteSpace(SelectedAuthor) ? null : SelectedAuthor.Trim(),
         ["page"] = CurrentPage > 1 ? CurrentPage : (int?)null,
@@ -498,18 +529,53 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     // serializer omits, so round-tripping an omitted param is lossless.
     public void ApplyQueryParameters(
         string? q, string? group, string? category,
-        int? genre, int? tag, string? status, string? author, int? page)
+        int? genre, int? tag, int? series, string? status, string? author, int? page)
     {
         SearchTerm = q ?? "";
         SelectedGroupBy = Enum.TryParse<LibraryGroupBy>(group, ignoreCase: true, out var g)
             ? g : LibraryGroupBy.Author;
         SelectedCategory = category ?? "";
-        SelectedGenreId = genre is > 0 ? genre.Value : 0;
+        SelectedGenreId = genre is -1 or > 0 ? genre.Value : 0;
         SelectedTagId = tag is > 0 ? tag.Value : 0;
+        SelectedSeriesId = series is -1 or > 0 ? series.Value : 0;
         SelectedStatus = Enum.TryParse<BookStatus>(status, ignoreCase: true, out var s)
             ? s : null;
         SelectedAuthor = author ?? "";
         CurrentPage = page is > 0 ? page.Value : 1;
+    }
+
+    // Build the query parameters for drilling a group row into a flat, filtered
+    // book list: carry the current filters forward, switch to the flat list,
+    // reset paging, and pin the clicked group's dimension. Lives on the VM (not
+    // the page) so it's unit-testable and so the NoneKey/id key-encoding stays
+    // next to the grouping code that produces those keys.
+    public Dictionary<string, object?> BuildGroupDrillParameters(GroupRow group)
+    {
+        var dict = ToQueryParameters();
+        // Must be the explicit "None" token, NOT null: an omitted group hydrates
+        // back to the Author default, which would land on a grouped view, not
+        // the flat list.
+        dict["group"] = LibraryGroupBy.None.ToString();
+        dict["page"] = null;
+
+        switch (SelectedGroupBy)
+        {
+            case LibraryGroupBy.Author:
+                // group.Label is the (unique) canonical author name, which the
+                // flat-list author filter matches including alias rollup.
+                dict["author"] = group.Label;
+                break;
+            case LibraryGroupBy.Genre:
+                dict["genre"] = group.Key == NoneKey ? -1 : int.Parse(group.Key);
+                break;
+            case LibraryGroupBy.Collection:
+                // No "(no series)" bucket in this grouping, so the key is always
+                // a real series id.
+                dict["series"] = int.Parse(group.Key);
+                break;
+        }
+
+        return dict;
     }
 
     public async Task ApplyFiltersAsync()
@@ -524,6 +590,7 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         SelectedCategory = "";
         SelectedGenreId = 0;
         SelectedTagId = 0;
+        SelectedSeriesId = 0;
         SelectedAuthor = "";
         SelectedStatus = null;
         CurrentPage = 1;
@@ -624,4 +691,5 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
 
     public record GenreOption(int Id, string Name, int? ParentGenreId);
     public record TagOption(int Id, string Name);
+    public record SeriesOption(int Id, string Name);
 }

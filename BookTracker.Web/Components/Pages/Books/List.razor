@@ -1,4 +1,5 @@
 @page "/books"
+@using Microsoft.AspNetCore.Components.Web.Virtualization
 @inject BookListViewModel VM
 @inject NavigationManager Nav
 @inject IDialogService DialogService
@@ -89,6 +90,7 @@
                                    Margin="Margin.Dense"
                                    Dense="true">
                             <MudSelectItem Value="0">All</MudSelectItem>
+                            <MudSelectItem Value="-1">(no genre)</MudSelectItem>
                             @foreach (var g in VM.AllGenres)
                             {
                                 @* NBSPs preserve the parent/child indent inside the dropdown. *@
@@ -109,6 +111,22 @@
                             @foreach (var t in VM.AllTags)
                             {
                                 <MudSelectItem Value="@t.Id">@t.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="6" md="2">
+                        <MudSelect T="int"
+                                   Value="@VM.SelectedSeriesId"
+                                   ValueChanged="@OnSeriesChanged"
+                                   Label="Series"
+                                   Variant="Variant.Outlined"
+                                   Margin="Margin.Dense"
+                                   Dense="true">
+                            <MudSelectItem Value="0">All</MudSelectItem>
+                            <MudSelectItem Value="-1">(no series)</MudSelectItem>
+                            @foreach (var s in VM.AllSeries)
+                            {
+                                <MudSelectItem Value="@s.Id">@s.Name</MudSelectItem>
                             }
                         </MudSelect>
                     </MudItem>
@@ -183,53 +201,34 @@
     }
     else
     {
-        @if (VM.Groups.Count == 0)
+        @* Snapshot the groups so Virtualize and the empty-result check share one
+           view per render. *@
+        var groups = VM.Groups;
+
+        @if (groups.Count == 0)
         {
             @RenderEmptyState
         }
         else
         {
-            <MudExpansionPanels MultiExpansion="true" Elevation="1">
-                @foreach (var group in VM.Groups)
-                {
-                    var key = group.Key;
-                    var isOpen = VM.ExpandedGroupKeys.Contains(key);
-                    var loaded = VM.LoadedGroups.GetValueOrDefault(key);
-                    <MudExpansionPanel Expanded="@isOpen"
-                                       ExpandedChanged="@(v => OnGroupExpandChanged(v, key))">
-                        <TitleContent>
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                <MudText Typo="Typo.body1" Style="font-weight: 500;" Class="flex-grow-1">@group.Label</MudText>
-                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@($"{group.Count} book{(group.Count == 1 ? "" : "s")}")</MudChip>
-                            </MudStack>
-                        </TitleContent>
-                        <ChildContent>
-                            @if (isOpen)
-                            {
-                                if (loaded is null)
-                                {
-                                    <MudStack AlignItems="AlignItems.Center" Class="py-3">
-                                        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
-                                    </MudStack>
-                                }
-                                else
-                                {
-                                    @RenderBooks(loaded.Books)
-
-                                    @if (loaded.TotalPages > 1)
-                                    {
-                                        <MudStack AlignItems="AlignItems.Center" Class="py-2">
-                                            <MudPagination Count="@loaded.TotalPages"
-                                                           Selected="@loaded.Page"
-                                                           SelectedChanged="@(p => VM.LoadGroupBooksAsync(key, p))" />
-                                        </MudStack>
-                                    }
-                                }
-                            }
-                        </ChildContent>
-                    </MudExpansionPanel>
-                }
-            </MudExpansionPanels>
+            @* Each group is a lightweight clickable row that drills into a flat,
+               filtered book list keyed by the group's dimension. Virtualize keeps
+               the rendered row count to ~the viewport — the old accordion put all
+               500-plus panels in the render tree at once, which was the lag. Drill
+               uses push-nav (not replace) so Back returns to this list. *@
+            <MudPaper Elevation="1">
+                <Virtualize Items="groups" Context="grp" ItemSize="57">
+                    <ItemContent>
+                        <div class="d-flex align-items-center pa-3"
+                             style="cursor: pointer; border-bottom: 1px solid var(--mud-palette-divider);"
+                             @onclick="@(() => DrillIntoGroup(grp))">
+                            <MudText Typo="Typo.body1" Style="font-weight: 500;" Class="flex-grow-1">@grp.Label</MudText>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="mr-2">@BookCountLabel(grp.Count)</MudChip>
+                            <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" Color="Color.Secondary" />
+                        </div>
+                    </ItemContent>
+                </Virtualize>
+            </MudPaper>
         }
     }
 
@@ -248,6 +247,7 @@
     [SupplyParameterFromQuery(Name = "category")] public string? QueryCategory { get; set; }
     [SupplyParameterFromQuery(Name = "genre")] public int? QueryGenre { get; set; }
     [SupplyParameterFromQuery(Name = "tag")] public int? QueryTag { get; set; }
+    [SupplyParameterFromQuery(Name = "series")] public int? QuerySeries { get; set; }
     [SupplyParameterFromQuery(Name = "status")] public string? QueryStatus { get; set; }
     [SupplyParameterFromQuery(Name = "author")] public string? QueryAuthor { get; set; }
     [SupplyParameterFromQuery(Name = "page")] public int? QueryPage { get; set; }
@@ -265,11 +265,11 @@
         // Fires on first render and on every same-component query change (filter
         // edits NavigateTo with replace:true). Guard so we only re-query the DB
         // when the filter signature actually changed.
-        var signature = $"{QueryTerm}|{QueryGroup}|{QueryCategory}|{QueryGenre}|{QueryTag}|{QueryStatus}|{QueryAuthor}|{QueryPage}";
+        var signature = $"{QueryTerm}|{QueryGroup}|{QueryCategory}|{QueryGenre}|{QueryTag}|{QuerySeries}|{QueryStatus}|{QueryAuthor}|{QueryPage}";
         if (signature == loadedSignature) return;
         loadedSignature = signature;
 
-        VM.ApplyQueryParameters(QueryTerm, QueryGroup, QueryCategory, QueryGenre, QueryTag, QueryStatus, QueryAuthor, QueryPage);
+        VM.ApplyQueryParameters(QueryTerm, QueryGroup, QueryCategory, QueryGenre, QueryTag, QuerySeries, QueryStatus, QueryAuthor, QueryPage);
         GroupBySelected = VM.SelectedGroupBy;
         await VM.ReloadAsync();
     }
@@ -330,6 +330,12 @@
         ApplyFilterChange();
     }
 
+    private void OnSeriesChanged(int value)
+    {
+        VM.SelectedSeriesId = value;
+        ApplyFilterChange();
+    }
+
     private void OnStatusFilterChanged(BookStatus? value)
     {
         VM.SelectedStatus = value;
@@ -365,14 +371,15 @@
         Nav.NavigateTo("books", forceLoad: false, replace: true);
     }
 
-    private async Task OnGroupExpandChanged(bool isExpanded, string key)
+    // Drill a group row into a flat, filtered book list (URL building lives on
+    // the VM — see BuildGroupDrillParameters). Push-nav (no replace:true) so
+    // Back returns to the group list: the group list → flat list → book stack.
+    private void DrillIntoGroup(BookListViewModel.GroupRow group)
     {
-        var alreadyExpanded = VM.ExpandedGroupKeys.Contains(key);
-        if (isExpanded != alreadyExpanded)
-        {
-            await VM.ToggleGroupAsync(key);
-        }
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(VM.BuildGroupDrillParameters(group)));
     }
+
+    private static string BookCountLabel(int count) => $"{count} book{(count == 1 ? "" : "s")}";
 
     private void NavigateToBook(int bookId) => Nav.NavigateTo($"/books/{bookId}");
 
