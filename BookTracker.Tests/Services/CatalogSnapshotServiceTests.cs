@@ -264,6 +264,45 @@ public class CatalogSnapshotServiceTests
     }
 
     [Fact]
+    public async Task GetSnapshotAsync_InterquelProjectsFlooredOrderAndDisplayLabel()
+    {
+        // An interquel work (SeriesOrder floored to 4 + SeriesOrderDisplay
+        // "4.5") ships BOTH the int (for sort + gap math) and the label so
+        // mobile can render "4.5" and exclude it from numbered-slot ownership.
+        using (var db = _factory.CreateDbContext())
+        {
+            var sanderson = new Author { Name = "Brandon Sanderson" };
+            db.Authors.Add(sanderson);
+            var stormlight = new Series { Name = "The Stormlight Archive", Type = SeriesType.Series, ExpectedCount = 5 };
+            db.Series.Add(stormlight);
+            await db.SaveChangesAsync();
+
+            db.Books.Add(new Book
+            {
+                Title = "Edgedancer",
+                Works =
+                [
+                    new Work
+                    {
+                        Title = "Edgedancer",
+                        SeriesId = stormlight.Id,
+                        SeriesOrder = 4,
+                        SeriesOrderDisplay = "4.5",
+                        WorkAuthors = [new WorkAuthor { Author = sanderson, Order = 0 }],
+                    },
+                ],
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var snapshot = await CreateService().GetSnapshotAsync();
+
+        var edgedancer = snapshot.Books.Single(b => b.Title == "Edgedancer");
+        Assert.Equal(4, edgedancer.SeriesOrder);
+        Assert.Equal("4.5", edgedancer.SeriesOrderDisplay);
+    }
+
+    [Fact]
     public async Task GetSnapshotAsync_SeriesListIncludesAllSeries_EvenEmptyOnes()
     {
         // Series list is always full-listed (changed from "only series

@@ -160,11 +160,11 @@ public class CatalogSnapshotService(
                 b.Rating,
                 b.Isbns.Distinct().ToList(),
                 b.FirstWorkSeries?.SeriesId,
-                // Mobile can't yet see SeriesOrderDisplay (PR2), so a floored
-                // interquel ("4.5" -> SeriesOrder 4) would phantom-claim slot 4
-                // in the offline series-gap view. Emit null for display-only
-                // orders until PR2 carries the label + restores adjacency.
-                b.FirstWorkSeries?.SeriesOrderDisplay == null ? b.FirstWorkSeries?.SeriesOrder : null,
+                // Real (floored) integer order. Mobile now carries
+                // SeriesOrderDisplay and applies the same "display-only orders
+                // don't claim a numbered slot" guard as the web gap detection,
+                // so the floored int is safe to ship.
+                b.FirstWorkSeries?.SeriesOrder,
                 b.DefaultCoverArtUrl,
                 Editions: b.Editions
                     .Select(e => new EditionSnapshot(e.Id, e.Isbn, e.Format.ToString(), e.CoverUrl, e.EditionNumber))
@@ -186,7 +186,8 @@ public class CatalogSnapshotService(
                         Contributors: w.WorkContributors
                             .Select(c => new AuthorContribution(c.Name, c.Role.ToString()))
                             .ToList()))
-                    .ToList()))
+                    .ToList(),
+                SeriesOrderDisplay: b.FirstWorkSeries?.SeriesOrderDisplay))
             .OrderBy(b => b.Title)
             .ToList();
 

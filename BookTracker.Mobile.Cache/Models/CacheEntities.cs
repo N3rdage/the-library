@@ -29,6 +29,15 @@ internal class CachedBook
     public int Rating { get; set; }
     public int? SeriesId { get; set; }
     public int? SeriesOrder { get; set; }
+    /// <summary>Human-facing order label overriding <see cref="SeriesOrder"/>
+    /// when the position isn't a plain integer ("4.5" interquel, "1A"). Null
+    /// for ordinary integer orders. Also the signal that a given
+    /// <see cref="SeriesOrder"/> is a floored/shared slot rather than a true
+    /// numbered volume — gap detection skips display-only rows so an interquel
+    /// doesn't mask a genuinely-missing numbered book. NULL is the correct
+    /// default for legacy rows (no interquel), so no InitAsync backfill is
+    /// needed (mirrors the EditionNumber int? case).</summary>
+    public string? SeriesOrderDisplay { get; set; }
     /// <summary>Remote cover URL from the snapshot (server-side
     /// Book.DefaultCoverArtUrl). Null when the Book has no cover set.
     /// Populated from BookSnapshot.CoverUrl; reset on every

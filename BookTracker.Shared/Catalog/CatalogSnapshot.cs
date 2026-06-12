@@ -79,7 +79,17 @@ public record BookSnapshot(
     // Only meaningful for multi-Work compendiums; single-Work books
     // ship a one-element list which the UI hides. Defaults to null
     // for the same back-compat reason as Editions.
-    IReadOnlyList<WorkSnapshot>? Works = null);
+    IReadOnlyList<WorkSnapshot>? Works = null,
+    // Human-facing order label that overrides SeriesOrder when the
+    // position isn't a plain integer — "4.5" for an interquel, "1A"
+    // for a hierarchical position. Null for ordinary integer orders
+    // (SeriesOrder renders directly). Sorting + gap detection run off
+    // the integer SeriesOrder (floored from the display on capture);
+    // this is display-only AND the signal that a given SeriesOrder is
+    // a shared/floored slot rather than a true numbered volume.
+    // Appended (not placed next to SeriesOrder) to keep existing
+    // positional BookSnapshot constructions compiling. Default null.
+    string? SeriesOrderDisplay = null);
 
 public record EditionSnapshot(
     int Id,

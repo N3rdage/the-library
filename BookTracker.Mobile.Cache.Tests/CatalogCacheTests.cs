@@ -810,6 +810,46 @@ public class CatalogCacheTests
     }
 
     [Fact]
+    public async Task GetSeriesGapsAsync_FlooredInterquel_DoesNotClaimNumberedSlot()
+    {
+        // An interquel ("4.5" -> SeriesOrder 4, SeriesOrderDisplay "4.5") shares
+        // an int slot for sort adjacency but must NOT count as owning slot #4 —
+        // otherwise the genuinely-missing real #4 is hidden from the gap view.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Vol 1", "Sanderson", ["Sanderson"], "Read", 0, [], SeriesId: 10, SeriesOrder: 1),
+                new(2, "Vol 2", "Sanderson", ["Sanderson"], "Read", 0, [], SeriesId: 10, SeriesOrder: 2),
+                new(3, "Vol 3", "Sanderson", ["Sanderson"], "Read", 0, [], SeriesId: 10, SeriesOrder: 3),
+                new(4, "Vol 5", "Sanderson", ["Sanderson"], "Read", 0, [], SeriesId: 10, SeriesOrder: 5),
+                new(5, "Edgedancer", "Sanderson", ["Sanderson"], "Read", 0, [], SeriesId: 10, SeriesOrder: 4, SeriesOrderDisplay: "4.5"),
+            ],
+            series: [new(10, "The Stormlight Archive", "Series", 5)]));
+
+        var gap = Assert.Single(await cache.GetSeriesGapsAsync());
+        Assert.Contains(4, gap.MissingOrders); // real #4 still flagged missing
+    }
+
+    [Fact]
+    public async Task PopulateAsync_PreservesSeriesOrderDisplayOnBooks()
+    {
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Edgedancer", "Sanderson", ["Sanderson"], "Read", 0,
+                    ["9780765391161"], SeriesId: 10, SeriesOrder: 4, SeriesOrderDisplay: "4.5"),
+            ],
+            series: [new(10, "The Stormlight Archive", "Series", 5)]));
+
+        var book = await cache.LookupByIsbnAsync("9780765391161");
+        Assert.NotNull(book);
+        Assert.Equal(4, book!.SeriesOrder);
+        Assert.Equal("4.5", book.SeriesOrderDisplay);
+    }
+
+    [Fact]
     public async Task GetSeriesGapsAsync_AlphabeticallySortedByName()
     {
         var cache = await NewCacheAsync();
