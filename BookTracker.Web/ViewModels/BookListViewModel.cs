@@ -418,9 +418,9 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         ["q"] = string.IsNullOrWhiteSpace(SearchTerm) ? null : SearchTerm.Trim(),
         ["group"] = SelectedGroupBy == LibraryGroupBy.Author ? null : SelectedGroupBy.ToString(),
         ["category"] = string.IsNullOrEmpty(SelectedCategory) ? null : SelectedCategory,
-        ["genre"] = SelectedGenreId != 0 ? SelectedGenreId : (int?)null,
+        ["genre"] = SentinelToQuery(SelectedGenreId),
         ["tag"] = SelectedTagId > 0 ? SelectedTagId : (int?)null,
-        ["series"] = SelectedSeriesId != 0 ? SelectedSeriesId : (int?)null,
+        ["series"] = SentinelToQuery(SelectedSeriesId),
         ["status"] = SelectedStatus?.ToString(),
         ["author"] = string.IsNullOrWhiteSpace(SelectedAuthor) ? null : SelectedAuthor.Trim(),
         ["page"] = CurrentPage > 1 ? CurrentPage : (int?)null,
@@ -437,14 +437,21 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         SelectedGroupBy = Enum.TryParse<LibraryGroupBy>(group, ignoreCase: true, out var g)
             ? g : LibraryGroupBy.Author;
         SelectedCategory = category ?? "";
-        SelectedGenreId = genre is -1 or > 0 ? genre.Value : 0;
+        SelectedGenreId = SentinelFromQuery(genre);
         SelectedTagId = tag is > 0 ? tag.Value : 0;
-        SelectedSeriesId = series is -1 or > 0 ? series.Value : 0;
+        SelectedSeriesId = SentinelFromQuery(series);
         SelectedStatus = Enum.TryParse<BookStatus>(status, ignoreCase: true, out var s)
             ? s : null;
         SelectedAuthor = author ?? "";
         CurrentPage = page is > 0 ? page.Value : 1;
     }
+
+    // Sentinel ⇄ query for the genre/series filters: 0 = "all" (omitted from the
+    // URL); -1 = the "uncategorised" bucket ("(no genre)" / "(no series)"); > 0 =
+    // a specific id. One rule, named once per direction rather than inlined at
+    // each call site. (Tag has no uncategorised bucket, so it stays `> 0`.)
+    private static int? SentinelToQuery(int value) => value != 0 ? value : null;
+    private static int SentinelFromQuery(int? value) => value is -1 or > 0 ? value.Value : 0;
 
     // Build the query parameters for drilling a group row into a flat, filtered
     // book list: carry the current filters forward, switch to the flat list,
