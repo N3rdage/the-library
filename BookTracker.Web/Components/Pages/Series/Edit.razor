@@ -141,8 +141,9 @@ else
                                             {
                                                 <tr>
                                                     <td>
-                                                        <input type="number" class="form-control form-control-sm" style="width: 70px;"
-                                                               value="@work.SeriesOrder"
+                                                        <input type="text" class="form-control form-control-sm" style="width: 70px;"
+                                                               value="@SeriesOrderParser.Format(work.SeriesOrder, work.SeriesOrderDisplay)"
+                                                               title="Whole number, or '4.5' for an interquel"
                                                                @onchange="e => UpdateOrderAsync(work.Id, e)" />
                                                     </td>
                                                     <td>@work.Title</td>
@@ -261,7 +262,6 @@ else
 
     private async Task UpdateOrderAsync(int workId, ChangeEventArgs e)
     {
-        int? newOrder = int.TryParse(e.Value?.ToString(), out var val) ? val : null;
-        await VM.UpdateWorkOrderAsync(workId, newOrder);
+        await VM.UpdateWorkOrderAsync(workId, e.Value?.ToString());
     }
 }

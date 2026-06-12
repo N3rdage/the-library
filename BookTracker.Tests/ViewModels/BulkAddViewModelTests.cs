@@ -388,4 +388,44 @@ public class BulkAddViewModelTests
         // No new Series row created — attached to the seeded one.
         Assert.Equal(1, db2.Series.Count());
     }
+
+    [Fact]
+    public async Task AcceptRowAsync_WithNonIntegerOrder_PersistsFlooredOrderAndDisplay()
+    {
+        int seededSeriesId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var series = new Series { Name = "The Stormlight Archive", Type = SeriesType.Series };
+            db.Series.Add(series);
+            await db.SaveChangesAsync();
+            seededSeriesId = series.Id;
+        }
+
+        var vm = CreateVm();
+        vm.OnStateChanged = () => Task.CompletedTask;
+        var row = new BulkAddViewModel.DiscoveryRow
+        {
+            Isbn = "9780765326362",
+            Title = "Edgedancer",
+            Author = "Brandon Sanderson",
+            Status = BulkAddViewModel.RowStatus.Found,
+            SeriesSuggestion = new SeriesMatch(
+                SeriesId: seededSeriesId,
+                SeriesName: "The Stormlight Archive",
+                SeriesType: SeriesType.Series,
+                Reason: MatchReason.ApiMatchExisting,
+                Message: "Open Library indicates this is part of \"The Stormlight Archive\" #2.5",
+                SuggestedOrder: 2,
+                SuggestedOrderDisplay: "2.5")
+        };
+        vm.Rows.Add(row);
+
+        vm.AcceptSeriesSuggestion(row);
+        await vm.AcceptRowAsync(row);
+
+        using var db2 = _factory.CreateDbContext();
+        var work = db2.Works.Single();
+        Assert.Equal(2, work.SeriesOrder);             // floored sort key
+        Assert.Equal("2.5", work.SeriesOrderDisplay);  // raw display override
+    }
 }

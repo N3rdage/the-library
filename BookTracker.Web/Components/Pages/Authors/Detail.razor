@@ -143,9 +143,9 @@
                             <MudListItem T="int" Class="px-2">
                                 <MudStack Spacing="0">
                                     <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
-                                        @if (w.SeriesOrder is int so)
+                                        @if (!string.IsNullOrEmpty(w.SeriesOrderLabel))
                                         {
-                                            <MudText Typo="Typo.body2" Color="Color.Secondary">#@so</MudText>
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">#@w.SeriesOrderLabel</MudText>
                                         }
                                         <MudText Typo="Typo.body1" Style="font-weight: 500;">@w.Title</MudText>
                                         @if (!string.IsNullOrEmpty(w.WrittenAs))

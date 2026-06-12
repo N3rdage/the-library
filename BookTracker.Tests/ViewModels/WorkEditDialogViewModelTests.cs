@@ -50,7 +50,7 @@ public class WorkEditDialogViewModelTests
         Assert.Equal(new[] { "Terry Pratchett" }, vm.AuthorNames);
         Assert.Equal("12 Nov 1987", vm.FirstPublishedDate);
         Assert.NotNull(vm.SelectedSeriesId);
-        Assert.Equal(4, vm.SeriesOrder);
+        Assert.Equal("4", vm.SeriesOrderInput);
         Assert.Single(vm.AvailableSeries);
     }
 

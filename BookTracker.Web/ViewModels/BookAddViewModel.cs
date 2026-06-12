@@ -196,6 +196,7 @@ public class BookAddViewModel(
     public int? AcceptedSeriesId { get; private set; }
     public string? AcceptedSeriesName { get; private set; }
     public int? AcceptedSeriesOrder { get; private set; }
+    public string? AcceptedSeriesOrderDisplay { get; private set; }
 
     public void AcceptSeriesSuggestion()
     {
@@ -210,6 +211,7 @@ public class BookAddViewModel(
         AcceptedSeriesId = SeriesSuggestion.SeriesId;
         AcceptedSeriesName = SeriesSuggestion.SeriesName;
         AcceptedSeriesOrder = SeriesSuggestion.SuggestedOrder;
+        AcceptedSeriesOrderDisplay = SeriesSuggestion.SuggestedOrderDisplay;
         SeriesSuggestionAccepted = true;
     }
 
@@ -219,6 +221,7 @@ public class BookAddViewModel(
         AcceptedSeriesId = null;
         AcceptedSeriesName = null;
         AcceptedSeriesOrder = null;
+        AcceptedSeriesOrderDisplay = null;
     }
 
     // Existing-book detection — set during LookupAsync when the ISBN
@@ -635,6 +638,7 @@ public class BookAddViewModel(
                     {
                         work.SeriesId = existingId;
                         work.SeriesOrder = AcceptedSeriesOrder;
+                        work.SeriesOrderDisplay = AcceptedSeriesOrderDisplay;
                     }
                     else if (!string.IsNullOrWhiteSpace(AcceptedSeriesName))
                     {
@@ -648,6 +652,7 @@ public class BookAddViewModel(
                         }
                         work.Series = series;
                         work.SeriesOrder = AcceptedSeriesOrder;
+                        work.SeriesOrderDisplay = AcceptedSeriesOrderDisplay;
                     }
                 }
 

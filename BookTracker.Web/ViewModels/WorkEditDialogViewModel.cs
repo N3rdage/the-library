@@ -24,7 +24,10 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
     public List<ContributorEntry> Contributors { get; set; } = [];
     public string FirstPublishedDate { get; set; } = "";
     public int? SelectedSeriesId { get; set; }
-    public int? SeriesOrder { get; set; }
+    // Free-text so the user can enter "4.5" interquels / "1A" hierarchical
+    // positions — parsed into (SeriesOrder int sort key, SeriesOrderDisplay
+    // override) on save via SeriesOrderParser.
+    public string? SeriesOrderInput { get; set; }
     public List<int> SelectedGenreIds { get; set; } = [];
 
     public List<SeriesOption> AvailableSeries { get; private set; } = [];
@@ -58,7 +61,7 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
             .ToList();
         FirstPublishedDate = PartialDateParser.Format(work.FirstPublishedDate, work.FirstPublishedDatePrecision);
         SelectedSeriesId = work.SeriesId;
-        SeriesOrder = work.SeriesOrder;
+        SeriesOrderInput = SeriesOrderParser.Format(work.SeriesOrder, work.SeriesOrderDisplay);
         SelectedGenreIds = work.Genres.Select(g => g.Id).ToList();
 
         AvailableSeries = await db.Series
@@ -117,7 +120,15 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
         work.FirstPublishedDatePrecision = parsed.Precision;
 
         work.SeriesId = SelectedSeriesId;
-        work.SeriesOrder = SelectedSeriesId.HasValue ? SeriesOrder : null;
+        if (SelectedSeriesId.HasValue)
+        {
+            (work.SeriesOrder, work.SeriesOrderDisplay) = SeriesOrderParser.Parse(SeriesOrderInput);
+        }
+        else
+        {
+            work.SeriesOrder = null;
+            work.SeriesOrderDisplay = null;
+        }
 
         // Reconcile Genres to match the selection. Load requested genres
         // by id and replace the work's collection.

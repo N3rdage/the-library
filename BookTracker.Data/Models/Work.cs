@@ -44,5 +44,16 @@ public class Work
     /// <summary>Position in a Series (1-based). Defaults to publication order for Collections.</summary>
     public int? SeriesOrder { get; set; }
 
+    /// <summary>
+    /// Optional human-facing order label that overrides <see cref="SeriesOrder"/>
+    /// in the UI when the position isn't a plain integer — e.g. "4.5" for an
+    /// interquel (<i>Edgedancer</i>) or "1A" for a hierarchical position.
+    /// Null for ordinary integer orders, where <see cref="SeriesOrder"/> renders
+    /// directly. Sorting + gap detection always run off the integer
+    /// <see cref="SeriesOrder"/> (floored from the display value on capture).
+    /// </summary>
+    [MaxLength(50)]
+    public string? SeriesOrderDisplay { get; set; }
+
     public List<Book> Books { get; set; } = [];
 }

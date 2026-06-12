@@ -226,6 +226,7 @@ public class BulkAddViewModel(
             {
                 work.SeriesId = existingId;
                 work.SeriesOrder = row.AcceptedSeriesOrder;
+                work.SeriesOrderDisplay = row.AcceptedSeriesOrderDisplay;
             }
             else if (!string.IsNullOrWhiteSpace(row.AcceptedSeriesName))
             {
@@ -239,6 +240,7 @@ public class BulkAddViewModel(
                 }
                 work.Series = series;
                 work.SeriesOrder = row.AcceptedSeriesOrder;
+                work.SeriesOrderDisplay = row.AcceptedSeriesOrderDisplay;
             }
         }
 
@@ -340,6 +342,7 @@ public class BulkAddViewModel(
         public int? AcceptedSeriesId { get; set; }
         public string? AcceptedSeriesName { get; set; }
         public int? AcceptedSeriesOrder { get; set; }
+        public string? AcceptedSeriesOrderDisplay { get; set; }
     }
 
     public void AcceptSeriesSuggestion(DiscoveryRow row)
@@ -354,6 +357,7 @@ public class BulkAddViewModel(
         row.AcceptedSeriesId = row.SeriesSuggestion.SeriesId;
         row.AcceptedSeriesName = row.SeriesSuggestion.SeriesName;
         row.AcceptedSeriesOrder = row.SeriesSuggestion.SuggestedOrder;
+        row.AcceptedSeriesOrderDisplay = row.SeriesSuggestion.SuggestedOrderDisplay;
         row.SeriesSuggestionAccepted = true;
     }
 
@@ -363,6 +367,7 @@ public class BulkAddViewModel(
         row.AcceptedSeriesId = null;
         row.AcceptedSeriesName = null;
         row.AcceptedSeriesOrder = null;
+        row.AcceptedSeriesOrderDisplay = null;
     }
 
     public enum RowStatus { Searching, Found, NotFound }
