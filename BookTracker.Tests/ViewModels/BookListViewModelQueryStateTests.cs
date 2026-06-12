@@ -127,6 +127,64 @@ public class BookListViewModelQueryStateTests
         Assert.Equal(1, vm.CurrentPage);
     }
 
+    [Fact]
+    public void BuildGroupDrillParameters_SwitchesToFlatListExplicitly()
+    {
+        // Regression guard for the group=null bug: the drill must emit the
+        // explicit "None" token, NOT omit `group` — an omitted group hydrates
+        // back to the Author default and lands on a grouped view, not the flat
+        // list the drill is supposed to produce.
+        var vm = NewVm();
+        vm.SelectedGroupBy = LibraryGroupBy.Author;
+        vm.CurrentPage = 3;
+
+        var q = vm.BuildGroupDrillParameters(new BookListViewModel.GroupRow("42", "Stephen King", 7));
+
+        Assert.Equal(LibraryGroupBy.None.ToString(), q["group"]);
+        Assert.Null(q["page"]); // paging reset
+        Assert.Equal("Stephen King", q["author"]); // author keyed by (unique) canonical name
+    }
+
+    [Fact]
+    public void BuildGroupDrillParameters_GenreGroup_KeysByGenreId()
+    {
+        var vm = NewVm();
+        vm.SelectedGroupBy = LibraryGroupBy.Genre;
+
+        var q = vm.BuildGroupDrillParameters(new BookListViewModel.GroupRow("8", "Horror", 5));
+
+        Assert.Equal(LibraryGroupBy.None.ToString(), q["group"]);
+        Assert.Equal(8, q["genre"]);
+    }
+
+    [Fact]
+    public void BuildGroupDrillParameters_NoGenreBucket_MapsToMinusOneSentinel()
+    {
+        var vm = NewVm();
+        vm.SelectedGroupBy = LibraryGroupBy.Genre;
+
+        var q = vm.BuildGroupDrillParameters(
+            new BookListViewModel.GroupRow(BookListViewModel.NoneKey, "(no genre)", 3));
+
+        Assert.Equal(-1, q["genre"]);
+    }
+
+    [Fact]
+    public void BuildGroupDrillParameters_CollectionGroup_KeysBySeriesIdAndCarriesFilters()
+    {
+        // Drilling a series carries the active status filter forward but drops
+        // the grouping + page.
+        var vm = NewVm();
+        vm.SelectedGroupBy = LibraryGroupBy.Collection;
+        vm.SelectedStatus = BookStatus.Unread;
+
+        var q = vm.BuildGroupDrillParameters(new BookListViewModel.GroupRow("15", "Dune", 6));
+
+        Assert.Equal(LibraryGroupBy.None.ToString(), q["group"]);
+        Assert.Equal(15, q["series"]);
+        Assert.Equal("Unread", q["status"]); // current filter carried forward
+    }
+
     [Theory]
     [InlineData("plague", LibraryGroupBy.None, "Fiction", 12, 5, 8, BookStatus.Read, "Camus", 2)]
     [InlineData("", LibraryGroupBy.Author, "", 0, 0, 0, null, "", 1)]

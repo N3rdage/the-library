@@ -544,6 +544,40 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         CurrentPage = page is > 0 ? page.Value : 1;
     }
 
+    // Build the query parameters for drilling a group row into a flat, filtered
+    // book list: carry the current filters forward, switch to the flat list,
+    // reset paging, and pin the clicked group's dimension. Lives on the VM (not
+    // the page) so it's unit-testable and so the NoneKey/id key-encoding stays
+    // next to the grouping code that produces those keys.
+    public Dictionary<string, object?> BuildGroupDrillParameters(GroupRow group)
+    {
+        var dict = ToQueryParameters();
+        // Must be the explicit "None" token, NOT null: an omitted group hydrates
+        // back to the Author default, which would land on a grouped view, not
+        // the flat list.
+        dict["group"] = LibraryGroupBy.None.ToString();
+        dict["page"] = null;
+
+        switch (SelectedGroupBy)
+        {
+            case LibraryGroupBy.Author:
+                // group.Label is the (unique) canonical author name, which the
+                // flat-list author filter matches including alias rollup.
+                dict["author"] = group.Label;
+                break;
+            case LibraryGroupBy.Genre:
+                dict["genre"] = group.Key == NoneKey ? -1 : int.Parse(group.Key);
+                break;
+            case LibraryGroupBy.Collection:
+                // No "(no series)" bucket in this grouping, so the key is always
+                // a real series id.
+                dict["series"] = int.Parse(group.Key);
+                break;
+        }
+
+        return dict;
+    }
+
     public async Task ApplyFiltersAsync()
     {
         CurrentPage = 1;

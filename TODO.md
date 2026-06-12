@@ -1,6 +1,6 @@
 # TODO
 
-Outstanding work items for BookTracker. Priority-ordered: **security items first** (they always go to the top regardless of size), then the rest sorted by **increasing size / complexity** so small wins are at the top of the non-security list. This file is the single source of truth — code-level `// TODO` comments provide local context but this list is the master.
+Outstanding work items for BookTracker. Priority-ordered: **security items first** (they always go to the top regardless of size), then the rest sorted by **increasing size / complexity** so small wins are at the top of the non-security list. This file is the single source of truth for **feature / product** work — code-level `// TODO` comments provide local context but this list is the master. Code-quality / robustness debt surfaced during reviews lives in [`docs/TECH-DEBT.md`](docs/TECH-DEBT.md) (including items we've deliberately chosen **not** to fix, with rationale).
 
 Size legend: **XS** ≈ one-line fix, **S** ≈ one short session, **M** ≈ a day or a tight multi-PR series, **L** ≈ a multi-day arc or broad cross-cutting work, **XL** ≈ blocked / needs external change.
 

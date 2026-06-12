@@ -371,36 +371,12 @@
         Nav.NavigateTo("books", forceLoad: false, replace: true);
     }
 
-    // Drill a group row into a flat, filtered book list. Carries forward the
-    // current filters, switches to the flat list (group=None), and pins the
-    // clicked group's dimension. Push-nav (no replace:true) so Back returns to
-    // the group list — the group list → flat list → book nav stack.
+    // Drill a group row into a flat, filtered book list (URL building lives on
+    // the VM — see BuildGroupDrillParameters). Push-nav (no replace:true) so
+    // Back returns to the group list: the group list → flat list → book stack.
     private void DrillIntoGroup(BookListViewModel.GroupRow group)
     {
-        var dict = new Dictionary<string, object?>(VM.ToQueryParameters())
-        {
-            ["group"] = null, // flat list
-            ["page"] = null,  // reset paging
-        };
-
-        switch (VM.SelectedGroupBy)
-        {
-            case LibraryGroupBy.Author:
-                // group.Label is the (unique) canonical author name, which the
-                // flat-list author filter matches including alias rollup.
-                dict["author"] = group.Label;
-                break;
-            case LibraryGroupBy.Genre:
-                dict["genre"] = group.Key == BookListViewModel.NoneKey ? -1 : int.Parse(group.Key);
-                break;
-            case LibraryGroupBy.Collection:
-                // No "(no series)" bucket in this grouping, so the key is always
-                // a real series id.
-                dict["series"] = int.Parse(group.Key);
-                break;
-        }
-
-        Nav.NavigateTo(Nav.GetUriWithQueryParameters(dict));
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(VM.BuildGroupDrillParameters(group)));
     }
 
     private static string BookCountLabel(int count) => $"{count} book{(count == 1 ? "" : "s")}";
