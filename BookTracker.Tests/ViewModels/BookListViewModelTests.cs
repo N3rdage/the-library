@@ -92,7 +92,7 @@ public class BookListViewModelTests
     }
 
     [Fact]
-    public async Task GroupByCollection_AppendsNoSeriesBucket()
+    public async Task GroupByCollection_ExcludesSerieslessBooks()
     {
         var factory = new TestDbContextFactory();
         await SeedSampleLibraryAsync(factory);
@@ -100,9 +100,103 @@ public class BookListViewModelTests
         var vm = new BookListViewModel(factory) { SelectedGroupBy = LibraryGroupBy.Collection };
         await vm.InitializeAsync();
 
+        // Grouping by series intentionally drops seriesless books — only the
+        // real series surfaces, no "(no series)" bucket. Seriesless books are
+        // reachable via the Series filter's "(no series)" option instead.
         Assert.Contains(vm.Groups, g => g.Label == "Hercule Poirot" && g.Count == 1);
-        Assert.Contains(vm.Groups, g => g.Label == "(no series)" && g.Count == 3);
-        Assert.Equal("(no series)", vm.Groups.Last().Label);
+        Assert.DoesNotContain(vm.Groups, g => g.Label == "(no series)");
+        Assert.Single(vm.Groups);
+    }
+
+    [Fact]
+    public async Task FlatList_SeriesFilter_ReturnsOnlyThatSeries()
+    {
+        var factory = new TestDbContextFactory();
+        await SeedSampleLibraryAsync(factory);
+
+        int poirotId;
+        using (var db = factory.CreateDbContext())
+            poirotId = db.Series.Single(s => s.Name == "Hercule Poirot").Id;
+
+        var vm = new BookListViewModel(factory)
+        {
+            SelectedGroupBy = LibraryGroupBy.None,
+            SelectedSeriesId = poirotId,
+        };
+        await vm.InitializeAsync();
+
+        Assert.Equal(1, vm.TotalCount);
+        Assert.Equal("Murder on the Orient Express", Assert.Single(vm.Books).Title);
+    }
+
+    [Fact]
+    public async Task FlatList_NoSeriesFilter_ReturnsSerieslessBooks()
+    {
+        var factory = new TestDbContextFactory();
+        await SeedSampleLibraryAsync(factory);
+
+        var vm = new BookListViewModel(factory)
+        {
+            SelectedGroupBy = LibraryGroupBy.None,
+            SelectedSeriesId = -1, // "(no series)"
+        };
+        await vm.InitializeAsync();
+
+        // Everything except the one Poirot book.
+        Assert.Equal(3, vm.TotalCount);
+        Assert.DoesNotContain(vm.Books, b => b.Title == "Murder on the Orient Express");
+        Assert.Contains(vm.Books, b => b.Title == "Carrie");
+        Assert.Contains(vm.Books, b => b.Title == "The Long Walk");
+        Assert.Contains(vm.Books, b => b.Title == "Mystery Book Without Tags");
+    }
+
+    [Fact]
+    public async Task FlatList_NoGenreFilter_ReturnsUngenredBooks()
+    {
+        var factory = new TestDbContextFactory();
+        await SeedSampleLibraryAsync(factory);
+
+        var vm = new BookListViewModel(factory)
+        {
+            SelectedGroupBy = LibraryGroupBy.None,
+            SelectedGenreId = -1, // "(no genre)"
+        };
+        await vm.InitializeAsync();
+
+        Assert.Equal("Mystery Book Without Tags", Assert.Single(vm.Books).Title);
+    }
+
+    [Fact]
+    public async Task FlatList_SeriesFilter_SortsBySeriesOrder()
+    {
+        // Drilling into a series shows reading order, not DateAdded. Seed the
+        // books out of order to prove the SeriesOrder sort is what's applied.
+        var factory = new TestDbContextFactory();
+        int seriesId;
+        using (var db = factory.CreateDbContext())
+        {
+            var herbert = new Author { Name = "Frank Herbert" };
+            db.Authors.Add(herbert);
+            var dune = new Series { Name = "Dune", Type = SeriesType.Series };
+            db.Series.Add(dune);
+            db.Books.AddRange(
+                new Book { Title = "Dune Messiah", Works = [new Work { Title = "Dune Messiah", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }], Series = dune, SeriesOrder = 2 }] },
+                new Book { Title = "Dune", Works = [new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }], Series = dune, SeriesOrder = 1 }] },
+                new Book { Title = "Children of Dune", Works = [new Work { Title = "Children of Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }], Series = dune, SeriesOrder = 3 }] });
+            await db.SaveChangesAsync();
+            seriesId = dune.Id;
+        }
+
+        var vm = new BookListViewModel(factory)
+        {
+            SelectedGroupBy = LibraryGroupBy.None,
+            SelectedSeriesId = seriesId,
+        };
+        await vm.InitializeAsync();
+
+        Assert.Equal(
+            ["Dune", "Dune Messiah", "Children of Dune"],
+            vm.Books.Select(b => b.Title).ToList());
     }
 
     [Fact]
