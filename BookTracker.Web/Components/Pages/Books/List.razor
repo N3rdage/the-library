@@ -252,7 +252,10 @@
     [SupplyParameterFromQuery(Name = "author")] public string? QueryAuthor { get; set; }
     [SupplyParameterFromQuery(Name = "page")] public int? QueryPage { get; set; }
 
-    private string? loadedSignature;
+    // The query values last applied to the VM. A value tuple compares
+    // element-wise, so (unlike a delimited string) no filter value containing
+    // the delimiter can collide into a false "unchanged".
+    private (string?, string?, string?, int?, int?, int?, string?, string?, int?)? appliedQuery;
 
     protected override async Task OnInitializedAsync()
     {
@@ -263,15 +266,23 @@
     protected override async Task OnParametersSetAsync()
     {
         // Fires on first render and on every same-component query change (filter
-        // edits NavigateTo with replace:true). Guard so we only re-query the DB
-        // when the filter signature actually changed.
-        var signature = $"{QueryTerm}|{QueryGroup}|{QueryCategory}|{QueryGenre}|{QueryTag}|{QuerySeries}|{QueryStatus}|{QueryAuthor}|{QueryPage}";
-        if (signature == loadedSignature) return;
-        loadedSignature = signature;
+        // edits NavigateTo with replace:true). Skip the DB reload when the query
+        // is unchanged from what we last applied.
+        var incoming = (QueryTerm, QueryGroup, QueryCategory, QueryGenre, QueryTag, QuerySeries, QueryStatus, QueryAuthor, QueryPage);
+        if (incoming == appliedQuery) return;
+        appliedQuery = incoming;
 
         VM.ApplyQueryParameters(QueryTerm, QueryGroup, QueryCategory, QueryGenre, QueryTag, QuerySeries, QueryStatus, QueryAuthor, QueryPage);
         GroupBySelected = VM.SelectedGroupBy;
         await VM.ReloadAsync();
+
+        // Keep the URL the source of truth: if the requested page was clamped
+        // (the result set shrank), write the corrected page back so a refresh or
+        // Back doesn't re-request an out-of-range page every time.
+        if (VM.SelectedGroupBy == LibraryGroupBy.None && VM.CurrentPage != (QueryPage ?? 1))
+        {
+            NavigateWithState();
+        }
     }
 
     // Push the current VM filter state into the URL. replace:true keeps filter

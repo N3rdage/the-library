@@ -20,9 +20,6 @@ Each item notes where it came from so the context is recoverable.
 | # | Area | Item | Why it matters | Size |
 |---|---|---|---|---|
 | TD-2 | Library / scale | **`BookQueryWithIncludes` eager-loads four collection navigations in one query** (`Tags`, `Works→Genres`, `Works→WorkAuthors→Author`) — a cartesian-explosion shape that wants `AsSplitQuery()`. Also flagged: the grouped-sort correlated `.Min()` subqueries and FK-index coverage. | Makes every Library load heavier than necessary; bites harder toward the 3000+ copy target. Best handled as part of a `/scale-audit` pass rather than piecemeal — that skill targets exactly this. | M |
-| TD-3 | Library / correctness | **`loadedSignature` is a `\|`-delimited concat of raw query values** (`List.razor` `OnParametersSetAsync`). A search term or author name containing `\|` could collide into a false "unchanged" signature and skip a needed reload. | Low-probability stale-list bug; also every new filter param must be hand-added to the concat with no compiler help. Replace with a structured/ordinal comparison of the `ToQueryParameters` dict (or hash it). | S |
-| TD-4 | Library / correctness | **`LoadBooksAsync` clamps `CurrentPage` in-VM without re-navigating.** URL says `page=5`, data shrinks to 2 pages → VM shows page 2 but the URL still says 5, breaking the "URL is the source of truth" invariant PR1 established. | Harmless today (re-clamps on refresh) but a latent desync. Fix: clamp before capturing `loadedSignature`, or issue a `replace:true` nav with the corrected page. | S |
-| TD-5 | Library / cleanup | **The genre/series `-1` / `>0` / `0` sentinel rule is encoded three times** in three dialects across `ApplyFilters`, `ToQueryParameters`, and `ApplyQueryParameters` (and `tag` uses `>0` while genre/series use `!=0`). | Adding a filter dimension or a second sentinel means editing the same rule in three places; an inconsistency round-trips to the URL but silently no-ops in the query, with no compile error. Consider a small shared helper. | S |
 
 ## Accepted — deliberately not fixing (for now)
 
@@ -37,6 +34,9 @@ Each item notes where it came from so the context is recoverable.
 | # | Item | Resolution |
 |---|---|---|
 | TD-1 | Remove dead accordion machinery in `BookListViewModel` | Done 2026-06-12. Deleted `ToggleGroupAsync`, `LoadGroupBooksAsync`, `ApplyGroupFilter`, `LoadedGroups`, `ExpandedGroupKeys`, the `GroupBooks` record, and `PatchLoadedItem`'s group loop — plus three page-action helpers the URL rework had orphaned (`ChangeGroupingAsync`, `GoToPageAsync`, `ClearFiltersAsync`). The four `ToggleGroupAsync_*` tests were retargeted onto the flat-list path (two converted, two removed as redundant/obsolete). One deliberate behaviour drop recorded as TD-A3. |
+| TD-3 | `loadedSignature` `\|`-delimited string could collide | Done 2026-06-12. Replaced the delimited-string change-detection in `List.razor` `OnParametersSetAsync` with a value-tuple of the query params (element-wise equality — no delimiter to collide on, and a new param is a compile-time tuple change). |
+| TD-4 | `CurrentPage` clamp desynced from the URL | Done 2026-06-12. After a flat-list reload, if `CurrentPage` was clamped (result set shrank), the page now writes the corrected page back via `replace:true` nav, keeping the URL the source of truth. VM clamp covered by `FlatList_PageBeyondRange_ClampsToLastPage`. |
+| TD-5 | Genre/series sentinel rule triplicated | Done 2026-06-12. Extracted `SentinelToQuery`/`SentinelFromQuery` helpers on the VM; `ToQueryParameters`/`ApplyQueryParameters` now call them instead of inlining the `-1`/`0`/`>0` rule in two dialects. (`ApplyFilters` keeps its per-dimension predicates — a different concern — but the rule is named once.) |
 
 ---
 

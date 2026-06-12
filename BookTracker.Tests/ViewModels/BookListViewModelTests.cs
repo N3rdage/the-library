@@ -200,6 +200,26 @@ public class BookListViewModelTests
     }
 
     [Fact]
+    public async Task FlatList_PageBeyondRange_ClampsToLastPage()
+    {
+        // A page number past the end (e.g. a stale bookmarked ?page=5 after the
+        // library shrank) clamps to the last page. The page then writes the
+        // corrected value back into the URL (handled in List.razor).
+        var factory = new TestDbContextFactory();
+        await SeedSampleLibraryAsync(factory); // 4 books → 1 page
+
+        var vm = new BookListViewModel(factory)
+        {
+            SelectedGroupBy = LibraryGroupBy.None,
+            CurrentPage = 5,
+        };
+        await vm.InitializeAsync();
+
+        Assert.Equal(1, vm.TotalPages);
+        Assert.Equal(1, vm.CurrentPage);
+    }
+
+    [Fact]
     public async Task FlatList_AuthorFilter_IncludesAliasRollup()
     {
         // Drilling an Author group lands on the flat list filtered by the
