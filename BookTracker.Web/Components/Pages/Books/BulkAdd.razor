@@ -530,9 +530,9 @@
             <div class="text-success small mt-1 text-break d-flex align-items-start gap-2 flex-wrap">
                 <span>
                     <strong>✓ Series:</strong> @row.AcceptedSeriesName
-                    @if (row.AcceptedSeriesOrder is int order)
+                    @if (!string.IsNullOrEmpty(row.AcceptedSeriesOrderLabel))
                     {
-                        <span> #@order</span>
+                        <span> #@row.AcceptedSeriesOrderLabel</span>
                     }
                     @if (row.AcceptedSeriesId is null)
                     {

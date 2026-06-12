@@ -235,8 +235,24 @@ Rules:
             .ToListAsync(ct);
 
         var gapsText = incompleteSeries
-            .Where(s => s.Works.Count < s.ExpectedCount!.Value)
-            .Select(s => $"- {s.Name} by {s.Author ?? "various"}: have {s.Works.Count}/{s.ExpectedCount!.Value}, missing: {string.Join(", ", Enumerable.Range(1, s.ExpectedCount.Value).Where(i => !s.Works.Any(w => w.SeriesOrder == i)))}")
+            .Select(s =>
+            {
+                // Only plain-integer orders occupy a numbered slot. A floored
+                // interquel ("4.5", SeriesOrderDisplay set) shares an int for
+                // sort adjacency but must NOT count as owning that slot —
+                // otherwise it masks a genuinely-missing numbered volume.
+                var ownedSlots = s.Works
+                    .Where(w => w.SeriesOrderDisplay == null && w.SeriesOrder.HasValue)
+                    .Select(w => w.SeriesOrder!.Value)
+                    .Where(o => o >= 1 && o <= s.ExpectedCount!.Value)
+                    .ToHashSet();
+                var missing = Enumerable.Range(1, s.ExpectedCount!.Value)
+                    .Where(i => !ownedSlots.Contains(i))
+                    .ToList();
+                return (s, OwnedCount: ownedSlots.Count, Missing: missing);
+            })
+            .Where(x => x.Missing.Count > 0)
+            .Select(x => $"- {x.s.Name} by {x.s.Author ?? "various"}: have {x.OwnedCount}/{x.s.ExpectedCount!.Value}, missing: {string.Join(", ", x.Missing)}")
             .ToList();
 
         return $@"Here's the reader's library profile:

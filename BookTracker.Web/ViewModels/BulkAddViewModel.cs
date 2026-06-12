@@ -222,11 +222,14 @@ public class BulkAddViewModel(
         // SeriesId; otherwise find-or-create by name and attach the new row.
         if (row.SeriesSuggestionAccepted)
         {
+            // Derive the (sort int, display) pair from the captured label at
+            // save time — never freeze the int at accept time.
+            var (acceptedOrder, acceptedOrderDisplay) = SeriesOrderParser.Parse(row.AcceptedSeriesOrderLabel);
             if (row.AcceptedSeriesId is int existingId)
             {
                 work.SeriesId = existingId;
-                work.SeriesOrder = row.AcceptedSeriesOrder;
-                work.SeriesOrderDisplay = row.AcceptedSeriesOrderDisplay;
+                work.SeriesOrder = acceptedOrder;
+                work.SeriesOrderDisplay = acceptedOrderDisplay;
             }
             else if (!string.IsNullOrWhiteSpace(row.AcceptedSeriesName))
             {
@@ -239,8 +242,8 @@ public class BulkAddViewModel(
                     db.Series.Add(series);
                 }
                 work.Series = series;
-                work.SeriesOrder = row.AcceptedSeriesOrder;
-                work.SeriesOrderDisplay = row.AcceptedSeriesOrderDisplay;
+                work.SeriesOrder = acceptedOrder;
+                work.SeriesOrderDisplay = acceptedOrderDisplay;
             }
         }
 
@@ -341,8 +344,9 @@ public class BulkAddViewModel(
         public bool SeriesSuggestionAccepted { get; set; }
         public int? AcceptedSeriesId { get; set; }
         public string? AcceptedSeriesName { get; set; }
-        public int? AcceptedSeriesOrder { get; set; }
-        public string? AcceptedSeriesOrderDisplay { get; set; }
+        // Single round-trippable order label ("5" / "4.5") captured at accept
+        // time; re-parsed into (SeriesOrder, SeriesOrderDisplay) at save.
+        public string? AcceptedSeriesOrderLabel { get; set; }
     }
 
     public void AcceptSeriesSuggestion(DiscoveryRow row)
@@ -356,8 +360,7 @@ public class BulkAddViewModel(
         }
         row.AcceptedSeriesId = row.SeriesSuggestion.SeriesId;
         row.AcceptedSeriesName = row.SeriesSuggestion.SeriesName;
-        row.AcceptedSeriesOrder = row.SeriesSuggestion.SuggestedOrder;
-        row.AcceptedSeriesOrderDisplay = row.SeriesSuggestion.SuggestedOrderDisplay;
+        row.AcceptedSeriesOrderLabel = SeriesOrderParser.Format(row.SeriesSuggestion.SuggestedOrder, row.SeriesSuggestion.SuggestedOrderDisplay);
         row.SeriesSuggestionAccepted = true;
     }
 
@@ -366,8 +369,7 @@ public class BulkAddViewModel(
         row.SeriesSuggestionAccepted = false;
         row.AcceptedSeriesId = null;
         row.AcceptedSeriesName = null;
-        row.AcceptedSeriesOrder = null;
-        row.AcceptedSeriesOrderDisplay = null;
+        row.AcceptedSeriesOrderLabel = null;
     }
 
     public enum RowStatus { Searching, Found, NotFound }

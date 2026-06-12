@@ -29,10 +29,12 @@ public partial class SeriesMatchService(IDbContextFactory<BookTrackerDbContext> 
                 .Where(s => s.Name.ToLower() == apiSeriesName.ToLower())
                 .FirstOrDefaultAsync();
 
-            // Split the upstream order into the integer sort key + an optional
-            // display override. Non-integer orders ("4.5") now floor to a sort
-            // int instead of being dropped, and carry the raw label through to
-            // Work.SeriesOrderDisplay on Accept.
+            // SeriesOrderParser is the single authority that turns an order
+            // token into (sort int, display label) — interquel floor included.
+            // Parse the raw upstream string here rather than reusing
+            // lookup.SeriesNumber (which is only the "clean integer or null"
+            // lookup signal) so the flooring rule lives in exactly one place
+            // shared with the manual-entry path.
             var (order, orderDisplay) = SeriesOrderParser.Parse(lookup.SeriesNumberRaw);
             var orderHint = FormatOrderHint(order, orderDisplay);
 

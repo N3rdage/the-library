@@ -301,15 +301,16 @@ public class WishlistViewModel(
             .ToListAsync();
 
         SeriesGaps = incompleteSeries
-            .Where(s => s.Works.Count < s.ExpectedCount!.Value)
-            .OrderBy(s => s.Name)
             .Select(s =>
             {
+                // Only plain-integer orders occupy a numbered slot. A floored
+                // interquel ("4.5", SeriesOrderDisplay set) must not count as
+                // owning slot #4, or the real #4 gap is silently hidden.
                 var ownedPositions = s.Works
-                    .Where(w => w.SeriesOrder.HasValue)
+                    .Where(w => w.SeriesOrderDisplay == null && w.SeriesOrder.HasValue)
                     .Select(w => w.SeriesOrder!.Value)
-                    .OrderBy(n => n)
-                    .ToList();
+                    .Where(o => o >= 1 && o <= s.ExpectedCount!.Value)
+                    .ToHashSet();
 
                 var missing = new List<int>();
                 for (int i = 1; i <= s.ExpectedCount!.Value; i++)
@@ -322,16 +323,18 @@ public class WishlistViewModel(
                     s.Id,
                     s.Name,
                     s.Author,
-                    s.Works.Count,
+                    ownedPositions.Count,
                     s.ExpectedCount.Value,
                     missing,
                     s.Works.OrderBy(w => w.SeriesOrder ?? int.MaxValue)
                         .Select(w => new OwnedSeriesBook(
                             w.Books.FirstOrDefault()?.Id ?? 0,
                             w.Title,
-                            w.SeriesOrder))
+                            SeriesOrderParser.Format(w.SeriesOrder, w.SeriesOrderDisplay)))
                         .ToList());
             })
+            .Where(g => g.MissingPositions.Count > 0)
+            .OrderBy(g => g.SeriesName)
             .ToList();
 
         // Open-ended series — no ExpectedCount, but the user owns at
@@ -593,7 +596,7 @@ public class WishlistViewModel(
         List<int> MissingPositions,
         List<OwnedSeriesBook> OwnedBooks);
 
-    public record OwnedSeriesBook(int Id, string Title, int? SeriesOrder);
+    public record OwnedSeriesBook(int Id, string Title, string? SeriesOrderLabel);
 
     /// <summary>Series with no ExpectedCount where the user owns at least
     /// one Work. HighestOwnedOrder seeds the "Add next N missing" flow

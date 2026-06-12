@@ -27,7 +27,7 @@ public record WorkMergeDetail(
     string AuthorName,
     int? FirstPublishedYear,
     string? SeriesName,
-    int? SeriesOrder,
+    string? SeriesOrderLabel,
     IReadOnlyList<string> GenreNames,
     int BookCount,
     IReadOnlyList<string> SampleBookTitles,
@@ -163,6 +163,7 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
         {
             winner.SeriesId = loser.SeriesId;
             winner.SeriesOrder = loser.SeriesOrder;
+            winner.SeriesOrderDisplay = loser.SeriesOrderDisplay;
             fieldsAutoFilled++;
         }
 
@@ -255,7 +256,7 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
             WorkAuthorshipFormatter.Display(work),
             work.FirstPublishedDate?.Year,
             work.Series?.Name,
-            work.SeriesOrder,
+            SeriesOrderParser.Format(work.SeriesOrder, work.SeriesOrderDisplay),
             work.Genres.Select(g => g.Name).OrderBy(n => n).ToList(),
             bookCount, sampleBookTitles,
             fallbackCover);

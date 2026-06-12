@@ -21,6 +21,13 @@ public class SeriesOrderParserTests
     // No leading digit → no sort key, raw preserved.
     [InlineData("II", null, "II")]
     [InlineData("Prologue", null, "Prologue")]
+    // Series order is 1-based: reject 0 / negatives outright (no slot, no label).
+    [InlineData("0", null, null)]
+    [InlineData("-5", null, null)]
+    // A leading zero in a non-integer label keeps the label but no sort slot.
+    [InlineData("0.5", null, "0.5")]
+    // A leading run that overflows int leaves the sort key null, label preserved.
+    [InlineData("99999999999", null, "99999999999")]
     public void Parse_SplitsOrderAndDisplay(string? raw, int? expectedOrder, string? expectedDisplay)
     {
         var (order, display) = SeriesOrderParser.Parse(raw);

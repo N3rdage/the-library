@@ -205,9 +205,9 @@
                                     {
                                         <strong>✓ Will attach to series:</strong>
                                         <span>@VM.AcceptedSeriesName</span>
-                                        @if (VM.AcceptedSeriesOrder is int order)
+                                        @if (!string.IsNullOrEmpty(VM.AcceptedSeriesOrderLabel))
                                         {
-                                            <span> #@order</span>
+                                            <span> #@VM.AcceptedSeriesOrderLabel</span>
                                         }
                                         @if (VM.AcceptedSeriesId is null)
                                         {

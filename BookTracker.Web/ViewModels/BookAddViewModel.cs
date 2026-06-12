@@ -195,8 +195,11 @@ public class BookAddViewModel(
     public bool SeriesSuggestionAccepted { get; private set; }
     public int? AcceptedSeriesId { get; private set; }
     public string? AcceptedSeriesName { get; private set; }
-    public int? AcceptedSeriesOrder { get; private set; }
-    public string? AcceptedSeriesOrderDisplay { get; private set; }
+    // Single round-trippable order label captured at accept time ("5" or
+    // "4.5"); re-parsed into (SeriesOrder, SeriesOrderDisplay) at save so the
+    // stored int can't skew from the parser. Null when the suggestion carries
+    // no order.
+    public string? AcceptedSeriesOrderLabel { get; private set; }
 
     public void AcceptSeriesSuggestion()
     {
@@ -210,8 +213,7 @@ public class BookAddViewModel(
         }
         AcceptedSeriesId = SeriesSuggestion.SeriesId;
         AcceptedSeriesName = SeriesSuggestion.SeriesName;
-        AcceptedSeriesOrder = SeriesSuggestion.SuggestedOrder;
-        AcceptedSeriesOrderDisplay = SeriesSuggestion.SuggestedOrderDisplay;
+        AcceptedSeriesOrderLabel = SeriesOrderParser.Format(SeriesSuggestion.SuggestedOrder, SeriesSuggestion.SuggestedOrderDisplay);
         SeriesSuggestionAccepted = true;
     }
 
@@ -220,8 +222,7 @@ public class BookAddViewModel(
         SeriesSuggestionAccepted = false;
         AcceptedSeriesId = null;
         AcceptedSeriesName = null;
-        AcceptedSeriesOrder = null;
-        AcceptedSeriesOrderDisplay = null;
+        AcceptedSeriesOrderLabel = null;
     }
 
     // Existing-book detection — set during LookupAsync when the ISBN
@@ -634,11 +635,14 @@ public class BookAddViewModel(
                 // on /series/{id} later if wrong.
                 if (SeriesSuggestionAccepted)
                 {
+                    // Derive the (sort int, display) pair from the captured label
+                    // at save time — never freeze the int at accept time.
+                    var (acceptedOrder, acceptedOrderDisplay) = SeriesOrderParser.Parse(AcceptedSeriesOrderLabel);
                     if (AcceptedSeriesId is int existingId)
                     {
                         work.SeriesId = existingId;
-                        work.SeriesOrder = AcceptedSeriesOrder;
-                        work.SeriesOrderDisplay = AcceptedSeriesOrderDisplay;
+                        work.SeriesOrder = acceptedOrder;
+                        work.SeriesOrderDisplay = acceptedOrderDisplay;
                     }
                     else if (!string.IsNullOrWhiteSpace(AcceptedSeriesName))
                     {
@@ -651,8 +655,8 @@ public class BookAddViewModel(
                             db.Series.Add(series);
                         }
                         work.Series = series;
-                        work.SeriesOrder = AcceptedSeriesOrder;
-                        work.SeriesOrderDisplay = AcceptedSeriesOrderDisplay;
+                        work.SeriesOrder = acceptedOrder;
+                        work.SeriesOrderDisplay = acceptedOrderDisplay;
                     }
                 }
 

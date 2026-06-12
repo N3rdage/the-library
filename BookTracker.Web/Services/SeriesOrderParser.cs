@@ -14,6 +14,12 @@ namespace BookTracker.Web.Services;
 /// display and floor to the leading integer so the work still sorts next to its
 /// neighbours instead of sinking to the bottom via the <c>int.MaxValue</c>
 /// null-fallback.
+///
+/// This is the single source of truth for interpreting a free-text order token
+/// (lookup-accept path and manual entry both route through it). The lookup-side
+/// <c>BookLookupService.ParseOpenLibrarySeries</c> only splits a series
+/// <i>string</i> into name + raw token + a clean-integer signal; it deliberately
+/// does not floor, so the interquel rule isn't duplicated.
 /// </summary>
 public static partial class SeriesOrderParser
 {
@@ -32,14 +38,20 @@ public static partial class SeriesOrderParser
         var trimmed = raw.Trim();
 
         // Clean integer: no display override — the stored int renders fine.
+        // Series order is 1-based, so reject 0 / negatives outright rather than
+        // storing a position that sorts ahead of #1 and is invisible to gap
+        // detection (Enumerable.Range(1, N)).
         if (int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var clean))
-            return (clean, null);
+            return clean >= 1 ? (clean, null) : (null, null);
 
         // Non-integer: preserve the raw label and floor to the leading integer
-        // (if any) so the work sorts in the right neighbourhood.
+        // (if any, and only when positive) so the work sorts in the right
+        // neighbourhood. A leading run that overflows int leaves the sort key
+        // null — the label is still kept.
         var leading = LeadingIntegerRegex().Match(trimmed);
         int? order = leading.Success
             && int.TryParse(leading.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n)
+            && n >= 1
             ? n
             : null;
         return (order, trimmed);
