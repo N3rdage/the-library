@@ -548,6 +548,43 @@ public class WishlistViewModelTests
     }
 
     [Fact]
+    public async Task LoadSeriesGapsAsync_FlooredInterquel_DoesNotMaskRealNumberedGap()
+    {
+        // An interquel ("4.5" -> SeriesOrder 4, SeriesOrderDisplay "4.5") must
+        // NOT count as owning slot #4 — otherwise the genuinely-missing real
+        // #4 is hidden from the gap card. Own #1,2,3,5 + the interquel; #4 is
+        // absent and must still surface as missing.
+        int seriesId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var author = new Author { Name = "Brandon Sanderson" };
+            var series = new Series { Name = "The Stormlight Archive", Author = "Brandon Sanderson", Type = SeriesType.Series, ExpectedCount = 5 };
+            foreach (var (order, display) in new (int?, string?)[] { (1, null), (2, null), (3, null), (5, null), (4, "4.5") })
+            {
+                var work = new Work
+                {
+                    Title = $"Work {display ?? order?.ToString()}",
+                    Series = series,
+                    SeriesOrder = order,
+                    SeriesOrderDisplay = display,
+                    WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
+                };
+                db.Books.Add(new Book { Title = $"Book {display ?? order?.ToString()}", Works = [work] });
+            }
+            db.Series.Add(series);
+            await db.SaveChangesAsync();
+            seriesId = series.Id;
+        }
+
+        var vm = CreateVm();
+        await vm.LoadSeriesGapsAsync();
+
+        var gap = vm.SeriesGaps.Single(g => g.SeriesId == seriesId);
+        Assert.Contains(4, gap.MissingPositions);   // real #4 still flagged missing
+        Assert.Equal(4, gap.OwnedCount);            // 1,2,3,5 counted; interquel not
+    }
+
+    [Fact]
     public async Task LoadSeriesGapsAsync_PopulatesOpenSeriesList_WithNullExpectedCountAndOwnedBooks()
     {
         // Open-ended series — no ExpectedCount, owns at least one book.

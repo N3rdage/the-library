@@ -255,9 +255,9 @@
                             @foreach (var book in gap.OwnedBooks)
                             {
                                 <li>
-                                    @if (book.SeriesOrder.HasValue)
+                                    @if (!string.IsNullOrEmpty(book.SeriesOrderLabel))
                                     {
-                                        <span class="text-muted">#@book.SeriesOrder</span>
+                                        <span class="text-muted">#@book.SeriesOrderLabel</span>
                                     }
                                     <a href="@($"/books/{book.Id}")" class="text-decoration-none">@book.Title</a>
                                 </li>

@@ -159,7 +159,7 @@ else
                 {
                     <div class="small mb-2">
                         <span class="badge bg-light text-dark border">
-                            Series: @detail.SeriesName@(detail.SeriesOrder.HasValue ? $" #{detail.SeriesOrder}" : "")
+                            Series: @detail.SeriesName@(!string.IsNullOrEmpty(detail.SeriesOrderLabel) ? $" #{detail.SeriesOrderLabel}" : "")
                         </span>
                     </div>
                 }

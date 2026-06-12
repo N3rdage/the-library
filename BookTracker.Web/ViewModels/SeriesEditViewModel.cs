@@ -65,6 +65,7 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
                 w.Title,
                 WorkAuthorshipFormatter.Display(w),
                 w.SeriesOrder,
+                w.SeriesOrderDisplay,
                 w.Books.Select(b => new ContainingBook(b.Id, b.Title)).ToList()))
             .ToList();
     }
@@ -171,6 +172,7 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
 
         work.SeriesId = seriesId;
         work.SeriesOrder = nextOrder;
+        work.SeriesOrderDisplay = null;
         await db.SaveChangesAsync();
 
         Works.Add(new SeriesWorkRow(
@@ -178,6 +180,7 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
             work.Title,
             WorkAuthorshipFormatter.Display(work),
             nextOrder,
+            null,
             work.Books.Select(b => new ContainingBook(b.Id, b.Title)).ToList()));
         WorkSearchResults.RemoveAll(r => r.Id == workId);
     }
@@ -195,13 +198,18 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
         Works.RemoveAll(w => w.Id == workId);
     }
 
-    public async Task UpdateWorkOrderAsync(int workId, int? newOrder)
+    public async Task UpdateWorkOrderAsync(int workId, string? rawOrder)
     {
+        // Free-text so "4.5" interquels survive: parse into the integer sort
+        // key + an optional display override.
+        var (order, display) = SeriesOrderParser.Parse(rawOrder);
+
         await using var db = await dbFactory.CreateDbContextAsync();
         var work = await db.Works.FindAsync(workId);
         if (work is not null)
         {
-            work.SeriesOrder = newOrder;
+            work.SeriesOrder = order;
+            work.SeriesOrderDisplay = display;
             await db.SaveChangesAsync();
         }
 
@@ -209,11 +217,11 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
         if (row is not null)
         {
             var idx = Works.IndexOf(row);
-            Works[idx] = row with { SeriesOrder = newOrder };
+            Works[idx] = row with { SeriesOrder = order, SeriesOrderDisplay = display };
         }
     }
 
-    public record SeriesWorkRow(int Id, string Title, string Author, int? SeriesOrder, List<ContainingBook> Books);
+    public record SeriesWorkRow(int Id, string Title, string Author, int? SeriesOrder, string? SeriesOrderDisplay, List<ContainingBook> Books);
     public record ContainingBook(int Id, string Title);
     public record WorkSearchResult(int Id, string Title, string Author, int? CurrentSeriesId);
 

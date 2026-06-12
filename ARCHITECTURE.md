@@ -43,7 +43,8 @@ Book                                                ← physical-object grouping
   │     Title, Subtitle, FirstPublishedDate
   │     ├── Author (many-to-1 → Author)
   │     ├── Genres (many-to-many → Genre)
-  │     └── Series (many-to-1, optional) + SeriesOrder
+  │     └── Series (many-to-1, optional) + SeriesOrder (int sort key)
+  │           + SeriesOrderDisplay (optional label, e.g. "4.5" interquel)
   ├── Editions (1-to-many)
   │     ISBN (filtered unique, nullable for pre-ISBN books),
   │     Format, EditionNumber (nullable — "3rd ed."),

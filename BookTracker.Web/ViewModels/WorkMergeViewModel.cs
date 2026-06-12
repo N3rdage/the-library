@@ -68,7 +68,7 @@ public class WorkMergeViewModel(IWorkMergeService merger)
         }
         if (string.IsNullOrEmpty(winner.SeriesName) && !string.IsNullOrEmpty(loser.SeriesName))
         {
-            hints.Add($"Series \"{loser.SeriesName}\"" + (loser.SeriesOrder.HasValue ? $" (#{loser.SeriesOrder})" : ""));
+            hints.Add($"Series \"{loser.SeriesName}\"" + (!string.IsNullOrEmpty(loser.SeriesOrderLabel) ? $" (#{loser.SeriesOrderLabel})" : ""));
         }
         var winnerGenres = winner.GenreNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var addedGenres = loser.GenreNames.Where(g => !winnerGenres.Contains(g)).ToList();

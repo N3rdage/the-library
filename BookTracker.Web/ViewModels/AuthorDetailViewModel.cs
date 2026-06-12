@@ -106,7 +106,7 @@ public class AuthorDetailViewModel(IDbContextFactory<BookTrackerDbContext> dbFac
             PartialDateParser.Format(w.FirstPublishedDate, w.FirstPublishedDatePrecision),
             w.Series?.Name,
             w.Series?.Type,
-            w.SeriesOrder,
+            SeriesOrderParser.Format(w.SeriesOrder, w.SeriesOrderDisplay),
             w.Books.Select(b => new BookRef(b.Id, b.Title)).ToList()
         )).ToList();
 
@@ -213,7 +213,7 @@ public class AuthorDetailViewModel(IDbContextFactory<BookTrackerDbContext> dbFac
         string FirstPublishedDisplay,
         string? SeriesName,
         SeriesType? SeriesType,
-        int? SeriesOrder,
+        string? SeriesOrderLabel,
         IReadOnlyList<BookRef> InBooks);
 
     public record BookSummaryRow(

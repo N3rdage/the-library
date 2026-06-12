@@ -121,7 +121,7 @@ public class CatalogSnapshotService(
                 // books are unambiguous.
                 FirstWorkSeries = b.Works
                     .OrderBy(w => w.Id)
-                    .Select(w => new { w.SeriesId, w.SeriesOrder })
+                    .Select(w => new { w.SeriesId, w.SeriesOrder, w.SeriesOrderDisplay })
                     .FirstOrDefault(),
             })
             .ToListAsync(ct);
@@ -160,7 +160,11 @@ public class CatalogSnapshotService(
                 b.Rating,
                 b.Isbns.Distinct().ToList(),
                 b.FirstWorkSeries?.SeriesId,
-                b.FirstWorkSeries?.SeriesOrder,
+                // Mobile can't yet see SeriesOrderDisplay (PR2), so a floored
+                // interquel ("4.5" -> SeriesOrder 4) would phantom-claim slot 4
+                // in the offline series-gap view. Emit null for display-only
+                // orders until PR2 carries the label + restores adjacency.
+                b.FirstWorkSeries?.SeriesOrderDisplay == null ? b.FirstWorkSeries?.SeriesOrder : null,
                 b.DefaultCoverArtUrl,
                 Editions: b.Editions
                     .Select(e => new EditionSnapshot(e.Id, e.Isbn, e.Format.ToString(), e.CoverUrl, e.EditionNumber))

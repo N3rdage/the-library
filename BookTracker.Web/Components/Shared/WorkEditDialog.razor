@@ -56,12 +56,12 @@
                 </MudSelect>
                 @if (VM.SelectedSeriesId.HasValue)
                 {
-                    <MudNumericField T="int?"
-                                     @bind-Value="VM.SeriesOrder"
-                                     Label="Order / position"
-                                     Variant="Variant.Outlined"
-                                     Margin="Margin.Dense"
-                                     Min="1" />
+                    <MudTextField T="string"
+                                  @bind-Value="VM.SeriesOrderInput"
+                                  Label="Order / position"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  HelperText="Whole number, or '4.5' for an interquel." />
                 }
 
                 <div>

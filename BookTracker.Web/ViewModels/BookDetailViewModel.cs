@@ -623,7 +623,7 @@ public class BookDetailViewModel(
         w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.AuthorId).FirstOrDefault(),
         PartialDateParser.Format(w.FirstPublishedDate, w.FirstPublishedDatePrecision),
         w.Genres.OrderBy(g => g.Name).Select(g => g.Name).ToList(),
-        w.Series is null ? null : new SeriesInfo(w.Series.Id, w.Series.Name, w.Series.Type, w.SeriesOrder));
+        w.Series is null ? null : new SeriesInfo(w.Series.Id, w.Series.Name, w.Series.Type, SeriesOrderParser.Format(w.SeriesOrder, w.SeriesOrderDisplay)));
 
     private static EditionDetail ToEditionDetail(Edition e) => new(
         e.Id,
@@ -666,7 +666,7 @@ public class BookDetailViewModel(
         IReadOnlyList<string> Genres,
         SeriesInfo? Series);
 
-    public record SeriesInfo(int Id, string Name, SeriesType Type, int? Order);
+    public record SeriesInfo(int Id, string Name, SeriesType Type, string? OrderLabel);
 
     public record EditionDetail(
         int Id,

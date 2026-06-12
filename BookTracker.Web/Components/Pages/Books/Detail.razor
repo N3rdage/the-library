@@ -174,8 +174,8 @@
                         }
                         @if (primary.Series is not null)
                         {
-                            var seriesValue = primary.Series.Order.HasValue
-                                ? $"{primary.Series.Name} (#{primary.Series.Order})"
+                            var seriesValue = !string.IsNullOrEmpty(primary.Series.OrderLabel)
+                                ? $"{primary.Series.Name} (#{primary.Series.OrderLabel})"
                                 : primary.Series.Name;
                             <FieldRow Label="@(primary.Series.Type == SeriesType.Collection ? "Collection" : "Series")" Value="@seriesValue" />
                         }
@@ -243,7 +243,7 @@
                                         <MudIcon Icon="@(expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" Size="Size.Small" />
                                         <MudStack Spacing="0" Class="flex-grow-1" Style="min-width: 0;">
                                             <MudText Typo="Typo.body1" Style="word-break: break-word;">
-                                                @(w.Series?.Order is int o ? $"{o}. " : "")@w.Title
+                                                @(!string.IsNullOrEmpty(w.Series?.OrderLabel) ? $"{w.Series!.OrderLabel}. " : "")@w.Title
                                             </MudText>
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">@w.AuthorName</MudText>
                                         </MudStack>
@@ -264,7 +264,7 @@
                                                 }
                                                 @if (w.Series is not null)
                                                 {
-                                                    var seriesValue = w.Series.Order.HasValue ? $"{w.Series.Name} (#{w.Series.Order})" : w.Series.Name;
+                                                    var seriesValue = !string.IsNullOrEmpty(w.Series.OrderLabel) ? $"{w.Series.Name} (#{w.Series.OrderLabel})" : w.Series.Name;
                                                     <FieldRow Label="@(w.Series.Type == SeriesType.Collection ? "Collection" : "Series")" Value="@seriesValue" />
                                                 }
                                                 @if (w.Genres.Count > 0)

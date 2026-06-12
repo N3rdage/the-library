@@ -29,7 +29,14 @@ public partial class SeriesMatchService(IDbContextFactory<BookTrackerDbContext> 
                 .Where(s => s.Name.ToLower() == apiSeriesName.ToLower())
                 .FirstOrDefaultAsync();
 
-            var orderHint = FormatOrderHint(lookup.SeriesNumber, lookup.SeriesNumberRaw);
+            // SeriesOrderParser is the single authority that turns an order
+            // token into (sort int, display label) — interquel floor included.
+            // Parse the raw upstream string here rather than reusing
+            // lookup.SeriesNumber (which is only the "clean integer or null"
+            // lookup signal) so the flooring rule lives in exactly one place
+            // shared with the manual-entry path.
+            var (order, orderDisplay) = SeriesOrderParser.Parse(lookup.SeriesNumberRaw);
+            var orderHint = FormatOrderHint(order, orderDisplay);
 
             if (localMatch is not null)
             {
@@ -37,7 +44,8 @@ public partial class SeriesMatchService(IDbContextFactory<BookTrackerDbContext> 
                     localMatch.Id, localMatch.Name, localMatch.Type,
                     MatchReason.ApiMatchExisting,
                     $"{lookup.Source} indicates this is part of \"{localMatch.Name}\"{orderHint}",
-                    SuggestedOrder: lookup.SeriesNumber);
+                    SuggestedOrder: order,
+                    SuggestedOrderDisplay: orderDisplay);
             }
 
             // No local match — propose creating a new series. SeriesId is
@@ -47,25 +55,19 @@ public partial class SeriesMatchService(IDbContextFactory<BookTrackerDbContext> 
                 null, apiSeriesName, null,
                 MatchReason.ApiMatchNewSeries,
                 $"{lookup.Source} suggests this is part of \"{apiSeriesName}\"{orderHint} — accept to create the series and attach this book.",
-                SuggestedOrder: lookup.SeriesNumber);
+                SuggestedOrder: order,
+                SuggestedOrderDisplay: orderDisplay);
         }
 
         // No upstream series data — fall back to local title/author matching.
         return await FindMatchAsync(lookup.Title, lookup.Author);
     }
 
-    private static string FormatOrderHint(int? seriesNumber, string? seriesNumberRaw)
+    private static string FormatOrderHint(int? order, string? orderDisplay)
     {
-        if (seriesNumber is int n) return $" #{n}";
-        if (!string.IsNullOrWhiteSpace(seriesNumberRaw))
-        {
-            // Non-integer order from upstream (e.g. "5.5", "1A") — surface
-            // the source value so the user can set Work.SeriesOrder manually
-            // if they want a position. Cannot store directly; tracked as a
-            // follow-up TODO ("Support non-integer / hierarchical SeriesOrder").
-            return $" (order '{seriesNumberRaw}', left blank)";
-        }
-        return string.Empty;
+        // The display override wins (e.g. "4.5"); otherwise the plain integer.
+        var label = SeriesOrderParser.Format(order, orderDisplay);
+        return string.IsNullOrWhiteSpace(label) ? string.Empty : $" #{label}";
     }
 
     /// <summary>
@@ -204,13 +206,18 @@ public record SeriesMatch(
     MatchReason Reason,
     string Message,
     /// <summary>
-    /// Integer order from the upstream lookup, when present and parseable
-    /// (Open Library "Discworld -- 5" → 5). Null for non-integer orders
-    /// (preserved as raw in the message via FormatOrderHint), and for all
-    /// local-only suggestion paths which have no order signal. Used by the
-    /// Accept-suggestion flow to pre-fill `Work.SeriesOrder` on save.
+    /// Integer sort key from the upstream lookup, when present (Open Library
+    /// "Discworld -- 5" → 5; non-integer "4.5" floors to 4). Null only for
+    /// non-numeric labels and the local-only suggestion paths which have no
+    /// order signal. Used by the Accept-suggestion flow to pre-fill
+    /// `Work.SeriesOrder` on save.
     /// </summary>
-    int? SuggestedOrder = null);
+    int? SuggestedOrder = null,
+    /// <summary>
+    /// Display override for non-integer orders ("4.5", "1A") — pre-fills
+    /// `Work.SeriesOrderDisplay` on Accept. Null for clean integer orders.
+    /// </summary>
+    string? SuggestedOrderDisplay = null);
 
 public enum MatchReason
 {

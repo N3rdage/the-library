@@ -154,11 +154,12 @@ public class SeriesMatchServiceTests
     }
 
     [Fact]
-    public async Task FindMatchAsync_FromLookup_NonIntegerOrder_SurfacesRawValueInMessage()
+    public async Task FindMatchAsync_FromLookup_NonIntegerOrder_FloorsForSortAndKeepsRawForDisplay()
     {
-        // Per revised Q3 default: non-integer orders leave SeriesNumber null
-        // but the raw publisher string surfaces in the suggestion message so
-        // the user can set Work.SeriesOrder manually if they want a position.
+        // Non-integer interquel orders ("2.5", Edgedancer) now floor to a sort
+        // int (2) so the work sorts next to its neighbours, and carry the raw
+        // string through SuggestedOrderDisplay → Work.SeriesOrderDisplay on
+        // Accept. The suggestion message shows the raw label.
         var factory = new TestDbContextFactory();
         var service = new SeriesMatchService(factory);
 
@@ -172,8 +173,9 @@ public class SeriesMatchServiceTests
         var match = await service.FindMatchAsync(lookup);
 
         Assert.NotNull(match);
-        Assert.Contains("'2.5'", match.Message);
-        Assert.Contains("left blank", match.Message);
+        Assert.Equal(2, match.SuggestedOrder);            // floored for sort + gaps
+        Assert.Equal("2.5", match.SuggestedOrderDisplay); // raw label for display
+        Assert.Contains("#2.5", match.Message);
     }
 
     [Fact]
