@@ -790,11 +790,12 @@ public class CatalogCacheTests
     }
 
     [Fact]
-    public async Task GetSeriesGapsAsync_BooksWithNullSeriesOrderCountTowardOwnedButNotMissing()
+    public async Task GetSeriesGapsAsync_BookWithNullSeriesOrderFillsNoSlotAndIsNotCounted()
     {
-        // Book in the series but with no SeriesOrder set (rare —
-        // upstream metadata gap). OwnedCount reflects it; MissingOrders
-        // doesn't subtract for it (we don't know which slot it fills).
+        // Book in the series but with no SeriesOrder set (rare — upstream
+        // metadata gap). It fills no numbered slot, so it neither subtracts
+        // from MissingOrders nor counts toward OwnedCount (which is "numbered
+        // slots owned", keeping "X of N owned" coherent with the missing list).
         var cache = await NewCacheAsync();
         await cache.PopulateAsync(SampleSnapshot(
             books:
@@ -805,7 +806,7 @@ public class CatalogCacheTests
             series: [new(10, "Trilogy", "Series", 3)]));
 
         var gap = Assert.Single(await cache.GetSeriesGapsAsync());
-        Assert.Equal(2, gap.OwnedCount); // both books count
+        Assert.Equal(1, gap.OwnedCount); // only the numbered #1 — null-order fills no slot
         Assert.Equal([2, 3], gap.MissingOrders); // null-order doesn't fill a slot
     }
 
@@ -829,6 +830,7 @@ public class CatalogCacheTests
 
         var gap = Assert.Single(await cache.GetSeriesGapsAsync());
         Assert.Contains(4, gap.MissingOrders); // real #4 still flagged missing
+        Assert.Equal(4, gap.OwnedCount);       // 1,2,3,5 — interquel not counted, no "5 of 5 owned, missing 4"
     }
 
     [Fact]
