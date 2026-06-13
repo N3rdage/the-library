@@ -105,6 +105,14 @@ public class CatalogCache : ICatalogCache
         await _db.ExecuteAsync(
             "UPDATE book_works SET ContributorsJson = '[]' WHERE ContributorsJson IS NULL OR ContributorsJson = ''");
 
+        // No backfill for books.SeriesOrderDisplay (added with the interquel
+        // support): NULL is the correct value for every legacy row (none had
+        // a non-integer order — the server stored those as null SeriesOrder
+        // pre-feature), and all readers handle null (gap detection treats null
+        // as "plain integer slot"; display falls back to SeriesOrder). Same
+        // reasoning as the EditionNumber int? column — unlike ContributorsJson,
+        // a NULL here doesn't break any consumer.
+
         // Covers live alongside the DB file by convention — Mobile's
         // FileSystem.AppDataDirectory holds both. Single dbPath
         // parameter keeps the public Init surface narrow; tests get
@@ -152,6 +160,7 @@ public class CatalogCache : ICatalogCache
                     Rating = book.Rating,
                     SeriesId = book.SeriesId,
                     SeriesOrder = book.SeriesOrder,
+                    SeriesOrderDisplay = book.SeriesOrderDisplay,
                     CoverUrl = book.CoverUrl,
                     // CoverPath reset to null on every populate — lazy
                     // re-fetch on first display after a refresh. When
@@ -283,6 +292,7 @@ public class CatalogCache : ICatalogCache
                     Rating = book.Rating,
                     SeriesId = book.SeriesId,
                     SeriesOrder = book.SeriesOrder,
+                    SeriesOrderDisplay = book.SeriesOrderDisplay,
                     CoverUrl = book.CoverUrl,
                     // CoverPath survives when CoverUrl unchanged. When
                     // it changed, nulling out lets EnsureCoverCachedAsync
@@ -548,15 +558,19 @@ public class CatalogCache : ICatalogCache
             var inSeries = books.Where(b => b.SeriesId == series.Id).ToList();
             if (inSeries.Count == 0) continue; // user hasn't started this series
 
-            // SeriesOrder slots the user occupies. Null orders count
-            // toward OwnedCount but don't fill a specific 1..N slot —
-            // they neither help nor hurt the missing-orders calc.
+            var expected = series.ExpectedCount!.Value;
+
+            // Numbered 1..N slots the user owns. Only true numbered volumes
+            // count (SeriesSlots.OccupiesNumberedSlot) — a floored interquel
+            // ("4.5", SeriesOrderDisplay set) shares an int for sort adjacency
+            // but must NOT count as owning that slot, or it masks a genuinely-
+            // missing volume. Orders above ExpectedCount don't fill a 1..N slot.
             var ownedOrders = inSeries
-                .Where(b => b.SeriesOrder is > 0)
+                .Where(b => SeriesSlots.OccupiesNumberedSlot(b.SeriesOrder, b.SeriesOrderDisplay))
                 .Select(b => b.SeriesOrder!.Value)
+                .Where(o => o <= expected)
                 .ToHashSet();
 
-            var expected = series.ExpectedCount!.Value;
             var missing = Enumerable.Range(1, expected)
                 .Where(n => !ownedOrders.Contains(n))
                 .ToList();
@@ -567,7 +581,10 @@ public class CatalogCache : ICatalogCache
                 SeriesName: series.Name,
                 SeriesType: series.Type,
                 ExpectedCount: expected,
-                OwnedCount: inSeries.Count,
+                // Numbered slots owned (not total books) so "X of N owned"
+                // stays coherent with the missing list (X + missing = N) and
+                // matches the web gap views.
+                OwnedCount: ownedOrders.Count,
                 MissingOrders: missing));
         }
 
@@ -667,7 +684,8 @@ public class CatalogCache : ICatalogCache
             isbns.Select(r => r.Isbn).ToList(),
             book.SeriesId,
             book.SeriesOrder,
-            book.CoverUrl);
+            book.CoverUrl,
+            SeriesOrderDisplay: book.SeriesOrderDisplay);
     }
 
     public async Task<string?> EnsureCoverCachedAsync(int bookId, HttpClient http, CancellationToken ct = default)

@@ -1,5 +1,6 @@
 using BookTracker.Data;
 using BookTracker.Data.Models;
+using BookTracker.Shared.Catalog;
 using BookTracker.Web.Services;
 using Microsoft.EntityFrameworkCore;
 
@@ -303,13 +304,14 @@ public class WishlistViewModel(
         SeriesGaps = incompleteSeries
             .Select(s =>
             {
-                // Only plain-integer orders occupy a numbered slot. A floored
-                // interquel ("4.5", SeriesOrderDisplay set) must not count as
-                // owning slot #4, or the real #4 gap is silently hidden.
+                // Only true numbered volumes occupy a slot (shared rule —
+                // SeriesSlots.OccupiesNumberedSlot). A floored interquel ("4.5",
+                // SeriesOrderDisplay set) must not count as owning slot #4, or
+                // the real #4 gap is silently hidden.
                 var ownedPositions = s.Works
-                    .Where(w => w.SeriesOrderDisplay == null && w.SeriesOrder.HasValue)
+                    .Where(w => SeriesSlots.OccupiesNumberedSlot(w.SeriesOrder, w.SeriesOrderDisplay))
                     .Select(w => w.SeriesOrder!.Value)
-                    .Where(o => o >= 1 && o <= s.ExpectedCount!.Value)
+                    .Where(o => o <= s.ExpectedCount!.Value)
                     .ToHashSet();
 
                 var missing = new List<int>();

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using BookTracker.Data;
 using BookTracker.Data.Models;
+using BookTracker.Shared.Catalog;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.Services;
@@ -237,14 +238,15 @@ Rules:
         var gapsText = incompleteSeries
             .Select(s =>
             {
-                // Only plain-integer orders occupy a numbered slot. A floored
-                // interquel ("4.5", SeriesOrderDisplay set) shares an int for
-                // sort adjacency but must NOT count as owning that slot —
-                // otherwise it masks a genuinely-missing numbered volume.
+                // Only true numbered volumes occupy a slot (shared rule —
+                // SeriesSlots.OccupiesNumberedSlot). A floored interquel ("4.5",
+                // SeriesOrderDisplay set) shares an int for sort adjacency but
+                // must NOT count as owning that slot, or it masks a genuinely-
+                // missing numbered volume.
                 var ownedSlots = s.Works
-                    .Where(w => w.SeriesOrderDisplay == null && w.SeriesOrder.HasValue)
+                    .Where(w => SeriesSlots.OccupiesNumberedSlot(w.SeriesOrder, w.SeriesOrderDisplay))
                     .Select(w => w.SeriesOrder!.Value)
-                    .Where(o => o >= 1 && o <= s.ExpectedCount!.Value)
+                    .Where(o => o <= s.ExpectedCount!.Value)
                     .ToHashSet();
                 var missing = Enumerable.Range(1, s.ExpectedCount!.Value)
                     .Where(i => !ownedSlots.Contains(i))

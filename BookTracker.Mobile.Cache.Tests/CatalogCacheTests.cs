@@ -790,11 +790,12 @@ public class CatalogCacheTests
     }
 
     [Fact]
-    public async Task GetSeriesGapsAsync_BooksWithNullSeriesOrderCountTowardOwnedButNotMissing()
+    public async Task GetSeriesGapsAsync_BookWithNullSeriesOrderFillsNoSlotAndIsNotCounted()
     {
-        // Book in the series but with no SeriesOrder set (rare —
-        // upstream metadata gap). OwnedCount reflects it; MissingOrders
-        // doesn't subtract for it (we don't know which slot it fills).
+        // Book in the series but with no SeriesOrder set (rare — upstream
+        // metadata gap). It fills no numbered slot, so it neither subtracts
+        // from MissingOrders nor counts toward OwnedCount (which is "numbered
+        // slots owned", keeping "X of N owned" coherent with the missing list).
         var cache = await NewCacheAsync();
         await cache.PopulateAsync(SampleSnapshot(
             books:
@@ -805,8 +806,49 @@ public class CatalogCacheTests
             series: [new(10, "Trilogy", "Series", 3)]));
 
         var gap = Assert.Single(await cache.GetSeriesGapsAsync());
-        Assert.Equal(2, gap.OwnedCount); // both books count
+        Assert.Equal(1, gap.OwnedCount); // only the numbered #1 — null-order fills no slot
         Assert.Equal([2, 3], gap.MissingOrders); // null-order doesn't fill a slot
+    }
+
+    [Fact]
+    public async Task GetSeriesGapsAsync_FlooredInterquel_DoesNotClaimNumberedSlot()
+    {
+        // An interquel ("4.5" -> SeriesOrder 4, SeriesOrderDisplay "4.5") shares
+        // an int slot for sort adjacency but must NOT count as owning slot #4 —
+        // otherwise the genuinely-missing real #4 is hidden from the gap view.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Vol 1", "Sanderson", ["Sanderson"], "Read", 0, [], SeriesId: 10, SeriesOrder: 1),
+                new(2, "Vol 2", "Sanderson", ["Sanderson"], "Read", 0, [], SeriesId: 10, SeriesOrder: 2),
+                new(3, "Vol 3", "Sanderson", ["Sanderson"], "Read", 0, [], SeriesId: 10, SeriesOrder: 3),
+                new(4, "Vol 5", "Sanderson", ["Sanderson"], "Read", 0, [], SeriesId: 10, SeriesOrder: 5),
+                new(5, "Edgedancer", "Sanderson", ["Sanderson"], "Read", 0, [], SeriesId: 10, SeriesOrder: 4, SeriesOrderDisplay: "4.5"),
+            ],
+            series: [new(10, "The Stormlight Archive", "Series", 5)]));
+
+        var gap = Assert.Single(await cache.GetSeriesGapsAsync());
+        Assert.Contains(4, gap.MissingOrders); // real #4 still flagged missing
+        Assert.Equal(4, gap.OwnedCount);       // 1,2,3,5 — interquel not counted, no "5 of 5 owned, missing 4"
+    }
+
+    [Fact]
+    public async Task PopulateAsync_PreservesSeriesOrderDisplayOnBooks()
+    {
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Edgedancer", "Sanderson", ["Sanderson"], "Read", 0,
+                    ["9780765391161"], SeriesId: 10, SeriesOrder: 4, SeriesOrderDisplay: "4.5"),
+            ],
+            series: [new(10, "The Stormlight Archive", "Series", 5)]));
+
+        var book = await cache.LookupByIsbnAsync("9780765391161");
+        Assert.NotNull(book);
+        Assert.Equal(4, book!.SeriesOrder);
+        Assert.Equal("4.5", book.SeriesOrderDisplay);
     }
 
     [Fact]
