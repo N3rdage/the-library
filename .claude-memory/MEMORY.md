@@ -1,5 +1,6 @@
 - [GitHub push/PR hand-off](feedback_github_push.md) — never push branches or open PRs; tell the user to do it and wait for merge confirmation.
 - ["plan:" prefix](feedback_plan_prefix.md) — when a message starts with "plan:", propose with defaults + open questions and wait; don't execute.
+- [Review findings gate](feedback_review_findings_gate.md) — after a code-review, present findings + recommendations and WAIT for go-ahead; never flow straight into fixes.
 - [Drew — solo developer](user_drew.md) — context on the user, their stack (Windows/PowerShell/Azure/GitHub `N3rdage/the-library`, Gandi DNS), and collaboration style.
 - [Auto-commit locally](feedback_commit_locally.md) — always stage and commit before handing off; don't wait to be asked.
 - [Hot-reload ≠ committed](feedback_hot_reload_commit_gap.md) — every mid-PR-cycle edit must be committed before the user tests it; hot-reload makes uncommitted edits feel "done".
