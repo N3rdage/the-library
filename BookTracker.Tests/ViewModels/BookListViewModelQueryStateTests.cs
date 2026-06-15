@@ -78,11 +78,11 @@ public class BookListViewModelQueryStateTests
         var vm = NewVm();
 
         vm.ApplyQueryParameters(
-            q: "dune", group: "Collection", category: "NonFiction",
+            q: "dune", group: "Genre", category: "NonFiction",
             genre: 7, tag: 3, series: 11, status: "Reading", author: "Herbert", page: 4);
 
         Assert.Equal("dune", vm.SearchTerm);
-        Assert.Equal(LibraryGroupBy.Collection, vm.SelectedGroupBy);
+        Assert.Equal(LibraryGroupBy.Genre, vm.SelectedGroupBy);
         Assert.Equal("NonFiction", vm.SelectedCategory);
         Assert.Equal(7, vm.SelectedGenreId);
         Assert.Equal(3, vm.SelectedTagId);
@@ -110,10 +110,12 @@ public class BookListViewModelQueryStateTests
     {
         var vm = NewVm();
 
-        // Absent params + an unparseable status/group degrade to defaults
-        // rather than throwing — round-tripping an omitted value is lossless.
+        // Absent params + an unparseable status + the RETIRED "Collection"
+        // grouping (TODO #53c) all degrade to defaults rather than throwing,
+        // so an old `?group=Collection` bookmark lands on the Author default
+        // instead of erroring. Round-tripping an omitted value is lossless.
         vm.ApplyQueryParameters(
-            q: null, group: "NotAGroup", category: null,
+            q: null, group: "Collection", category: null,
             genre: null, tag: null, series: null, status: "Bogus", author: null, page: 0);
 
         Assert.Equal("", vm.SearchTerm);
@@ -169,26 +171,12 @@ public class BookListViewModelQueryStateTests
         Assert.Equal(-1, q["genre"]);
     }
 
-    [Fact]
-    public void BuildGroupDrillParameters_CollectionGroup_KeysBySeriesIdAndCarriesFilters()
-    {
-        // Drilling a series carries the active status filter forward but drops
-        // the grouping + page.
-        var vm = NewVm();
-        vm.SelectedGroupBy = LibraryGroupBy.Collection;
-        vm.SelectedStatus = BookStatus.Unread;
-
-        var q = vm.BuildGroupDrillParameters(new BookListViewModel.GroupRow("15", "Dune", 6));
-
-        Assert.Equal(LibraryGroupBy.None.ToString(), q["group"]);
-        Assert.Equal(15, q["series"]);
-        Assert.Equal("Unread", q["status"]); // current filter carried forward
-    }
-
     [Theory]
     [InlineData("plague", LibraryGroupBy.None, "Fiction", 12, 5, 8, BookStatus.Read, "Camus", 2)]
     [InlineData("", LibraryGroupBy.Author, "", 0, 0, 0, null, "", 1)]
-    [InlineData("x", LibraryGroupBy.Collection, "NonFiction", 0, 9, 4, BookStatus.Reference, "", 3)]
+    // Series-filtered flat list — the canonical "view a series" path after the
+    // grouped Series view was retired (TODO #53c).
+    [InlineData("x", LibraryGroupBy.None, "NonFiction", 0, 9, 4, BookStatus.Reference, "", 3)]
     [InlineData("", LibraryGroupBy.Genre, "", -1, 0, -1, null, "", 1)] // uncategorised sentinels
     public void RoundTrip_SerialiseThenHydrate_PreservesState(
         string term, LibraryGroupBy group, string category,

@@ -4,7 +4,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
 
-public enum LibraryGroupBy { None, Author, Genre, Collection }
+// Series is deliberately NOT a grouping mode: browsing a series is "filter to
+// that series + reading-order sort" (see LoadBooksAsync), which the Series
+// filter already gives. The grouped Series view was retired once it became a
+// redundant second door to the same flat list (TODO #53c).
+public enum LibraryGroupBy { None, Author, Genre }
 
 public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
 {
@@ -108,10 +112,10 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         TotalPages = Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
         if (CurrentPage > TotalPages) CurrentPage = TotalPages;
 
-        // Filtering to a single series (e.g. drilling in from a Collection
-        // group) sorts by that series' reading order rather than DateAdded —
-        // reading order is the whole point of looking at a series. Every other
-        // view keeps newest-first.
+        // Filtering to a single series (via the Series filter) sorts by that
+        // series' reading order rather than DateAdded — reading order is the
+        // whole point of looking at a series, and is what replaced the retired
+        // Series grouping (TODO #53c). Every other view keeps newest-first.
         IQueryable<Book> ordered = SelectedSeriesId > 0
             ? query
                 .OrderBy(b => b.Works
@@ -144,7 +148,6 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         {
             LibraryGroupBy.Author => await GroupByAuthorAsync(db, filtered),
             LibraryGroupBy.Genre => await GroupByGenreAsync(db, filtered),
-            LibraryGroupBy.Collection => await GroupBySeriesAsync(db, filtered),
             _ => [],
         };
 
@@ -297,35 +300,6 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         return groups;
     }
 
-    private async Task<List<GroupRow>> GroupBySeriesAsync(BookTrackerDbContext db, IQueryable<Book> filtered)
-    {
-        var raw = await filtered
-            .SelectMany(b => b.Works
-                .Where(w => w.SeriesId.HasValue)
-                .Select(w => new { BookId = b.Id, SeriesId = w.SeriesId!.Value }))
-            .Distinct()
-            .GroupBy(x => x.SeriesId)
-            .Select(g => new { SeriesId = g.Key, Count = g.Count() })
-            .ToListAsync();
-
-        var seriesIds = raw.Select(r => r.SeriesId).ToList();
-        var names = await db.Series
-            .Where(s => seriesIds.Contains(s.Id))
-            .Select(s => new { s.Id, s.Name })
-            .ToDictionaryAsync(x => x.Id, x => x.Name);
-
-        // No "(no series)" bucket: grouping by series intentionally excludes
-        // seriesless books — that list is long enough to be noise here. Use the
-        // Series filter's "(no series)" option to see them as a flat list.
-        return raw
-            .Select(r => new GroupRow(
-                Key: r.SeriesId.ToString(),
-                Label: names.GetValueOrDefault(r.SeriesId) ?? "(unknown)",
-                Count: r.Count))
-            .OrderBy(g => g.Label)
-            .ToList();
-    }
-
     private IQueryable<Book> BookQueryWithIncludes(BookTrackerDbContext db) => db.Books
         .Include(b => b.Tags)
         .Include(b => b.Works).ThenInclude(w => w.Genres)
@@ -476,11 +450,6 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
                 break;
             case LibraryGroupBy.Genre:
                 dict["genre"] = group.Key == NoneKey ? -1 : int.Parse(group.Key);
-                break;
-            case LibraryGroupBy.Collection:
-                // No "(no series)" bucket in this grouping, so the key is always
-                // a real series id.
-                dict["series"] = int.Parse(group.Key);
                 break;
         }
 

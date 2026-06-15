@@ -91,22 +91,9 @@ public class BookListViewModelTests
         Assert.Equal("(no genre)", vm.Groups.Last().Label);
     }
 
-    [Fact]
-    public async Task GroupByCollection_ExcludesSerieslessBooks()
-    {
-        var factory = new TestDbContextFactory();
-        await SeedSampleLibraryAsync(factory);
-
-        var vm = new BookListViewModel(factory) { SelectedGroupBy = LibraryGroupBy.Collection };
-        await vm.InitializeAsync();
-
-        // Grouping by series intentionally drops seriesless books — only the
-        // real series surfaces, no "(no series)" bucket. Seriesless books are
-        // reachable via the Series filter's "(no series)" option instead.
-        Assert.Contains(vm.Groups, g => g.Label == "Hercule Poirot" && g.Count == 1);
-        Assert.DoesNotContain(vm.Groups, g => g.Label == "(no series)");
-        Assert.Single(vm.Groups);
-    }
+    // Note: there is no "group by series" mode — series browsing is the
+    // Series filter + reading-order sort (FlatList_SeriesFilter_* below),
+    // which retired the grouped Series view (TODO #53c).
 
     [Fact]
     public async Task FlatList_SeriesFilter_ReturnsOnlyThatSeries()
