@@ -187,6 +187,76 @@ public class BookListViewModelTests
     }
 
     [Fact]
+    public async Task SeriesFilter_ForcesFlatReadingOrderList_EvenUnderAuthorGrouping()
+    {
+        // TODO #53c: a specific series filter shows the reading-order flat list
+        // regardless of the Group-by selection (it replaced the retired Series
+        // grouping). Default grouping is Author; picking a series must still
+        // land on the flat, SeriesOrder-sorted list — not author groups.
+        var factory = new TestDbContextFactory();
+        int seriesId;
+        using (var db = factory.CreateDbContext())
+        {
+            var herbert = new Author { Name = "Frank Herbert" };
+            var dune = new Series { Name = "Dune", Type = SeriesType.Series };
+            db.Books.AddRange(
+                new Book { Title = "Dune Messiah", Works = [new Work { Title = "Dune Messiah", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }], Series = dune, SeriesOrder = 2 }] },
+                new Book { Title = "Dune", Works = [new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }], Series = dune, SeriesOrder = 1 }] });
+            await db.SaveChangesAsync();
+            seriesId = dune.Id;
+        }
+
+        var vm = new BookListViewModel(factory)
+        {
+            SelectedGroupBy = LibraryGroupBy.Author, // the default — NOT None
+            SelectedSeriesId = seriesId,
+        };
+        await vm.InitializeAsync();
+
+        Assert.True(vm.ShowingFlatList);
+        Assert.Empty(vm.Groups); // no grouped rows produced under a series filter
+        Assert.Equal(["Dune", "Dune Messiah"], vm.Books.Select(b => b.Title).ToList()); // reading order
+    }
+
+    [Fact]
+    public async Task FlatList_SeriesFilter_BookWithTwoWorksInSameSeries_AppearsOnce()
+    {
+        // A compendium Book can contain two Works of the same series (an omnibus
+        // of #1 + #2). The series-filtered flat list must show that Book ONCE,
+        // not once per matching Work — the Where(b.Works.Any(...)) shape avoids
+        // a SelectMany fan-out. Guards against a future per-Work join sneaking
+        // duplicates back in (the dedup the retired grouping did via .Distinct).
+        var factory = new TestDbContextFactory();
+        int seriesId;
+        using (var db = factory.CreateDbContext())
+        {
+            var herbert = new Author { Name = "Frank Herbert" };
+            var dune = new Series { Name = "Dune", Type = SeriesType.Series };
+            db.Books.Add(new Book
+            {
+                Title = "Dune Omnibus",
+                Works =
+                [
+                    new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }], Series = dune, SeriesOrder = 1 },
+                    new Work { Title = "Dune Messiah", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }], Series = dune, SeriesOrder = 2 },
+                ],
+            });
+            await db.SaveChangesAsync();
+            seriesId = dune.Id;
+        }
+
+        var vm = new BookListViewModel(factory)
+        {
+            SelectedGroupBy = LibraryGroupBy.None,
+            SelectedSeriesId = seriesId,
+        };
+        await vm.InitializeAsync();
+
+        Assert.Equal(1, vm.TotalCount);
+        Assert.Equal("Dune Omnibus", Assert.Single(vm.Books).Title);
+    }
+
+    [Fact]
     public async Task FlatList_PageBeyondRange_ClampsToLastPage()
     {
         // A page number past the end (e.g. a stale bookmarked ?page=5 after the

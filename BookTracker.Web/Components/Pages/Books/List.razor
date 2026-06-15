@@ -174,7 +174,7 @@
             <MudProgressCircular Indeterminate="true" />
         </MudStack>
     }
-    else if (VM.SelectedGroupBy == LibraryGroupBy.None)
+    else if (VM.ShowingFlatList)
     {
         @if (VM.Books.Count == 0)
         {
@@ -278,7 +278,7 @@
         // Keep the URL the source of truth: if the requested page was clamped
         // (the result set shrank), write the corrected page back so a refresh or
         // Back doesn't re-request an out-of-range page every time.
-        if (VM.SelectedGroupBy == LibraryGroupBy.None && VM.CurrentPage != (QueryPage ?? 1))
+        if (VM.ShowingFlatList && VM.CurrentPage != (QueryPage ?? 1))
         {
             NavigateWithState();
         }
