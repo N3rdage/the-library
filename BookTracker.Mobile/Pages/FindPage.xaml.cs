@@ -3,6 +3,7 @@ using BookTracker.Mobile.Services;
 using BookTracker.Mobile.Theming;
 using BookTracker.Shared.Catalog;
 using Microsoft.Maui.Controls.Shapes;
+using ZXing.Net.Maui;
 
 namespace BookTracker.Mobile.Pages;
 
@@ -26,6 +27,13 @@ public partial class FindPage : ContentPage
     private enum Scope { All, Authors, Works }
     private Scope _scope = Scope.All;
 
+    // Inline scanner state. Debounce mirrors ScanPage — ZXing re-fires while a
+    // code stays in frame, so one lookup per "real" scan.
+    private static readonly TimeSpan ScanDebounce = TimeSpan.FromSeconds(3);
+    private bool _cameraExpanded;
+    private string? _lastScannedIsbn;
+    private DateTime _lastScannedAt = DateTime.MinValue;
+
     public FindPage(ICatalogCache cache, IHttpClientFactory httpFactory, ISyncService sync)
     {
         InitializeComponent();
@@ -35,6 +43,14 @@ public partial class FindPage : ContentPage
         _sync.StateChanged += (_, _) => MainThread.BeginInvokeOnMainThread(RefreshSyncChip);
         RefreshSyncChip();
         UpdateScopeButtons();
+
+        // Book barcodes only — EAN-13 (ISBN-13) + the rare EAN-8.
+        Reader.Options = new BarcodeReaderOptions
+        {
+            Formats = BarcodeFormat.Ean13 | BarcodeFormat.Ean8,
+            AutoRotate = true,
+            Multiple = false,
+        };
     }
 
     protected override void OnAppearing()
@@ -50,6 +66,9 @@ public partial class FindPage : ContentPage
     {
         base.OnDisappearing();
         _searchCts?.Cancel();
+        // Stop + collapse the camera when leaving the tab so we never hold it
+        // open in the background.
+        if (_cameraExpanded) CollapseCamera();
     }
 
     private void RefreshSyncChip() =>
@@ -60,13 +79,51 @@ public partial class FindPage : ContentPage
 
     private async void OnScanClicked(object? sender, EventArgs e)
     {
-        // Transitional: push the existing camera page. The next slice embeds an
-        // inline camera here and deletes ScanPage.
-        var services = Application.Current?.Handler?.MauiContext?.Services
-            ?? throw new InvalidOperationException("ServiceProvider not available.");
-        var page = services.GetService(typeof(ScanPage)) as ScanPage
-            ?? throw new InvalidOperationException("ScanPage not registered.");
-        await Navigation.PushAsync(page);
+        if (_cameraExpanded) { CollapseCamera(); return; }
+
+        // Runtime CAMERA permission — manifest alone isn't enough on Android 6+.
+        var status = await Permissions.CheckStatusAsync<Permissions.Camera>();
+        if (status != PermissionStatus.Granted)
+            status = await Permissions.RequestAsync<Permissions.Camera>();
+        if (status != PermissionStatus.Granted)
+        {
+            ResultsLayout.Children.Clear();
+            ScopeSegment.IsVisible = false;
+            ResultsLayout.Children.Add(Hint("Camera permission denied. Type an ISBN to look it up instead."));
+            return;
+        }
+
+        _cameraExpanded = true;
+        CameraSection.IsVisible = true;
+        Reader.IsDetecting = true;
+        ScanButton.Text = "Cancel";
+    }
+
+    private void CollapseCamera()
+    {
+        _cameraExpanded = false;
+        Reader.IsDetecting = false;
+        CameraSection.IsVisible = false;
+        ScanButton.Text = "Scan";
+    }
+
+    private async void OnBarcodesDetected(object? sender, BarcodeDetectionEventArgs e)
+    {
+        // Fires on a background thread + re-fires while the code stays in frame.
+        var result = e.Results.FirstOrDefault();
+        var isbn = (result?.Value ?? "").Trim();
+        if (string.IsNullOrEmpty(isbn)) return;
+
+        var now = DateTime.UtcNow;
+        if (isbn == _lastScannedIsbn && (now - _lastScannedAt) < ScanDebounce) return;
+        _lastScannedIsbn = isbn;
+        _lastScannedAt = now;
+
+        await MainThread.InvokeOnMainThreadAsync(async () =>
+        {
+            CollapseCamera();
+            await Navigation.PushAsync(new ResultPage(_cache, _httpFactory, isbn));
+        });
     }
 
     private async void OnSearchTextChanged(object? sender, TextChangedEventArgs e)

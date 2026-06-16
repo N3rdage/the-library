@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:zxing="clr-namespace:ZXing.Net.Maui.Controls;assembly=ZXing.Net.MAUI.Controls"
              x:Class="BookTracker.Mobile.Pages.FindPage"
              Shell.NavBarIsVisible="False"
              Style="{StaticResource Page}">
@@ -9,9 +10,9 @@
          with an ISBN auto-detect path, plus a scan button. Replaces MainPage +
          the old author/title search pages. Token-based + dark. v1 is offline
          search/scan of what you own; the online "what am I missing" layer is
-         TODO #54. (Inline camera + ScanPage removal: next slice.) -->
+         TODO #54. -->
 
-    <Grid RowDefinitions="Auto,Auto,Auto,*">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*">
 
         <!-- Espresso banner + trailing tappable sync chip. -->
         <Grid Grid.Row="0"
@@ -53,6 +54,7 @@
                        TextColor="{AppThemeBinding Light={StaticResource TextL}, Dark={StaticResource TextD}}" />
             </Border>
             <Button Grid.Column="1"
+                    x:Name="ScanButton"
                     Text="Scan"
                     Clicked="OnScanClicked"
                     WidthRequest="64"
@@ -64,9 +66,36 @@
                     CornerRadius="8" />
         </Grid>
 
+        <!-- Inline scanner — collapsed by default; the Scan button expands it.
+             Reuses the ScanPage letterbox + green-target overlay. Camera is
+             started on expand and stopped on collapse / tab-leave. -->
+        <Grid x:Name="CameraSection"
+              Grid.Row="2"
+              IsVisible="False"
+              HeightRequest="220"
+              Margin="20,12,20,0">
+            <zxing:CameraBarcodeReaderView x:Name="Reader"
+                                           BarcodesDetected="OnBarcodesDetected"
+                                           IsDetecting="False" />
+            <Grid InputTransparent="True"
+                  RowDefinitions="1.5*,*,1.5*"
+                  ColumnDefinitions="*,6*,*">
+                <BoxView Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" Color="#B3000000" />
+                <BoxView Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Color="#B3000000" />
+                <BoxView Grid.Row="1" Grid.Column="0" Color="#B3000000" />
+                <BoxView Grid.Row="1" Grid.Column="2" Color="#B3000000" />
+                <Border Grid.Row="1" Grid.Column="1"
+                        BackgroundColor="Transparent"
+                        Stroke="{StaticResource ScanReticle}"
+                        StrokeThickness="3">
+                    <Border.StrokeShape><RoundRectangle CornerRadius="4" /></Border.StrokeShape>
+                </Border>
+            </Grid>
+        </Grid>
+
         <!-- Scope segment (All / Authors / Works) — shown only with results. -->
         <Grid x:Name="ScopeSegment"
-              Grid.Row="2"
+              Grid.Row="3"
               Padding="20,12,20,0"
               ColumnDefinitions="*,*,*"
               ColumnSpacing="8"
@@ -76,7 +105,7 @@
             <Button x:Name="ScopeWorksButton" Grid.Column="2" Text="Works" Clicked="OnScopeWorks" HeightRequest="40" CornerRadius="8" FontSize="13" />
         </Grid>
 
-        <ScrollView Grid.Row="3" Padding="20,12,20,20">
+        <ScrollView Grid.Row="4" Padding="20,12,20,20">
             <VerticalStackLayout x:Name="ResultsLayout" Spacing="8" />
         </ScrollView>
     </Grid>
