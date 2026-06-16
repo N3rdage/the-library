@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="BookTracker.Mobile.Pages.ResultPage"
+             Style="{StaticResource Page}"
+             Title="Result">
+
+    <!-- The scan/search result destination: "do I own this?" at the
+         (this-)edition level. Found → cover + title + authors + status +
+         editions/works. Not-found → neutral card + add-in-app. Wishlist flag
+         shows in both. v1 is offline (this exact ISBN); the work-level /
+         online-edition answer is the online-layer arc (TODO #54). -->
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="12">
+
+            <Label x:Name="StatusLabel"
+                   HorizontalOptions="Center"
+                   HorizontalTextAlignment="Center"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource TextMutedL}, Dark={StaticResource TextMutedD}}" />
+
+            <!-- Wishlist flag — "am I looking for this?", regardless of owned. -->
+            <Border x:Name="WishlistFlag"
+                    IsVisible="False"
+                    Stroke="{StaticResource Brass}"
+                    StrokeThickness="2"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource MissBgL}, Dark={StaticResource MissBgD}}"
+                    Padding="12,8">
+                <Border.StrokeShape><RoundRectangle CornerRadius="8" /></Border.StrokeShape>
+                <Label Text="⭐  On your wishlist"
+                       FontSize="15"
+                       FontAttributes="Bold"
+                       HorizontalTextAlignment="Center"
+                       TextColor="{AppThemeBinding Light={StaticResource LeatherL}, Dark={StaticResource LeatherD}}" />
+            </Border>
+
+            <!-- Found (owned this edition) -->
+            <Border x:Name="FoundFrame"
+                    IsVisible="False"
+                    Stroke="{AppThemeBinding Light={StaticResource FoundBorderL}, Dark={StaticResource FoundBorderD}}"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource FoundBgL}, Dark={StaticResource FoundBgD}}"
+                    Padding="12">
+                <Border.StrokeShape><RoundRectangle CornerRadius="8" /></Border.StrokeShape>
+                <VerticalStackLayout Spacing="12">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <Grid Grid.Column="0"
+                              WidthRequest="80"
+                              HeightRequest="120"
+                              VerticalOptions="Start"
+                              BackgroundColor="{AppThemeBinding Light={StaticResource CoverMissL}, Dark={StaticResource CoverMissD}}">
+                            <Label x:Name="FoundCoverPlaceholder"
+                                   Text="📖"
+                                   FontSize="32"
+                                   HorizontalOptions="Center"
+                                   VerticalOptions="Center"
+                                   TextColor="{AppThemeBinding Light={StaticResource BrassTextL}, Dark={StaticResource BrassTextD}}" />
+                            <Image x:Name="FoundCover" IsVisible="False" Aspect="AspectFit" />
+                        </Grid>
+                        <VerticalStackLayout Grid.Column="1" Spacing="6">
+                            <Label x:Name="FoundTitle" FontAttributes="Bold" FontSize="18"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextL}, Dark={StaticResource TextD}}" />
+                            <Label x:Name="FoundAuthors" FontSize="14"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextMutedL}, Dark={StaticResource TextMutedD}}" />
+                            <Label x:Name="FoundStatusRating" FontSize="13"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextL}, Dark={StaticResource TextD}}" />
+                            <Label x:Name="FoundIsbn" FontSize="12" FontFamily="Courier New"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextMutedL}, Dark={StaticResource TextMutedD}}" />
+                            <Button x:Name="OpenInAppButton" Text="Open in app →" Clicked="OnOpenInAppClicked"
+                                    Style="{StaticResource PrimaryButton}" HorizontalOptions="Start" Padding="16,0" />
+                        </VerticalStackLayout>
+                    </Grid>
+
+                    <VerticalStackLayout x:Name="WorksSection" IsVisible="False" Spacing="4">
+                        <Label Text="Works in this book" FontSize="12" FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Light={StaticResource BrassTextL}, Dark={StaticResource BrassTextD}}" />
+                        <VerticalStackLayout x:Name="WorksLayout" Spacing="4" />
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout x:Name="EditionsSection" IsVisible="False" Spacing="4">
+                        <Label Text="Editions you own" FontSize="12" FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Light={StaticResource BrassTextL}, Dark={StaticResource BrassTextD}}" />
+                        <VerticalStackLayout x:Name="EditionsLayout" Spacing="6" />
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Not found (this edition not owned) -->
+            <Border x:Name="MissingFrame"
+                    IsVisible="False"
+                    Stroke="{AppThemeBinding Light={StaticResource MissBorderL}, Dark={StaticResource MissBorderD}}"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource MissBgL}, Dark={StaticResource MissBgD}}"
+                    Padding="12">
+                <Border.StrokeShape><RoundRectangle CornerRadius="8" /></Border.StrokeShape>
+                <VerticalStackLayout Spacing="6">
+                    <Label x:Name="MissingHeadline" Text="Not in your library."
+                           FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource TextL}, Dark={StaticResource TextD}}" />
+                    <Label x:Name="MissingIsbn" FontSize="12" FontFamily="Courier New"
+                           TextColor="{AppThemeBinding Light={StaticResource TextMutedL}, Dark={StaticResource TextMutedD}}" />
+                    <Button x:Name="AddToLibraryButton" Text="Add in app →" Clicked="OnAddToLibraryClicked"
+                            Style="{StaticResource PrimaryButton}" HorizontalOptions="Start" Padding="16,0" />
+                </VerticalStackLayout>
+            </Border>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>
