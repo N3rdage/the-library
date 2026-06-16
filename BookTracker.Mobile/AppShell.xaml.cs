@@ -12,7 +12,7 @@ public partial class AppShell : Shell
     // Pages are injected (not DataTemplate-instantiated) so they get their DI
     // dependencies. Content is set eagerly — three tab pages is cheap, and
     // each still loads its data in OnAppearing when its tab is first shown.
-    public AppShell(ISyncService sync, MainPage find, WishlistPage wishlist, SeriesGapsPage gaps)
+    public AppShell(ISyncService sync, FindPage find, WishlistPage wishlist, SeriesGapsPage gaps)
     {
         InitializeComponent();
         _sync = sync;
