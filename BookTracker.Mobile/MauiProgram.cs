@@ -64,11 +64,14 @@ public static class MauiProgram
         // registered — it's constructed inline because it needs a
         // runtime-chosen AuthorSnapshot that DI can't supply.
         builder.Services.AddTransient<AuthorSearchPage>();
-        // Title search + Series gaps — same transient lifetime so each
-        // visit gets fresh state.
+        // Title search is transient — pushed within the Find tab, fresh per push.
         builder.Services.AddTransient<TitleSearchPage>();
-        builder.Services.AddTransient<SeriesGapsPage>();
-        builder.Services.AddTransient<WishlistPage>();
+        // Wishlist + Series gaps are bottom TABS — AppShell holds one instance
+        // each for the app lifetime, so register them Singleton to match reality
+        // (Transient was misleading: the shell captures them once). Their pages
+        // reload their data in OnAppearing on every tab visit.
+        builder.Services.AddSingleton<SeriesGapsPage>();
+        builder.Services.AddSingleton<WishlistPage>();
 
 #if DEBUG
         builder.Logging.AddDebug();
