@@ -1,6 +1,7 @@
 - [GitHub push/PR hand-off](feedback_github_push.md) — never push branches or open PRs; tell the user to do it and wait for merge confirmation.
 - ["plan:" prefix](feedback_plan_prefix.md) — when a message starts with "plan:", propose with defaults + open questions and wait; don't execute.
 - [Review findings gate](feedback_review_findings_gate.md) — after a code-review, present findings + recommendations and WAIT for go-ahead; never flow straight into fixes.
+- [Overloaded field → shared predicate](feedback_overloaded_field_shared_predicate.md) — repurposing a column to carry a 2nd meaning silently conscripts every existing reader; centralise "what does this value mean" in one shared predicate (or model it explicitly).
 - [Drew — solo developer](user_drew.md) — context on the user, their stack (Windows/PowerShell/Azure/GitHub `N3rdage/the-library`, Gandi DNS), and collaboration style.
 - [Auto-commit locally](feedback_commit_locally.md) — always stage and commit before handing off; don't wait to be asked.
 - [Hot-reload ≠ committed](feedback_hot_reload_commit_gap.md) — every mid-PR-cycle edit must be committed before the user tests it; hot-reload makes uncommitted edits feel "done".
@@ -32,6 +33,7 @@
 - [Close TODOs in same PR](feedback_close_todos_in_same_pr.md) — when a PR delivers a TODO row, move Open→Shipped in the same commit.
 - [Add/View/Edit polish arc retro](retros/retro_add_view_edit_polish_arc.md) — six PRs decommissioning `/edit`; three durable patterns + one accepted papercut (MudAutocomplete portaled popover stays open after free-text Enter, Esc dismisses).
 - [Pre-reference-capture arc retro](retros/retro_pre_reference_capture_arc.md) — three buckets shipped 2026-05-24 (editor-only Works, mobile contributor roles, EditionNumber + Reference); four durable lessons including silent `string.Join(record)` post-wire-rename and "bucket plans are throwaway once the user names the real pain".
+- [Series-order arc retro](retros/retro_series_order_arc.md) — 3 PRs (#329 web SeriesOrderDisplay, #330 mobile sync, #335 Library series collapse) reconciling the Series TODO cluster (#3 deleted, #16 drift, #14 shipped, #13 deferred, #53 shipped). Headline: the overloaded-column trap (flooring "4.5"→int broke gap detection) + fixing-the-replacement-path-was-unreachable; review caught a regression on every PR.
 - [sqlite-net-pcl schema backfill](feedback_sqlite_net_pcl_schema_backfill.md) — adding a queryable column to `Cached*` entities silently breaks queries for existing rows (CreateTableAsync ALTERs but doesn't populate); always pair with a one-shot UPDATE in `CatalogCache.InitAsync`.
 - [Runbook: Bookshelf Clear data kills the app](runbook_bookshelf_clear_data_kills_app.md) — Android Settings → Clear data prevents Bookshelf from launching afterwards (2026-05-14). Use uninstall + reinstall instead; root cause not yet diagnosed.
 - [Dogfood data cleanup via UI](feedback_dogfood_data_cleanup.md) — default to manual UI cleanup for judgement-per-row work; only script uniform bulk transforms. Drew wants to feel the same friction users will.
