@@ -28,6 +28,7 @@ public partial class WishlistPage : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
+        _ = ((VisualElement)Content).InAsync(rise: 6); // tab cross-fade
         await LoadFromCacheAsync();
     }
 
@@ -211,8 +212,6 @@ public partial class WishlistPage : ContentPage
             VerticalOptions = LayoutOptions.Center,
             WidthRequest = 88,
         };
-        boughtButton.Clicked += async (_, _) => await OnBoughtAsync(item.Id);
-
         var row = new Grid
         {
             ColumnDefinitions =
@@ -227,6 +226,9 @@ public partial class WishlistPage : ContentPage
         row.Add(coverSlot, 0, 0);
         row.Add(textStack, 1, 0);
         row.Add(boughtButton, 2, 0);
+
+        // Wire Bought once the row exists so the handler can collapse it out.
+        boughtButton.Clicked += async (_, _) => await OnBoughtAsync(item.Id, row);
 
         // Best-effort cover fetch — wishlist covers aren't disk-cached
         // (unlike Book covers); just stream bytes per render. If the URL
@@ -288,12 +290,15 @@ public partial class WishlistPage : ContentPage
         }
     }
 
-    private async Task OnBoughtAsync(int itemId)
+    private async Task OnBoughtAsync(int itemId, View row)
     {
         // Fired from an async-void click lambda — an unhandled throw here would
         // tear down the process, so a cache-write failure must surface, not crash.
         try
         {
+            // Collapse the row out instead of yanking it, then reload (the rebuilt
+            // list no longer carries the bought item).
+            if (Motion.Enabled) await row.FadeTo(0, 160, Easing.CubicIn);
             await _cache.MarkBoughtLocallyAsync(itemId);
             await LoadFromCacheAsync();
         }

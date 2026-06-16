@@ -64,6 +64,7 @@ public partial class ResultPage : ContentPage
             StatusLabel.Text = "";
             MissingIsbn.Text = $"ISBN: {_isbn}";
             MissingFrame.IsVisible = true;
+            _ = MissingFrame.InAsync(); // answer + motion land together
             return;
         }
 
@@ -75,6 +76,7 @@ public partial class ResultPage : ContentPage
         FoundIsbn.Text = $"ISBN: {_isbn}";
         OpenInAppButton.CommandParameter = book.Id;
         FoundFrame.IsVisible = true;
+        _ = FoundFrame.InAsync(); // answer + motion land together
 
         _coverCts = new CancellationTokenSource();
         _ = Covers.LoadIntoAsync(_cache, _httpFactory, book.Id, FoundCover, FoundCoverPlaceholder);

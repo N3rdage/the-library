@@ -18,6 +18,7 @@ public partial class SeriesGapsPage : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
+        _ = ((VisualElement)Content).InAsync(rise: 6); // tab cross-fade
         // Reload on every appearance. Under Shell this page is app-lifetime
         // (the singleton AppShell holds it), so a one-shot guard would leave
         // the gaps list stale after the catalog is refreshed on the Find tab.

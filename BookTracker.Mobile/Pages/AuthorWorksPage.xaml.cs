@@ -32,6 +32,7 @@ public partial class AuthorWorksPage : ContentPage
         base.OnAppearing();
         if (_loaded) return; // pushed page, fresh instance per visit — load once
         _loaded = true;
+        _ = ((VisualElement)Content).InAsync(); // soften the push
         await LoadWorksAsync();
     }
 
