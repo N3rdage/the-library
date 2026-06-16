@@ -41,4 +41,70 @@
     <SolidColorBrush x:Key="Gray600Brush" Color="{StaticResource Gray600}"/>
     <SolidColorBrush x:Key="Gray900Brush" Color="{StaticResource Gray900}"/>
     <SolidColorBrush x:Key="Gray950Brush" Color="{StaticResource Gray950}"/>
+
+    <!-- ============================================================
+         BookTracker design tokens (Bookshelf UI redesign, 2026-06).
+         Single source of truth for the leather/brass/parchment palette,
+         mirrored from BookTracker.Web/Theme/BookTrackerTheme.cs with
+         explicit light (…L) / dark (…D) pairs. Code-behind resolves these
+         via ThemeColors + SetAppThemeColor; XAML via AppThemeBinding.
+         Closes TODO #37 (the hand-mirrored inline hex it replaces).
+         The template Primary/Secondary/Gray* above are MAUI defaults kept
+         only because the template Styles.xaml still references them.
+         ============================================================ -->
+
+    <!-- Mode-stable constants -->
+    <Color x:Key="Brass">#A67B3A</Color>
+    <Color x:Key="InkOnBrass">#2C2416</Color>
+    <Color x:Key="OnLeather">#FAF6EC</Color>
+    <Color x:Key="ScanReticle">#4CAF50</Color>
+
+    <!-- Surfaces -->
+    <Color x:Key="PageBgL">#FAF6EC</Color>      <Color x:Key="PageBgD">#1F140F</Color>
+    <Color x:Key="SurfaceL">#F2EADB</Color>     <Color x:Key="SurfaceD">#30211A</Color>
+    <Color x:Key="HeaderL">#3E2723</Color>      <Color x:Key="HeaderD">#2A1A13</Color>
+    <Color x:Key="InputBgL">#FAF6EC</Color>     <Color x:Key="InputBgD">#2A2018</Color>
+    <Color x:Key="CoverTileL">#3E2723</Color>   <Color x:Key="CoverTileD">#1A130D</Color>
+    <Color x:Key="CoverMissL">#E2D8C4</Color>   <Color x:Key="CoverMissD">#1A130D</Color>
+
+    <!-- Text -->
+    <Color x:Key="TextL">#2C2416</Color>        <Color x:Key="TextD">#F2EADB</Color>
+    <Color x:Key="TextMutedL">#6B5D4A</Color>   <Color x:Key="TextMutedD">#B9A98E</Color>
+
+    <!-- Leather primary -->
+    <Color x:Key="LeatherL">#6B2737</Color>     <Color x:Key="LeatherD">#8A3447</Color>
+
+    <!-- Brass as text/icon (fill uses constant Brass) -->
+    <Color x:Key="BrassTextL">#A67B3A</Color>   <Color x:Key="BrassTextD">#CDA256</Color>
+
+    <!-- Tertiary / progress (green leather) -->
+    <Color x:Key="GreenL">#3D5A3F</Color>       <Color x:Key="GreenD">#6E9270</Color>
+    <Color x:Key="BarTrackL">#E2D8C4</Color>    <Color x:Key="BarTrackD">#3A2A20</Color>
+
+    <!-- Borders -->
+    <Color x:Key="BorderL">#A67B3A</Color>      <Color x:Key="BorderD">#4F3E30</Color>
+
+    <!-- Found (success) card -->
+    <Color x:Key="FoundBgL">#E8F5E9</Color>     <Color x:Key="FoundBgD">#1B3320</Color>
+    <Color x:Key="FoundBorderL">#A3D9A5</Color> <Color x:Key="FoundBorderD">#356735</Color>
+    <Color x:Key="FoundPillBgL">#4F6B3D</Color> <Color x:Key="FoundPillBgD">#2E5A33</Color>
+    <Color x:Key="FoundPillTxL">#FAF6EC</Color> <Color x:Key="FoundPillTxD">#BFE3C2</Color>
+
+    <!-- Not-found / neutral card -->
+    <Color x:Key="MissBgL">#F0EADF</Color>      <Color x:Key="MissBgD">#2A2018</Color>
+    <Color x:Key="MissBorderL">#D8C9A8</Color>  <Color x:Key="MissBorderD">#4F3E30</Color>
+
+    <!-- Status tags -->
+    <Color x:Key="OwnedBgL">#DDEBD0</Color>     <Color x:Key="OwnedBgD">#243318</Color>
+    <Color x:Key="OwnedTxL">#3B5A1E</Color>     <Color x:Key="OwnedTxD">#8DB36E</Color>
+    <Color x:Key="MissTagBgL">#F5DAD5</Color>   <Color x:Key="MissTagBgD">#4A2620</Color>
+    <Color x:Key="MissTagTxL">#9B3B2E</Color>   <Color x:Key="MissTagTxD">#D08577</Color>
+    <Color x:Key="WarnBgL">#F5E6C8</Color>      <Color x:Key="WarnBgD">#3E2F12</Color>
+    <Color x:Key="WarnTxL">#8A6510</Color>      <Color x:Key="WarnTxD">#D6A93F</Color>
+
+    <!-- Sync states -->
+    <Color x:Key="OnlineBgL">#E8F1E4</Color>    <Color x:Key="OnlineBgD">#1B3320</Color>
+    <Color x:Key="OnlineTxL">#4F6B3D</Color>    <Color x:Key="OnlineTxD">#8DB36E</Color>
+    <Color x:Key="InfoTxL">#3A6B7A</Color>      <Color x:Key="InfoTxD">#7FB3C0</Color>
+    <Color x:Key="ChipBgL">#EFE4CC</Color>      <Color x:Key="ChipBgD">#30211A</Color>
 </ResourceDictionary>

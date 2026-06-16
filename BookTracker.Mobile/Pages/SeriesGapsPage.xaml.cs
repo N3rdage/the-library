@@ -1,5 +1,5 @@
 using BookTracker.Mobile.Cache;
-using Microsoft.Maui.Controls.Shapes;
+using BookTracker.Mobile.Theming;
 
 namespace BookTracker.Mobile.Pages;
 
@@ -7,13 +7,6 @@ public partial class SeriesGapsPage : ContentPage
 {
     private readonly ICatalogCache _cache;
     private bool _loaded;
-
-    private static readonly Color Brass = Color.FromArgb("#A67B3A");
-    private static readonly Color AgedParchment = Color.FromArgb("#F2EADB");
-    private static readonly Color Ink = Color.FromArgb("#2C2416");
-    private static readonly Color FadedInk = Color.FromArgb("#6B5D4A");
-    private static readonly Color ErrorColor = Color.FromArgb("#9B3B2E");
-    private static readonly Color Leather = Color.FromArgb("#6B2737");
 
     public SeriesGapsPage(ICatalogCache cache)
     {
@@ -32,12 +25,13 @@ public partial class SeriesGapsPage : ContentPage
     private async Task LoadGapsAsync()
     {
         GapsLayout.Children.Clear();
-        GapsLayout.Children.Add(new ActivityIndicator
+        var spinner = new ActivityIndicator
         {
             IsRunning = true,
-            Color = Leather,
             HorizontalOptions = LayoutOptions.Center,
-        });
+        };
+        spinner.SetThemeColor(ActivityIndicator.ColorProperty, "LeatherL", "LeatherD");
+        GapsLayout.Children.Add(spinner);
 
         IReadOnlyList<SeriesGap> gaps;
         try
@@ -47,13 +41,14 @@ public partial class SeriesGapsPage : ContentPage
         catch (Exception ex)
         {
             GapsLayout.Children.Clear();
-            GapsLayout.Children.Add(new Label
+            var error = new Label
             {
                 Text = $"Couldn't load gaps: {ex.GetType().Name} — {ex.Message}",
-                TextColor = ErrorColor,
                 FontSize = 14,
                 LineBreakMode = LineBreakMode.WordWrap,
-            });
+            };
+            error.SetThemeColor(Label.TextColorProperty, "MissTagTxL", "MissTagTxD");
+            GapsLayout.Children.Add(error);
             return;
         }
 
@@ -64,15 +59,16 @@ public partial class SeriesGapsPage : ContentPage
             // Empty-state surfaces both "no series at all" and "all
             // series you own are complete" with a single message —
             // both are good news.
-            GapsLayout.Children.Add(new Label
+            var empty = new Label
             {
                 Text = "No gaps in your series collection — either you're complete, or you haven't started any series with a known length yet.",
                 FontSize = 14,
-                TextColor = FadedInk,
                 HorizontalTextAlignment = TextAlignment.Center,
                 LineBreakMode = LineBreakMode.WordWrap,
                 Margin = new Thickness(0, 16, 0, 0),
-            });
+            };
+            empty.SetThemeColor(Label.TextColorProperty, "TextMutedL", "TextMutedD");
+            GapsLayout.Children.Add(empty);
             return;
         }
 
@@ -89,23 +85,25 @@ public partial class SeriesGapsPage : ContentPage
             Text = gap.SeriesName,
             FontSize = 16,
             FontAttributes = FontAttributes.Bold,
-            TextColor = Ink,
             LineBreakMode = LineBreakMode.WordWrap,
         };
+        nameLabel.SetThemeColor(Label.TextColorProperty, "TextL", "TextD");
+
         var progressLabel = new Label
         {
             Text = $"{gap.OwnedCount} of {gap.ExpectedCount} owned",
             FontSize = 13,
-            TextColor = FadedInk,
         };
+        progressLabel.SetThemeColor(Label.TextColorProperty, "TextMutedL", "TextMutedD");
+
         var missingLabel = new Label
         {
             Text = "Missing " + FormatMissingOrders(gap.MissingOrders),
             FontSize = 14,
-            TextColor = Leather,
             FontAttributes = FontAttributes.Bold,
             LineBreakMode = LineBreakMode.WordWrap,
         };
+        missingLabel.SetThemeColor(Label.TextColorProperty, "LeatherL", "LeatherD");
 
         var stack = new VerticalStackLayout
         {
@@ -113,13 +111,12 @@ public partial class SeriesGapsPage : ContentPage
             Children = { nameLabel, progressLabel, missingLabel },
         };
 
+        // Card style supplies the themed surface + border + 8 dp radius;
+        // override padding to the gap card's 14,12 rung.
         return new Border
         {
-            Stroke = Brass,
-            StrokeThickness = 1,
-            BackgroundColor = AgedParchment,
+            Style = (Style)Application.Current!.Resources["Card"],
             Padding = new Thickness(14, 12),
-            StrokeShape = new RoundRectangle { CornerRadius = 8 },
             Content = stack,
         };
     }

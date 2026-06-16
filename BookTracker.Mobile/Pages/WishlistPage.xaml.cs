@@ -1,5 +1,6 @@
 using BookTracker.Mobile.Cache;
 using BookTracker.Mobile.Services;
+using BookTracker.Mobile.Theming;
 using BookTracker.Shared.Wishlist;
 using Microsoft.Maui.Controls.Shapes;
 
@@ -10,16 +11,6 @@ public partial class WishlistPage : ContentPage
     private readonly ICatalogCache _cache;
     private readonly IApiClient _api;
     private readonly IHttpClientFactory _httpFactory;
-
-    // Palette duplicated from STYLE-GUIDE.md / MainPage.xaml so the
-    // dynamic per-row Views can use Color.FromArgb. Will move to
-    // {StaticResource ...} when TODO #37 (Mobile palette ResourceDictionary)
-    // lands.
-    private static readonly Color Leather = Color.FromArgb("#6B2737");
-    private static readonly Color Brass = Color.FromArgb("#A67B3A");
-    private static readonly Color AgedParchment = Color.FromArgb("#F2EADB");
-    private static readonly Color Ink = Color.FromArgb("#2C2416");
-    private static readonly Color FadedInk = Color.FromArgb("#6B5D4A");
 
     public WishlistPage(ICatalogCache cache, IApiClient api, IHttpClientFactory httpFactory)
     {
@@ -73,8 +64,8 @@ public partial class WishlistPage : ContentPage
             FontSize = 18,
             HorizontalOptions = LayoutOptions.Center,
             VerticalOptions = LayoutOptions.Center,
-            TextColor = Brass,
         };
+        coverPlaceholder.SetThemeColor(Label.TextColorProperty, "BrassTextL", "BrassTextD");
         var coverImage = new Image
         {
             IsVisible = false,
@@ -84,30 +75,32 @@ public partial class WishlistPage : ContentPage
         {
             WidthRequest = 48,
             HeightRequest = 68,
-            BackgroundColor = AgedParchment,
             VerticalOptions = LayoutOptions.Start,
             Children = { coverPlaceholder, coverImage },
         };
+        coverSlot.SetThemeColor(Grid.BackgroundColorProperty, "CoverMissL", "CoverMissD");
 
         var titleLabel = new Label
         {
             Text = item.Title,
             FontSize = 15,
             FontAttributes = FontAttributes.Bold,
-            TextColor = Ink,
             LineBreakMode = LineBreakMode.WordWrap,
         };
+        titleLabel.SetThemeColor(Label.TextColorProperty, "TextL", "TextD");
         var authorLabel = new Label
         {
             Text = item.Author,
             FontSize = 13,
-            TextColor = FadedInk,
         };
+        authorLabel.SetThemeColor(Label.TextColorProperty, "TextMutedL", "TextMutedD");
         var badges = new HorizontalStackLayout { Spacing = 6 };
-        badges.Children.Add(BuildBadge(item.Priority, PriorityColor(item.Priority)));
+        badges.Children.Add(PriorityBadge(item.Priority));
         if (item.SeriesId is not null && item.SeriesOrder is int seriesOrder)
         {
-            badges.Children.Add(BuildBadge($"#{seriesOrder}", FadedInk));
+            // Series-order pill: chip surface + brass text (wishlist items
+            // carry a plain int order — no interquel display label).
+            badges.Children.Add(BuildBadge($"#{seriesOrder}", "ChipBgL", "ChipBgD", "BrassTextL", "BrassTextD"));
         }
 
         var textStack = new VerticalStackLayout
@@ -121,8 +114,9 @@ public partial class WishlistPage : ContentPage
         {
             Text = "Bought",
             HeightRequest = 40,
-            BackgroundColor = Brass,
-            TextColor = Ink,
+            // Brass + ink-on-brass are mode-stable (the killer-accent pairing).
+            BackgroundColor = ThemeColors.Get("Brass"),
+            TextColor = ThemeColors.Get("InkOnBrass"),
             FontSize = 13,
             CornerRadius = 6,
             VerticalOptions = LayoutOptions.Center,
@@ -153,27 +147,35 @@ public partial class WishlistPage : ContentPage
         return row;
     }
 
-    private static View BuildBadge(string text, Color background) => new Border
+    // Pill badge resolving a light/dark token pair for both fill and text.
+    private static View BuildBadge(string text, string bgLightKey, string bgDarkKey, string txLightKey, string txDarkKey)
     {
-        BackgroundColor = background,
-        Padding = new Thickness(6, 2),
-        StrokeShape = new RoundRectangle { CornerRadius = 4 },
-        StrokeThickness = 0,
-        Content = new Label
+        var label = new Label
         {
             Text = text,
             FontSize = 11,
-            TextColor = Colors.White,
             FontAttributes = FontAttributes.Bold,
-        },
-    };
+        };
+        label.SetThemeColor(Label.TextColorProperty, txLightKey, txDarkKey);
 
-    private static Color PriorityColor(string priority) => priority switch
+        var border = new Border
+        {
+            Padding = new Thickness(6, 2),
+            StrokeThickness = 0,
+            StrokeShape = new RoundRectangle { CornerRadius = 4 },
+            Content = label,
+        };
+        border.SetThemeColor(Border.BackgroundColorProperty, bgLightKey, bgDarkKey);
+        return border;
+    }
+
+    // Priority → status-tag token pair (High = miss-tag red, Medium = warn
+    // amber, Low/other = owned green), each dark-mode aware.
+    private static View PriorityBadge(string priority) => priority switch
     {
-        "High" => Color.FromArgb("#9B3B2E"),
-        "Medium" => Color.FromArgb("#A67B3A"),
-        "Low" => Color.FromArgb("#6B5D4A"),
-        _ => Color.FromArgb("#6B5D4A"),
+        "High" => BuildBadge(priority, "MissTagBgL", "MissTagBgD", "MissTagTxL", "MissTagTxD"),
+        "Medium" => BuildBadge(priority, "WarnBgL", "WarnBgD", "WarnTxL", "WarnTxD"),
+        _ => BuildBadge(priority, "OwnedBgL", "OwnedBgD", "OwnedTxL", "OwnedTxD"),
     };
 
     private async Task LoadCoverAsync(string? coverUrl, Image target, Label placeholder)
