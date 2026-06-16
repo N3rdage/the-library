@@ -3,6 +3,7 @@ using BookTracker.Mobile.Services;
 using BookTracker.Mobile.Theming;
 using BookTracker.Shared.Catalog;
 using Microsoft.Maui.Controls.Shapes;
+using ZXing.Net.Maui;
 
 namespace BookTracker.Mobile.Pages;
 
@@ -26,6 +27,13 @@ public partial class FindPage : ContentPage
     private enum Scope { All, Authors, Works }
     private Scope _scope = Scope.All;
 
+    // Inline scanner state. ZXing fires OnBarcodesDetected on a background thread
+    // and re-fires while a code stays in frame (and can deliver a misread then
+    // the real read), so _scanHandled gates navigation to the first detection of
+    // each camera session; it resets when the camera is re-opened.
+    private bool _cameraExpanded;
+    private int _scanHandled; // 0 = ready, 1 = a scan already navigated (Interlocked)
+
     public FindPage(ICatalogCache cache, IHttpClientFactory httpFactory, ISyncService sync)
     {
         InitializeComponent();
@@ -35,6 +43,14 @@ public partial class FindPage : ContentPage
         _sync.StateChanged += (_, _) => MainThread.BeginInvokeOnMainThread(RefreshSyncChip);
         RefreshSyncChip();
         UpdateScopeButtons();
+
+        // Book barcodes only — EAN-13 (ISBN-13) + the rare EAN-8.
+        Reader.Options = new BarcodeReaderOptions
+        {
+            Formats = BarcodeFormat.Ean13 | BarcodeFormat.Ean8,
+            AutoRotate = true,
+            Multiple = false,
+        };
     }
 
     protected override void OnAppearing()
@@ -50,6 +66,9 @@ public partial class FindPage : ContentPage
     {
         base.OnDisappearing();
         _searchCts?.Cancel();
+        // Stop + collapse the camera when leaving the tab so we never hold it
+        // open in the background.
+        if (_cameraExpanded) CollapseCamera();
     }
 
     private void RefreshSyncChip() =>
@@ -60,13 +79,53 @@ public partial class FindPage : ContentPage
 
     private async void OnScanClicked(object? sender, EventArgs e)
     {
-        // Transitional: push the existing camera page. The next slice embeds an
-        // inline camera here and deletes ScanPage.
-        var services = Application.Current?.Handler?.MauiContext?.Services
-            ?? throw new InvalidOperationException("ServiceProvider not available.");
-        var page = services.GetService(typeof(ScanPage)) as ScanPage
-            ?? throw new InvalidOperationException("ScanPage not registered.");
-        await Navigation.PushAsync(page);
+        if (_cameraExpanded) { CollapseCamera(); return; }
+
+        // Runtime CAMERA permission — manifest alone isn't enough on Android 6+.
+        var status = await Permissions.CheckStatusAsync<Permissions.Camera>();
+        if (status != PermissionStatus.Granted)
+            status = await Permissions.RequestAsync<Permissions.Camera>();
+        if (status != PermissionStatus.Granted)
+        {
+            ResultsLayout.Children.Clear();
+            ScopeSegment.IsVisible = false;
+            ResultsLayout.Children.Add(Hint("Camera permission denied. Type an ISBN to look it up instead."));
+            return;
+        }
+
+        _cameraExpanded = true;
+        _scanHandled = 0; // fresh camera session — allow one navigation
+        CameraRow.Height = new GridLength(220); // open the bounded strip
+        CameraSection.IsVisible = true;
+        Reader.IsDetecting = true;
+        ScanButton.Text = "Cancel";
+    }
+
+    private void CollapseCamera()
+    {
+        _cameraExpanded = false;
+        Reader.IsDetecting = false;
+        CameraSection.IsVisible = false;
+        CameraRow.Height = new GridLength(0); // reclaim the strip
+        ScanButton.Text = "Scan";
+    }
+
+    private async void OnBarcodesDetected(object? sender, BarcodeDetectionEventArgs e)
+    {
+        // Fires on a background thread + re-fires while the code stays in frame.
+        var raw = (e.Results.FirstOrDefault()?.Value ?? "").Trim();
+        if (string.IsNullOrEmpty(raw)) return;
+
+        // First detection of the session wins — a second concurrent callback
+        // (e.g. a misread then the real read) must not stack a second ResultPage.
+        if (Interlocked.Exchange(ref _scanHandled, 1) == 1) return;
+
+        var isbn = CleanIsbn(raw);
+        await MainThread.InvokeOnMainThreadAsync(async () =>
+        {
+            CollapseCamera();
+            await Navigation.PushAsync(new ResultPage(_cache, _httpFactory, isbn));
+        });
     }
 
     private async void OnSearchTextChanged(object? sender, TextChangedEventArgs e)
@@ -120,9 +179,14 @@ public partial class FindPage : ContentPage
     {
         var query = (SearchEntry.Text ?? "").Trim();
         if (!LooksLikeIsbn(query)) return;
-        var cleaned = new string(query.Where(c => char.IsDigit(c) || c is 'X' or 'x').ToArray());
-        await Navigation.PushAsync(new ResultPage(_cache, _httpFactory, cleaned));
+        await Navigation.PushAsync(new ResultPage(_cache, _httpFactory, CleanIsbn(query)));
     }
+
+    // Strip to digits + a trailing ISBN-10 check 'X'. Shared by the typed path
+    // and the scanner so a noisy barcode payload normalises the same way a typed
+    // ISBN does before the cache lookup.
+    private static string CleanIsbn(string raw) =>
+        new string(raw.Where(c => char.IsDigit(c) || c is 'X' or 'x').ToArray());
 
     private void RenderResults()
     {

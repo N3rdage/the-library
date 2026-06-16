@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:zxing="clr-namespace:ZXing.Net.Maui.Controls;assembly=ZXing.Net.MAUI.Controls"
              x:Class="BookTracker.Mobile.Pages.FindPage"
              Shell.NavBarIsVisible="False"
              Style="{StaticResource Page}">
@@ -9,9 +10,21 @@
          with an ISBN auto-detect path, plus a scan button. Replaces MainPage +
          the old author/title search pages. Token-based + dark. v1 is offline
          search/scan of what you own; the online "what am I missing" layer is
-         TODO #54. (Inline camera + ScanPage removal: next slice.) -->
+         TODO #54. -->
 
-    <Grid RowDefinitions="Auto,Auto,Auto,*">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <!-- Inline-camera row. Height is toggled 0↔220 in code rather than
+                 relying on the camera view's own HeightRequest — ZXing's native
+                 Android preview surface ignores a parent's requested height and
+                 fills (and draws over) everything otherwise. The explicit row
+                 rect is what actually bounds it. -->
+            <RowDefinition x:Name="CameraRow" Height="0" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
         <!-- Espresso banner + trailing tappable sync chip. -->
         <Grid Grid.Row="0"
@@ -53,10 +66,11 @@
                        TextColor="{AppThemeBinding Light={StaticResource TextL}, Dark={StaticResource TextD}}" />
             </Border>
             <Button Grid.Column="1"
+                    x:Name="ScanButton"
                     Text="Scan"
                     Clicked="OnScanClicked"
-                    WidthRequest="64"
                     HeightRequest="48"
+                    Padding="18,0"
                     BackgroundColor="{StaticResource Brass}"
                     TextColor="{StaticResource InkOnBrass}"
                     FontSize="14"
@@ -64,9 +78,35 @@
                     CornerRadius="8" />
         </Grid>
 
+        <!-- Inline scanner — collapsed by default; the Scan button expands it.
+             A green target outline floats over the full live preview (the heavy
+             letterbox dimming the old full-screen ScanPage used read as a grey
+             box at this inline size). Camera is started on expand and stopped on
+             collapse / tab-leave. -->
+        <Grid x:Name="CameraSection"
+              Grid.Row="2"
+              IsVisible="False"
+              IsClippedToBounds="True"
+              Margin="20,12,20,0">
+            <zxing:CameraBarcodeReaderView x:Name="Reader"
+                                           HeightRequest="220"
+                                           BarcodesDetected="OnBarcodesDetected"
+                                           IsDetecting="False" />
+            <Grid InputTransparent="True"
+                  RowDefinitions="1.5*,*,1.5*"
+                  ColumnDefinitions="*,6*,*">
+                <Border Grid.Row="1" Grid.Column="1"
+                        BackgroundColor="Transparent"
+                        Stroke="{StaticResource ScanReticle}"
+                        StrokeThickness="3">
+                    <Border.StrokeShape><RoundRectangle CornerRadius="4" /></Border.StrokeShape>
+                </Border>
+            </Grid>
+        </Grid>
+
         <!-- Scope segment (All / Authors / Works) — shown only with results. -->
         <Grid x:Name="ScopeSegment"
-              Grid.Row="2"
+              Grid.Row="3"
               Padding="20,12,20,0"
               ColumnDefinitions="*,*,*"
               ColumnSpacing="8"
@@ -76,7 +116,7 @@
             <Button x:Name="ScopeWorksButton" Grid.Column="2" Text="Works" Clicked="OnScopeWorks" HeightRequest="40" CornerRadius="8" FontSize="13" />
         </Grid>
 
-        <ScrollView Grid.Row="3" Padding="20,12,20,20">
+        <ScrollView Grid.Row="4" Padding="20,12,20,20">
             <VerticalStackLayout x:Name="ResultsLayout" Spacing="8" />
         </ScrollView>
     </Grid>
