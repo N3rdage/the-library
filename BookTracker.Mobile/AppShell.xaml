@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+       xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+       x:Class="BookTracker.Mobile.AppShell"
+       FlyoutBehavior="Disabled"
+       Shell.TabBarBackgroundColor="{AppThemeBinding Light={StaticResource HeaderL}, Dark={StaticResource HeaderD}}"
+       Shell.TabBarForegroundColor="{AppThemeBinding Light={StaticResource BrassTextL}, Dark={StaticResource BrassTextD}}"
+       Shell.TabBarTitleColor="{AppThemeBinding Light={StaticResource BrassTextL}, Dark={StaticResource BrassTextD}}"
+       Shell.TabBarUnselectedColor="{AppThemeBinding Light={StaticResource OnLeather}, Dark={StaticResource TextMutedD}}">
+
+    <!-- Three co-equal in-shop tabs (Bookshelf redesign §1). Page content +
+         the Tabler tab icons are assigned in code-behind so the pages resolve
+         through DI (a DataTemplate ContentTemplate would try a parameterless
+         ctor and throw). Find is the transitional MainPage until PR3 rebuilds
+         it as the unified search surface. -->
+    <TabBar>
+        <ShellContent x:Name="FindTab"     Title="Find"     Route="find" />
+        <ShellContent x:Name="WishlistTab" Title="Wishlist" Route="wishlist" />
+        <ShellContent x:Name="GapsTab"     Title="Gaps"     Route="gaps" />
+    </TabBar>
+</Shell>

@@ -20,6 +20,9 @@ public static class MauiProgram
             {
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
                 fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
+                // Tabler icon webfont (MIT) — referenced as family "Tabler"
+                // via FontImageSource; glyphs in Theming/TablerIcons.
+                fonts.AddFont("tabler-icons.ttf", "Tabler");
             });
 
         // Auth + API services.
@@ -45,6 +48,11 @@ public static class MauiProgram
         // mirror). IHttpClientFactory handles connection pooling so
         // repeated fetches across pages reuse the same handler.
         builder.Services.AddHttpClient("covers");
+
+        // AppShell hosts the three bottom tabs; it injects the tab pages so
+        // they resolve through DI (a DataTemplate ContentTemplate would try a
+        // parameterless ctor and fail). Singleton — one shell per app.
+        builder.Services.AddSingleton<AppShell>();
 
         builder.Services.AddSingleton<MainPage>();
         // Scan page is transient — every navigation gets a fresh

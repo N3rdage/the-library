@@ -12,12 +12,10 @@ public partial class App : Application
 
     protected override Window CreateWindow(IActivationState? activationState)
     {
-        // Resolve MainPage from DI so it gets IAuthService + IApiClient.
-        // Shell would have tried to construct MainPage parameterless
-        // via its ContentTemplate, which would have failed. PR 3 is
-        // one page; PR 4+ can swap in Shell or TabbedPage when
-        // there are tabs to navigate.
-        var page = _services.GetRequiredService<MainPage>();
-        return new Window(new NavigationPage(page));
+        // AppShell hosts the Find / Wishlist / Gaps bottom tabs and injects
+        // the tab pages from DI (its ctor takes them). Drill-downs push within
+        // the active tab's stack, so the tab bar stays visible.
+        var shell = _services.GetRequiredService<AppShell>();
+        return new Window(shell);
     }
 }
