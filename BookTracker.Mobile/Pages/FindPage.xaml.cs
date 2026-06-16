@@ -27,12 +27,12 @@ public partial class FindPage : ContentPage
     private enum Scope { All, Authors, Works }
     private Scope _scope = Scope.All;
 
-    // Inline scanner state. Debounce mirrors ScanPage — ZXing re-fires while a
-    // code stays in frame, so one lookup per "real" scan.
-    private static readonly TimeSpan ScanDebounce = TimeSpan.FromSeconds(3);
+    // Inline scanner state. ZXing fires OnBarcodesDetected on a background thread
+    // and re-fires while a code stays in frame (and can deliver a misread then
+    // the real read), so _scanHandled gates navigation to the first detection of
+    // each camera session; it resets when the camera is re-opened.
     private bool _cameraExpanded;
-    private string? _lastScannedIsbn;
-    private DateTime _lastScannedAt = DateTime.MinValue;
+    private int _scanHandled; // 0 = ready, 1 = a scan already navigated (Interlocked)
 
     public FindPage(ICatalogCache cache, IHttpClientFactory httpFactory, ISyncService sync)
     {
@@ -94,6 +94,7 @@ public partial class FindPage : ContentPage
         }
 
         _cameraExpanded = true;
+        _scanHandled = 0; // fresh camera session — allow one navigation
         CameraSection.IsVisible = true;
         Reader.IsDetecting = true;
         ScanButton.Text = "Cancel";
@@ -110,15 +111,14 @@ public partial class FindPage : ContentPage
     private async void OnBarcodesDetected(object? sender, BarcodeDetectionEventArgs e)
     {
         // Fires on a background thread + re-fires while the code stays in frame.
-        var result = e.Results.FirstOrDefault();
-        var isbn = (result?.Value ?? "").Trim();
-        if (string.IsNullOrEmpty(isbn)) return;
+        var raw = (e.Results.FirstOrDefault()?.Value ?? "").Trim();
+        if (string.IsNullOrEmpty(raw)) return;
 
-        var now = DateTime.UtcNow;
-        if (isbn == _lastScannedIsbn && (now - _lastScannedAt) < ScanDebounce) return;
-        _lastScannedIsbn = isbn;
-        _lastScannedAt = now;
+        // First detection of the session wins — a second concurrent callback
+        // (e.g. a misread then the real read) must not stack a second ResultPage.
+        if (Interlocked.Exchange(ref _scanHandled, 1) == 1) return;
 
+        var isbn = CleanIsbn(raw);
         await MainThread.InvokeOnMainThreadAsync(async () =>
         {
             CollapseCamera();
@@ -177,9 +177,14 @@ public partial class FindPage : ContentPage
     {
         var query = (SearchEntry.Text ?? "").Trim();
         if (!LooksLikeIsbn(query)) return;
-        var cleaned = new string(query.Where(c => char.IsDigit(c) || c is 'X' or 'x').ToArray());
-        await Navigation.PushAsync(new ResultPage(_cache, _httpFactory, cleaned));
+        await Navigation.PushAsync(new ResultPage(_cache, _httpFactory, CleanIsbn(query)));
     }
+
+    // Strip to digits + a trailing ISBN-10 check 'X'. Shared by the typed path
+    // and the scanner so a noisy barcode payload normalises the same way a typed
+    // ISBN does before the cache lookup.
+    private static string CleanIsbn(string raw) =>
+        new string(raw.Where(c => char.IsDigit(c) || c is 'X' or 'x').ToArray());
 
     private void RenderResults()
     {
