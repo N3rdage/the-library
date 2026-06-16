@@ -3,6 +3,7 @@ using BookTracker.Mobile.Services;
 using BookTracker.Mobile.Theming;
 using BookTracker.Shared.Catalog;
 using Microsoft.Maui.Controls.Shapes;
+using Microsoft.Maui.Devices;
 using ZXing.Net.Maui;
 
 namespace BookTracker.Mobile.Pages;
@@ -57,6 +58,8 @@ public partial class FindPage : ContentPage
     {
         base.OnAppearing();
         RefreshSyncChip();
+        // Soften Shell's instant tab switch with a content cross-fade.
+        _ = ((VisualElement)Content).InAsync(rise: 6);
         // Focus the field — delayed because an early Focus() is a no-op before
         // the Android layout pass completes.
         Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(50), () => SearchEntry.Focus());
@@ -123,6 +126,10 @@ public partial class FindPage : ContentPage
         var isbn = CleanIsbn(raw);
         await MainThread.InvokeOnMainThreadAsync(async () =>
         {
+            // Confirm the read before the result renders: a haptic tick + a quick
+            // reticle pulse (both no-op under reduced motion / unsupported haptics).
+            try { HapticFeedback.Default.Perform(HapticFeedbackType.Click); } catch { /* no haptic motor */ }
+            await ReticleBox.PulseAsync();
             CollapseCamera();
             await Navigation.PushAsync(new ResultPage(_cache, _httpFactory, isbn));
         });
@@ -211,6 +218,9 @@ public partial class FindPage : ContentPage
             ResultsLayout.Children.Add(GroupHeader($"Works · {_works.Count}"));
             foreach (var b in _works) ResultsLayout.Children.Add(BuildWorkCard(b));
         }
+
+        // Reveal the freshly-bound results as a group (decorates, never gates).
+        _ = ResultsLayout.InAsync(rise: 8);
     }
 
     private void OnScopeAll(object? sender, EventArgs e) { _scope = Scope.All; UpdateScopeButtons(); RenderResults(); }

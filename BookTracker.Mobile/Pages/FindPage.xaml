@@ -95,7 +95,8 @@
             <Grid InputTransparent="True"
                   RowDefinitions="1.5*,*,1.5*"
                   ColumnDefinitions="*,6*,*">
-                <Border Grid.Row="1" Grid.Column="1"
+                <Border x:Name="ReticleBox"
+                        Grid.Row="1" Grid.Column="1"
                         BackgroundColor="Transparent"
                         Stroke="{StaticResource ScanReticle}"
                         StrokeThickness="3">
