@@ -64,7 +64,6 @@
     <Color x:Key="SurfaceL">#F2EADB</Color>     <Color x:Key="SurfaceD">#30211A</Color>
     <Color x:Key="HeaderL">#3E2723</Color>      <Color x:Key="HeaderD">#2A1A13</Color>
     <Color x:Key="InputBgL">#FAF6EC</Color>     <Color x:Key="InputBgD">#2A2018</Color>
-    <Color x:Key="CoverTileL">#3E2723</Color>   <Color x:Key="CoverTileD">#1A130D</Color>
     <Color x:Key="CoverMissL">#E2D8C4</Color>   <Color x:Key="CoverMissD">#1A130D</Color>
 
     <!-- Text -->
@@ -105,6 +104,5 @@
     <!-- Sync states -->
     <Color x:Key="OnlineBgL">#E8F1E4</Color>    <Color x:Key="OnlineBgD">#1B3320</Color>
     <Color x:Key="OnlineTxL">#4F6B3D</Color>    <Color x:Key="OnlineTxD">#8DB36E</Color>
-    <Color x:Key="InfoTxL">#3A6B7A</Color>      <Color x:Key="InfoTxD">#7FB3C0</Color>
     <Color x:Key="ChipBgL">#EFE4CC</Color>      <Color x:Key="ChipBgD">#30211A</Color>
 </ResourceDictionary>

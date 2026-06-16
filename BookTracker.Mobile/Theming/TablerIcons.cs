@@ -16,20 +16,10 @@ public static class TablerIcons
 {
     private static string G(int codepoint) => char.ConvertFromUtf32(codepoint);
 
+    // Only the three tab-bar glyphs are in use — the redesign settled on text
+    // and emoji affordances elsewhere. The full font is bundled, so add a line
+    // here (with its upstream \eXXXX codepoint) when a surface actually needs one.
     public static readonly string Search = G(0xEB1C);
-    public static readonly string Barcode = G(0xEBC6);
     public static readonly string Star = G(0xEB2E);
     public static readonly string Books = G(0xEFF2);
-    public static readonly string Book = G(0xEA39);
-    public static readonly string User = G(0xEB4D);
-    public static readonly string Refresh = G(0xEB13);
-    public static readonly string Wifi = G(0xEB52);
-    public static readonly string WifiOff = G(0xECFA);
-    public static readonly string ArrowsSort = G(0xEB5A);
-    public static readonly string ChevronRight = G(0xEA61);
-    public static readonly string ChevronLeft = G(0xEA60);
-    public static readonly string Logout = G(0xEBA8);
-    public static readonly string Plus = G(0xEB0B);
-    public static readonly string X = G(0xEB55);
-    public static readonly string DotsVertical = G(0xEA94);
 }
