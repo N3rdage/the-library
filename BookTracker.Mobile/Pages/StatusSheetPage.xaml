@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="BookTracker.Mobile.Pages.StatusSheetPage"
+             Style="{StaticResource Page}"
+             Title="Sync &amp; account">
+
+    <!-- Modal sheet behind the SyncChip: the home for sync detail + account.
+         Replaces the auth/sync/cache chrome that used to live on MainPage.
+         Offline-first: sign-in lives here (you sign in only to refresh) — it
+         does NOT gate the tabs. -->
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="16">
+
+            <Grid ColumnDefinitions="*,Auto" VerticalOptions="Center">
+                <Label Text="Sync &amp; account"
+                       FontSize="24"
+                       FontAttributes="Bold"
+                       VerticalOptions="Center"
+                       TextColor="{AppThemeBinding Light={StaticResource TextL}, Dark={StaticResource TextD}}" />
+                <Button Grid.Column="1"
+                        Text="Close"
+                        Clicked="OnCloseClicked"
+                        Style="{StaticResource OutlinedButton}"
+                        WidthRequest="90" />
+            </Grid>
+
+            <Label x:Name="ConnectivityLabel"
+                   FontSize="14"
+                   FontAttributes="Bold" />
+
+            <Border Style="{StaticResource Card}">
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Cached catalog"
+                           FontSize="12"
+                           FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light={StaticResource LeatherL}, Dark={StaticResource LeatherD}}" />
+                    <Label x:Name="StatsLabel"
+                           FontSize="15"
+                           TextColor="{AppThemeBinding Light={StaticResource TextL}, Dark={StaticResource TextD}}" />
+                    <Label x:Name="SyncedAtLabel"
+                           FontSize="12"
+                           TextColor="{AppThemeBinding Light={StaticResource TextMutedL}, Dark={StaticResource TextMutedD}}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <ActivityIndicator x:Name="Busy"
+                               IsRunning="False"
+                               HorizontalOptions="Center"
+                               Color="{AppThemeBinding Light={StaticResource LeatherL}, Dark={StaticResource LeatherD}}" />
+
+            <Label x:Name="StatusLabel"
+                   FontSize="13"
+                   HorizontalTextAlignment="Center"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource TextMutedL}, Dark={StaticResource TextMutedD}}" />
+
+            <Button x:Name="RefreshButton"
+                    Text="Refresh now"
+                    Clicked="OnRefreshClicked"
+                    Style="{StaticResource PrimaryButton}" />
+
+            <Button x:Name="AuthButton"
+                    Clicked="OnAuthClicked"
+                    Style="{StaticResource OutlinedButton}"
+                    HorizontalOptions="Center"
+                    WidthRequest="160"
+                    Margin="0,8,0,0" />
+
+            <Label x:Name="BuildFooter"
+                   FontSize="11"
+                   HorizontalTextAlignment="Center"
+                   HorizontalOptions="Center"
+                   Margin="0,16,0,0"
+                   TextColor="{AppThemeBinding Light={StaticResource TextMutedL}, Dark={StaticResource TextMutedD}}" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>
