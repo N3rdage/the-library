@@ -351,9 +351,10 @@ Motion.Enabled = scale > 0f;
 |---|---|---|
 | **Add to wishlist (local write)** | **Parked — button present but inert** | Appears on Not-found (§4.3) and Author-works missing rows (§5). Wire as a local write like the Bought flag (survives refresh, reconciles on sync). When implemented, lights up in all locations at once. No layout change needed to activate. |
 | **Online edition lookup** | **Parked** | The disabled "Other editions of this work — online only" row in `WorkEditionPanel`. When online, resolves an unknown ISBN against the web catalogue → "you have this *work*, not this *edition*". Must degrade gracefully to "online only" offline; never blocks the primary answer. |
-| **Sync mode on start** | **Decision needed** | Auto-sync silently vs leave to manual refresh. UI supports both; no prompt either way. |
-| **Wishlist default sort** | **Decision needed** | Priority (current) vs Author/Series. Author/Series likely better for shop-owner recall. |
+| **Sync mode on start** | **Decided (2026-06-16): auto-sync silently** | When online at launch, fire the delta sync in the background — no prompt. Wire in PR4. |
+| **Wishlist default sort** | **Decided (2026-06-16): Priority default** | Keep High/Medium/Low grouping as default; offer Author/Series as alternate sorts. PR4. |
 | **Gaps tab longevity** | **Watch** | Candidate for later deprecation as missing→wishlist grows. Keep self-contained. |
+| **Transitional stragglers — recheck at arc end** | **Accepted as transitional (2026-06-16 arc review F3/F4/F5)** | (F3) `MainPage`/`ScanPage`/Author/Title still light-only inline hex → dark mode looks broken on the default Find tab + pushed search pages until PR3 rebuilds them. (F4) `KillerButton`/`PrimaryButton`/`OutlinedButton`/`GapProgress` styles + (F5) ~24 tokens and 13/16 `TablerIcons` glyphs have no consumers yet (defined ahead of the surfaces that use them; icon codepoints unverified-until-rendered). **All deliberately deferred** — the surfaces that consume them are built in PR3–5. **At end of arc, recheck:** any page still on inline hex, any style/token/glyph still unconsumed → migrate or delete. Don't let the foundation's unused half calcify. |
 
 ---
 

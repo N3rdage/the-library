@@ -6,7 +6,6 @@ namespace BookTracker.Mobile.Pages;
 public partial class SeriesGapsPage : ContentPage
 {
     private readonly ICatalogCache _cache;
-    private bool _loaded;
 
     public SeriesGapsPage(ICatalogCache cache)
     {
@@ -17,8 +16,10 @@ public partial class SeriesGapsPage : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
-        if (_loaded) return;
-        _loaded = true;
+        // Reload on every appearance. Under Shell this page is app-lifetime
+        // (the singleton AppShell holds it), so a one-shot guard would leave
+        // the gaps list stale after the catalog is refreshed on the Find tab.
+        // GetSeriesGapsAsync is a single cached-table scan — cheap to re-run.
         await LoadGapsAsync();
     }
 

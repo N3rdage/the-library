@@ -2,6 +2,7 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="BookTracker.Mobile.MainPage"
+             Shell.NavBarIsVisible="False"
              NavigationPage.HasNavigationBar="False"
              BackgroundColor="#FAF6EC">
 
@@ -112,35 +113,8 @@
                         HorizontalOptions="Fill"
                         IsVisible="False" />
 
-                <!-- Series gaps — "what am I missing?" for series with
-                     a known length where the user owns some but not
-                     all. Useful while shopping. -->
-                <Button x:Name="SeriesGapsButton"
-                        Text="📚  Series gaps"
-                        Clicked="OnSeriesGapsClicked"
-                        HeightRequest="56"
-                        BackgroundColor="#6B2737"
-                        TextColor="#FAF6EC"
-                        FontSize="16"
-                        CornerRadius="8"
-                        HorizontalOptions="Fill"
-                        IsVisible="False" />
-
-                <!-- Wishlist — books Drew is actively looking for.
-                     In-bookshop CTA so brass-coloured (highlighted)
-                     because it surfaces a "do I want this?" answer
-                     the same way Scan ISBN surfaces "do I have this?". -->
-                <Button x:Name="WishlistButton"
-                        Text="⭐  Wishlist"
-                        Clicked="OnWishlistClicked"
-                        HeightRequest="56"
-                        BackgroundColor="#A67B3A"
-                        TextColor="#2C2416"
-                        FontSize="16"
-                        FontAttributes="Bold"
-                        CornerRadius="8"
-                        HorizontalOptions="Fill"
-                        IsVisible="False" />
+                <!-- Series gaps + Wishlist moved to bottom tabs (AppShell,
+                     PR2) — they used to live here as buttons. -->
 
                 <!-- Cache stats panel — passive info card that surfaces
                      "what's stashed locally" so it isn't buried in
