@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="BookTracker.Mobile.Pages.SeriesGapsPage"
              Title="Series gaps"
-             BackgroundColor="#FAF6EC">
+             Style="{StaticResource Page}">
 
     <!-- "Series gaps" — at-a-glance "what am I missing?" view for
          series where the user owns some but not all books. Mirror of

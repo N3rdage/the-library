@@ -431,4 +431,68 @@
         <Setter Property="SelectedTabColor" Value="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray200}}" />
     </Style>
 
+    <!-- ============================================================
+         BookTracker semantic styles (Bookshelf UI redesign, 2026-06).
+         Opt-in via Style="{StaticResource Page}" etc. — they don't
+         override the template's implicit (keyless) styles above.
+         All colours resolve from the design tokens in Colors.xaml.
+         ============================================================ -->
+
+    <Style x:Key="Page" TargetType="ContentPage">
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource PageBgL}, Dark={StaticResource PageBgD}}" />
+    </Style>
+
+    <!-- Killer CTA — identical both modes, 64 dp -->
+    <Style x:Key="KillerButton" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{StaticResource Brass}" />
+        <Setter Property="TextColor" Value="{StaticResource InkOnBrass}" />
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="HeightRequest" Value="64" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+
+    <!-- Primary CTA — leather brightens in dark, 56 dp -->
+    <Style x:Key="PrimaryButton" TargetType="Button">
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource LeatherL}, Dark={StaticResource LeatherD}}" />
+        <Setter Property="TextColor" Value="{StaticResource OnLeather}" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="HeightRequest" Value="56" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+
+    <!-- Low-emphasis outlined — 44 dp -->
+    <Style x:Key="OutlinedButton" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="BorderColor"
+                Value="{AppThemeBinding Light={StaticResource BorderL}, Dark={StaticResource BorderD}}" />
+        <Setter Property="BorderWidth" Value="1" />
+        <Setter Property="TextColor"
+                Value="{AppThemeBinding Light={StaticResource TextMutedL}, Dark={StaticResource TextMutedD}}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="HeightRequest" Value="44" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+
+    <!-- Base card / passive panel -->
+    <Style x:Key="Card" TargetType="Border">
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource SurfaceL}, Dark={StaticResource SurfaceD}}" />
+        <Setter Property="Stroke"
+                Value="{AppThemeBinding Light={StaticResource BorderL}, Dark={StaticResource BorderD}}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="Padding" Value="12" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 8" />
+    </Style>
+
+    <!-- Series-gap progress bar — green-leather fill on a parchment track -->
+    <Style x:Key="GapProgress" TargetType="ProgressBar">
+        <Setter Property="ProgressColor"
+                Value="{AppThemeBinding Light={StaticResource GreenL}, Dark={StaticResource GreenD}}" />
+        <Setter Property="BackgroundColor"
+                Value="{AppThemeBinding Light={StaticResource BarTrackL}, Dark={StaticResource BarTrackD}}" />
+    </Style>
+
 </ResourceDictionary>

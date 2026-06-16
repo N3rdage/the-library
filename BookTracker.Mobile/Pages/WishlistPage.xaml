@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="BookTracker.Mobile.Pages.WishlistPage"
              Title="Wishlist"
-             BackgroundColor="#FAF6EC">
+             Style="{StaticResource Page}">
 
     <!-- Wishlist — books Drew is looking for. Backs the in-shop
          "what am I trying to buy?" use case that the Web /wishlist
@@ -26,8 +26,8 @@
                 Text="↻  Refresh wishlist"
                 Clicked="OnRefreshClicked"
                 HeightRequest="44"
-                BackgroundColor="#6B2737"
-                TextColor="#FAF6EC"
+                BackgroundColor="{AppThemeBinding Light={StaticResource LeatherL}, Dark={StaticResource LeatherD}}"
+                TextColor="{StaticResource OnLeather}"
                 FontSize="14"
                 CornerRadius="8"
                 HorizontalOptions="Fill" />
@@ -35,7 +35,7 @@
         <ActivityIndicator x:Name="Busy"
                            Grid.Row="1"
                            IsRunning="False"
-                           Color="#6B2737"
+                           Color="{AppThemeBinding Light={StaticResource LeatherL}, Dark={StaticResource LeatherD}}"
                            HorizontalOptions="Center"
                            Margin="0,8,0,0" />
 
@@ -43,7 +43,7 @@
                Grid.Row="2"
                Text="Loading…"
                FontSize="13"
-               TextColor="#6B5D4A"
+               TextColor="{AppThemeBinding Light={StaticResource TextMutedL}, Dark={StaticResource TextMutedD}}"
                HorizontalTextAlignment="Center"
                LineBreakMode="WordWrap"
                Margin="0,8,0,0" />
