@@ -5,6 +5,10 @@
              Title="Wishlist"
              Style="{StaticResource Page}">
 
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="Sync" Clicked="OnSyncClicked" />
+    </ContentPage.ToolbarItems>
+
     <!-- Wishlist — books Drew is looking for. Backs the in-shop
          "what am I trying to buy?" use case that the Web /wishlist
          page captures. Read from the offline cache; refresh button

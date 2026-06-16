@@ -3,75 +3,47 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="BookTracker.Mobile.MainPage"
              Shell.NavBarIsVisible="False"
-             NavigationPage.HasNavigationBar="False"
              BackgroundColor="#FAF6EC">
 
-    <!-- BookTracker library palette — mirrored from
-         BookTracker.Web/Theme/BookTrackerTheme.cs so the mobile companion
-         reads as the same product as the Web app.
-
-           leather   #6B2737  primary actions
-           brass     #A67B3A  accent borders + primary in-bookshop CTA
-           parchment #FAF6EC  page background
-           surface   #F2EADB  card / panel background
-           espresso  #3E2723  header banner
-           ink       #2C2416  primary text
-           faded ink #6B5D4A  secondary text
-
-         Root page hides the system nav bar (NavigationPage.HasNavigationBar)
-         because this is the entry surface — nothing to navigate back from.
-         ScanPage keeps its nav bar so the back button is visible there. -->
+    <!-- Transitional Find tab. Auth + sync chrome moved to the status sheet
+         (behind the sync chip, top-right). PR(next) rebuilds this as the
+         unified search surface, at which point its inline hex (light-only)
+         is replaced by the design tokens. Until then it stays as-is per the
+         "don't polish doomed pages" rule. -->
 
     <Grid RowDefinitions="Auto,*">
 
-        <!-- Espresso header banner. Replaces the previous in-content
-             Headline/SubHeadline pair so the brand chrome is anchored to
-             a fixed bar rather than flowing inside the scroll view. -->
-        <VerticalStackLayout Grid.Row="0"
-                             BackgroundColor="#3E2723"
-                             Padding="24,20,24,18"
-                             Spacing="2">
-            <Label Text="Bookshelf"
-                   FontSize="24"
-                   FontAttributes="Bold"
-                   TextColor="#F2EADB" />
-            <Label Text="Offline-capable companion"
-                   FontSize="13"
-                   TextColor="#A67B3A" />
-        </VerticalStackLayout>
+        <!-- Espresso banner with a trailing tappable sync chip. -->
+        <Grid Grid.Row="0"
+              BackgroundColor="#3E2723"
+              Padding="24,20,24,18"
+              ColumnDefinitions="*,Auto"
+              ColumnSpacing="12">
+            <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                <Label Text="Bookshelf" FontSize="24" FontAttributes="Bold" TextColor="#F2EADB" />
+                <Label Text="Offline-capable companion" FontSize="13" TextColor="#A67B3A" />
+            </VerticalStackLayout>
+
+            <Border Grid.Column="1"
+                    Stroke="#A67B3A"
+                    StrokeThickness="1"
+                    BackgroundColor="#30211A"
+                    Padding="10,6"
+                    VerticalOptions="Center">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="14" />
+                </Border.StrokeShape>
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnSyncChipTapped" />
+                </Border.GestureRecognizers>
+                <Label x:Name="SyncChipLabel" Text="⟳ Sync" FontSize="12" TextColor="#CDA256" />
+            </Border>
+        </Grid>
 
         <ScrollView Grid.Row="1">
             <VerticalStackLayout Padding="20,24" Spacing="14">
 
-                <!-- Sign in — primary CTA when signed out. -->
-                <Button x:Name="SignInButton"
-                        Text="Sign in"
-                        Clicked="OnSignInClicked"
-                        HeightRequest="56"
-                        BackgroundColor="#6B2737"
-                        TextColor="#FAF6EC"
-                        FontSize="16"
-                        FontAttributes="Bold"
-                        CornerRadius="8"
-                        HorizontalOptions="Fill" />
-
-                <!-- Load / refresh catalog snapshot. Visible only when
-                     signed in; doubles as Refresh once the cache is
-                     populated. -->
-                <Button x:Name="LoadCatalogButton"
-                        Text="📚  Load catalog snapshot"
-                        Clicked="OnLoadCatalogClicked"
-                        HeightRequest="56"
-                        BackgroundColor="#6B2737"
-                        TextColor="#FAF6EC"
-                        FontSize="16"
-                        CornerRadius="8"
-                        HorizontalOptions="Fill"
-                        IsVisible="False" />
-
-                <!-- Scan ISBN — the in-bookshop killer action. Brass
-                     accent + slightly larger height makes it stand out
-                     over the leather-coloured CTAs above. -->
+                <!-- Scan ISBN — the in-bookshop killer action (brass). -->
                 <Button x:Name="ScanButton"
                         Text="📷  Scan ISBN"
                         Clicked="OnScanClicked"
@@ -81,13 +53,8 @@
                         FontSize="18"
                         FontAttributes="Bold"
                         CornerRadius="8"
-                        HorizontalOptions="Fill"
-                        IsVisible="False" />
+                        HorizontalOptions="Fill" />
 
-                <!-- Find by author — the at-home killer action.
-                     Same height as Sign in / Load catalog (56dp);
-                     leather treatment because it's a navigation
-                     action, not an in-bookshop CTA. -->
                 <Button x:Name="FindByAuthorButton"
                         Text="👤  Find by author"
                         Clicked="OnFindByAuthorClicked"
@@ -96,12 +63,8 @@
                         TextColor="#FAF6EC"
                         FontSize="16"
                         CornerRadius="8"
-                        HorizontalOptions="Fill"
-                        IsVisible="False" />
+                        HorizontalOptions="Fill" />
 
-                <!-- Find by title — substring search on Book.Title for
-                     the "I'm pretty sure I have something Mountain"
-                     case. Same shape as Find by author. -->
                 <Button x:Name="FindByTitleButton"
                         Text="🔍  Find by title"
                         Clicked="OnFindByTitleClicked"
@@ -110,85 +73,15 @@
                         TextColor="#FAF6EC"
                         FontSize="16"
                         CornerRadius="8"
-                        HorizontalOptions="Fill"
-                        IsVisible="False" />
+                        HorizontalOptions="Fill" />
 
-                <!-- Series gaps + Wishlist moved to bottom tabs (AppShell,
-                     PR2) — they used to live here as buttons. -->
-
-                <!-- Cache stats panel — passive info card that surfaces
-                     "what's stashed locally" so it isn't buried in
-                     StatusLabel text. Brass border on aged-parchment
-                     surface mirrors the Library list card treatment on
-                     Web. Visible whenever the cache has data, even
-                     when signed out (data persists across sign-out). -->
-                <Border x:Name="CacheStatsPanel"
-                        IsVisible="False"
-                        Stroke="#A67B3A"
-                        StrokeThickness="1"
-                        BackgroundColor="#F2EADB"
-                        Padding="16,12">
-                    <Border.StrokeShape>
-                        <RoundRectangle CornerRadius="8" />
-                    </Border.StrokeShape>
-                    <VerticalStackLayout Spacing="4">
-                        <Label Text="Cached catalog"
-                               FontSize="12"
-                               FontAttributes="Bold"
-                               TextColor="#6B2737" />
-                        <Label x:Name="CacheStatsLabel"
-                               FontSize="15"
-                               TextColor="#2C2416" />
-                        <Label x:Name="CacheSyncedAtLabel"
-                               FontSize="12"
-                               TextColor="#6B5D4A" />
-                    </VerticalStackLayout>
-                </Border>
-
-                <ActivityIndicator x:Name="Busy"
-                                   IsRunning="False"
-                                   Color="#6B2737"
-                                   HorizontalOptions="Center"
-                                   Margin="0,4,0,0" />
-
-                <!-- Status / error label. Centred, faded-ink for low
-                     emphasis; the panel above carries the real
-                     "what's true" info. -->
+                <!-- Hint when there's no cached catalogue yet. -->
                 <Label x:Name="StatusLabel"
-                       Text="Not signed in. Tap Sign in to begin."
                        FontSize="14"
                        TextColor="#6B5D4A"
                        HorizontalTextAlignment="Center"
-                       LineBreakMode="WordWrap" />
-
-                <!-- Sign out — outlined low-emphasis. Pushed down with
-                     margin so it's visually separated from primary
-                     actions. -->
-                <Button x:Name="SignOutButton"
-                        Text="Sign out"
-                        Clicked="OnSignOutClicked"
-                        HeightRequest="44"
-                        BackgroundColor="Transparent"
-                        TextColor="#6B5D4A"
-                        BorderColor="#A67B3A"
-                        BorderWidth="1"
-                        FontSize="14"
-                        CornerRadius="8"
-                        HorizontalOptions="Center"
-                        WidthRequest="160"
-                        Margin="0,32,0,0"
-                        IsVisible="False" />
-
-                <!-- Build footer — version + short SHA so it's obvious
-                     which build is on the device. Populated in code-
-                     behind from BuildInfo.DisplayString. Centred + faded
-                     ink so it's unobtrusive. -->
-                <Label x:Name="BuildFooter"
-                       FontSize="11"
-                       TextColor="#6B5D4A"
-                       HorizontalOptions="Center"
-                       HorizontalTextAlignment="Center"
-                       Margin="0,16,0,0" />
+                       LineBreakMode="WordWrap"
+                       Margin="0,8,0,0" />
 
             </VerticalStackLayout>
         </ScrollView>

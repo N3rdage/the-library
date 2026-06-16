@@ -5,6 +5,10 @@
              Title="Series gaps"
              Style="{StaticResource Page}">
 
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="Sync" Clicked="OnSyncClicked" />
+    </ContentPage.ToolbarItems>
+
     <!-- "Series gaps" — at-a-glance "what am I missing?" view for
          series where the user owns some but not all books. Mirror of
          the Web /shopping Card 2. Sources data from

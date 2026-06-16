@@ -1,298 +1,67 @@
-using BookTracker.Mobile.Cache;
 using BookTracker.Mobile.Pages;
 using BookTracker.Mobile.Services;
 
 namespace BookTracker.Mobile;
 
+// Transitional Find tab. Auth + catalog-sync moved to ISyncService + the
+// status sheet (PR: status/auth). This page is now a thin view: the search
+// entry points + a sync chip. PR(next) replaces it with the unified FindPage.
 public partial class MainPage : ContentPage
 {
-    private readonly IAuthService _auth;
-    private readonly IApiClient _api;
-    private readonly ICatalogCache _cache;
+    private readonly ISyncService _sync;
 
-    private bool _signedIn;
-    private bool _busy;
-    // Last-known cache metadata. Refreshed on app appearing, after
-    // sign-in, and after Load catalog. RefreshUi() reads from this
-    // (sync) rather than touching the cache directly so the render
-    // path stays cheap.
-    private CacheMeta? _meta;
-
-    public MainPage(IAuthService auth, IApiClient api, ICatalogCache cache)
+    public MainPage(ISyncService sync)
     {
         InitializeComponent();
-        _auth = auth;
-        _api = api;
-        _cache = cache;
-        // Build footer — version + SHA so Drew can see which build is
-        // on the device. BuildInfo is static and computed once on
-        // first reference, so this is just a label assignment.
-        BuildFooter.Text = BuildInfo.DisplayString;
+        _sync = sync;
+        // Re-render when sign-in / connectivity / cache meta changes (e.g.
+        // after a sync from the status sheet enables the search buttons).
+        _sync.StateChanged += (_, _) => MainThread.BeginInvokeOnMainThread(RefreshUi);
         RefreshUi();
     }
 
     protected override async void OnAppearing()
     {
         base.OnAppearing();
-
-        // Open the SQLite cache for the lifetime of the app process.
-        // InitAsync is idempotent so calling on every appearing is
-        // fine — second-and-later calls return immediately.
-        var dbPath = Path.Combine(FileSystem.AppDataDirectory, "catalog.db");
-        try
-        {
-            await _cache.InitAsync(dbPath);
-        }
-        catch (Exception ex)
-        {
-            // Cache failure shouldn't block the sign-in UX; surface
-            // it as status text but let the user still try to
-            // sign in + load (the no-cache path).
-            StatusLabel.Text = $"Cache init failed: {ex.Message}";
-        }
-
-        // Refresh the meta panel regardless of sign-in state — cached
-        // catalog data outlives sign-out, so the panel should show what
-        // we actually have locally.
-        await RefreshMetaAsync();
-
-        if (await _auth.IsSignedInAsync())
-        {
-            _signedIn = true;
-            StatusLabel.Text = _meta is null
-                ? "Signed in. Tap Load catalog snapshot to begin."
-                : "Signed in.";
-        }
-
+        await _sync.InitAsync();        // idempotent — AppShell already ran it
+        await _sync.RefreshMetaAsync(); // reflect any sync that happened elsewhere
         RefreshUi();
     }
 
-    private async void OnSignInClicked(object? sender, EventArgs e)
+    private async void OnScanClicked(object? sender, EventArgs e) => await PushAsync<ScanPage>();
+    private async void OnFindByAuthorClicked(object? sender, EventArgs e) => await PushAsync<AuthorSearchPage>();
+    private async void OnFindByTitleClicked(object? sender, EventArgs e) => await PushAsync<TitleSearchPage>();
+
+    private async void OnSyncChipTapped(object? sender, TappedEventArgs e) =>
+        await StatusSheetPage.OpenAsync(Navigation);
+
+    private async Task PushAsync<TPage>() where TPage : Page
     {
-        await RunBusyAsync("Signing in…", async () =>
-        {
-            await _auth.SignInAsync();
-            _signedIn = true;
-            await RefreshMetaAsync();
-            return _meta is null
-                ? "Signed in. Tap Load catalog snapshot to begin."
-                : "Signed in.";
-        });
-    }
-
-    private async void OnLoadCatalogClicked(object? sender, EventArgs e)
-    {
-        await RunBusyAsync("Loading catalog…", async () =>
-        {
-            // Delta-sync decision tree:
-            //   1. No stored watermark → first load → full PopulateAsync.
-            //   2. Have watermark → call with ?since=<token>.
-            //      a. Response.Version matches stored Version → merge
-            //         deltas into existing cache via ApplyDeltaAsync.
-            //         Preserves CoverPath when CoverUrl unchanged so
-            //         we don't re-download thumbnails on every refresh.
-            //      b. Response.Version differs → server deploy
-            //         invalidated cache shape; fall back to full
-            //         PopulateAsync.
-            // Status text mentions delta vs full so Drew can see which
-            // path the refresh took — useful both for sanity-checking
-            // the feature and for "wait why was that so quick" intuition.
-
-            var storedToken = _meta?.LatestUpdatedAt;
-            var storedVersion = _meta?.Version;
-            var snapshot = await _api.GetCatalogSnapshotAsync(since: storedToken);
-
-            string statusSuffix;
-            if (storedToken is null)
-            {
-                await _cache.PopulateAsync(snapshot);
-                statusSuffix = "full";
-            }
-            else if (!string.Equals(snapshot.Version, storedVersion, StringComparison.Ordinal))
-            {
-                // Version moved on the server. The snapshot we just
-                // fetched is a DELTA — we sent `since=<storedToken>`
-                // so the server filtered to Books with UpdatedAt > since.
-                // Populating with it would wipe-and-rewrite the cache
-                // using only the delta-window books, leaving everything
-                // older missing locally (which we hit 2026-05-14 on the
-                // Arc D deploy — search returned only the few books
-                // changed in the deploy window). Re-fetch without the
-                // token for a true full snapshot before wiping.
-                snapshot = await _api.GetCatalogSnapshotAsync(since: null);
-                await _cache.PopulateAsync(snapshot);
-                statusSuffix = "full (version changed)";
-            }
-            else
-            {
-                await _cache.ApplyDeltaAsync(snapshot);
-                var bookChanges = snapshot.Books?.Count ?? 0;
-                var deletes = snapshot.DeletedIds?.Count ?? 0;
-                statusSuffix = bookChanges == 0 && deletes == 0
-                    ? "delta · no changes"
-                    : $"delta · {bookChanges} updated, {deletes} removed";
-            }
-
-            await RefreshMetaAsync();
-
-            // Surface the redeploy hint only when the server is
-            // genuinely lagging on the /series field — the original
-            // PR 4 NRE diagnostic kept around as a passive warning.
-            return snapshot.Series is null
-                ? $"Catalog loaded ✓ ({statusSuffix}, server lacks /series field — redeploy Web)"
-                : $"Catalog loaded ✓ ({statusSuffix})";
-        });
-    }
-
-    private async void OnSignOutClicked(object? sender, EventArgs e)
-    {
-        await RunBusyAsync("Signing out…", async () =>
-        {
-            await _auth.SignOutAsync();
-            _signedIn = false;
-            // Note: cache data is intentionally not wiped on sign-out.
-            // The stats panel keeps showing what's locally stashed.
-            return "Signed out.";
-        });
-    }
-
-    // Runs an async action with the spinner up + buttons disabled,
-    // then renders the returned status string. Catches + surfaces
-    // any exception with enough breadcrumbs to diagnose without
-    // dumping the full stack trace to the UI.
-    private async Task RunBusyAsync(string busyStatus, Func<Task<string>> action)
-    {
-        _busy = true;
-        StatusLabel.Text = busyStatus;
-        RefreshUi();
-        try
-        {
-            var result = await action();
-            StatusLabel.Text = result;
-        }
-        catch (Exception ex)
-        {
-            // For NullReferenceException the canonical message is
-            // useless ("Object reference not set..."). Capture the
-            // exception type + the first stack frame so we can see
-            // where the throw originated. Limit to ~2-3 lines so
-            // the label stays readable on a phone.
-            var topFrame = ex.StackTrace?
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                .FirstOrDefault()?.Trim() ?? "(no stack)";
-            StatusLabel.Text =
-                $"Failed: {ex.GetType().Name}\n{ex.Message}\n→ {topFrame}";
-        }
-        finally
-        {
-            _busy = false;
-            RefreshUi();
-        }
-    }
-
-    private async void OnScanClicked(object? sender, EventArgs e)
-    {
-        // Resolve the page from DI so it gets ICatalogCache injected.
-        // Transient registration in MauiProgram — each navigation
-        // gets a fresh CameraBarcodeReaderView, no held-camera between
-        // visits.
-        var services = Microsoft.Maui.Controls.Application.Current?.Handler?.MauiContext?.Services
+        // Resolve transient pages from DI (fresh per push within the Find tab).
+        var services = Application.Current?.Handler?.MauiContext?.Services
             ?? throw new InvalidOperationException("ServiceProvider not available.");
-        var page = services.GetService(typeof(ScanPage)) as ScanPage
-            ?? throw new InvalidOperationException("ScanPage not registered.");
+        var page = services.GetService(typeof(TPage)) as TPage
+            ?? throw new InvalidOperationException($"{typeof(TPage).Name} not registered.");
         await Navigation.PushAsync(page);
-    }
-
-    private async void OnFindByAuthorClicked(object? sender, EventArgs e)
-    {
-        // Same DI pattern as OnScanClicked. AuthorSearchPage is
-        // transient so each visit gets fresh debounce state.
-        var services = Microsoft.Maui.Controls.Application.Current?.Handler?.MauiContext?.Services
-            ?? throw new InvalidOperationException("ServiceProvider not available.");
-        var page = services.GetService(typeof(AuthorSearchPage)) as AuthorSearchPage
-            ?? throw new InvalidOperationException("AuthorSearchPage not registered.");
-        await Navigation.PushAsync(page);
-    }
-
-    private async void OnFindByTitleClicked(object? sender, EventArgs e)
-    {
-        var services = Microsoft.Maui.Controls.Application.Current?.Handler?.MauiContext?.Services
-            ?? throw new InvalidOperationException("ServiceProvider not available.");
-        var page = services.GetService(typeof(TitleSearchPage)) as TitleSearchPage
-            ?? throw new InvalidOperationException("TitleSearchPage not registered.");
-        await Navigation.PushAsync(page);
-    }
-
-    // Series gaps + Wishlist are now bottom tabs (AppShell), not buttons on
-    // this page — their nav handlers + buttons were removed in the Shell
-    // migration (PR2). This page is the transitional Find tab until PR3
-    // rebuilds it as the unified search surface.
-
-    private async Task RefreshMetaAsync()
-    {
-        try
-        {
-            _meta = await _cache.GetMetaAsync();
-        }
-        catch
-        {
-            // GetMetaAsync only throws if the cache file is corrupt
-            // or InitAsync wasn't called — both already surfaced
-            // upstream. Treat as "no cache" here so RefreshUi keeps
-            // rendering something sensible.
-            _meta = null;
-        }
     }
 
     private void RefreshUi()
     {
-        Busy.IsRunning = _busy;
-        var hasCache = _meta is not null;
+        // Offline-first: search the cache whether or not you're signed in —
+        // the buttons need cached data, not a session.
+        var hasCache = _sync.Meta is not null;
+        ScanButton.IsEnabled = hasCache;
+        FindByAuthorButton.IsEnabled = hasCache;
+        FindByTitleButton.IsEnabled = hasCache;
 
-        // Signed-out flow: only Sign in is visible / enabled.
-        SignInButton.IsVisible = !_signedIn;
-        SignInButton.IsEnabled = !_busy && !_signedIn;
+        SyncChipLabel.Text = _sync.IsOnline
+            ? $"⟳ {SyncService.FormatAge(_sync.Meta?.SyncedAt)}"
+            : "⚠ offline";
 
-        // Signed-in flow: Load catalog + Scan + Find by author visible.
-        // Load stays visible after first load so the user can tap to
-        // refresh. Scan + Find-by-author both need cached data
-        // (otherwise both would say "not in your library").
-        LoadCatalogButton.IsVisible = _signedIn;
-        LoadCatalogButton.IsEnabled = !_busy && _signedIn;
-        ScanButton.IsVisible = _signedIn;
-        ScanButton.IsEnabled = !_busy && _signedIn && hasCache;
-        FindByAuthorButton.IsVisible = _signedIn;
-        FindByAuthorButton.IsEnabled = !_busy && _signedIn && hasCache;
-        FindByTitleButton.IsVisible = _signedIn;
-        FindByTitleButton.IsEnabled = !_busy && _signedIn && hasCache;
-
-        // Cache stats panel: passive info, only when we have data.
-        // Renders independently of signed-in state — cached data
-        // outlives sign-out.
-        CacheStatsPanel.IsVisible = hasCache;
-        if (hasCache && _meta is not null)
-        {
-            CacheStatsLabel.Text =
-                $"{_meta.BookCount:N0} books · {_meta.AuthorCount:N0} authors";
-            CacheSyncedAtLabel.Text = _meta.SyncedAt is { } syncedAt
-                ? $"Last synced {FormatSyncedAt(syncedAt)}"
-                : "Last synced (unknown)";
-        }
-
-        SignOutButton.IsVisible = _signedIn;
-        SignOutButton.IsEnabled = !_busy && _signedIn;
-    }
-
-    // Relative-time formatter for the cache stats panel.
-    // "just now / 5m ago / 2h ago / 2026-05-12 14:23". Kept inline
-    // because it's UI-only with a single use site — promoting it to
-    // a helper class would be over-engineered for one Label binding.
-    private static string FormatSyncedAt(DateTime syncedUtc)
-    {
-        var ago = DateTime.UtcNow - syncedUtc;
-        if (ago.TotalMinutes < 1) return "just now";
-        if (ago.TotalMinutes < 60) return $"{(int)ago.TotalMinutes}m ago";
-        if (ago.TotalHours < 24) return $"{(int)ago.TotalHours}h ago";
-        return syncedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+        StatusLabel.Text = hasCache
+            ? ""
+            : _sync.IsSignedIn
+                ? "No catalog cached yet — tap the sync chip, then Refresh now."
+                : "No catalog cached yet — tap the sync chip to sign in and load.";
     }
 }

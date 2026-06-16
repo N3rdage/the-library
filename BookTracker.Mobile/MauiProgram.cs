@@ -49,6 +49,11 @@ public static class MauiProgram
         // repeated fetches across pages reuse the same handler.
         builder.Services.AddHttpClient("covers");
 
+        // Auth + catalog-sync state, lifted out of MainPage so the status
+        // sheet, the SyncChip, and auto-sync-on-launch share one source.
+        builder.Services.AddSingleton<ISyncService, SyncService>();
+        builder.Services.AddTransient<Pages.StatusSheetPage>();
+
         // AppShell hosts the three bottom tabs; it injects the tab pages so
         // they resolve through DI (a DataTemplate ContentTemplate would try a
         // parameterless ctor and fail). Singleton — one shell per app.

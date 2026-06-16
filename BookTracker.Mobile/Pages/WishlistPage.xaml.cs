@@ -26,6 +26,9 @@ public partial class WishlistPage : ContentPage
         await LoadFromCacheAsync();
     }
 
+    private async void OnSyncClicked(object? sender, EventArgs e) =>
+        await StatusSheetPage.OpenAsync(Navigation);
+
     private async Task LoadFromCacheAsync()
     {
         try

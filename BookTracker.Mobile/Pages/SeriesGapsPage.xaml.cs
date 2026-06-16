@@ -23,6 +23,9 @@ public partial class SeriesGapsPage : ContentPage
         await LoadGapsAsync();
     }
 
+    private async void OnSyncClicked(object? sender, EventArgs e) =>
+        await StatusSheetPage.OpenAsync(Navigation);
+
     private async Task LoadGapsAsync()
     {
         GapsLayout.Children.Clear();
