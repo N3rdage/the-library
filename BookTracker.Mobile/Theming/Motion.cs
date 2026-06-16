@@ -22,8 +22,8 @@ public static class Motion
         v.Opacity = 0;
         v.TranslationY = rise;
         return Task.WhenAll(
-            v.FadeTo(1, ms, Easing.CubicOut),
-            v.TranslateTo(0, 0, ms, Easing.CubicOut));
+            v.FadeToAsync(1, ms, Easing.CubicOut),
+            v.TranslateToAsync(0, 0, ms, Easing.CubicOut));
     }
 
     /// <summary>A quick scale pulse — used as the "barcode recognised" cue on the
@@ -31,7 +31,7 @@ public static class Motion
     public static async Task PulseAsync(this VisualElement v, double scale = 1.06, uint up = 90, uint down = 110)
     {
         if (!Enabled) return;
-        await v.ScaleTo(scale, up, Easing.CubicOut);
-        await v.ScaleTo(1.0, down, Easing.CubicIn);
+        await v.ScaleToAsync(scale, up, Easing.CubicOut);
+        await v.ScaleToAsync(1.0, down, Easing.CubicIn);
     }
 }

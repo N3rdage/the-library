@@ -298,7 +298,7 @@ public partial class WishlistPage : ContentPage
         {
             // Collapse the row out instead of yanking it, then reload (the rebuilt
             // list no longer carries the bought item).
-            if (Motion.Enabled) await row.FadeTo(0, 160, Easing.CubicIn);
+            if (Motion.Enabled) await row.FadeToAsync(0, 160, Easing.CubicIn);
             await _cache.MarkBoughtLocallyAsync(itemId);
             await LoadFromCacheAsync();
         }
