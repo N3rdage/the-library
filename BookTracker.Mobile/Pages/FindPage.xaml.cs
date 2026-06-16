@@ -95,6 +95,7 @@ public partial class FindPage : ContentPage
 
         _cameraExpanded = true;
         _scanHandled = 0; // fresh camera session — allow one navigation
+        CameraRow.Height = new GridLength(220); // open the bounded strip
         CameraSection.IsVisible = true;
         Reader.IsDetecting = true;
         ScanButton.Text = "Cancel";
@@ -105,6 +106,7 @@ public partial class FindPage : ContentPage
         _cameraExpanded = false;
         Reader.IsDetecting = false;
         CameraSection.IsVisible = false;
+        CameraRow.Height = new GridLength(0); // reclaim the strip
         ScanButton.Text = "Scan";
     }
 

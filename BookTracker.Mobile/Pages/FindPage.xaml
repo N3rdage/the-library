@@ -12,7 +12,19 @@
          search/scan of what you own; the online "what am I missing" layer is
          TODO #54. -->
 
-    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <!-- Inline-camera row. Height is toggled 0↔220 in code rather than
+                 relying on the camera view's own HeightRequest — ZXing's native
+                 Android preview surface ignores a parent's requested height and
+                 fills (and draws over) everything otherwise. The explicit row
+                 rect is what actually bounds it. -->
+            <RowDefinition x:Name="CameraRow" Height="0" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
         <!-- Espresso banner + trailing tappable sync chip. -->
         <Grid Grid.Row="0"
@@ -72,9 +84,10 @@
         <Grid x:Name="CameraSection"
               Grid.Row="2"
               IsVisible="False"
-              HeightRequest="220"
+              IsClippedToBounds="True"
               Margin="20,12,20,0">
             <zxing:CameraBarcodeReaderView x:Name="Reader"
+                                           HeightRequest="220"
                                            BarcodesDetected="OnBarcodesDetected"
                                            IsDetecting="False" />
             <Grid InputTransparent="True"
