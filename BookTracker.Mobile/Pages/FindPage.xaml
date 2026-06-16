@@ -69,8 +69,8 @@
                     x:Name="ScanButton"
                     Text="Scan"
                     Clicked="OnScanClicked"
-                    WidthRequest="64"
                     HeightRequest="48"
+                    Padding="18,0"
                     BackgroundColor="{StaticResource Brass}"
                     TextColor="{StaticResource InkOnBrass}"
                     FontSize="14"
@@ -79,8 +79,10 @@
         </Grid>
 
         <!-- Inline scanner — collapsed by default; the Scan button expands it.
-             Reuses the ScanPage letterbox + green-target overlay. Camera is
-             started on expand and stopped on collapse / tab-leave. -->
+             A green target outline floats over the full live preview (the heavy
+             letterbox dimming the old full-screen ScanPage used read as a grey
+             box at this inline size). Camera is started on expand and stopped on
+             collapse / tab-leave. -->
         <Grid x:Name="CameraSection"
               Grid.Row="2"
               IsVisible="False"
@@ -93,10 +95,6 @@
             <Grid InputTransparent="True"
                   RowDefinitions="1.5*,*,1.5*"
                   ColumnDefinitions="*,6*,*">
-                <BoxView Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" Color="#B3000000" />
-                <BoxView Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Color="#B3000000" />
-                <BoxView Grid.Row="1" Grid.Column="0" Color="#B3000000" />
-                <BoxView Grid.Row="1" Grid.Column="2" Color="#B3000000" />
                 <Border Grid.Row="1" Grid.Column="1"
                         BackgroundColor="Transparent"
                         Stroke="{StaticResource ScanReticle}"
