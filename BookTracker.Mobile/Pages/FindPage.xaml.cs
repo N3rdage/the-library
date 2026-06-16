@@ -132,6 +132,7 @@ public partial class FindPage : ContentPage
     {
         var query = (e.NewTextValue ?? "").Trim();
         _searchCts?.Cancel();
+        _searchCts?.Dispose(); // singleton tab — don't leak a CTS per keystroke
         _searchCts = new CancellationTokenSource();
         var ct = _searchCts.Token;
 

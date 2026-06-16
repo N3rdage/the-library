@@ -36,6 +36,7 @@ public sealed class SyncService : ISyncService
     private readonly IAuthService _auth;
     private readonly IApiClient _api;
     private readonly ICatalogCache _cache;
+    private readonly SemaphoreSlim _syncGate = new(1, 1);
     private bool _initialised;
 
     public SyncService(IAuthService auth, IApiClient api, ICatalogCache cache)
@@ -98,47 +99,67 @@ public sealed class SyncService : ISyncService
 
     public async Task<string> SyncCatalogAsync()
     {
-        // Delta-sync decision tree (lifted verbatim from the old
-        // MainPage.OnLoadCatalogClicked):
-        //   1. No watermark → first load → full PopulateAsync.
-        //   2. Have watermark → GET ?since=<token>.
-        //      a. Version matches → merge deltas via ApplyDeltaAsync.
-        //      b. Version differs → server deploy invalidated cache shape;
-        //         re-fetch WITHOUT the token for a true full snapshot before
-        //         wiping (else a delta-window populate drops everything older).
-        var storedToken = Meta?.LatestUpdatedAt;
-        var storedVersion = Meta?.Version;
-        var snapshot = await _api.GetCatalogSnapshotAsync(since: storedToken);
+        // One sync at a time — launch auto-sync (AppShell) and a manual Refresh
+        // (status sheet) must not both write the cache concurrently. A second
+        // caller backs off rather than interleaving PopulateAsync/ApplyDeltaAsync.
+        if (!await _syncGate.WaitAsync(0))
+            return "Sync already in progress…";
+        try
+        {
+            // Delta-sync decision tree (lifted verbatim from the old
+            // MainPage.OnLoadCatalogClicked):
+            //   1. No watermark → first load → full PopulateAsync.
+            //   2. Have watermark → GET ?since=<token>.
+            //      a. Version matches → merge deltas via ApplyDeltaAsync.
+            //      b. Version differs → server deploy invalidated cache shape;
+            //         re-fetch WITHOUT the token for a true full snapshot before
+            //         wiping (else a delta-window populate drops everything older).
+            var storedToken = Meta?.LatestUpdatedAt;
+            var storedVersion = Meta?.Version;
+            var snapshot = await _api.GetCatalogSnapshotAsync(since: storedToken);
 
-        string statusSuffix;
-        if (storedToken is null)
-        {
-            await _cache.PopulateAsync(snapshot);
-            statusSuffix = "full";
-        }
-        else if (!string.Equals(snapshot.Version, storedVersion, StringComparison.Ordinal))
-        {
-            snapshot = await _api.GetCatalogSnapshotAsync(since: null);
-            await _cache.PopulateAsync(snapshot);
-            statusSuffix = "full (version changed)";
-        }
-        else
-        {
-            await _cache.ApplyDeltaAsync(snapshot);
-            var bookChanges = snapshot.Books?.Count ?? 0;
-            var deletes = snapshot.DeletedIds?.Count ?? 0;
-            statusSuffix = bookChanges == 0 && deletes == 0
-                ? "delta · no changes"
-                : $"delta · {bookChanges} updated, {deletes} removed";
-        }
+            string statusSuffix;
+            if (storedToken is null)
+            {
+                await _cache.PopulateAsync(snapshot);
+                statusSuffix = "full";
+            }
+            else if (!string.Equals(snapshot.Version, storedVersion, StringComparison.Ordinal))
+            {
+                snapshot = await _api.GetCatalogSnapshotAsync(since: null);
+                await _cache.PopulateAsync(snapshot);
+                statusSuffix = "full (version changed)";
+            }
+            else
+            {
+                await _cache.ApplyDeltaAsync(snapshot);
+                var bookChanges = snapshot.Books?.Count ?? 0;
+                var deletes = snapshot.DeletedIds?.Count ?? 0;
+                statusSuffix = bookChanges == 0 && deletes == 0
+                    ? "delta · no changes"
+                    : $"delta · {bookChanges} updated, {deletes} removed";
+            }
 
-        await RefreshMetaAsync();
-        return snapshot.Series is null
-            ? $"Synced ✓ ({statusSuffix}, server lacks /series field — redeploy Web)"
-            : $"Synced ✓ ({statusSuffix})";
+            await RefreshMetaAsync();
+            return snapshot.Series is null
+                ? $"Synced ✓ ({statusSuffix}, server lacks /series field — redeploy Web)"
+                : $"Synced ✓ ({statusSuffix})";
+        }
+        finally
+        {
+            _syncGate.Release();
+        }
     }
 
-    private void Raise() => StateChanged?.Invoke(this, EventArgs.Empty);
+    // OnConnectivityChanged fires on a non-UI thread, so marshal here once —
+    // every StateChanged subscriber can then touch UI without its own guard.
+    private void Raise()
+    {
+        if (MainThread.IsMainThread)
+            StateChanged?.Invoke(this, EventArgs.Empty);
+        else
+            MainThread.BeginInvokeOnMainThread(() => StateChanged?.Invoke(this, EventArgs.Empty));
+    }
 
     /// <summary>Relative-time label for a last-synced timestamp:
     /// "never" / "just now" / "5m ago" / "2h ago" / "2026-05-12 14:23".

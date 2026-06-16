@@ -204,8 +204,17 @@ public partial class WishlistPage : ContentPage
 
     private async Task OnBoughtAsync(int itemId)
     {
-        await _cache.MarkBoughtLocallyAsync(itemId);
-        await LoadFromCacheAsync();
+        // Fired from an async-void click lambda — an unhandled throw here would
+        // tear down the process, so a cache-write failure must surface, not crash.
+        try
+        {
+            await _cache.MarkBoughtLocallyAsync(itemId);
+            await LoadFromCacheAsync();
+        }
+        catch (Exception ex)
+        {
+            StatusLabel.Text = $"Couldn't mark as bought: {ex.GetType().Name}";
+        }
     }
 
     private async void OnRefreshClicked(object? sender, EventArgs e)

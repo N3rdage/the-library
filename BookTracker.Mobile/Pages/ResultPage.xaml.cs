@@ -32,6 +32,14 @@ public partial class ResultPage : ContentPage
         await LookupAsync();
     }
 
+    protected override void OnDisappearing()
+    {
+        base.OnDisappearing();
+        // Popping mid-load: cancel the enriched-detail fetch so its UI-thread
+        // continuation doesn't mutate this (now off-stack) page.
+        _coverCts?.Cancel();
+    }
+
     private async Task LookupAsync()
     {
         StatusLabel.Text = $"Looking up {_isbn}…";

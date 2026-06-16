@@ -29,8 +29,17 @@ public partial class StatusSheetPage : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
-        await _sync.RefreshSignInAsync();
-        await _sync.RefreshMetaAsync();
+        // async void — an unhandled throw (e.g. MSAL on RefreshSignInAsync) would
+        // crash the app, so guard and render whatever state we have.
+        try
+        {
+            await _sync.RefreshSignInAsync();
+            await _sync.RefreshMetaAsync();
+        }
+        catch (Exception ex)
+        {
+            StatusLabel.Text = $"Couldn't refresh status: {ex.GetType().Name}";
+        }
         Render();
     }
 
