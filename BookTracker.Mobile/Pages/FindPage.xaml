@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="BookTracker.Mobile.Pages.FindPage"
+             Shell.NavBarIsVisible="False"
+             Style="{StaticResource Page}">
+
+    <!-- The Find tab: unified search of your owned library (authors + works)
+         with an ISBN auto-detect path, plus a scan button. Replaces MainPage +
+         the old author/title search pages. Token-based + dark. v1 is offline
+         search/scan of what you own; the online "what am I missing" layer is
+         TODO #54. (Inline camera + ScanPage removal: next slice.) -->
+
+    <Grid RowDefinitions="Auto,Auto,Auto,*">
+
+        <!-- Espresso banner + trailing tappable sync chip. -->
+        <Grid Grid.Row="0"
+              BackgroundColor="{AppThemeBinding Light={StaticResource HeaderL}, Dark={StaticResource HeaderD}}"
+              Padding="24,20,24,16"
+              ColumnDefinitions="*,Auto"
+              ColumnSpacing="12">
+            <Label Text="Find" FontSize="24" FontAttributes="Bold" VerticalOptions="Center"
+                   TextColor="{StaticResource OnLeather}" />
+            <Border Grid.Column="1"
+                    Stroke="{StaticResource Brass}"
+                    StrokeThickness="1"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource ChipBgL}, Dark={StaticResource ChipBgD}}"
+                    Padding="10,6"
+                    VerticalOptions="Center">
+                <Border.StrokeShape><RoundRectangle CornerRadius="14" /></Border.StrokeShape>
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnSyncChipTapped" />
+                </Border.GestureRecognizers>
+                <Label x:Name="SyncChipLabel" Text="⟳ Sync" FontSize="12"
+                       TextColor="{AppThemeBinding Light={StaticResource BrassTextL}, Dark={StaticResource BrassTextD}}" />
+            </Border>
+        </Grid>
+
+        <!-- Search field + scan button. -->
+        <Grid Grid.Row="1" Padding="20,16,20,0" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <Border Grid.Column="0"
+                    Stroke="{StaticResource Brass}"
+                    StrokeThickness="1.5"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource InputBgL}, Dark={StaticResource InputBgD}}"
+                    Padding="12,0"
+                    VerticalOptions="Center">
+                <Border.StrokeShape><RoundRectangle CornerRadius="8" /></Border.StrokeShape>
+                <Entry x:Name="SearchEntry"
+                       Placeholder="Title, author or ISBN…"
+                       ReturnType="Search"
+                       TextChanged="OnSearchTextChanged"
+                       Completed="OnSearchCompleted"
+                       TextColor="{AppThemeBinding Light={StaticResource TextL}, Dark={StaticResource TextD}}" />
+            </Border>
+            <Button Grid.Column="1"
+                    Text="Scan"
+                    Clicked="OnScanClicked"
+                    WidthRequest="64"
+                    HeightRequest="48"
+                    BackgroundColor="{StaticResource Brass}"
+                    TextColor="{StaticResource InkOnBrass}"
+                    FontSize="14"
+                    FontAttributes="Bold"
+                    CornerRadius="8" />
+        </Grid>
+
+        <!-- Scope segment (All / Authors / Works) — shown only with results. -->
+        <Grid x:Name="ScopeSegment"
+              Grid.Row="2"
+              Padding="20,12,20,0"
+              ColumnDefinitions="*,*,*"
+              ColumnSpacing="8"
+              IsVisible="False">
+            <Button x:Name="ScopeAllButton" Text="All" Clicked="OnScopeAll" HeightRequest="40" CornerRadius="8" FontSize="13" />
+            <Button x:Name="ScopeAuthorsButton" Grid.Column="1" Text="Authors" Clicked="OnScopeAuthors" HeightRequest="40" CornerRadius="8" FontSize="13" />
+            <Button x:Name="ScopeWorksButton" Grid.Column="2" Text="Works" Clicked="OnScopeWorks" HeightRequest="40" CornerRadius="8" FontSize="13" />
+        </Grid>
+
+        <ScrollView Grid.Row="3" Padding="20,12,20,20">
+            <VerticalStackLayout x:Name="ResultsLayout" Spacing="8" />
+        </ScrollView>
+    </Grid>
+</ContentPage>

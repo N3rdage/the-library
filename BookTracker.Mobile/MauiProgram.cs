@@ -59,18 +59,14 @@ public static class MauiProgram
         // parameterless ctor and fail). Singleton — one shell per app.
         builder.Services.AddSingleton<AppShell>();
 
-        builder.Services.AddSingleton<MainPage>();
+        // FindPage is the Find tab — unified search of the owned library
+        // (singleton, app-lifetime tab content held by AppShell).
+        builder.Services.AddSingleton<Pages.FindPage>();
         // Scan page is transient — every navigation gets a fresh
-        // CameraBarcodeReaderView so we don't hold the camera open
-        // when the page isn't visible.
+        // CameraBarcodeReaderView so we don't hold the camera open when the
+        // page isn't visible. FindPage's Scan button pushes it (transitional
+        // until the inline camera lands).
         builder.Services.AddTransient<ScanPage>();
-        // Author search page is transient so each navigation gets a
-        // fresh debounce state + result list. AuthorBooksPage isn't
-        // registered — it's constructed inline because it needs a
-        // runtime-chosen AuthorSnapshot that DI can't supply.
-        builder.Services.AddTransient<AuthorSearchPage>();
-        // Title search is transient — pushed within the Find tab, fresh per push.
-        builder.Services.AddTransient<TitleSearchPage>();
         // Wishlist + Series gaps are bottom TABS — AppShell holds one instance
         // each for the app lifetime, so register them Singleton to match reality
         // (Transient was misleading: the shell captures them once). Their pages
