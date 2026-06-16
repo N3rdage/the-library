@@ -73,7 +73,7 @@ End-to-end setup (Docker Desktop containers for SQL Server + Azurite, mkcert for
 Two distinct mobile surfaces:
 
 - **Bookcase as a PWA** — installable on mobile + desktop, runs in standalone display mode with the same Blazor Server backend. Mobile-responsive Razor pages; primary in-bookshop surface is `/bookshop` (IndexedDB cache + scan + author lookup tabs).
-- **Bookshelf MAUI Android app** — native sibling for the same in-bookshop use case, but offline-capable. Pulls a slim JSON catalog snapshot from Bookcase, caches it in local SQLite. Pages: Sign in / Load catalog / Scan ISBN / Find by author / Find by title / Series gaps.
+- **Bookshelf MAUI Android app** — native sibling for the same in-bookshop use case, but offline-capable. Pulls a slim JSON catalog snapshot from Bookcase, caches it in local SQLite. **Shell + 3 bottom tabs** (redesigned 2026-06, see `docs/BOOKSHELF-UI-REDESIGN.md`): **Find** (owned-library search + inline scanner + ISBN → result), **Wishlist** (sortable, grouped), **Gaps** (per-series progress + missing pills); sign-in + sync live in a status sheet off the Find tab's sync chip. v1 is offline search/scan of what you *own*; the "do better when online" layer is a separate arc (TODO #54).
 
 When planning new features, always clarify which surface(s) it touches: **Bookcase web only**, **Bookcase web + PWA mobile**, **Bookshelf only**, or **both apps**. The decision drives where the work lands (Razor + JS, MAUI XAML + cache, or DTO + both consumers). Key mobile workflows: in-bookshop ISBN scan, author/title lookup, series gaps (do I need #6 of Foundation while I'm here?).
 
