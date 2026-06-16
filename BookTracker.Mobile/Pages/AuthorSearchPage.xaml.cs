@@ -170,11 +170,10 @@ public partial class AuthorSearchPage : ContentPage
 
     private async Task OpenAuthorBooksAsync(AuthorSnapshot author)
     {
-        // AuthorBooksPage takes ICatalogCache via DI (same singleton)
-        // plus the runtime-chosen author. Constructed inline rather
-        // than through the service provider because the AuthorSnapshot
-        // isn't something DI can supply.
-        var page = new AuthorBooksPage(_cache, _httpFactory, author);
+        // AuthorWorksPage takes ICatalogCache + the cover http factory via DI
+        // plus the runtime-chosen author. Constructed inline because the
+        // AuthorSnapshot isn't something DI can supply.
+        var page = new AuthorWorksPage(_cache, _httpFactory, author);
         await Navigation.PushAsync(page);
     }
 }
