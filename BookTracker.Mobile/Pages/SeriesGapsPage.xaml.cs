@@ -1,5 +1,7 @@
 using BookTracker.Mobile.Cache;
 using BookTracker.Mobile.Theming;
+using Microsoft.Maui.Controls.Shapes;
+using Microsoft.Maui.Layouts;
 
 namespace BookTracker.Mobile.Pages;
 
@@ -76,6 +78,16 @@ public partial class SeriesGapsPage : ContentPage
             return;
         }
 
+        var summary = new Label
+        {
+            Text = gaps.Count == 1 ? "1 series with a gap" : $"{gaps.Count} series with gaps",
+            FontSize = 13,
+            FontAttributes = FontAttributes.Bold,
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+        summary.SetThemeColor(Label.TextColorProperty, "TextMutedL", "TextMutedD");
+        GapsLayout.Children.Add(summary);
+
         foreach (var gap in gaps)
         {
             GapsLayout.Children.Add(BuildGapCard(gap));
@@ -100,19 +112,33 @@ public partial class SeriesGapsPage : ContentPage
         };
         progressLabel.SetThemeColor(Label.TextColorProperty, "TextMutedL", "TextMutedD");
 
-        var missingLabel = new Label
+        // Owned/expected as a bar — green-leather fill on a BarTrack track.
+        var bar = new ProgressBar
         {
-            Text = "Missing " + FormatMissingOrders(gap.MissingOrders),
-            FontSize = 14,
-            FontAttributes = FontAttributes.Bold,
-            LineBreakMode = LineBreakMode.WordWrap,
+            Progress = gap.ExpectedCount > 0
+                ? Math.Clamp((double)gap.OwnedCount / gap.ExpectedCount, 0, 1)
+                : 0,
+            Margin = new Thickness(0, 2, 0, 4),
         };
-        missingLabel.SetThemeColor(Label.TextColorProperty, "LeatherL", "LeatherD");
+        bar.SetThemeColor(ProgressBar.ProgressColorProperty, "GreenL", "GreenD");
+        bar.SetThemeColor(ProgressBar.BackgroundColorProperty, "BarTrackL", "BarTrackD");
+
+        var missingHeader = new Label
+        {
+            Text = "Missing",
+            FontSize = 12,
+            FontAttributes = FontAttributes.Bold,
+        };
+        missingHeader.SetThemeColor(Label.TextColorProperty, "BrassTextL", "BrassTextD");
+
+        var pills = new FlexLayout { Wrap = FlexWrap.Wrap };
+        foreach (var part in MissingParts(gap.MissingOrders))
+            pills.Add(MissingPill(part));
 
         var stack = new VerticalStackLayout
         {
             Spacing = 4,
-            Children = { nameLabel, progressLabel, missingLabel },
+            Children = { nameLabel, progressLabel, bar, missingHeader, pills },
         };
 
         // Card style supplies the themed surface + border + 8 dp radius;
@@ -125,14 +151,31 @@ public partial class SeriesGapsPage : ContentPage
         };
     }
 
-    // Compose "#2, #6" — orders prefixed with # so the row reads as
-    // ordinals. Collapses runs of three or more (#2, #3, #4 → #2-#4)
-    // so a long missing tail (a series the user is way behind on)
-    // doesn't render as a wall of numbers.
-    private static string FormatMissingOrders(IReadOnlyList<int> orders)
+    // Surface chip, brass border + brass text — the design kit's "Series #N"
+    // badge. One per missing slot, or a collapsed range for a long run.
+    private static View MissingPill(string text)
     {
-        if (orders.Count == 0) return "(none)";
+        var label = new Label { Text = text, FontSize = 12, FontAttributes = FontAttributes.Bold };
+        label.SetThemeColor(Label.TextColorProperty, "BrassTextL", "BrassTextD");
 
+        var border = new Border
+        {
+            Padding = new Thickness(8, 3),
+            Margin = new Thickness(0, 0, 6, 6),
+            Stroke = new SolidColorBrush(ThemeColors.Get("Brass")), // Brass is mode-stable
+            StrokeThickness = 1,
+            StrokeShape = new RoundRectangle { CornerRadius = 4 },
+            Content = label,
+        };
+        border.SetThemeColor(Border.BackgroundColorProperty, "SurfaceL", "SurfaceD");
+        return border;
+    }
+
+    // Missing slots as pill captions: a single "#N" per slot, but a run of
+    // three or more collapses to one "#2–#4" range pill so a series the user
+    // is far behind on doesn't render as a wall of pills.
+    private static List<string> MissingParts(IReadOnlyList<int> orders)
+    {
         var parts = new List<string>();
         int i = 0;
         while (i < orders.Count)
@@ -144,9 +187,12 @@ public partial class SeriesGapsPage : ContentPage
                 end = orders[i + 1];
                 i++;
             }
-            parts.Add(end - start >= 2 ? $"#{start}-#{end}" : end == start ? $"#{start}" : $"#{start}, #{end}");
+            if (end - start + 1 >= 3)
+                parts.Add($"#{start}–#{end}");
+            else
+                for (int n = start; n <= end; n++) parts.Add($"#{n}");
             i++;
         }
-        return string.Join(", ", parts);
+        return parts;
     }
 }

@@ -23,7 +23,7 @@
 
          Child page — system nav bar visible for back navigation. -->
 
-    <Grid RowDefinitions="Auto,Auto,Auto,*" Padding="20,16,20,0">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" Padding="20,16,20,0">
 
         <Button x:Name="RefreshButton"
                 Grid.Row="0"
@@ -52,7 +52,20 @@
                LineBreakMode="WordWrap"
                Margin="0,8,0,0" />
 
-        <ScrollView Grid.Row="3" Margin="0,12,0,0">
+        <!-- Sort segment (Priority / Author / Series) — shown only with items.
+             Default Priority (with High/Medium/Low group headers). -->
+        <Grid x:Name="SortSegment"
+              Grid.Row="3"
+              Padding="0,12,0,0"
+              ColumnDefinitions="*,*,*"
+              ColumnSpacing="8"
+              IsVisible="False">
+            <Button x:Name="SortPriorityButton" Text="Priority" Clicked="OnSortPriority" HeightRequest="40" CornerRadius="8" FontSize="13" />
+            <Button x:Name="SortAuthorButton" Grid.Column="1" Text="Author" Clicked="OnSortAuthor" HeightRequest="40" CornerRadius="8" FontSize="13" />
+            <Button x:Name="SortSeriesButton" Grid.Column="2" Text="Series" Clicked="OnSortSeries" HeightRequest="40" CornerRadius="8" FontSize="13" />
+        </Grid>
+
+        <ScrollView Grid.Row="4" Margin="0,12,0,0">
             <VerticalStackLayout x:Name="ItemsLayout"
                                  Spacing="8"
                                  Padding="0,0,0,20" />

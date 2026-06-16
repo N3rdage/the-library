@@ -12,12 +12,17 @@ public partial class WishlistPage : ContentPage
     private readonly IApiClient _api;
     private readonly IHttpClientFactory _httpFactory;
 
+    private IReadOnlyList<WishlistItemSnapshot> _items = [];
+    private enum Sort { Priority, Author, Series }
+    private Sort _sort = Sort.Priority;
+
     public WishlistPage(ICatalogCache cache, IApiClient api, IHttpClientFactory httpFactory)
     {
         InitializeComponent();
         _cache = cache;
         _api = api;
         _httpFactory = httpFactory;
+        UpdateSortButtons();
     }
 
     protected override async void OnAppearing()
@@ -33,27 +38,108 @@ public partial class WishlistPage : ContentPage
     {
         try
         {
-            var items = await _cache.GetWishlistAsync();
-            RenderItems(items);
+            _items = await _cache.GetWishlistAsync();
+            Render();
         }
         catch (Exception ex)
         {
+            _items = [];
+            SortSegment.IsVisible = false;
             StatusLabel.Text = $"Couldn't read cached wishlist: {ex.GetType().Name}";
         }
     }
 
-    private void RenderItems(IReadOnlyList<WishlistItemSnapshot> items)
+    private void OnSortPriority(object? sender, EventArgs e) { _sort = Sort.Priority; UpdateSortButtons(); Render(); }
+    private void OnSortAuthor(object? sender, EventArgs e) { _sort = Sort.Author; UpdateSortButtons(); Render(); }
+    private void OnSortSeries(object? sender, EventArgs e) { _sort = Sort.Series; UpdateSortButtons(); Render(); }
+
+    private void Render()
     {
         ItemsLayout.Children.Clear();
-        if (items.Count == 0)
+        SortSegment.IsVisible = _items.Count > 0;
+
+        if (_items.Count == 0)
         {
             StatusLabel.Text = "Wishlist empty. Tap Refresh wishlist to pull from the server, or add books from Bookcase web.";
             return;
         }
-        StatusLabel.Text = $"{items.Count} {(items.Count == 1 ? "book" : "books")} on your wishlist.";
-        foreach (var item in items)
+        StatusLabel.Text = $"{_items.Count} {(_items.Count == 1 ? "book" : "books")} on your wishlist.";
+
+        switch (_sort)
         {
-            ItemsLayout.Children.Add(BuildItemRow(item));
+            case Sort.Priority:
+                // High → Medium → Low(/other) buckets, each titled, rows by title.
+                foreach (var (label, inBucket) in PriorityBuckets)
+                {
+                    var rows = _items.Where(inBucket)
+                        .OrderBy(i => i.Title, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    if (rows.Count == 0) continue;
+                    ItemsLayout.Children.Add(GroupHeader(label));
+                    foreach (var it in rows) ItemsLayout.Children.Add(BuildItemRow(it));
+                }
+                break;
+
+            case Sort.Author:
+                foreach (var it in _items
+                    .OrderBy(i => i.Author, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase))
+                    ItemsLayout.Children.Add(BuildItemRow(it));
+                break;
+
+            case Sort.Series:
+                // Series members first, grouped by series and in reading order;
+                // standalone wishlist entries fall to the end, by title.
+                foreach (var it in _items
+                    .OrderBy(i => i.SeriesId is null)
+                    .ThenBy(i => i.SeriesId ?? int.MaxValue)
+                    .ThenBy(i => i.SeriesOrder ?? int.MaxValue)
+                    .ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase))
+                    ItemsLayout.Children.Add(BuildItemRow(it));
+                break;
+        }
+    }
+
+    // High / Medium / everything-else (Low). "Low" catches any other server
+    // priority string so no row is silently dropped.
+    private static readonly (string Label, Func<WishlistItemSnapshot, bool> InBucket)[] PriorityBuckets =
+    [
+        ("High", i => i.Priority == "High"),
+        ("Medium", i => i.Priority == "Medium"),
+        ("Low", i => i.Priority != "High" && i.Priority != "Medium"),
+    ];
+
+    private Label GroupHeader(string text)
+    {
+        var label = new Label
+        {
+            Text = text,
+            FontSize = 12,
+            FontAttributes = FontAttributes.Bold,
+            Margin = new Thickness(0, 8, 0, 0),
+        };
+        label.SetThemeColor(Label.TextColorProperty, "BrassTextL", "BrassTextD");
+        return label;
+    }
+
+    private void UpdateSortButtons()
+    {
+        Style(SortPriorityButton, _sort == Sort.Priority);
+        Style(SortAuthorButton, _sort == Sort.Author);
+        Style(SortSeriesButton, _sort == Sort.Series);
+
+        static void Style(Button b, bool active)
+        {
+            if (active)
+            {
+                b.BackgroundColor = ThemeColors.Get("Brass");
+                b.TextColor = ThemeColors.Get("InkOnBrass");
+            }
+            else
+            {
+                b.SetThemeColor(Button.BackgroundColorProperty, "SurfaceL", "SurfaceD");
+                b.SetThemeColor(Button.TextColorProperty, "TextMutedL", "TextMutedD");
+            }
         }
     }
 
