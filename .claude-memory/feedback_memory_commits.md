@@ -8,6 +8,8 @@ When committing feature work, do not stage files in `.claude-memory/`. Memory ch
 
 If memory files have been added or modified during the session and they're *not* covered by the closing-PR exception, mention it when handing off the branch: "Memory files were also updated — want to do a separate commit for those?"
 
+**Path note:** the harness auto-memory dir (`~/.claude/projects/C--Users-Drew-Work-code-The-Library/memory/`) is a **symlink to the repo's `.claude-memory/`** — they are the same files. So writing to "auto-memory" lands in the repo working tree and is governed by this commit discipline; there is no second, separate memory store to reconcile.
+
 **Why:** General workflow memory (feedback files, pattern docs, user-profile tweaks) is metadata about *how we work*, not metadata about *what shipped* — it doesn't belong in feature diffs. The closing-PR exception is specifically for memory that documents *the thing being shipped* (its retro) plus the TODO.md row that moves it to Shipped. Bundling those keeps the work and its record atomic.
 
 **How to apply:** When running `git add`, explicitly list feature files. For closing PRs, that includes the retro + `retros/index.md` + `TODO.md`; for non-closing PRs, that excludes everything in `.claude-memory/`. After the commit, check `git status` for unstaged `.claude-memory/` changes and flag them to Drew.
