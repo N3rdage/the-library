@@ -1,4 +1,5 @@
 using BookTracker.Application;
+using BookTracker.Application.Authors;
 using BookTracker.Application.Books;
 using BookTracker.Data;
 using BookTracker.Data.Models;
