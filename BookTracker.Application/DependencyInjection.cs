@@ -1,3 +1,4 @@
+using BookTracker.Application.Books;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BookTracker.Application;
@@ -14,14 +15,26 @@ public static class DependencyInjection
     /// Registers the application-layer handlers with the DI container.
     /// </summary>
     /// <remarks>
-    /// Empty in PR0 — the scaffold proves the project + DI wiring compile and
-    /// run green before any behaviour rides on top. Handlers land here from the
-    /// Book pilot (PR1) onward. The registration strategy (per-handler vs a
-    /// marker-interface assembly scan) is an open question to settle in PR1;
-    /// see docs/BACKEND-REFACTOR-DESIGN.md.
+    /// Explicit per-handler registration — no marker-interface assembly scan
+    /// (keeps the wiring greppable and on-ethos with the no-MediatR decision;
+    /// revisit if the list gets unwieldy). Handlers are Scoped to match the
+    /// DbContextFactory's per-operation context lifetime.
     /// </remarks>
     public static IServiceCollection AddApplicationLayer(this IServiceCollection services)
     {
+        // Books feature
+        services.AddScoped<RateBookHandler>();
+        services.AddScoped<SetBookStatusHandler>();
+        services.AddScoped<UpdateBookNotesHandler>();
+        services.AddScoped<UpdateBookDetailsHandler>();
+        services.AddScoped<AddEditionToBookHandler>();
+        services.AddScoped<UpdateEditionHandler>();
+        services.AddScoped<AddCopyToEditionHandler>();
+        services.AddScoped<UpdateCopyHandler>();
+        services.AddScoped<DeleteCopyHandler>();
+        services.AddScoped<DeleteBookHandler>();
+        services.AddScoped<SetEditionCoverHandler>();
+
         return services;
     }
 }

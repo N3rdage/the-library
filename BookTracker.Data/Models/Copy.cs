@@ -12,4 +12,11 @@ public class Copy
     public DateTime? DateAcquired { get; set; }
 
     public string? Notes { get; set; }
+
+    public void UpdateDetails(BookCondition condition, DateTime? dateAcquired, string? notes)
+    {
+        Condition = condition;
+        DateAcquired = dateAcquired;
+        Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+    }
 }
