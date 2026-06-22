@@ -5,9 +5,10 @@ using Microsoft.EntityFrameworkCore;
 namespace BookTracker.Application.Books;
 
 /// <summary>Changes a Book's reading status.</summary>
-public sealed record SetBookStatus(int BookId, BookStatus Status);
+public sealed record SetBookStatus(int BookId, BookStatus Status) : ICommand;
 
 public sealed class SetBookStatusHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : ICommandHandler<SetBookStatus>
 {
     public async Task HandleAsync(SetBookStatus command, CancellationToken ct = default)
     {

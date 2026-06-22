@@ -4,9 +4,10 @@ using Microsoft.EntityFrameworkCore;
 namespace BookTracker.Application.Books;
 
 /// <summary>Updates a Book's free-text notes (trimmed; blank becomes null).</summary>
-public sealed record UpdateBookNotes(int BookId, string? Notes);
+public sealed record UpdateBookNotes(int BookId, string? Notes) : ICommand;
 
 public sealed class UpdateBookNotesHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : ICommandHandler<UpdateBookNotes>
 {
     public async Task HandleAsync(UpdateBookNotes command, CancellationToken ct = default)
     {

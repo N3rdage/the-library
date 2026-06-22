@@ -1,10 +1,12 @@
-using BookTracker.Application.Books;
+using BookTracker.Application;
+using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.Services.Covers;
 using BookTracker.Web.ViewModels;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
@@ -18,12 +20,17 @@ public class BookDetailViewModelTests
             coverStorage ?? Substitute.For<IBookCoverStorage>(),
             new WorkSearchService(factory),
             NullLogger<BookDetailViewModel>.Instance,
-            new RateBookHandler(factory),
-            new SetBookStatusHandler(factory),
-            new UpdateBookNotesHandler(factory),
-            new DeleteCopyHandler(factory),
-            new DeleteBookHandler(factory),
-            new SetEditionCoverHandler(factory));
+            BuildDispatcher(factory));
+
+    // A real dispatcher backed by the application-layer DI registrations, so
+    // these tests exercise the same command-resolution path as production.
+    private static IDispatcher BuildDispatcher(TestDbContextFactory factory)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IDbContextFactory<BookTrackerDbContext>>(factory);
+        services.AddApplicationLayer();
+        return services.BuildServiceProvider().GetRequiredService<IDispatcher>();
+    }
 
     [Fact]
     public async Task InitializeAsync_MissingId_MarksNotFound()

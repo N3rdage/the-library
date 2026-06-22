@@ -13,7 +13,7 @@ public sealed record UpdateEdition(
     DateOnly? DatePrinted,
     DatePrecision DatePrintedPrecision,
     string? PublisherName,
-    string? CoverUrl);
+    string? CoverUrl) : ICommand;
 
 // Loads the Edition leaf directly rather than through the Book root: editing
 // edition fields carries no cross-entity invariant, and the interceptor still
@@ -21,6 +21,7 @@ public sealed record UpdateEdition(
 // load the Book and navigate; the pilot doesn't pay for that here — revisit
 // at the post-PR1 gate.)
 public sealed class UpdateEditionHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : ICommandHandler<UpdateEdition>
 {
     public async Task HandleAsync(UpdateEdition command, CancellationToken ct = default)
     {

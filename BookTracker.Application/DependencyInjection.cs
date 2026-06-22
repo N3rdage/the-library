@@ -15,26 +15,30 @@ public static class DependencyInjection
     /// Registers the application-layer handlers with the DI container.
     /// </summary>
     /// <remarks>
-    /// Explicit per-handler registration — no marker-interface assembly scan
-    /// (keeps the wiring greppable and on-ethos with the no-MediatR decision;
-    /// revisit if the list gets unwieldy). Handlers are Scoped to match the
-    /// DbContextFactory's per-operation context lifetime.
+    /// The dispatcher + explicit per-handler registration against
+    /// <see cref="ICommandHandler{TCommand}"/> — no assembly scan (one line per
+    /// command is the price of no magic; the list stays greppable). Consumers
+    /// inject a single <see cref="IDispatcher"/> rather than each handler.
+    /// Everything is Scoped to match the DbContextFactory's per-operation
+    /// context lifetime.
     /// </remarks>
     public static IServiceCollection AddApplicationLayer(this IServiceCollection services)
     {
+        services.AddScoped<IDispatcher, Dispatcher>();
+
         // Books feature
-        services.AddScoped<MarkBookReadHandler>();
-        services.AddScoped<RateBookHandler>();
-        services.AddScoped<SetBookStatusHandler>();
-        services.AddScoped<UpdateBookNotesHandler>();
-        services.AddScoped<UpdateBookDetailsHandler>();
-        services.AddScoped<AddEditionToBookHandler>();
-        services.AddScoped<UpdateEditionHandler>();
-        services.AddScoped<AddCopyToEditionHandler>();
-        services.AddScoped<UpdateCopyHandler>();
-        services.AddScoped<DeleteCopyHandler>();
-        services.AddScoped<DeleteBookHandler>();
-        services.AddScoped<SetEditionCoverHandler>();
+        services.AddScoped<ICommandHandler<MarkBookRead>, MarkBookReadHandler>();
+        services.AddScoped<ICommandHandler<RateBook>, RateBookHandler>();
+        services.AddScoped<ICommandHandler<SetBookStatus>, SetBookStatusHandler>();
+        services.AddScoped<ICommandHandler<UpdateBookNotes>, UpdateBookNotesHandler>();
+        services.AddScoped<ICommandHandler<UpdateBookDetails>, UpdateBookDetailsHandler>();
+        services.AddScoped<ICommandHandler<AddEditionToBook, int>, AddEditionToBookHandler>();
+        services.AddScoped<ICommandHandler<UpdateEdition>, UpdateEditionHandler>();
+        services.AddScoped<ICommandHandler<AddCopyToEdition, int>, AddCopyToEditionHandler>();
+        services.AddScoped<ICommandHandler<UpdateCopy>, UpdateCopyHandler>();
+        services.AddScoped<ICommandHandler<DeleteCopy>, DeleteCopyHandler>();
+        services.AddScoped<ICommandHandler<DeleteBook>, DeleteBookHandler>();
+        services.AddScoped<ICommandHandler<SetEditionCover>, SetEditionCoverHandler>();
 
         return services;
     }

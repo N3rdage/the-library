@@ -5,9 +5,10 @@ using Microsoft.EntityFrameworkCore;
 namespace BookTracker.Application.Books;
 
 /// <summary>Updates an existing Copy's condition, acquired date, and notes.</summary>
-public sealed record UpdateCopy(int CopyId, BookCondition Condition, DateTime? DateAcquired, string? Notes);
+public sealed record UpdateCopy(int CopyId, BookCondition Condition, DateTime? DateAcquired, string? Notes) : ICommand;
 
 public sealed class UpdateCopyHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : ICommandHandler<UpdateCopy>
 {
     public async Task HandleAsync(UpdateCopy command, CancellationToken ct = default)
     {

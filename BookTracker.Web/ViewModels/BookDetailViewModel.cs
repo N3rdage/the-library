@@ -23,12 +23,7 @@ public class BookDetailViewModel(
     IBookCoverStorage coverStorage,
     IWorkSearchService workSearch,
     ILogger<BookDetailViewModel> logger,
-    RateBookHandler rateBook,
-    SetBookStatusHandler setBookStatus,
-    UpdateBookNotesHandler updateBookNotes,
-    DeleteCopyHandler deleteCopy,
-    DeleteBookHandler deleteBook,
-    SetEditionCoverHandler setEditionCover)
+    IDispatcher dispatcher)
 {
     /// <summary>Server-side cap on user-uploaded cover photos. 10 MB is generous
     /// enough to accept a 12MP phone-camera JPEG without rejection while
@@ -115,14 +110,14 @@ public class BookDetailViewModel(
     public async Task SetRatingAsync(int rating)
     {
         if (Book is null) return;
-        await rateBook.HandleAsync(new RateBook(Book.Id, rating));
+        await dispatcher.Send(new RateBook(Book.Id, rating));
         CurrentRating = rating;
     }
 
     public async Task SetStatusAsync(BookStatus status)
     {
         if (Book is null) return;
-        await setBookStatus.HandleAsync(new SetBookStatus(Book.Id, status));
+        await dispatcher.Send(new SetBookStatus(Book.Id, status));
         CurrentStatus = status;
     }
 
@@ -135,7 +130,7 @@ public class BookDetailViewModel(
         NotesSaving = true;
         try
         {
-            await updateBookNotes.HandleAsync(new UpdateBookNotes(Book.Id, CurrentNotes));
+            await dispatcher.Send(new UpdateBookNotes(Book.Id, CurrentNotes));
             NotesDirty = false;
         }
         finally
@@ -187,7 +182,7 @@ public class BookDetailViewModel(
     public async Task DeleteCopyAsync(int copyId)
     {
         if (Book is null) return;
-        await deleteCopy.HandleAsync(new DeleteCopy(Book.Id, copyId));
+        await dispatcher.Send(new DeleteCopy(Book.Id, copyId));
     }
 
     /// <summary>
@@ -237,7 +232,7 @@ public class BookDetailViewModel(
 
         try
         {
-            await setEditionCover.HandleAsync(new SetEditionCover(editionId, newUrl, IsUserSupplied: true), ct);
+            await dispatcher.Send(new SetEditionCover(editionId, newUrl, IsUserSupplied: true), ct);
         }
         catch (NotFoundException)
         {
@@ -561,7 +556,7 @@ public class BookDetailViewModel(
     public async Task<bool> DeleteBookAsync()
     {
         if (Book is null) return false;
-        await deleteBook.HandleAsync(new DeleteBook(Book.Id));
+        await dispatcher.Send(new DeleteBook(Book.Id));
         return true;
     }
 

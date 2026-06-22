@@ -7,9 +7,10 @@ namespace BookTracker.Application.Books;
 /// (DeletedAt stamped, hidden by the global query filter) so the catalog
 /// snapshot can emit it in deletedIds[]; its Editions (and Copies via cascade)
 /// are hard-removed, and the Work/Tag join rows are cleared.</summary>
-public sealed record DeleteBook(int BookId);
+public sealed record DeleteBook(int BookId) : ICommand;
 
 public sealed class DeleteBookHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : ICommandHandler<DeleteBook>
 {
     public async Task HandleAsync(DeleteBook command, CancellationToken ct = default)
     {

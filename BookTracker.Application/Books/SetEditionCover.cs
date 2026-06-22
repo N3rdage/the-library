@@ -8,9 +8,10 @@ namespace BookTracker.Application.Books;
 /// stays in the Web layer — that storage service is a Web concern and can't
 /// move below the application layer without dragging the cover subsystem with
 /// it. This handler owns only the persistence half.</summary>
-public sealed record SetEditionCover(int EditionId, string Url, bool IsUserSupplied = true);
+public sealed record SetEditionCover(int EditionId, string Url, bool IsUserSupplied = true) : ICommand;
 
 public sealed class SetEditionCoverHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : ICommandHandler<SetEditionCover>
 {
     public async Task HandleAsync(SetEditionCover command, CancellationToken ct = default)
     {

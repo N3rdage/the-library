@@ -6,9 +6,10 @@ namespace BookTracker.Application.Books;
 
 /// <summary>Updates the Book-level fields from the "edit details" dialog
 /// (title, category, default cover URL).</summary>
-public sealed record UpdateBookDetails(int BookId, string Title, BookCategory Category, string? CoverUrl);
+public sealed record UpdateBookDetails(int BookId, string Title, BookCategory Category, string? CoverUrl) : ICommand;
 
 public sealed class UpdateBookDetailsHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : ICommandHandler<UpdateBookDetails>
 {
     public async Task HandleAsync(UpdateBookDetails command, CancellationToken ct = default)
     {
