@@ -1,3 +1,5 @@
+using BookTracker.Application;
+using BookTracker.Application.Books;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +11,9 @@ namespace BookTracker.Web.ViewModels;
 // cover URL). Notes have inline auto-save on the View page and are
 // deliberately absent here. Genres and series live on the Work and
 // are edited via WorkEditDialogViewModel.
-public class BookEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
+public class BookEditDialogViewModel(
+    IDbContextFactory<BookTrackerDbContext> dbFactory,
+    IDispatcher dispatcher)
 {
     public bool NotFound { get; private set; }
     public int BookId { get; private set; }
@@ -33,15 +37,14 @@ public class BookEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
     public async Task SaveAsync()
     {
         if (NotFound || string.IsNullOrWhiteSpace(Title)) return;
-
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books.FindAsync(BookId);
-        if (book is null) return;
-
-        book.Title = Title.Trim();
-        book.Category = Category;
-        book.DefaultCoverArtUrl = string.IsNullOrWhiteSpace(CoverUrl) ? null : CoverUrl.Trim();
-
-        await db.SaveChangesAsync();
+        try
+        {
+            await dispatcher.Send(new UpdateBookDetails(BookId, Title, Category, CoverUrl));
+        }
+        catch (NotFoundException)
+        {
+            // Book deleted between opening the dialog and saving — no-op, matching
+            // the old FindAsync-returns-null path.
+        }
     }
 }

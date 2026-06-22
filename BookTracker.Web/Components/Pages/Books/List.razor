@@ -426,7 +426,7 @@
         var result = await dialog.Result;
         if (result is not null && !result.Canceled && result.Data is MarkReadDialog.MarkReadResult r)
         {
-            try { await VM.SetStatusAsync(book.Id, BookStatus.Read, r.Rating, r.Notes); }
+            try { await VM.MarkReadAsync(book.Id, r.Rating, r.Notes); }
             catch (Exception ex) { Snackbar.Add($"Couldn't update status: {ex.Message}", Severity.Error); }
         }
     }

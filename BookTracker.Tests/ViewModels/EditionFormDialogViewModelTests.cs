@@ -15,7 +15,7 @@ public class EditionFormDialogViewModelTests
     public async Task InitializeForAdd_SetsIsNewAndBookId()
     {
         var factory = new TestDbContextFactory();
-        var vm = new EditionFormDialogViewModel(factory, _lookup);
+        var vm = new EditionFormDialogViewModel(factory, _lookup, TestDispatcher.For(factory));
 
         await vm.InitializeForAddAsync(42);
 
@@ -28,7 +28,7 @@ public class EditionFormDialogViewModelTests
     public async Task InitializeForEditAsync_MissingId_MarksNotFound()
     {
         var factory = new TestDbContextFactory();
-        var vm = new EditionFormDialogViewModel(factory, _lookup);
+        var vm = new EditionFormDialogViewModel(factory, _lookup, TestDispatcher.For(factory));
 
         await vm.InitializeForEditAsync(999);
 
@@ -62,7 +62,7 @@ public class EditionFormDialogViewModelTests
             editionId = edition.Id;
         }
 
-        var vm = new EditionFormDialogViewModel(factory, _lookup);
+        var vm = new EditionFormDialogViewModel(factory, _lookup, TestDispatcher.For(factory));
         await vm.InitializeForEditAsync(editionId);
 
         Assert.False(vm.IsNew);
@@ -90,7 +90,7 @@ public class EditionFormDialogViewModelTests
             bookId = book.Id;
         }
 
-        var vm = new EditionFormDialogViewModel(factory, _lookup);
+        var vm = new EditionFormDialogViewModel(factory, _lookup, TestDispatcher.For(factory));
         await vm.InitializeForAddAsync(bookId);
         vm.Isbn = "9780552131063";
         vm.Format = BookFormat.MassMarketPaperback;
@@ -126,7 +126,7 @@ public class EditionFormDialogViewModelTests
             bookId = book.Id;
         }
 
-        var vm = new EditionFormDialogViewModel(factory, _lookup);
+        var vm = new EditionFormDialogViewModel(factory, _lookup, TestDispatcher.For(factory));
         await vm.InitializeForAddAsync(bookId);
         vm.Isbn = "   ";
         vm.Format = BookFormat.Hardcover;
@@ -159,7 +159,7 @@ public class EditionFormDialogViewModelTests
             existingPublisherId = corgi.Id;
         }
 
-        var vm = new EditionFormDialogViewModel(factory, _lookup);
+        var vm = new EditionFormDialogViewModel(factory, _lookup, TestDispatcher.For(factory));
         await vm.InitializeForAddAsync(bookId);
         vm.Isbn = "x";
         vm.Publisher = "Corgi";
@@ -194,7 +194,7 @@ public class EditionFormDialogViewModelTests
             editionId = seedEdition.Id;
         }
 
-        var vm = new EditionFormDialogViewModel(factory, _lookup);
+        var vm = new EditionFormDialogViewModel(factory, _lookup, TestDispatcher.For(factory));
         await vm.InitializeForEditAsync(editionId);
         vm.Isbn = "9780000000001";
         vm.Format = BookFormat.TradePaperback;
@@ -230,7 +230,7 @@ public class EditionFormDialogViewModelTests
             bookId = book.Id;
         }
 
-        var vm = new EditionFormDialogViewModel(factory, _lookup);
+        var vm = new EditionFormDialogViewModel(factory, _lookup, TestDispatcher.For(factory));
         await vm.InitializeForAddAsync(bookId);
         var results = (await vm.SearchPublishersAsync("or", CancellationToken.None)).ToList();
 
@@ -257,7 +257,7 @@ public class EditionFormDialogViewModelTests
                 Format: BookFormat.MassMarketPaperback,
                 DatePrintedPrecision: DatePrecision.Day));
 
-        var vm = new EditionFormDialogViewModel(factory, _lookup);
+        var vm = new EditionFormDialogViewModel(factory, _lookup, TestDispatcher.For(factory));
         await vm.InitializeForAddAsync(1);
         vm.Isbn = "9780552131063";
         await vm.LookupAsync();

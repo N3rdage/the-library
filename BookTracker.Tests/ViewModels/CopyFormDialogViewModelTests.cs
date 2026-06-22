@@ -11,7 +11,7 @@ public class CopyFormDialogViewModelTests
     public void InitializeForAdd_SetsIsNewAndDefaults()
     {
         var factory = new TestDbContextFactory();
-        var vm = new CopyFormDialogViewModel(factory);
+        var vm = new CopyFormDialogViewModel(factory, TestDispatcher.For(factory));
 
         vm.InitializeForAdd(42);
 
@@ -25,7 +25,7 @@ public class CopyFormDialogViewModelTests
     public async Task InitializeForEditAsync_MissingId_MarksNotFound()
     {
         var factory = new TestDbContextFactory();
-        var vm = new CopyFormDialogViewModel(factory);
+        var vm = new CopyFormDialogViewModel(factory, TestDispatcher.For(factory));
 
         await vm.InitializeForEditAsync(999);
 
@@ -56,7 +56,7 @@ public class CopyFormDialogViewModelTests
             copyId = copy.Id;
         }
 
-        var vm = new CopyFormDialogViewModel(factory);
+        var vm = new CopyFormDialogViewModel(factory, TestDispatcher.For(factory));
         await vm.InitializeForEditAsync(copyId);
 
         Assert.False(vm.IsNew);
@@ -84,7 +84,7 @@ public class CopyFormDialogViewModelTests
             editionId = seedEdition.Id;
         }
 
-        var vm = new CopyFormDialogViewModel(factory);
+        var vm = new CopyFormDialogViewModel(factory, TestDispatcher.For(factory));
         vm.InitializeForAdd(editionId);
         vm.Condition = BookCondition.Fine;
         vm.Notes = "  signed  ";
@@ -118,7 +118,7 @@ public class CopyFormDialogViewModelTests
             copyId = seedCopy.Id;
         }
 
-        var vm = new CopyFormDialogViewModel(factory);
+        var vm = new CopyFormDialogViewModel(factory, TestDispatcher.For(factory));
         await vm.InitializeForEditAsync(copyId);
         vm.Condition = BookCondition.Fair;
         vm.Notes = "";

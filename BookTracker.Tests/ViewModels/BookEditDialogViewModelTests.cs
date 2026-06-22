@@ -10,7 +10,7 @@ public class BookEditDialogViewModelTests
     public async Task InitializeAsync_MissingId_MarksNotFound()
     {
         var factory = new TestDbContextFactory();
-        var vm = new BookEditDialogViewModel(factory);
+        var vm = new BookEditDialogViewModel(factory, TestDispatcher.For(factory));
 
         await vm.InitializeAsync(999);
 
@@ -36,7 +36,7 @@ public class BookEditDialogViewModelTests
             bookId = book.Id;
         }
 
-        var vm = new BookEditDialogViewModel(factory);
+        var vm = new BookEditDialogViewModel(factory, TestDispatcher.For(factory));
         await vm.InitializeAsync(bookId);
 
         Assert.False(vm.NotFound);
@@ -63,7 +63,7 @@ public class BookEditDialogViewModelTests
             bookId = book.Id;
         }
 
-        var vm = new BookEditDialogViewModel(factory);
+        var vm = new BookEditDialogViewModel(factory, TestDispatcher.For(factory));
         await vm.InitializeAsync(bookId);
         vm.Title = "  New title  ";
         vm.Category = BookCategory.NonFiction;
@@ -95,7 +95,7 @@ public class BookEditDialogViewModelTests
             bookId = book.Id;
         }
 
-        var vm = new BookEditDialogViewModel(factory);
+        var vm = new BookEditDialogViewModel(factory, TestDispatcher.For(factory));
         await vm.InitializeAsync(bookId);
         vm.CoverUrl = "   ";
         await vm.SaveAsync();
@@ -121,7 +121,7 @@ public class BookEditDialogViewModelTests
             bookId = book.Id;
         }
 
-        var vm = new BookEditDialogViewModel(factory);
+        var vm = new BookEditDialogViewModel(factory, TestDispatcher.For(factory));
         await vm.InitializeAsync(bookId);
         vm.Title = "   ";
         await vm.SaveAsync();

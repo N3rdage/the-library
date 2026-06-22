@@ -1,3 +1,5 @@
+using BookTracker.Application;
+using BookTracker.Application.Books;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -6,7 +8,9 @@ namespace BookTracker.Web.ViewModels;
 
 // Dialog VM for Add Copy (against an existing Edition) and Edit Copy,
 // picked by IsNew flag.
-public class CopyFormDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
+public class CopyFormDialogViewModel(
+    IDbContextFactory<BookTrackerDbContext> dbFactory,
+    IDispatcher dispatcher)
 {
     public bool IsNew { get; private set; }
     public bool NotFound { get; private set; }
@@ -43,35 +47,23 @@ public class CopyFormDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
     public async Task<int?> SaveAsync()
     {
         if (NotFound) return null;
-
-        await using var db = await dbFactory.CreateDbContextAsync();
-
-        if (IsNew)
+        try
         {
-            if (EditionId is not int eid) return null;
-            var copy = new Copy
+            if (IsNew)
             {
-                EditionId = eid,
-                Condition = Condition,
-                DateAcquired = DateAcquired,
-                Notes = string.IsNullOrWhiteSpace(Notes) ? null : Notes.Trim(),
-            };
-            db.Copies.Add(copy);
-            await db.SaveChangesAsync();
-            return copy.Id;
-        }
-        else
-        {
+                if (EditionId is not int eid) return null;
+                return await dispatcher.Send(new AddCopyToEdition(eid, Condition, DateAcquired, Notes));
+            }
+
             if (CopyId is not int cid) return null;
-            var copy = await db.Copies.FindAsync(cid);
-            if (copy is null) return null;
-
-            copy.Condition = Condition;
-            copy.DateAcquired = DateAcquired;
-            copy.Notes = string.IsNullOrWhiteSpace(Notes) ? null : Notes.Trim();
-
-            await db.SaveChangesAsync();
-            return copy.Id;
+            await dispatcher.Send(new UpdateCopy(cid, Condition, DateAcquired, Notes));
+            return cid;
+        }
+        catch (NotFoundException)
+        {
+            // Edition/Copy deleted between opening the dialog and saving — no-op,
+            // matching the old FindAsync-returns-null path.
+            return null;
         }
     }
 }

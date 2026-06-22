@@ -93,14 +93,17 @@ public class Book
     public void UpdateNotes(string? notes) => Notes = notes.TrimToNull();
 
     /// <summary>Records the book as read in a single gesture — status, rating,
-    /// and notes together (the "mark read" quick action). One atomic command,
-    /// not three field updates (convention C10). Rating is validated first so
-    /// an invalid value leaves the book untouched.</summary>
+    /// and (optionally) notes together (the "mark read" quick action). One atomic
+    /// command, not three field updates (convention C10). Rating is validated
+    /// first so an invalid value leaves the book untouched. <paramref name="notes"/>
+    /// of <c>null</c> means "no note supplied" and leaves any existing notes
+    /// intact (the dialog doesn't surface them, so a blank field mustn't wipe
+    /// them); an empty/whitespace string still clears them.</summary>
     public void MarkRead(int rating, string? notes)
     {
         Rate(rating);
         Status = BookStatus.Read;
-        UpdateNotes(notes);
+        if (notes is not null) UpdateNotes(notes);
     }
 
     /// <summary>Updates the Book-level fields edited from the "edit details"
