@@ -73,4 +73,97 @@ public class Book
     public List<Tag> Tags { get; set; } = [];
 
     public List<Work> Works { get; set; } = [];
+
+    // --- Aggregate behaviour -------------------------------------------------
+    // Invariant-bearing operations live here so the rules are enforced in one
+    // place and are unit-testable without EF. See docs/BACKEND-REFACTOR-DESIGN.md.
+    // (Collection setters stay public for now — the C7 encapsulation lock-down
+    // is deferred until every writer routes through these methods.)
+
+    /// <summary>Sets the 0–5 star rating; rejects out-of-range values.</summary>
+    public void Rate(int rating)
+    {
+        if (rating is < 0 or > 5)
+            throw new DomainRuleException("Rating must be between 0 and 5.");
+        Rating = rating;
+    }
+
+    public void ChangeStatus(BookStatus status) => Status = status;
+
+    public void UpdateNotes(string? notes) => Notes = notes.TrimToNull();
+
+    /// <summary>Records the book as read in a single gesture — status, rating,
+    /// and notes together (the "mark read" quick action). One atomic command,
+    /// not three field updates (convention C10). Rating is validated first so
+    /// an invalid value leaves the book untouched.</summary>
+    public void MarkRead(int rating, string? notes)
+    {
+        Rate(rating);
+        Status = BookStatus.Read;
+        UpdateNotes(notes);
+    }
+
+    /// <summary>Updates the Book-level fields edited from the "edit details"
+    /// dialog (title, category, default cover). Title is required.</summary>
+    public void UpdateDetails(string title, BookCategory category, string? coverUrl)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            throw new DomainRuleException("Title is required.");
+        Title = title.Trim();
+        Category = category;
+        DefaultCoverArtUrl = coverUrl.TrimToNull();
+    }
+
+    /// <summary>Adds a new Edition seeded with its first Copy — an Edition
+    /// always owns at least one Copy. Returns the new Edition.</summary>
+    public Edition AddEdition(
+        string? isbn,
+        BookFormat format,
+        DateOnly? datePrinted,
+        DatePrecision datePrintedPrecision,
+        string? coverUrl,
+        Publisher? publisher,
+        BookCondition firstCopyCondition)
+    {
+        var edition = new Edition
+        {
+            Isbn = isbn.TrimToNull(),
+            Format = format,
+            DatePrinted = datePrinted,
+            DatePrintedPrecision = datePrintedPrecision,
+            Publisher = publisher,
+            CoverUrl = coverUrl.TrimToNull(),
+        };
+        edition.AddCopy(firstCopyCondition, null, null);
+        Editions.Add(edition);
+        return edition;
+    }
+
+    /// <summary>Removes a Copy from the book. If it was the Edition's last
+    /// Copy, the Edition goes too — an Edition with zero Copies represents
+    /// nothing ownable. Throws if the Copy isn't part of this book.</summary>
+    public void RemoveCopy(int copyId)
+    {
+        var edition = Editions.FirstOrDefault(e => e.Copies.Any(c => c.Id == copyId))
+            ?? throw new DomainRuleException("That copy isn't part of this book.");
+        if (edition.RemoveCopy(copyId))
+            Editions.Remove(edition);
+    }
+
+    /// <summary>Soft-deletes the book: hard-removes the Editions (their Copies
+    /// cascade), clears the Work/Tag join rows, and stamps the tombstone. The
+    /// husk row survives, hidden by the global query filter, so the delta-sync
+    /// endpoint can emit it in <c>deletedIds[]</c>. The handler need only load
+    /// the children (so EF tracks the removals) and save.</summary>
+    public void SoftDelete()
+    {
+        // Severing the required Book→Edition relationship orphan-deletes each
+        // Edition (and its Copies cascade at the DB level) — same mechanism
+        // RemoveCopy already relies on. Keeps the whole soft-delete on the
+        // aggregate rather than splitting it with the handler.
+        Editions.Clear();
+        Works.Clear();
+        Tags.Clear();
+        DeletedAt = DateTime.UtcNow;
+    }
 }

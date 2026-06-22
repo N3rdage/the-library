@@ -49,4 +49,49 @@ public class Edition
     public Publisher? Publisher { get; set; }
 
     public List<Copy> Copies { get; set; } = [];
+
+    /// <summary>Adds a Copy to this Edition. Returns the new Copy.</summary>
+    public Copy AddCopy(BookCondition condition, DateTime? dateAcquired, string? notes)
+    {
+        var copy = new Copy
+        {
+            Condition = condition,
+            DateAcquired = dateAcquired,
+            Notes = notes.TrimToNull(),
+        };
+        Copies.Add(copy);
+        return copy;
+    }
+
+    /// <summary>Removes a Copy by id; returns true when the Edition is left
+    /// with no Copies (the Book then drops the empty Edition).</summary>
+    public bool RemoveCopy(int copyId)
+    {
+        var copy = Copies.FirstOrDefault(c => c.Id == copyId);
+        if (copy is not null) Copies.Remove(copy);
+        return Copies.Count == 0;
+    }
+
+    public void UpdateDetails(
+        string? isbn,
+        BookFormat format,
+        DateOnly? datePrinted,
+        DatePrecision datePrintedPrecision,
+        string? coverUrl,
+        Publisher? publisher)
+    {
+        Isbn = isbn.TrimToNull();
+        Format = format;
+        DatePrinted = datePrinted;
+        DatePrintedPrecision = datePrintedPrecision;
+        Publisher = publisher;
+        PublisherId = publisher?.Id;
+        CoverUrl = coverUrl.TrimToNull();
+    }
+
+    public void SetCover(string url, bool userSupplied)
+    {
+        CoverUrl = url;
+        IsUserSupplied = userSupplied;
+    }
 }
