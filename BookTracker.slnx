@@ -14,6 +14,7 @@
     no MAUI workload required, so they build + test on standard CI
     runners.
   -->
+  <Project Path="BookTracker.Application/BookTracker.Application.csproj" />
   <Project Path="BookTracker.Data/BookTracker.Data.csproj" />
   <Project Path="BookTracker.Mobile.Cache/BookTracker.Mobile.Cache.csproj" />
   <Project Path="BookTracker.Mobile.Cache.Tests/BookTracker.Mobile.Cache.Tests.csproj" />

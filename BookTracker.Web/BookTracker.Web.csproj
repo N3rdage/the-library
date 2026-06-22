@@ -25,6 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\BookTracker.Application\BookTracker.Application.csproj" />
     <ProjectReference Include="..\BookTracker.Data\BookTracker.Data.csproj" />
     <ProjectReference Include="..\BookTracker.Shared\BookTracker.Shared.csproj" />
   </ItemGroup>

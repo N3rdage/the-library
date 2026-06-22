@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Application layer for Bookcase — the single seam between the Blazor
+    host (BookTracker.Web: pages, ViewModels, API endpoints) and the
+    persistence/aggregate layer (BookTracker.Data).
+
+    Owns command + query handlers and read-model DTOs, organised into
+    one folder per feature (Books/, Works/, Series/, ...). See
+    docs/BACKEND-REFACTOR-DESIGN.md for the binding conventions (C1-C9)
+    and the arc plan.
+
+    The point of making this a separate PROJECT rather than a folder is
+    the compiler-enforced seam: Web depends on Application, Application
+    depends on Data — Web cannot reach a DbContext across it except at
+    the composition root. That bounded blast radius is the headline goal.
+
+    EF Core surface (DbContext, Include, AsNoTracking, ...) flows in
+    transitively via the BookTracker.Data reference, which carries
+    Microsoft.EntityFrameworkCore.SqlServer as a public package ref.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- DI extension surface so the host calls one AddApplicationLayer()
+         and every handler self-registers from inside this project. -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Aggregates + DbContext live here; Application loads/saves them. -->
+    <ProjectReference Include="..\BookTracker.Data\BookTracker.Data.csproj" />
+    <!-- Wire-format DTOs reused as read-model shapes where they already fit
+         (e.g. the catalog snapshot). -->
+    <ProjectReference Include="..\BookTracker.Shared\BookTracker.Shared.csproj" />
+  </ItemGroup>
+
+</Project>
