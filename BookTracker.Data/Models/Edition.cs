@@ -57,7 +57,7 @@ public class Edition
         {
             Condition = condition,
             DateAcquired = dateAcquired,
-            Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
+            Notes = notes.TrimToNull(),
         };
         Copies.Add(copy);
         return copy;
@@ -80,13 +80,13 @@ public class Edition
         string? coverUrl,
         Publisher? publisher)
     {
-        Isbn = string.IsNullOrWhiteSpace(isbn) ? null : isbn.Trim();
+        Isbn = isbn.TrimToNull();
         Format = format;
         DatePrinted = datePrinted;
         DatePrintedPrecision = datePrintedPrecision;
         Publisher = publisher;
         PublisherId = publisher?.Id;
-        CoverUrl = string.IsNullOrWhiteSpace(coverUrl) ? null : coverUrl.Trim();
+        CoverUrl = coverUrl.TrimToNull();
     }
 
     public void SetCover(string url, bool userSupplied)

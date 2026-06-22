@@ -90,8 +90,7 @@ public class Book
 
     public void ChangeStatus(BookStatus status) => Status = status;
 
-    public void UpdateNotes(string? notes) =>
-        Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+    public void UpdateNotes(string? notes) => Notes = notes.TrimToNull();
 
     /// <summary>Records the book as read in a single gesture — status, rating,
     /// and notes together (the "mark read" quick action). One atomic command,
@@ -112,7 +111,7 @@ public class Book
             throw new DomainRuleException("Title is required.");
         Title = title.Trim();
         Category = category;
-        DefaultCoverArtUrl = string.IsNullOrWhiteSpace(coverUrl) ? null : coverUrl.Trim();
+        DefaultCoverArtUrl = coverUrl.TrimToNull();
     }
 
     /// <summary>Adds a new Edition seeded with its first Copy — an Edition
@@ -128,12 +127,12 @@ public class Book
     {
         var edition = new Edition
         {
-            Isbn = string.IsNullOrWhiteSpace(isbn) ? null : isbn.Trim(),
+            Isbn = isbn.TrimToNull(),
             Format = format,
             DatePrinted = datePrinted,
             DatePrintedPrecision = datePrintedPrecision,
             Publisher = publisher,
-            CoverUrl = string.IsNullOrWhiteSpace(coverUrl) ? null : coverUrl.Trim(),
+            CoverUrl = coverUrl.TrimToNull(),
         };
         edition.AddCopy(firstCopyCondition, null, null);
         Editions.Add(edition);
@@ -151,11 +150,18 @@ public class Book
             Editions.Remove(edition);
     }
 
-    /// <summary>Soft-deletes the book: clears the Work/Tag join rows and
-    /// stamps the tombstone. The Editions (and their Copies) are hard-removed
-    /// by the handler so EF cascades the deletes — see DeleteBookHandler.</summary>
+    /// <summary>Soft-deletes the book: hard-removes the Editions (their Copies
+    /// cascade), clears the Work/Tag join rows, and stamps the tombstone. The
+    /// husk row survives, hidden by the global query filter, so the delta-sync
+    /// endpoint can emit it in <c>deletedIds[]</c>. The handler need only load
+    /// the children (so EF tracks the removals) and save.</summary>
     public void SoftDelete()
     {
+        // Severing the required Book→Edition relationship orphan-deletes each
+        // Edition (and its Copies cascade at the DB level) — same mechanism
+        // RemoveCopy already relies on. Keeps the whole soft-delete on the
+        // aggregate rather than splitting it with the handler.
+        Editions.Clear();
         Works.Clear();
         Tags.Clear();
         DeletedAt = DateTime.UtcNow;

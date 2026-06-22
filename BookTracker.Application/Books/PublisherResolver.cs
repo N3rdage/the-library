@@ -15,8 +15,8 @@ internal static class PublisherResolver
     public static async Task<Publisher?> ResolveAsync(
         BookTrackerDbContext db, string? name, CancellationToken ct)
     {
-        var trimmed = name?.Trim();
-        if (string.IsNullOrEmpty(trimmed)) return null;
+        var trimmed = name.TrimToNull();
+        if (trimmed is null) return null;
 
         var existing = await db.Publishers.FirstOrDefaultAsync(p => p.Name == trimmed, ct);
         if (existing is not null) return existing;

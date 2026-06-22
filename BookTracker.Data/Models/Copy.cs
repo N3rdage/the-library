@@ -17,6 +17,6 @@ public class Copy
     {
         Condition = condition;
         DateAcquired = dateAcquired;
-        Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        Notes = notes.TrimToNull();
     }
 }

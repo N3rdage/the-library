@@ -21,9 +21,9 @@ public sealed class DeleteBookHandler(IDbContextFactory<BookTrackerDbContext> db
             .FirstOrDefaultAsync(b => b.Id == command.BookId, ct)
             ?? throw new NotFoundException($"Book {command.BookId} not found.");
 
-        // Editions (+ Copies via PK cascade) are hard-removed here; SoftDelete()
-        // clears the Work/Tag join rows and stamps the tombstone.
-        db.Editions.RemoveRange(book.Editions);
+        // SoftDelete() owns the whole operation — orphan-removes the Editions
+        // (Copies cascade), clears the Work/Tag joins, stamps the tombstone.
+        // The Includes above load the children so EF tracks the removals.
         book.SoftDelete();
 
         await db.SaveChangesAsync(ct);
