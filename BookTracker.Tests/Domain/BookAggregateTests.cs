@@ -63,6 +63,28 @@ public class BookAggregateTests
     }
 
     [Fact]
+    public void MarkRead_setsStatusRatingAndNotes_inOneGesture()
+    {
+        var book = new Book { Title = "X" };
+        book.MarkRead(5, "  loved it  ");
+
+        Assert.Equal(BookStatus.Read, book.Status);
+        Assert.Equal(5, book.Rating);
+        Assert.Equal("loved it", book.Notes);
+    }
+
+    [Fact]
+    public void MarkRead_invalidRating_throws_andLeavesBookUntouched()
+    {
+        var book = new Book { Title = "X", Status = BookStatus.Unread };
+
+        Assert.Throws<DomainRuleException>(() => book.MarkRead(7, "note"));
+
+        Assert.Equal(BookStatus.Unread, book.Status); // rating validated first → nothing applied
+        Assert.Null(book.Notes);
+    }
+
+    [Fact]
     public void AddEdition_createsEditionWithSingleFirstCopy_andTrimsIsbn()
     {
         var book = new Book { Title = "X" };

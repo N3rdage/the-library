@@ -23,6 +23,7 @@ public static class DependencyInjection
     public static IServiceCollection AddApplicationLayer(this IServiceCollection services)
     {
         // Books feature
+        services.AddScoped<MarkBookReadHandler>();
         services.AddScoped<RateBookHandler>();
         services.AddScoped<SetBookStatusHandler>();
         services.AddScoped<UpdateBookNotesHandler>();

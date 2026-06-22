@@ -93,6 +93,17 @@ public class Book
     public void UpdateNotes(string? notes) =>
         Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
 
+    /// <summary>Records the book as read in a single gesture — status, rating,
+    /// and notes together (the "mark read" quick action). One atomic command,
+    /// not three field updates (convention C10). Rating is validated first so
+    /// an invalid value leaves the book untouched.</summary>
+    public void MarkRead(int rating, string? notes)
+    {
+        Rate(rating);
+        Status = BookStatus.Read;
+        UpdateNotes(notes);
+    }
+
     /// <summary>Updates the Book-level fields edited from the "edit details"
     /// dialog (title, category, default cover). Title is required.</summary>
     public void UpdateDetails(string title, BookCategory category, string? coverUrl)

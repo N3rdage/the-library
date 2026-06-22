@@ -59,6 +59,19 @@ public class BookCommandHandlersTests
     }
 
     [Fact]
+    public async Task MarkBookRead_setsStatusRatingAndNotes_inOneSave()
+    {
+        var id = await SeedBookAsync();
+        await new MarkBookReadHandler(_factory).HandleAsync(new MarkBookRead(id, 4, "great read"));
+
+        await using var db = _factory.CreateDbContext();
+        var book = await db.Books.FindAsync(id);
+        Assert.Equal(BookStatus.Read, book!.Status);
+        Assert.Equal(4, book.Rating);
+        Assert.Equal("great read", book.Notes);
+    }
+
+    [Fact]
     public async Task SetBookStatus_persists()
     {
         var id = await SeedBookAsync();
