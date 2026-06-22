@@ -1,44 +1,40 @@
-using BookTracker.Application.Books;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BookTracker.Application;
 
 /// <summary>
 /// Single registration entry point for the application layer. The Blazor host
-/// calls <see cref="AddApplicationLayer"/> once; every command/query handler
-/// registers itself from inside this project so adding a feature never touches
-/// <c>ProgramSetup.cs</c> (convention C2 — a feature is one self-contained folder).
+/// calls <see cref="AddApplicationLayer"/> once; handlers self-register by
+/// convention so adding a feature never touches the host (convention C2 — a
+/// feature is one self-contained folder).
 /// </summary>
 public static class DependencyInjection
 {
+    private static readonly Type[] HandlerInterfaces =
+        [typeof(ICommandHandler<>), typeof(ICommandHandler<,>)];
+
     /// <summary>
-    /// Registers the application-layer handlers with the DI container.
+    /// Registers the dispatcher and every command handler in this assembly.
     /// </summary>
     /// <remarks>
-    /// The dispatcher + explicit per-handler registration against
-    /// <see cref="ICommandHandler{TCommand}"/> — no assembly scan (one line per
-    /// command is the price of no magic; the list stays greppable). Consumers
-    /// inject a single <see cref="IDispatcher"/> rather than each handler.
-    /// Everything is Scoped to match the DbContextFactory's per-operation
-    /// context lifetime.
+    /// Handlers register by convention: any concrete type implementing
+    /// <see cref="ICommandHandler{TCommand}"/> (or the two-arg form) is wired to
+    /// that closed interface — implementing the interface IS the registration,
+    /// so a new handler can't be left unregistered. No attribute (the interface
+    /// is already the marker) and no MediatR. Everything is Scoped to match the
+    /// DbContextFactory's per-operation context lifetime. Find every handler
+    /// with <c>grep ": ICommandHandler&lt;"</c>.
     /// </remarks>
     public static IServiceCollection AddApplicationLayer(this IServiceCollection services)
     {
         services.AddScoped<IDispatcher, Dispatcher>();
 
-        // Books feature
-        services.AddScoped<ICommandHandler<MarkBookRead>, MarkBookReadHandler>();
-        services.AddScoped<ICommandHandler<RateBook>, RateBookHandler>();
-        services.AddScoped<ICommandHandler<SetBookStatus>, SetBookStatusHandler>();
-        services.AddScoped<ICommandHandler<UpdateBookNotes>, UpdateBookNotesHandler>();
-        services.AddScoped<ICommandHandler<UpdateBookDetails>, UpdateBookDetailsHandler>();
-        services.AddScoped<ICommandHandler<AddEditionToBook, int>, AddEditionToBookHandler>();
-        services.AddScoped<ICommandHandler<UpdateEdition>, UpdateEditionHandler>();
-        services.AddScoped<ICommandHandler<AddCopyToEdition, int>, AddCopyToEditionHandler>();
-        services.AddScoped<ICommandHandler<UpdateCopy>, UpdateCopyHandler>();
-        services.AddScoped<ICommandHandler<DeleteCopy>, DeleteCopyHandler>();
-        services.AddScoped<ICommandHandler<DeleteBook>, DeleteBookHandler>();
-        services.AddScoped<ICommandHandler<SetEditionCover>, SetEditionCoverHandler>();
+        foreach (var type in typeof(DependencyInjection).Assembly.GetTypes()
+                     .Where(t => t is { IsAbstract: false, IsInterface: false }))
+            foreach (var iface in type.GetInterfaces()
+                         .Where(i => i.IsGenericType
+                                     && HandlerInterfaces.Contains(i.GetGenericTypeDefinition())))
+                services.AddScoped(iface, type);
 
         return services;
     }
