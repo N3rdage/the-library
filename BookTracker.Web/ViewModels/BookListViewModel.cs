@@ -1,3 +1,5 @@
+using BookTracker.Application;
+using BookTracker.Application.Books;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -10,7 +12,7 @@ namespace BookTracker.Web.ViewModels;
 // redundant second door to the same flat list (TODO #53c).
 public enum LibraryGroupBy { None, Author, Genre }
 
-public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
+public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory, IDispatcher dispatcher)
 {
     public const int PageSize = 20;
 
@@ -482,42 +484,33 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         await ReloadAsync();
     }
 
-    /// <summary>Inline status set from the Library row. Optionally also writes
-    /// Rating + Notes in the same save (the Mark-Read dialog supplies both).
-    /// The loaded row is patched in place rather than re-queried, so a book
-    /// the user just moved out of the active status filter doesn't vanish
-    /// mid-interaction — the filter re-applies only on the next explicit
-    /// reload (filter change / paging / navigation).</summary>
-    public async Task SetStatusAsync(int bookId, BookStatus status, int? rating = null, string? notes = null)
+    /// <summary>Inline status set from the Library row's status dropdown. The
+    /// loaded row is patched in place rather than re-queried, so a book the user
+    /// just moved out of the active status filter doesn't vanish mid-interaction
+    /// — the filter re-applies only on the next explicit reload (filter change /
+    /// paging / navigation).</summary>
+    public async Task SetStatusAsync(int bookId, BookStatus status)
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books.FindAsync(bookId);
-        if (book is null) return;
+        await dispatcher.Send(new SetBookStatus(bookId, status));
+        PatchLoadedItem(bookId, item => item with { Status = status });
+    }
 
-        book.Status = status;
-        if (rating.HasValue) book.Rating = Math.Clamp(rating.Value, 0, 5);
-        if (notes is not null) book.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
-        await db.SaveChangesAsync();
-
-        PatchLoadedItem(bookId, item => item with
-        {
-            Status = status,
-            Rating = rating ?? item.Rating,
-        });
+    /// <summary>Mark-Read quick action: status + rating + notes in one gesture
+    /// (the Mark-Read dialog supplies rating + notes). A distinct user intention
+    /// from the plain status set above, so it's its own command — not three
+    /// field updates (convention C10). A null <paramref name="notes"/> leaves
+    /// existing notes intact.</summary>
+    public async Task MarkReadAsync(int bookId, int rating, string? notes)
+    {
+        await dispatcher.Send(new MarkBookRead(bookId, rating, notes));
+        PatchLoadedItem(bookId, item => item with { Status = BookStatus.Read, Rating = rating });
     }
 
     /// <summary>Inline rating set from the Library row (independent of status —
     /// rating changes never hide a row, since there's no rating filter).</summary>
     public async Task SetRatingAsync(int bookId, int rating)
     {
-        rating = Math.Clamp(rating, 0, 5);
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books.FindAsync(bookId);
-        if (book is null) return;
-
-        book.Rating = rating;
-        await db.SaveChangesAsync();
-
+        await dispatcher.Send(new RateBook(bookId, rating));
         PatchLoadedItem(bookId, item => item with { Rating = rating });
     }
 

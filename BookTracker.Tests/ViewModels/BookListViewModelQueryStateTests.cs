@@ -9,7 +9,7 @@ namespace BookTracker.Tests.ViewModels;
 [Trait("Category", TestCategories.Unit)]
 public class BookListViewModelQueryStateTests
 {
-    private static BookListViewModel NewVm() => new(null!);
+    private static BookListViewModel NewVm() => new(null!, null!);
 
     [Fact]
     public void ToQueryParameters_OmitsDefaults()

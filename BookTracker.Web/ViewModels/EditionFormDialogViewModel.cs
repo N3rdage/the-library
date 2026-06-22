@@ -1,3 +1,5 @@
+using BookTracker.Application;
+using BookTracker.Application.Books;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
@@ -19,7 +21,8 @@ namespace BookTracker.Web.ViewModels;
 // pre-1974 editions save without one.
 public class EditionFormDialogViewModel(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
-    IBookLookupService lookup)
+    IBookLookupService lookup,
+    IDispatcher dispatcher)
 {
     public bool IsNew { get; private set; }
     public bool NotFound { get; private set; }
@@ -122,60 +125,32 @@ public class EditionFormDialogViewModel(
     }
 
     /// <returns>The new or updated Edition id.</returns>
+    /// <returns>The new or updated Edition id; null if the dialog state is stale
+    /// (book/edition gone). Publisher find-or-create now lives in the handler.</returns>
     public async Task<int?> SaveAsync()
     {
         if (NotFound) return null;
 
-        await using var db = await dbFactory.CreateDbContextAsync();
-
-        // Resolve Publisher via find-or-create.
-        Publisher? publisher = null;
-        var pubName = Publisher?.Trim();
-        if (!string.IsNullOrEmpty(pubName))
-        {
-            publisher = await db.Publishers.FirstOrDefaultAsync(p => p.Name == pubName);
-            if (publisher is null)
-            {
-                publisher = new Publisher { Name = pubName };
-                db.Publishers.Add(publisher);
-            }
-        }
-
         var datePrinted = PartialDateParser.TryParse(FirstPublishedOrPrintedDate) ?? PartialDate.Empty;
-
-        if (IsNew)
+        try
         {
-            var edition = new Edition
+            if (IsNew)
             {
-                BookId = BookId,
-                Isbn = string.IsNullOrWhiteSpace(Isbn) ? null : Isbn.Trim(),
-                Format = Format,
-                DatePrinted = datePrinted.Date,
-                DatePrintedPrecision = datePrinted.Precision,
-                Publisher = publisher,
-                CoverUrl = string.IsNullOrWhiteSpace(CoverUrl) ? null : CoverUrl.Trim(),
-                Copies = [new Copy { Condition = FirstCopyCondition }],
-            };
-            db.Editions.Add(edition);
-            await db.SaveChangesAsync();
-            return edition.Id;
-        }
-        else
-        {
+                return await dispatcher.Send(new AddEditionToBook(
+                    BookId, Isbn, Format, datePrinted.Date, datePrinted.Precision,
+                    Publisher, CoverUrl, FirstCopyCondition));
+            }
+
             if (EditionId is not int id) return null;
-            var edition = await db.Editions.FindAsync(id);
-            if (edition is null) return null;
-
-            edition.Isbn = string.IsNullOrWhiteSpace(Isbn) ? null : Isbn.Trim();
-            edition.Format = Format;
-            edition.DatePrinted = datePrinted.Date;
-            edition.DatePrintedPrecision = datePrinted.Precision;
-            edition.PublisherId = publisher?.Id;
-            edition.Publisher = publisher;
-            edition.CoverUrl = string.IsNullOrWhiteSpace(CoverUrl) ? null : CoverUrl.Trim();
-
-            await db.SaveChangesAsync();
-            return edition.Id;
+            await dispatcher.Send(new UpdateEdition(
+                id, Isbn, Format, datePrinted.Date, datePrinted.Precision, Publisher, CoverUrl));
+            return id;
+        }
+        catch (NotFoundException)
+        {
+            // Book/Edition deleted between opening the dialog and saving — no-op,
+            // matching the old FindAsync-returns-null path.
+            return null;
         }
     }
 }

@@ -74,6 +74,25 @@ public class BookAggregateTests
     }
 
     [Fact]
+    public void MarkRead_nullNotes_leavesExistingNotesIntact()
+    {
+        var book = new Book { Title = "X", Notes = "keep me", Status = BookStatus.Unread };
+        book.MarkRead(4, null);
+
+        Assert.Equal(BookStatus.Read, book.Status);
+        Assert.Equal(4, book.Rating);
+        Assert.Equal("keep me", book.Notes); // null notes = no change, not a wipe
+    }
+
+    [Fact]
+    public void MarkRead_blankNotes_clearsExistingNotes()
+    {
+        var book = new Book { Title = "X", Notes = "old" };
+        book.MarkRead(3, "   ");
+        Assert.Null(book.Notes);
+    }
+
+    [Fact]
     public void MarkRead_invalidRating_throws_andLeavesBookUntouched()
     {
         var book = new Book { Title = "X", Status = BookStatus.Unread };
