@@ -259,6 +259,30 @@ public class BookCommandHandlersTests
     }
 
     [Fact]
+    public async Task DeleteBook_deletesExclusiveWorks_butKeepsSharedOnes()
+    {
+        int bookA, exclusiveId, sharedId;
+        await using (var db = _factory.CreateDbContext())
+        {
+            var exclusive = new Work { Title = "Exclusive", WorkAuthors = { new WorkAuthor { Author = new Author { Name = "X" }, Order = 0, Role = AuthorRole.Author } } };
+            var shared = new Work { Title = "Shared", WorkAuthors = { new WorkAuthor { Author = new Author { Name = "Y" }, Order = 0, Role = AuthorRole.Author } } };
+            var a = new Book { Title = "A", Works = { exclusive, shared } };
+            var b = new Book { Title = "B", Works = { shared } };
+            db.Books.AddRange(a, b);
+            await db.SaveChangesAsync();
+            bookA = a.Id; exclusiveId = exclusive.Id; sharedId = shared.Id;
+        }
+
+        await new DeleteBookHandler(_factory).HandleAsync(new DeleteBook(bookA));
+
+        await using var verify = _factory.CreateDbContext();
+        Assert.Null(await verify.Works.FindAsync(exclusiveId)); // orphaned → deleted with the book
+        var survivor = await verify.Works.Include(w => w.Books).FirstOrDefaultAsync(w => w.Id == sharedId);
+        Assert.NotNull(survivor);          // still on book B → survives
+        Assert.Single(survivor!.Books);
+    }
+
+    [Fact]
     public async Task SetEditionCover_persists()
     {
         var id = await SeedBookAsync();

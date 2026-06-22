@@ -356,7 +356,7 @@ public class BookDetailViewModel(
             FirstPublishedDatePrecision = firstPub.Precision,
             Genres = genres,
         };
-        AuthorResolver.AssignAuthors(work, authors, resolvedContributors);
+        work.AssignAuthorship(authors, resolvedContributors);
 
         book.Works.Add(work);
         await db.SaveChangesAsync();
@@ -498,7 +498,7 @@ public class BookDetailViewModel(
                 FirstPublishedDatePrecision = rowFirstPub.Precision,
                 Genres = rowGenres,
             };
-            AuthorResolver.AssignAuthors(work, rowAuthors, rowContributors);
+            work.AssignAuthorship(rowAuthors, rowContributors);
             book.Works.Add(work);
             attachedCount++;
         }

@@ -605,7 +605,7 @@ public class BookAddViewModel(
                         FirstPublishedDatePrecision = rowFirstPub.Precision,
                         Genres = rowGenres,
                     };
-                    AuthorResolver.AssignAuthors(w, rowAuthors, rowContributors);
+                    w.AssignAuthorship(rowAuthors, rowContributors);
                     works.Add(w);
                 }
             }
@@ -626,7 +626,7 @@ public class BookAddViewModel(
                     FirstPublishedDatePrecision = firstPub.Precision,
                     Genres = selectedGenres,
                 };
-                AuthorResolver.AssignAuthors(work, authors, contributors);
+                work.AssignAuthorship(authors, contributors);
 
                 // Attach to the accepted series, if any. AcceptedSeriesId points at
                 // an existing local Series row; AcceptedSeriesName (without an Id)
