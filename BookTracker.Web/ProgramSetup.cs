@@ -1,3 +1,4 @@
+using BookTracker.Application;
 using BookTracker.Data;
 using BookTracker.Data.Interceptors;
 using BookTracker.Web.Api;
@@ -122,6 +123,11 @@ public static class ProgramSetup
         });
 
         builder.Services.AddTransient<SeriesMatchService>();
+
+        // Application layer (command/query handlers). Handlers self-register from
+        // inside BookTracker.Application; this host only calls the one extension.
+        // See docs/BACKEND-REFACTOR-DESIGN.md.
+        builder.Services.AddApplicationLayer();
 
         builder.Services.AddScoped<ICatalogSnapshotService, CatalogSnapshotService>();
         builder.Services.AddScoped<IWishlistSnapshotService, WishlistSnapshotService>();
