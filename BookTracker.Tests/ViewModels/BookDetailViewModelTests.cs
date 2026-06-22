@@ -1,3 +1,4 @@
+using BookTracker.Application.Books;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.Services.Covers;
@@ -16,7 +17,13 @@ public class BookDetailViewModelTests
         new(factory,
             coverStorage ?? Substitute.For<IBookCoverStorage>(),
             new WorkSearchService(factory),
-            NullLogger<BookDetailViewModel>.Instance);
+            NullLogger<BookDetailViewModel>.Instance,
+            new RateBookHandler(factory),
+            new SetBookStatusHandler(factory),
+            new UpdateBookNotesHandler(factory),
+            new DeleteCopyHandler(factory),
+            new DeleteBookHandler(factory),
+            new SetEditionCoverHandler(factory));
 
     [Fact]
     public async Task InitializeAsync_MissingId_MarksNotFound()
