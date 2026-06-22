@@ -1,3 +1,5 @@
+using BookTracker.Application;
+using BookTracker.Application.Books;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
@@ -13,11 +15,15 @@ namespace BookTracker.Web.ViewModels;
 // notes, tags) mutate the Current* properties + persist in the same call,
 // keeping the page focused on one value at a time. Larger structural
 // edits (Work, Edition, Copy) happen in modal dialogs in a later PR.
+// Book/Edition/Copy writes now route through BookTracker.Application command
+// handlers (PR1b of the back-end refactor); the VM keeps the detail read
+// (InitializeAsync) and the Work/Tag mutations until their own aggregates land.
 public class BookDetailViewModel(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
     IBookCoverStorage coverStorage,
     IWorkSearchService workSearch,
-    ILogger<BookDetailViewModel> logger)
+    ILogger<BookDetailViewModel> logger,
+    IDispatcher dispatcher)
 {
     /// <summary>Server-side cap on user-uploaded cover photos. 10 MB is generous
     /// enough to accept a 12MP phone-camera JPEG without rejection while
@@ -104,25 +110,14 @@ public class BookDetailViewModel(
     public async Task SetRatingAsync(int rating)
     {
         if (Book is null) return;
-        if (rating < 0 || rating > 5) return;
-
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books.FindAsync(Book.Id);
-        if (book is null) return;
-        book.Rating = rating;
-        await db.SaveChangesAsync();
+        await dispatcher.Send(new RateBook(Book.Id, rating));
         CurrentRating = rating;
     }
 
     public async Task SetStatusAsync(BookStatus status)
     {
         if (Book is null) return;
-
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books.FindAsync(Book.Id);
-        if (book is null) return;
-        book.Status = status;
-        await db.SaveChangesAsync();
+        await dispatcher.Send(new SetBookStatus(Book.Id, status));
         CurrentStatus = status;
     }
 
@@ -135,11 +130,7 @@ public class BookDetailViewModel(
         NotesSaving = true;
         try
         {
-            await using var db = await dbFactory.CreateDbContextAsync();
-            var book = await db.Books.FindAsync(Book.Id);
-            if (book is null) return;
-            book.Notes = string.IsNullOrWhiteSpace(CurrentNotes) ? null : CurrentNotes.Trim();
-            await db.SaveChangesAsync();
+            await dispatcher.Send(new UpdateBookNotes(Book.Id, CurrentNotes));
             NotesDirty = false;
         }
         finally
@@ -191,18 +182,7 @@ public class BookDetailViewModel(
     public async Task DeleteCopyAsync(int copyId)
     {
         if (Book is null) return;
-
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var copy = await db.Copies.Include(c => c.Edition).ThenInclude(e => e.Copies).FirstOrDefaultAsync(c => c.Id == copyId);
-        if (copy is null) return;
-
-        var edition = copy.Edition;
-        db.Copies.Remove(copy);
-        if (edition.Copies.Count <= 1)
-        {
-            db.Editions.Remove(edition);
-        }
-        await db.SaveChangesAsync();
+        await dispatcher.Send(new DeleteCopy(Book.Id, copyId));
     }
 
     /// <summary>
@@ -250,13 +230,14 @@ public class BookDetailViewModel(
             return UploadCoverResult.Failure("Upload failed. Try again or check the file.");
         }
 
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var edition = await db.Editions.FirstOrDefaultAsync(e => e.Id == editionId, ct);
-        if (edition is null) return UploadCoverResult.Failure("Edition not found.");
-
-        edition.CoverUrl = newUrl;
-        edition.IsUserSupplied = true;
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await dispatcher.Send(new SetEditionCover(editionId, newUrl, IsUserSupplied: true), ct);
+        }
+        catch (NotFoundException)
+        {
+            return UploadCoverResult.Failure("Edition not found.");
+        }
 
         // Refresh the in-memory snapshot so the page re-renders against the new URL.
         await InitializeAsync(Book.Id);
@@ -575,21 +556,7 @@ public class BookDetailViewModel(
     public async Task<bool> DeleteBookAsync()
     {
         if (Book is null) return false;
-
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books
-            .Include(b => b.Editions)
-            .Include(b => b.Tags)
-            .Include(b => b.Works)
-            .FirstOrDefaultAsync(b => b.Id == Book.Id);
-        if (book is null) return false;
-
-        db.Editions.RemoveRange(book.Editions); // Copies cascade via PK
-        book.Tags.Clear();
-        book.Works.Clear();
-        book.DeletedAt = DateTime.UtcNow;
-
-        await db.SaveChangesAsync();
+        await dispatcher.Send(new DeleteBook(Book.Id));
         return true;
     }
 

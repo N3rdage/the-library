@@ -10,9 +10,10 @@ namespace BookTracker.Application.Books;
 /// SetBookStatus + RateBook + UpdateBookNotes would mean three loads, three
 /// saves, three UpdatedAt bumps, and a non-atomic half-applied state on
 /// failure.</summary>
-public sealed record MarkBookRead(int BookId, int Rating, string? Notes);
+public sealed record MarkBookRead(int BookId, int Rating, string? Notes) : ICommand;
 
 public sealed class MarkBookReadHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : ICommandHandler<MarkBookRead>
 {
     public async Task HandleAsync(MarkBookRead command, CancellationToken ct = default)
     {

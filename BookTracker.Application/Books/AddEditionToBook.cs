@@ -14,9 +14,10 @@ public sealed record AddEditionToBook(
     DatePrecision DatePrintedPrecision,
     string? PublisherName,
     string? CoverUrl,
-    BookCondition FirstCopyCondition);
+    BookCondition FirstCopyCondition) : ICommand<int>;
 
 public sealed class AddEditionToBookHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : ICommandHandler<AddEditionToBook, int>
 {
     public async Task<int> HandleAsync(AddEditionToBook command, CancellationToken ct = default)
     {

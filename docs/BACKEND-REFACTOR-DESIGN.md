@@ -43,9 +43,12 @@ This refactor optimises for, co-equally:
 
 We are taking the **spine** of DDD + CQRS, not the cathedral. Out of scope:
 
-- **MediatR / a message bus.** Command record + handler class, called directly. Same
-  testability, no bus magic, no hidden registration. Can be added later *to a structure
-  already shaped for it* if cross-cutting pipeline behaviours are ever wanted.
+- **MediatR.** No external mediator dependency and no pipeline-behaviour stage. We *do* have
+  a **thin hand-rolled `IDispatcher`** (~35 lines we own, `Application/Messaging/`) so a
+  consumer injects one dispatcher instead of one handler per command — added at the PR1b gate
+  when `BookDetailViewModel`'s ctor hit 10 args (see retro). It has no behaviours; if
+  cross-cutting logging/validation/transactions are ever wanted, that one class is where they'd
+  go. The line we're holding is "no framework magic we didn't write," not "no dispatcher."
 - **A separate domain model vs persistence model.** The EF entities *are* the aggregates.
   We do not maintain a parallel POCO domain + mapping layer — that tax isn't worth it solo.
 - **Event sourcing / domain events infrastructure.** Not now.
@@ -196,8 +199,16 @@ the human *or* the agent), we adjust the conventions here before rolling out PR2
 
 - **Exception → UI mapping.** How do `NotFoundException` / validation failures from handlers
   surface to the user (snackbar)? Establish the pattern in PR1.
-- **Handler registration.** Plain DI registration per handler, or a small marker-interface +
-  assembly scan to register them all? (Still *not* MediatR — just less hand-wiring.)
+- **Handler registration.** ✅ *Resolved (PR1b):* handlers implement
+  `ICommandHandler<TCommand>` / `ICommandHandler<TCommand, TResult>`; commands carry an
+  `ICommand` / `ICommand<TResult>` marker; consumers inject a Scoped `IDispatcher` that
+  resolves the handler by command type. **Registration is a convention scan** —
+  `AddApplicationLayer` walks the assembly and registers every `ICommandHandler<>` implementer
+  against its closed interface, so implementing the interface *is* the registration and a
+  handler can't be forgotten. *This reverses the PR0 "no assembly scan" stance* (see non-goals):
+  that call predated the evidence — at 12 handlers and growing, the explicit list's
+  forgot-to-register footgun outweighed its one-file greppability, and `grep ": ICommandHandler<"`
+  recovers the same list. No attribute (the interface is already the marker), no MediatR.
 - **Transaction ownership.** Single `SaveChanges` per handler is the default; multi-aggregate
   writes (merges) keep explicit `BeginTransaction`. Confirm no handler spans two aggregates
   without a transaction.

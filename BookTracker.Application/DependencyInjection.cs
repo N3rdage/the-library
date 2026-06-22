@@ -1,40 +1,40 @@
-using BookTracker.Application.Books;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BookTracker.Application;
 
 /// <summary>
 /// Single registration entry point for the application layer. The Blazor host
-/// calls <see cref="AddApplicationLayer"/> once; every command/query handler
-/// registers itself from inside this project so adding a feature never touches
-/// <c>ProgramSetup.cs</c> (convention C2 — a feature is one self-contained folder).
+/// calls <see cref="AddApplicationLayer"/> once; handlers self-register by
+/// convention so adding a feature never touches the host (convention C2 — a
+/// feature is one self-contained folder).
 /// </summary>
 public static class DependencyInjection
 {
+    private static readonly Type[] HandlerInterfaces =
+        [typeof(ICommandHandler<>), typeof(ICommandHandler<,>)];
+
     /// <summary>
-    /// Registers the application-layer handlers with the DI container.
+    /// Registers the dispatcher and every command handler in this assembly.
     /// </summary>
     /// <remarks>
-    /// Explicit per-handler registration — no marker-interface assembly scan
-    /// (keeps the wiring greppable and on-ethos with the no-MediatR decision;
-    /// revisit if the list gets unwieldy). Handlers are Scoped to match the
-    /// DbContextFactory's per-operation context lifetime.
+    /// Handlers register by convention: any concrete type implementing
+    /// <see cref="ICommandHandler{TCommand}"/> (or the two-arg form) is wired to
+    /// that closed interface — implementing the interface IS the registration,
+    /// so a new handler can't be left unregistered. No attribute (the interface
+    /// is already the marker) and no MediatR. Everything is Scoped to match the
+    /// DbContextFactory's per-operation context lifetime. Find every handler
+    /// with <c>grep ": ICommandHandler&lt;"</c>.
     /// </remarks>
     public static IServiceCollection AddApplicationLayer(this IServiceCollection services)
     {
-        // Books feature
-        services.AddScoped<MarkBookReadHandler>();
-        services.AddScoped<RateBookHandler>();
-        services.AddScoped<SetBookStatusHandler>();
-        services.AddScoped<UpdateBookNotesHandler>();
-        services.AddScoped<UpdateBookDetailsHandler>();
-        services.AddScoped<AddEditionToBookHandler>();
-        services.AddScoped<UpdateEditionHandler>();
-        services.AddScoped<AddCopyToEditionHandler>();
-        services.AddScoped<UpdateCopyHandler>();
-        services.AddScoped<DeleteCopyHandler>();
-        services.AddScoped<DeleteBookHandler>();
-        services.AddScoped<SetEditionCoverHandler>();
+        services.AddScoped<IDispatcher, Dispatcher>();
+
+        foreach (var type in typeof(DependencyInjection).Assembly.GetTypes()
+                     .Where(t => t is { IsAbstract: false, IsInterface: false }))
+            foreach (var iface in type.GetInterfaces()
+                         .Where(i => i.IsGenericType
+                                     && HandlerInterfaces.Contains(i.GetGenericTypeDefinition())))
+                services.AddScoped(iface, type);
 
         return services;
     }
