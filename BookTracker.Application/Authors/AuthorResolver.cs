@@ -2,7 +2,7 @@ using BookTracker.Data;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace BookTracker.Web.Services;
+namespace BookTracker.Application.Authors;
 
 // Find-or-create entry point used at every Work save site to map the
 // user-entered author-name string to an Author entity. Drew picked
@@ -11,11 +11,11 @@ namespace BookTracker.Web.Services;
 // via the /authors page (mark one as alias of another) or via the
 // follow-up merge UI (TODO.md).
 //
-// Multi-author cutover (PR1 of #14): the batch helpers below take a list
-// of names and produce ordered Author entities + WorkAuthor join rows.
-// Save sites still set Work.Author to the lead (legacy compat) AND
-// populate Work.WorkAuthors with all authors; PR2 will drop Work.AuthorId
-// and switch reads to the join.
+// Lives in the application layer (relocated from Web in the back-end
+// refactor) so command handlers can resolve authors without reaching up
+// into Web. Web ViewModels that still create Works directly (Add / Bulk Add)
+// reference it here until they migrate. Find-or-create has the same
+// check-then-insert race as PublisherResolver — see TECH-DEBT TD-15.
 public static class AuthorResolver
 {
     public static async Task<Author> FindOrCreateAsync(string name, BookTrackerDbContext db, CancellationToken ct = default)
