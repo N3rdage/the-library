@@ -72,6 +72,27 @@ public class BookCommandHandlersTests
     }
 
     [Fact]
+    public async Task MarkBookRead_nullNotes_leavesExistingNotesIntact()
+    {
+        int id;
+        await using (var db = _factory.CreateDbContext())
+        {
+            var book = new Book { Title = "Dune", Notes = "keep me" };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            id = book.Id;
+        }
+
+        await new MarkBookReadHandler(_factory).HandleAsync(new MarkBookRead(id, 4, null));
+
+        await using var verify = _factory.CreateDbContext();
+        var saved = await verify.Books.FindAsync(id);
+        Assert.Equal(BookStatus.Read, saved!.Status);
+        Assert.Equal(4, saved.Rating);
+        Assert.Equal("keep me", saved.Notes); // null notes preserved through the full handler path
+    }
+
+    [Fact]
     public async Task SetBookStatus_persists()
     {
         var id = await SeedBookAsync();

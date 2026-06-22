@@ -3,6 +3,7 @@
    first-copy condition field; Edit is field-only. *@
 
 @inject EditionFormDialogViewModel VM
+@inject ISnackbar Snackbar
 
 <MudDialog>
     <DialogContent>
@@ -141,6 +142,10 @@
         {
             var id = await VM.SaveAsync();
             if (id is int) MudDialog.Close(DialogResult.Ok(id));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Couldn't save: {ex.Message}", Severity.Error);
         }
         finally
         {

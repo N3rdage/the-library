@@ -44,7 +44,7 @@ This refactor optimises for, co-equally:
 We are taking the **spine** of DDD + CQRS, not the cathedral. Out of scope:
 
 - **MediatR.** No external mediator dependency and no pipeline-behaviour stage. We *do* have
-  a **thin hand-rolled `IDispatcher`** (~35 lines we own, `Application/Messaging/`) so a
+  a **thin hand-rolled `IDispatcher`** (~40 lines we own, `Application/Messaging/`) so a
   consumer injects one dispatcher instead of one handler per command — added at the PR1b gate
   when `BookDetailViewModel`'s ctor hit 10 args (see retro). It has no behaviours; if
   cross-cutting logging/validation/transactions are ever wanted, that one class is where they'd
