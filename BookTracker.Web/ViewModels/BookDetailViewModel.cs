@@ -1,6 +1,6 @@
 using BookTracker.Application;
-using BookTracker.Application.Authors;
 using BookTracker.Application.Books;
+using BookTracker.Application.Works;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
@@ -288,22 +288,9 @@ public class BookDetailViewModel(
     public async Task<string?> AttachExistingWorkAsync(int workId)
     {
         if (Book is null) return null;
-
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books.Include(b => b.Works).FirstOrDefaultAsync(b => b.Id == Book.Id);
-        if (book is null) return null;
-
-        var work = await db.Works.FirstOrDefaultAsync(w => w.Id == workId);
-        if (work is null) return null;
-
-        if (book.Works.Any(w => w.Id == workId)) return null;
-
-        book.Works.Add(work);
-        await db.SaveChangesAsync();
-
-        var attachedTitle = work.Title;
-        await InitializeAsync(Book.Id);
-        return attachedTitle;
+        var title = await dispatcher.Send(new AttachWorkToBook(Book.Id, workId));
+        if (title is not null) await InitializeAsync(Book.Id);
+        return title;
     }
 
     /// <summary>Create a new Work (with the supplied fields) and attach it
@@ -323,46 +310,16 @@ public class BookDetailViewModel(
         if (Book is null) return null;
         if (string.IsNullOrWhiteSpace(title)) return null;
 
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books.Include(b => b.Works).FirstOrDefaultAsync(b => b.Id == Book.Id);
-        if (book is null) return null;
-
-        var authors = await AuthorResolver.FindOrCreateAllAsync(authorNames, db);
-
-        var resolvedContributors = new List<(Author Person, AuthorRole Role)>();
-        if (contributors is not null)
-        {
-            foreach (var entry in contributors)
-            {
-                if (string.IsNullOrWhiteSpace(entry.Name)) continue;
-                var person = await AuthorResolver.FindOrCreateAsync(entry.Name, db);
-                resolvedContributors.Add((person, entry.Role));
-            }
-        }
-
-        if (authors.Count == 0 && resolvedContributors.Count == 0) return null;
-
         var firstPub = PartialDateParser.TryParse(firstPublishedDate) ?? PartialDate.Empty;
+        var contributorInputs = (contributors ?? [])
+            .Select(c => new ContributorInput(c.Name, c.Role))
+            .ToList();
 
-        var genres = genreIds.Count == 0
-            ? new List<Genre>()
-            : await db.Genres.Where(g => genreIds.Contains(g.Id)).ToListAsync();
-
-        var work = new Work
-        {
-            Title = title.Trim(),
-            Subtitle = string.IsNullOrWhiteSpace(subtitle) ? null : subtitle.Trim(),
-            FirstPublishedDate = firstPub.Date,
-            FirstPublishedDatePrecision = firstPub.Precision,
-            Genres = genres,
-        };
-        work.AssignAuthorship(authors, resolvedContributors);
-
-        book.Works.Add(work);
-        await db.SaveChangesAsync();
-
-        await InitializeAsync(Book.Id);
-        return work.Id;
+        var id = await dispatcher.Send(new CreateWorkOnBook(
+            Book.Id, title, subtitle, authorNames, contributorInputs,
+            firstPub.Date, firstPub.Precision, genreIds));
+        if (id is not null) await InitializeAsync(Book.Id);
+        return id;
     }
 
     /// <summary>Attach a batch of new + existing Works to this Book in
@@ -396,116 +353,28 @@ public class BookDetailViewModel(
         if (Book is null) return 0;
         ArgumentNullException.ThrowIfNull(rows);
 
-        // Author / genre source per row depends on the toggle. Existing-
-        // attach rows ignore both (existing Works carry their own).
-        List<string> AuthorsFor(WorkFormViewModel.WorkFormInput row) =>
-            singleAuthor ? sharedAuthors.ToList() : row.Authors;
-        List<int> GenresFor(WorkFormViewModel.WorkFormInput row) =>
-            singleGenre ? sharedGenreIds.ToList() : row.GenreIds;
-
-        // Filter to rows that carry usable content. Empty title + no
-        // attach + no authors = blank row, skip silently. A row with
-        // a title but no contributors and no attach goes through to
-        // the validation throw below where the per-row error names
-        // the title so the user sees which row is the problem.
-        var orderedRows = rows
-            .Where(r => r.AttachedWorkId is not null
-                        || !string.IsNullOrWhiteSpace(r.Title))
-            .ToList();
-        if (orderedRows.Count == 0)
+        // Map each Web row to the Application contract, parsing the free-text
+        // date here (the VM owns parsing). The handler does the single-pass
+        // author/genre resolution, the attach-existing vs create-new branch,
+        // and the empty/no-contributor validation throws.
+        var mappedRows = rows.Select(r =>
         {
-            throw new InvalidOperationException(
-                "Add at least one work — type a title for a new work, or pick an existing one from the dropdown.");
-        }
+            var pub = PartialDateParser.TryParse(r.FirstPublishedDate) ?? PartialDate.Empty;
+            return new WorkRow(
+                r.AttachedWorkId,
+                r.Title,
+                r.Subtitle,
+                pub.Date,
+                pub.Precision,
+                r.Authors,
+                r.Contributors.Select(c => new ContributorInput(c.Name, c.Role)).ToList(),
+                r.GenreIds);
+        }).ToList();
 
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books
-            .Include(b => b.Works)
-            .FirstOrDefaultAsync(b => b.Id == Book.Id);
-        if (book is null) return 0;
-
-        var alreadyAttachedIds = book.Works.Select(w => w.Id).ToHashSet();
-
-        var newRows = orderedRows.Where(r => r.AttachedWorkId is null).ToList();
-        var attachIds = orderedRows
-            .Where(r => r.AttachedWorkId is int)
-            .Select(r => r.AttachedWorkId!.Value)
-            .Distinct()
-            .ToList();
-
-        // Single-pass author + contributor name resolution so a person
-        // credited as Author on one row and Editor on another resolves
-        // to a single Author entity (mirrors BookAddViewModel:539).
-        var allNames = (singleAuthor ? sharedAuthors : newRows.SelectMany(r => r.Authors))
-            .Concat(newRows.SelectMany(r => r.Contributors.Select(c => c.Name)));
-        var allAuthors = await AuthorResolver.FindOrCreateAllAsync(allNames, db);
-        var byName = allAuthors.ToDictionary(a => a.Name, StringComparer.OrdinalIgnoreCase);
-
-        // Single-query genre resolution.
-        var allGenreIds = (singleGenre ? sharedGenreIds : newRows.SelectMany(r => r.GenreIds))
-            .Distinct()
-            .ToList();
-        var collectionGenres = allGenreIds.Count == 0
-            ? new List<Genre>()
-            : await db.Genres.Where(g => allGenreIds.Contains(g.Id)).ToListAsync();
-        var genresById = collectionGenres.ToDictionary(g => g.Id);
-
-        // Single-query existing-Work fetch.
-        var attachedWorks = attachIds.Count == 0
-            ? new List<Work>()
-            : await db.Works.Where(w => attachIds.Contains(w.Id)).ToListAsync();
-        var attachedById = attachedWorks.ToDictionary(w => w.Id);
-
-        var attachedCount = 0;
-        foreach (var row in orderedRows)
-        {
-            if (row.AttachedWorkId is int existingId)
-            {
-                if (alreadyAttachedIds.Contains(existingId)) continue; // already on this book — silent skip
-                if (!attachedById.TryGetValue(existingId, out var existing)) continue; // deleted between pick + save
-                book.Works.Add(existing);
-                alreadyAttachedIds.Add(existingId);
-                attachedCount++;
-                continue;
-            }
-
-            var rowAuthors = AuthorsFor(row)
-                .Select(n => n?.Trim())
-                .Where(n => !string.IsNullOrEmpty(n))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Select(n => byName[n!])
-                .ToList();
-            var rowContributors = row.Contributors
-                .Where(c => !string.IsNullOrWhiteSpace(c.Name) && byName.ContainsKey(c.Name.Trim()))
-                .Select(c => (Person: byName[c.Name.Trim()], c.Role))
-                .ToList();
-            if (rowAuthors.Count == 0 && rowContributors.Count == 0)
-            {
-                throw new InvalidOperationException(
-                    $"Work \"{row.Title}\" needs at least one contributor (author, editor, or other role).");
-            }
-            var rowGenres = GenresFor(row)
-                .Distinct()
-                .Where(genresById.ContainsKey)
-                .Select(id => genresById[id])
-                .ToList();
-            var rowFirstPub = PartialDateParser.TryParse(row.FirstPublishedDate) ?? PartialDate.Empty;
-            var work = new Work
-            {
-                Title = row.Title!.Trim(),
-                Subtitle = string.IsNullOrWhiteSpace(row.Subtitle) ? null : row.Subtitle!.Trim(),
-                FirstPublishedDate = rowFirstPub.Date,
-                FirstPublishedDatePrecision = rowFirstPub.Precision,
-                Genres = rowGenres,
-            };
-            work.AssignAuthorship(rowAuthors, rowContributors);
-            book.Works.Add(work);
-            attachedCount++;
-        }
-
-        await db.SaveChangesAsync();
+        var count = await dispatcher.Send(new AttachWorksToBook(
+            Book.Id, mappedRows, singleAuthor, singleGenre, sharedAuthors, sharedGenreIds));
         await InitializeAsync(Book.Id);
-        return attachedCount;
+        return count;
     }
 
     /// <summary>Remove a Work from this Book. If the Work isn'\''t attached
@@ -517,30 +386,8 @@ public class BookDetailViewModel(
     public async Task<string?> RemoveWorkFromBookAsync(int workId)
     {
         if (Book is null) return null;
-
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books.Include(b => b.Works).FirstOrDefaultAsync(b => b.Id == Book.Id);
-        if (book is null) return null;
-
-        var work = await db.Works.Include(w => w.Books).FirstOrDefaultAsync(w => w.Id == workId);
-        if (work is null) return null;
-        if (!work.Books.Any(b => b.Id == Book.Id)) return null;
-
-        var title = work.Title;
-        if (work.Books.Count <= 1)
-        {
-            // Only attached here → delete the Work outright. EF removes
-            // the join row, WorkAuthors (cascade), and any Genres join.
-            db.Works.Remove(work);
-        }
-        else
-        {
-            // Still attached elsewhere → just detach the join row.
-            book.Works.Remove(work);
-        }
-        await db.SaveChangesAsync();
-
-        await InitializeAsync(Book.Id);
+        var title = await dispatcher.Send(new RemoveWorkFromBook(Book.Id, workId));
+        if (title is not null) await InitializeAsync(Book.Id);
         return title;
     }
 
