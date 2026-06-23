@@ -206,4 +206,19 @@ public class WishlistCommandHandlersTests
         await using var db = _factory.CreateDbContext();
         Assert.Empty(db.Books);
     }
+
+    [Fact]
+    public async Task MarkWishlistItemBought_routesEditionThroughAggregate_trimsIsbnAndSeedsOneCopy()
+    {
+        // Padded ISBN — book.AddEdition should TrimToNull it and seed the first Copy.
+        var itemId = await SeedWishlistItemAsync("Reaper Man", "Terry Pratchett", isbn: "  9780552134644  ");
+
+        var bookId = await new MarkWishlistItemBoughtHandler(_factory).HandleAsync(new MarkWishlistItemBought(itemId));
+
+        await using var db = _factory.CreateDbContext();
+        var edition = await db.Editions.Include(e => e.Copies).SingleAsync(e => e.BookId == bookId);
+        Assert.Equal("9780552134644", edition.Isbn);   // normalised by the aggregate factory
+        var copy = Assert.Single(edition.Copies);       // factory guarantees the first copy
+        Assert.Equal(BookCondition.Good, copy.Condition);
+    }
 }

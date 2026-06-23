@@ -255,14 +255,7 @@ public class WishlistViewModel(
         var row = new WishlistRow(
             result.Id, result.Title, result.Author, result.Priority, result.PrimaryIsbn,
             result.CoverUrl, null, null);
-
-        // Insert at the front of the in-memory list so it shows up
-        // immediately without a full reload, then re-sort.
-        Wishlist.Insert(0, row);
-        Wishlist = Wishlist
-            .OrderByDescending(i => i.Priority)
-            .ThenBy(i => i.Title)
-            .ToList();
+        InsertSortedRow(row);
         return row;
     }
 
@@ -418,15 +411,23 @@ public class WishlistViewModel(
             isbn is null ? [] : [isbn], CoverUrl: null));
         if (result is null) return;
 
-        Wishlist.Insert(0, new WishlistRow(
+        InsertSortedRow(new WishlistRow(
             result.Id, result.Title, result.Author, result.Priority, result.PrimaryIsbn, result.CoverUrl, null, null));
+
+        QuickAdd = new();
+        ShowingQuickAdd = false;
+    }
+
+    // Insert a freshly-added row at the front then re-sort, so it surfaces
+    // immediately without a full reload. Shared by both add paths so their
+    // ordering can't drift apart.
+    private void InsertSortedRow(WishlistRow row)
+    {
+        Wishlist.Insert(0, row);
         Wishlist = Wishlist
             .OrderByDescending(i => i.Priority)
             .ThenBy(i => i.Title)
             .ToList();
-
-        QuickAdd = new();
-        ShowingQuickAdd = false;
     }
 
     public async Task RemoveFromWishlistAsync(int itemId)

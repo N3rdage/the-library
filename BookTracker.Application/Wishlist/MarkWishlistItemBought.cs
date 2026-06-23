@@ -34,15 +34,11 @@ public sealed class MarkWishlistItemBoughtHandler(IDbContextFactory<BookTrackerD
         db.Books.Add(book);
         db.Works.Add(work); // work.Books holds the link; book.Works isn't populated by the factory
 
+        // Route the Edition through the aggregate factory so it owns its first
+        // Copy and the ISBN is normalised — same seam every other add path uses.
         if (!string.IsNullOrWhiteSpace(item.Isbn))
-        {
-            book.Editions.Add(new Edition
-            {
-                Isbn = item.Isbn,
-                Format = BookFormat.TradePaperback,
-                Copies = [new Copy { Condition = BookCondition.Good }],
-            });
-        }
+            book.AddEdition(item.Isbn, BookFormat.TradePaperback, datePrinted: null,
+                DatePrecision.Day, coverUrl: null, publisher: null, BookCondition.Good);
 
         db.WishlistItems.Remove(item);
         await db.SaveChangesAsync(ct);
