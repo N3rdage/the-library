@@ -75,7 +75,7 @@ public sealed class AttachWorksToBookHandler(IDbContextFactory<BookTrackerDbCont
             {
                 if (alreadyAttachedIds.Contains(existingId)) continue;       // already on this book — silent skip
                 if (!attachedById.TryGetValue(existingId, out var existing)) continue; // deleted between pick + save
-                book.Works.Add(existing);
+                existing.AppearsIn(book);   // Work owns the relationship (C11); dedup handled by alreadyAttachedIds
                 alreadyAttachedIds.Add(existingId);
                 attachedCount++;
                 continue;
