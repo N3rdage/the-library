@@ -3,6 +3,7 @@
    series + order, and genres (via MudGenrePicker — PR B). *@
 
 @inject WorkEditDialogViewModel VM
+@inject ISnackbar Snackbar
 
 <MudDialog>
     <DialogContent>
@@ -99,6 +100,10 @@
         {
             await VM.SaveAsync();
             MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Couldn't save: {ex.Message}", Severity.Error);
         }
         finally
         {
