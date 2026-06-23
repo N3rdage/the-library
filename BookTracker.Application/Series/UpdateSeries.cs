@@ -30,6 +30,6 @@ public sealed class UpdateSeriesHandler(IDbContextFactory<BookTrackerDbContext> 
 
         series.UpdateDetails(
             command.Name, command.Author, command.Type, command.ExpectedCount, command.Description);
-        await db.SaveChangesAsync(ct);
+        await SeriesNameGuard.SaveTranslatingDuplicateAsync(db, command.Name, excludeId: command.SeriesId, ct);
     }
 }

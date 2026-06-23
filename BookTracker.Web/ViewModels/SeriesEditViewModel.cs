@@ -83,7 +83,10 @@ public class SeriesEditViewModel(
     public async Task<int?> SaveAsync(int? seriesId)
     {
         Saving = true;
+        // Clear both banners so a prior success + a new failure (or vice-versa)
+        // can't render at once.
         ErrorMessage = null;
+        SuccessMessage = null;
         // The aggregate normalises (trims name, nulls blank author/description,
         // drops ExpectedCount for a Collection), so pass the raw form values.
         try
@@ -160,6 +163,8 @@ public class SeriesEditViewModel(
 
     public async Task AddWorkToSeriesAsync(int seriesId, int workId)
     {
+        if (Works.Any(w => w.Id == workId)) return; // already shown (e.g. a double-click) — no dup row
+
         await dispatcher.Send(new AddWorkToSeries(seriesId, workId)); // handler assigns the next order
 
         // Reload the work to build its row (and read the order the handler set).

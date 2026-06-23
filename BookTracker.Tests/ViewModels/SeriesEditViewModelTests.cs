@@ -231,4 +231,39 @@ public class SeriesEditViewModelTests
         Assert.Equal(4, work!.SeriesOrder);
         Assert.Equal("4.5", work.SeriesOrderDisplay);
     }
+
+    [Fact]
+    public async Task SaveAsync_failedSaveAfterSuccess_clearsStaleSuccessMessage()
+    {
+        var seriesId = await SeedSeriesAsync("Keeper");
+        await SeedSeriesAsync("Taken");
+
+        var vm = NewVm();
+        await vm.InitializeAsync(seriesId);
+        vm.Input!.Name = "Keeper Renamed";
+        await vm.SaveAsync(seriesId);                          // success → SuccessMessage set
+        Assert.False(string.IsNullOrEmpty(vm.SuccessMessage));
+
+        vm.Input.Name = "Taken";                              // now collides with the other series
+        var id = await vm.SaveAsync(seriesId);
+
+        Assert.Null(id);
+        Assert.False(string.IsNullOrEmpty(vm.ErrorMessage));
+        Assert.True(string.IsNullOrEmpty(vm.SuccessMessage)); // no dual green+red banner
+    }
+
+    [Fact]
+    public async Task AddWorkToSeriesAsync_calledTwiceForSameWork_addsOneRow()
+    {
+        var seriesId = await SeedSeriesAsync();
+        var workId = await SeedWorkAsync("Sourcery");
+
+        var vm = NewVm();
+        await vm.InitializeAsync(seriesId);
+        await vm.AddWorkToSeriesAsync(seriesId, workId);
+        await vm.AddWorkToSeriesAsync(seriesId, workId);  // double-fire (e.g. double-click)
+
+        Assert.Single(vm.Works);
+        Assert.Equal(workId, vm.Works[0].Id);
+    }
 }
