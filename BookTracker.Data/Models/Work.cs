@@ -138,6 +138,15 @@ public class Work
         SeriesOrderDisplay = null;
     }
 
+    /// <summary>Repositions this Work within its current series — the integer sort
+    /// key plus an optional display override ("4.5") — without changing which
+    /// series it belongs to. Used by the manage-series-from-the-series-page flow.</summary>
+    public void SetSeriesOrder(int? order, string? orderDisplay)
+    {
+        SeriesOrder = order;
+        SeriesOrderDisplay = orderDisplay;
+    }
+
     /// <summary>Rebuilds WorkAuthors: one Author-role row per author (Order 0+),
     /// then per-role contributor rows (each role its own Order sequence). Requires
     /// ≥1 contributor across both lists — editor-only Works (dictionaries) are
