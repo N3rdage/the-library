@@ -127,8 +127,7 @@ public class Work
     public void AssignToSeries(int seriesId, int? order, string? orderDisplay)
     {
         SeriesId = seriesId;
-        SeriesOrder = order;
-        SeriesOrderDisplay = orderDisplay;
+        SetSeriesOrder(order, orderDisplay);
     }
 
     public void ClearSeries()

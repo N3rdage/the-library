@@ -30,7 +30,7 @@ public sealed class CreateSeriesHandler(IDbContextFactory<BookTrackerDbContext> 
         var series = SeriesAggregate.Create(
             command.Name, command.Author, command.Type, command.ExpectedCount, command.Description);
         db.Series.Add(series);
-        await db.SaveChangesAsync(ct);
+        await SeriesNameGuard.SaveTranslatingDuplicateAsync(db, command.Name, excludeId: null, ct);
         return series.Id;
     }
 }
