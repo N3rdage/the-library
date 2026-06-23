@@ -1,4 +1,5 @@
-using BookTracker.Application.Authors;
+using BookTracker.Application;
+using BookTracker.Application.Works;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
@@ -10,7 +11,9 @@ namespace BookTracker.Web.ViewModels;
 // Work's title, subtitle, author (find-or-create with typeahead), first
 // published date (PartialDateParser), series membership + order, and
 // genres (via MudGenrePicker — PR B).
-public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
+public class WorkEditDialogViewModel(
+    IDbContextFactory<BookTrackerDbContext> dbFactory,
+    IDispatcher dispatcher)
 {
     public bool NotFound { get; private set; }
     public int WorkId { get; private set; }
@@ -95,49 +98,28 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
     {
         if (NotFound || string.IsNullOrWhiteSpace(Title) || AuthorNames.All(string.IsNullOrWhiteSpace)) return;
 
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var work = await db.Works
-            .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .Include(w => w.Genres)
-            .FirstOrDefaultAsync(w => w.Id == WorkId);
-        if (work is null) return;
-
-        work.Title = Title.Trim();
-        work.Subtitle = string.IsNullOrWhiteSpace(Subtitle) ? null : Subtitle.Trim();
-
-        var authors = await AuthorResolver.FindOrCreateAllAsync(AuthorNames, db);
-        var contributors = new List<(Author Person, AuthorRole Role)>();
-        foreach (var entry in Contributors)
-        {
-            if (string.IsNullOrWhiteSpace(entry.Name)) continue;
-            var person = await AuthorResolver.FindOrCreateAsync(entry.Name, db);
-            contributors.Add((person, entry.Role));
-        }
-        if (authors.Count == 0 && contributors.Count == 0) return;
-        work.AssignAuthorship(authors, contributors);
-
         var parsed = PartialDateParser.TryParse(FirstPublishedDate) ?? PartialDate.Empty;
-        work.FirstPublishedDate = parsed.Date;
-        work.FirstPublishedDatePrecision = parsed.Precision;
-
-        work.SeriesId = SelectedSeriesId;
+        int? seriesOrder = null;
+        string? seriesOrderDisplay = null;
         if (SelectedSeriesId.HasValue)
-        {
-            (work.SeriesOrder, work.SeriesOrderDisplay) = SeriesOrderParser.Parse(SeriesOrderInput);
-        }
-        else
-        {
-            work.SeriesOrder = null;
-            work.SeriesOrderDisplay = null;
-        }
+            (seriesOrder, seriesOrderDisplay) = SeriesOrderParser.Parse(SeriesOrderInput);
 
-        // Reconcile Genres to match the selection. Load requested genres
-        // by id and replace the work's collection.
-        var desired = await db.Genres.Where(g => SelectedGenreIds.Contains(g.Id)).ToListAsync();
-        work.Genres.Clear();
-        foreach (var g in desired) work.Genres.Add(g);
+        var contributorInputs = Contributors
+            .Where(c => !string.IsNullOrWhiteSpace(c.Name))
+            .Select(c => new ContributorInput(c.Name, c.Role))
+            .ToList();
 
-        await db.SaveChangesAsync();
+        try
+        {
+            await dispatcher.Send(new UpdateWork(
+                WorkId, Title, Subtitle, AuthorNames, contributorInputs,
+                parsed.Date, parsed.Precision, SelectedGenreIds,
+                SelectedSeriesId, seriesOrder, seriesOrderDisplay));
+        }
+        catch (NotFoundException)
+        {
+            // Work deleted between opening the dialog and saving — no-op.
+        }
     }
 
     public record SeriesOption(int Id, string Name, SeriesType Type);

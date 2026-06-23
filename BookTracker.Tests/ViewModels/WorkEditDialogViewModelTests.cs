@@ -11,7 +11,7 @@ public class WorkEditDialogViewModelTests
     public async Task InitializeAsync_MissingId_MarksNotFound()
     {
         var factory = new TestDbContextFactory();
-        var vm = new WorkEditDialogViewModel(factory);
+        var vm = new WorkEditDialogViewModel(factory, TestDispatcher.For(factory));
 
         await vm.InitializeAsync(999);
 
@@ -41,7 +41,7 @@ public class WorkEditDialogViewModelTests
             workId = work.Id;
         }
 
-        var vm = new WorkEditDialogViewModel(factory);
+        var vm = new WorkEditDialogViewModel(factory, TestDispatcher.For(factory));
         await vm.InitializeAsync(workId);
 
         Assert.False(vm.NotFound);
@@ -71,7 +71,7 @@ public class WorkEditDialogViewModelTests
             workId = work.Id;
         }
 
-        var vm = new WorkEditDialogViewModel(factory);
+        var vm = new WorkEditDialogViewModel(factory, TestDispatcher.For(factory));
         await vm.InitializeAsync(workId);
         vm.Title = "  Mort  ";
         vm.Subtitle = "A Discworld Novel";
@@ -105,7 +105,7 @@ public class WorkEditDialogViewModelTests
             existingAuthorId = a1.Id;
         }
 
-        var vm = new WorkEditDialogViewModel(factory);
+        var vm = new WorkEditDialogViewModel(factory, TestDispatcher.For(factory));
         await vm.InitializeAsync(workId);
         vm.AuthorNames = ["Terry Pratchett"];
         await vm.SaveAsync();
@@ -129,7 +129,7 @@ public class WorkEditDialogViewModelTests
             workId = work.Id;
         }
 
-        var vm = new WorkEditDialogViewModel(factory);
+        var vm = new WorkEditDialogViewModel(factory, TestDispatcher.For(factory));
         await vm.InitializeAsync(workId);
         vm.AuthorNames = ["Brand New Author"];
         await vm.SaveAsync();
@@ -158,7 +158,7 @@ public class WorkEditDialogViewModelTests
             workId = work.Id;
         }
 
-        var vm = new WorkEditDialogViewModel(factory);
+        var vm = new WorkEditDialogViewModel(factory, TestDispatcher.For(factory));
         await vm.InitializeAsync(workId);
         vm.SelectedSeriesId = null;
         await vm.SaveAsync();
@@ -190,7 +190,7 @@ public class WorkEditDialogViewModelTests
             fantasyId = fantasy.Id;
         }
 
-        var vm = new WorkEditDialogViewModel(factory);
+        var vm = new WorkEditDialogViewModel(factory, TestDispatcher.For(factory));
         await vm.InitializeAsync(workId);
 
         Assert.Single(vm.SelectedGenreIds);
@@ -222,7 +222,7 @@ public class WorkEditDialogViewModelTests
             horrorId = horror.Id;
         }
 
-        var vm = new WorkEditDialogViewModel(factory);
+        var vm = new WorkEditDialogViewModel(factory, TestDispatcher.For(factory));
         await vm.InitializeAsync(workId);
         // Swap selection: drop Fantasy, add Horror.
         vm.SelectedGenreIds = [horrorId];
@@ -251,7 +251,7 @@ public class WorkEditDialogViewModelTests
             workId = work.Id;
         }
 
-        var vm = new WorkEditDialogViewModel(factory);
+        var vm = new WorkEditDialogViewModel(factory, TestDispatcher.For(factory));
         await vm.InitializeAsync(workId);
         var results = (await vm.SearchAuthorsAsync("Pratch", CancellationToken.None)).ToList();
 
