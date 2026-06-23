@@ -1,4 +1,5 @@
-using BookTracker.Application.Authors;
+using BookTracker.Application;
+using BookTracker.Application.Wishlist;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Shared.Catalog;
@@ -24,6 +25,7 @@ namespace BookTracker.Web.ViewModels;
 public class WishlistViewModel(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
     IBookLookupService lookup,
+    IDispatcher dispatcher,
     ILogger<WishlistViewModel> logger)
 {
     // ---- Search-and-add (PR B) ----
@@ -244,38 +246,16 @@ public class WishlistViewModel(
     /// the single source of truth).</summary>
     public async Task<WishlistRow?> AddCandidateAsync(WishlistCandidate candidate)
     {
-        if (string.IsNullOrWhiteSpace(candidate.Title)) return null;
-
-        await using var db = await dbFactory.CreateDbContextAsync();
-
-        var primaryIsbn = candidate.Isbns.FirstOrDefault();
-        var item = new WishlistItem
-        {
-            Title = candidate.Title.Trim(),
-            Author = string.IsNullOrWhiteSpace(candidate.Author) ? "Unknown" : candidate.Author.Trim(),
-            Priority = WishlistPriority.Medium,
-            Isbn = primaryIsbn, // legacy column — primary ISBN for back-compat display
-            CoverUrl = string.IsNullOrWhiteSpace(candidate.CoverUrl) ? null : candidate.CoverUrl,
-            Isbns = candidate.Isbns
-                .Where(i => !string.IsNullOrWhiteSpace(i))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Select(i => new WishlistItemIsbn { Isbn = i })
-                .ToList(),
-        };
-        db.WishlistItems.Add(item);
-        await db.SaveChangesAsync();
+        // Aggregate owns the normalisation (trim, "Unknown" fallback, ISBN
+        // dual-write); a blank title comes back as null.
+        var result = await dispatcher.Send(new AddWishlistItem(
+            candidate.Title, candidate.Author, WishlistPriority.Medium, candidate.Isbns, candidate.CoverUrl));
+        if (result is null) return null;
 
         var row = new WishlistRow(
-            item.Id, item.Title, item.Author, item.Priority, item.Isbn,
-            item.CoverUrl, null, null);
-
-        // Insert at the front of the in-memory list so it shows up
-        // immediately without a full reload, then re-sort.
-        Wishlist.Insert(0, row);
-        Wishlist = Wishlist
-            .OrderByDescending(i => i.Priority)
-            .ThenBy(i => i.Title)
-            .ToList();
+            result.Id, result.Title, result.Author, result.Priority, result.PrimaryIsbn,
+            result.CoverUrl, null, null);
+        InsertSortedRow(row);
         return row;
     }
 
@@ -386,54 +366,12 @@ public class WishlistViewModel(
     public async Task<int> AddSeriesSlotsToWishlistAsync(int seriesId, IReadOnlyList<int> slots)
     {
         ArgumentNullException.ThrowIfNull(slots);
-        var deduped = slots
-            .Where(s => s > 0)
-            .Distinct()
-            .OrderBy(s => s)
-            .ToList();
-        if (deduped.Count == 0) return 0;
+        // The handler owns the dedup, series lookup, and idempotency skip.
+        var added = await dispatcher.Send(new AddWishlistSeriesSlots(seriesId, slots));
 
-        await using var db = await dbFactory.CreateDbContextAsync();
-
-        var series = await db.Series.FindAsync(seriesId);
-        if (series is null)
-        {
-            logger.LogWarning("AddSeriesSlotsToWishlist called with unknown SeriesId {SeriesId}", seriesId);
-            return 0;
-        }
-
-        // Existing wishlist rows for this series + the requested slots —
-        // load in one query so the dedup pass doesn't N+1.
-        var alreadyWishlisted = await db.WishlistItems
-            .Where(w => w.SeriesId == seriesId && w.SeriesOrder != null && deduped.Contains(w.SeriesOrder!.Value))
-            .Select(w => w.SeriesOrder!.Value)
-            .ToListAsync();
-        var alreadySet = alreadyWishlisted.ToHashSet();
-
-        var author = string.IsNullOrWhiteSpace(series.Author) ? "Unknown" : series.Author.Trim();
-        var added = 0;
-        foreach (var slot in deduped)
-        {
-            if (alreadySet.Contains(slot)) continue;
-            db.WishlistItems.Add(new WishlistItem
-            {
-                Title = $"{series.Name} #{slot}",
-                Author = author,
-                Priority = WishlistPriority.Medium,
-                SeriesId = seriesId,
-                SeriesOrder = slot,
-            });
-            added++;
-        }
-
-        if (added == 0) return 0;
-
-        await db.SaveChangesAsync();
-
-        // If the wishlist is already loaded, refresh it so the new
-        // stubs surface immediately. Skip if not loaded — the user
-        // hasn't asked to see the list yet.
-        if (WishlistLoaded) await LoadWishlistAsync();
+        // If the wishlist is already loaded, refresh it so the new stubs surface
+        // immediately. Skip if not loaded — the user hasn't asked to see it yet.
+        if (added > 0 && WishlistLoaded) await LoadWishlistAsync();
 
         return added;
     }
@@ -465,93 +403,50 @@ public class WishlistViewModel(
     {
         if (string.IsNullOrWhiteSpace(QuickAdd.Title)) return;
 
-        await using var db = await dbFactory.CreateDbContextAsync();
+        // Same AddWishlistItem path as search-and-add — the typed ISBN (if any)
+        // goes in as the single known ISBN so PR D's scan-flag catches it too.
         var isbn = string.IsNullOrWhiteSpace(QuickAdd.Isbn) ? null : QuickAdd.Isbn.Trim();
-        var item = new WishlistItem
-        {
-            Title = QuickAdd.Title.Trim(),
-            Author = string.IsNullOrWhiteSpace(QuickAdd.Author) ? "Unknown" : QuickAdd.Author.Trim(),
-            Priority = QuickAdd.Priority,
-            Isbn = isbn,
-            // Mirror the typed ISBN into the new table so PR D's scan-flag
-            // catches QuickAdd-entered wishlist hits the same way it
-            // catches search-and-add ones.
-            Isbns = isbn is null ? [] : [new WishlistItemIsbn { Isbn = isbn }],
-        };
+        var result = await dispatcher.Send(new AddWishlistItem(
+            QuickAdd.Title, QuickAdd.Author, QuickAdd.Priority,
+            isbn is null ? [] : [isbn], CoverUrl: null));
+        if (result is null) return;
 
-        db.WishlistItems.Add(item);
-        await db.SaveChangesAsync();
-
-        Wishlist.Insert(0, new WishlistRow(
-            item.Id, item.Title, item.Author, item.Priority, item.Isbn, null, null, null));
-        Wishlist = Wishlist
-            .OrderByDescending(i => i.Priority)
-            .ThenBy(i => i.Title)
-            .ToList();
+        InsertSortedRow(new WishlistRow(
+            result.Id, result.Title, result.Author, result.Priority, result.PrimaryIsbn, result.CoverUrl, null, null));
 
         QuickAdd = new();
         ShowingQuickAdd = false;
     }
 
+    // Insert a freshly-added row at the front then re-sort, so it surfaces
+    // immediately without a full reload. Shared by both add paths so their
+    // ordering can't drift apart.
+    private void InsertSortedRow(WishlistRow row)
+    {
+        Wishlist.Insert(0, row);
+        Wishlist = Wishlist
+            .OrderByDescending(i => i.Priority)
+            .ThenBy(i => i.Title)
+            .ToList();
+    }
+
     public async Task RemoveFromWishlistAsync(int itemId)
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var item = await db.WishlistItems.FindAsync(itemId);
-        if (item is not null)
-        {
-            db.WishlistItems.Remove(item);
-            await db.SaveChangesAsync();
-        }
+        await dispatcher.Send(new RemoveWishlistItem(itemId));
         Wishlist.RemoveAll(i => i.Id == itemId);
     }
 
     /// <summary>
     /// Marks a wishlist item as "bought" — creates a Book + Edition + Copy
-    /// with follow-up tag and default values, then removes the wishlist item.
-    /// Returns the new book ID for navigation.
+    /// with the follow-up tag and default values, then removes the wishlist item.
+    /// Returns the new book ID for navigation, or null if the item was already
+    /// gone (the handler loads it by id, so a double-click can't create a dup book).
     /// </summary>
     public async Task<int?> MarkAsBoughtAsync(WishlistRow item)
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-
-        var followUpTag = await db.Tags.FirstOrDefaultAsync(t => t.Name == "follow-up");
-        if (followUpTag is null)
-        {
-            followUpTag = new Tag { Name = "follow-up" };
-            db.Tags.Add(followUpTag);
-        }
-
-        var author = await AuthorResolver.FindOrCreateAsync(item.Author, db);
-        var work = new Work { Title = item.Title };
-        work.AssignAuthorship([author]);
-        var book = new Book
-        {
-            Title = item.Title,
-            Tags = [followUpTag],
-            Editions = [],
-            Works = [work]
-        };
-
-        if (!string.IsNullOrWhiteSpace(item.Isbn))
-        {
-            book.Editions.Add(new Edition
-            {
-                Isbn = item.Isbn,
-                Format = BookFormat.TradePaperback,
-                Copies = [new Copy { Condition = BookCondition.Good }]
-            });
-        }
-
-        db.Books.Add(book);
-
-        var wishlistItem = await db.WishlistItems.FindAsync(item.Id);
-        if (wishlistItem is not null)
-            db.WishlistItems.Remove(wishlistItem);
-
-        await db.SaveChangesAsync();
-
+        var bookId = await dispatcher.Send(new MarkWishlistItemBought(item.Id));
         Wishlist.RemoveAll(i => i.Id == item.Id);
-        return book.Id;
+        return bookId;
     }
 
     public static string PriorityBadgeClass(WishlistPriority p) => p switch

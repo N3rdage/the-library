@@ -54,6 +54,67 @@ public class WishlistItem
 
     /// <summary>Position in the series this item would fill.</summary>
     public int? SeriesOrder { get; set; }
+
+    // --- Aggregate behaviour -------------------------------------------------
+    // WishlistItem is a small aggregate. Its one non-obvious invariant is the
+    // ISBN dual-write: the legacy single-column Isbn (back-compat) must stay the
+    // primary of the Isbns table, and the table must be de-duplicated. SetIsbns
+    // is the single place that rule lives — both add paths route through it.
+    // Author is normalised to a non-blank value ("Unknown" fallback) since the
+    // column is Required. See docs/BACKEND-REFACTOR-DESIGN.md.
+
+    /// <summary>Creates a wishlist item from a search candidate or a quick-add:
+    /// title (required), author (blank → "Unknown"), priority, the known ISBNs
+    /// (dual-written via <see cref="SetIsbns"/>), and an optional cover URL.</summary>
+    public static WishlistItem Create(
+        string? title, string? author, WishlistPriority priority,
+        IEnumerable<string> isbns, string? coverUrl)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            throw new DomainRuleException("A wishlist item needs a title.");
+
+        var item = new WishlistItem
+        {
+            Title = title.Trim(),
+            Author = string.IsNullOrWhiteSpace(author) ? "Unknown" : author.Trim(),
+            Priority = priority,
+            CoverUrl = coverUrl.TrimToNull(),
+        };
+        item.SetIsbns(isbns);
+        return item;
+    }
+
+    /// <summary>Creates a placeholder stub for a missing numbered series slot —
+    /// titled "{series} #{slot}", authored as the series' display author, linked
+    /// to the series + slot so it renders with the badge and lines up against
+    /// gap detection. No ISBNs or cover (the user enriches it later).</summary>
+    public static WishlistItem CreateSeriesSlot(int seriesId, string seriesName, int slot, string? seriesAuthor)
+    {
+        return new WishlistItem
+        {
+            Title = $"{seriesName} #{slot}",
+            Author = string.IsNullOrWhiteSpace(seriesAuthor) ? "Unknown" : seriesAuthor.Trim(),
+            Priority = WishlistPriority.Medium,
+            SeriesId = seriesId,
+            SeriesOrder = slot,
+        };
+    }
+
+    /// <summary>Replaces the known-ISBN set, enforcing the dual-write: the legacy
+    /// <see cref="Isbn"/> column becomes the primary (first non-blank), and
+    /// <see cref="Isbns"/> holds the trimmed, case-insensitively de-duplicated
+    /// list. Empty input clears both.</summary>
+    public void SetIsbns(IEnumerable<string> isbns)
+    {
+        var clean = (isbns ?? [])
+            .Where(i => !string.IsNullOrWhiteSpace(i))
+            .Select(i => i.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        Isbn = clean.FirstOrDefault();   // legacy column — primary ISBN for back-compat
+        Isbns = clean.Select(i => new WishlistItemIsbn { Isbn = i }).ToList();
+    }
 }
 
 /// <summary>One row per ISBN known for a wishlisted book. Many-to-one

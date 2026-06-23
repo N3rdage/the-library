@@ -2,6 +2,7 @@ using BookTracker.Application;
 using BookTracker.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace BookTracker.Tests;
 
@@ -17,6 +18,7 @@ internal static class TestDispatcher
     {
         var services = new ServiceCollection();
         services.AddSingleton(factory);
+        services.AddLogging(); // handlers may inject ILogger<T> (e.g. AddWishlistSeriesSlots)
         services.AddApplicationLayer();
         return services.BuildServiceProvider().GetRequiredService<IDispatcher>();
     }
