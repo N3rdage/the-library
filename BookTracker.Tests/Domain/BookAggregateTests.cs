@@ -151,20 +151,24 @@ public class BookAggregateTests
     }
 
     [Fact]
-    public void SoftDelete_clearsJoinsAndStampsTombstone()
+    public void SoftDelete_clearsTagsAndEditionsAndStampsTombstone_butLeavesWorksToTheHandler()
     {
         var book = new Book
         {
             Title = "X",
             Works = { new Work { Title = "W" } },
             Tags = { new Tag { Name = "t" } },
+            Editions = { new Edition { Copies = { new Copy() } } },
         };
 
         book.SoftDelete();
 
-        Assert.Empty(book.Works);
         Assert.Empty(book.Tags);
+        Assert.Empty(book.Editions);
         Assert.NotNull(book.DeletedAt);
+        // Works are a shared, ref-counted aggregate — SoftDelete leaves them; the
+        // DeleteBookHandler detaches and orphan-deletes them.
+        Assert.Single(book.Works);
     }
 
     [Fact]

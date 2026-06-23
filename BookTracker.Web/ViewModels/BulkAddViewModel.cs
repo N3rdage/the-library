@@ -216,7 +216,7 @@ public class BulkAddViewModel(
             Subtitle = row.Subtitle,
         };
         // Dual-write: Work.Author = lead (legacy compat); Work.WorkAuthors = all.
-        AuthorResolver.AssignAuthors(work, authors);
+        work.AssignAuthorship(authors);
 
         // Series attachment if the user accepted the suggestion on this row.
         // Mirrors BookAddViewModel.SaveAsync: existing local series wins via

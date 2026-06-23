@@ -114,7 +114,7 @@ public class WorkEditDialogViewModel(IDbContextFactory<BookTrackerDbContext> dbF
             contributors.Add((person, entry.Role));
         }
         if (authors.Count == 0 && contributors.Count == 0) return;
-        AuthorResolver.AssignAuthors(work, authors, contributors);
+        work.AssignAuthorship(authors, contributors);
 
         var parsed = PartialDateParser.TryParse(FirstPublishedDate) ?? PartialDate.Empty;
         work.FirstPublishedDate = parsed.Date;

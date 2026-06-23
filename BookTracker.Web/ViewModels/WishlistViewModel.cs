@@ -523,7 +523,7 @@ public class WishlistViewModel(
 
         var author = await AuthorResolver.FindOrCreateAsync(item.Author, db);
         var work = new Work { Title = item.Title };
-        AuthorResolver.AssignAuthors(work, [author]);
+        work.AssignAuthorship([author]);
         var book = new Book
         {
             Title = item.Title,

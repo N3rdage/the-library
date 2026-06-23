@@ -154,18 +154,17 @@ public class Book
     }
 
     /// <summary>Soft-deletes the book: hard-removes the Editions (their Copies
-    /// cascade), clears the Work/Tag join rows, and stamps the tombstone. The
-    /// husk row survives, hidden by the global query filter, so the delta-sync
-    /// endpoint can emit it in <c>deletedIds[]</c>. The handler need only load
-    /// the children (so EF tracks the removals) and save.</summary>
+    /// cascade), clears the Tag join rows, and stamps the tombstone. The husk row
+    /// survives, hidden by the global query filter, so the delta-sync endpoint can
+    /// emit it in <c>deletedIds[]</c>. Works are NOT touched here — they're a
+    /// shared aggregate with a ref-count lifecycle, so DeleteBookHandler detaches
+    /// them and deletes any that become orphaned.</summary>
     public void SoftDelete()
     {
         // Severing the required Book→Edition relationship orphan-deletes each
         // Edition (and its Copies cascade at the DB level) — same mechanism
-        // RemoveCopy already relies on. Keeps the whole soft-delete on the
-        // aggregate rather than splitting it with the handler.
+        // RemoveCopy already relies on.
         Editions.Clear();
-        Works.Clear();
         Tags.Clear();
         DeletedAt = DateTime.UtcNow;
     }

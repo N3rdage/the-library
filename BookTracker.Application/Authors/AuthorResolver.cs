@@ -68,60 +68,7 @@ public static class AuthorResolver
             .ToList();
     }
 
-    /// <summary>
-    /// Replace Work.WorkAuthors with one Author-role join row per author
-    /// (Order ascending from 0), optionally followed by non-Author contributor
-    /// rows. Each non-Author role gets its own Order sequence (per-role) so
-    /// "first translator" and "first illustrator" both sit at Order 0 within
-    /// their role bucket. Caller is responsible for ensuring authors and
-    /// contributor people come from FindOrCreate* (so brand-new ones are
-    /// already attached to the DbContext) and for SaveChangesAsync.
-    /// Editor-only Works (e.g. dictionaries) are valid — at least one
-    /// contributor of any role must be supplied across the two lists.
-    /// </summary>
-    public static void AssignAuthors(
-        Work work,
-        IReadOnlyList<Author> authors,
-        IReadOnlyList<(Author Person, AuthorRole Role)>? additionalContributors = null)
-    {
-        var hasNonAuthor = additionalContributors is { Count: > 0 }
-            && additionalContributors.Any(c => c.Role != AuthorRole.Author);
-        if (authors.Count == 0 && !hasNonAuthor)
-        {
-            throw new ArgumentException("At least one contributor required (author, editor, or other role).", nameof(authors));
-        }
-
-        work.WorkAuthors.Clear();
-        for (var i = 0; i < authors.Count; i++)
-        {
-            work.WorkAuthors.Add(new WorkAuthor
-            {
-                Author = authors[i],
-                Order = i,
-                Role = AuthorRole.Author,
-            });
-        }
-
-        if (additionalContributors is null || additionalContributors.Count == 0) return;
-
-        // Per-role Order sequencing and (Author, Role) dedup. Reference-equality
-        // dedup on Author works because callers route every name through
-        // FindOrCreate* against the same DbContext — identical names produce
-        // identical Author instances.
-        var orderByRole = new Dictionary<AuthorRole, int>();
-        var seen = new HashSet<(Author Person, AuthorRole Role)>();
-        foreach (var (person, role) in additionalContributors)
-        {
-            if (role == AuthorRole.Author) continue;       // belongs in the main list
-            if (!seen.Add((person, role))) continue;       // duplicate (Author, Role) pair
-            var next = orderByRole.GetValueOrDefault(role, 0);
-            work.WorkAuthors.Add(new WorkAuthor
-            {
-                Author = person,
-                Order = next,
-                Role = role,
-            });
-            orderByRole[role] = next + 1;
-        }
-    }
+    // NOTE: the former AssignAuthors(work, authors, contributors) now lives on
+    // the Work aggregate as Work.AssignAuthorship (the ≥1-contributor invariant
+    // belongs on the aggregate). Resolve names here, then call work.AssignAuthorship.
 }

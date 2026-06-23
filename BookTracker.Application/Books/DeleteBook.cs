@@ -1,4 +1,5 @@
 using BookTracker.Data;
+using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Application.Books;
@@ -6,7 +7,9 @@ namespace BookTracker.Application.Books;
 /// <summary>Soft-deletes a Book. The Book row survives as a tombstone
 /// (DeletedAt stamped, hidden by the global query filter) so the catalog
 /// snapshot can emit it in deletedIds[]; its Editions (and Copies via cascade)
-/// are hard-removed, and the Work/Tag join rows are cleared.</summary>
+/// are hard-removed, and its Tag joins cleared. Works are detached via the
+/// ref-count lifecycle — a Work left in no other book is orphaned and deleted,
+/// a Work still on another book survives detached.</summary>
 public sealed record DeleteBook(int BookId) : ICommand;
 
 public sealed class DeleteBookHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
@@ -18,13 +21,20 @@ public sealed class DeleteBookHandler(IDbContextFactory<BookTrackerDbContext> db
         var book = await db.Books
             .Include(b => b.Editions)
             .Include(b => b.Tags)
-            .Include(b => b.Works)
+            .Include(b => b.Works).ThenInclude(w => w.Books)   // Work ref counts
             .FirstOrDefaultAsync(b => b.Id == command.BookId, ct)
             ?? throw new NotFoundException($"Book {command.BookId} not found.");
 
-        // SoftDelete() owns the whole operation — orphan-removes the Editions
-        // (Copies cascade), clears the Work/Tag joins, stamps the tombstone.
-        // The Includes above load the children so EF tracks the removals.
+        // Detach the book's Works; any Work now in no book (ref count 0) is
+        // orphaned and deleted — the same lifecycle RemoveWorkFromBook uses, so
+        // deleting a book takes its exclusive Works with it but leaves shared ones.
+        var orphaned = new List<Work>();
+        foreach (var work in book.Works.ToList())
+            if (work.RemoveFrom(book)) orphaned.Add(work);
+        if (orphaned.Count > 0) db.Works.RemoveRange(orphaned);
+
+        // SoftDelete() orphan-removes the Editions (Copies cascade), clears the
+        // Tag joins, and stamps the tombstone.
         book.SoftDelete();
 
         await db.SaveChangesAsync(ct);
