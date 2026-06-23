@@ -14,7 +14,7 @@ public class WishlistViewModelTests
     private readonly IBookLookupService _lookup = Substitute.For<IBookLookupService>();
 
     private WishlistViewModel CreateVm() =>
-        new(_factory, _lookup, NullLogger<WishlistViewModel>.Instance);
+        new(_factory, _lookup, TestDispatcher.For(_factory), NullLogger<WishlistViewModel>.Instance);
 
     [Fact]
     public async Task SearchAsync_IsbnShapedQuery_CallsIsbnLookupAndPopulatesSingleCandidate()
