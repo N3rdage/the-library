@@ -1,4 +1,6 @@
 using System.ComponentModel.DataAnnotations;
+using BookTracker.Application;
+using BookTracker.Application.Series;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
@@ -10,13 +12,21 @@ namespace BookTracker.Web.ViewModels;
 // Work in the series (in order) along with the Book(s) that contain it,
 // so a short story republished in three compendiums shows once with three
 // book references.
-public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
+//
+// Writes go through the Application layer (PR3b): create/edit/delete and the
+// work-membership ops dispatch commands; reads (Initialize, SearchWorks) stay
+// on the DbContext factory. The in-memory Works list is kept in sync after each
+// mutation so the page doesn't reload.
+public class SeriesEditViewModel(
+    IDbContextFactory<BookTrackerDbContext> dbFactory,
+    IDispatcher dispatcher)
 {
     public SeriesFormInput? Input { get; private set; }
     public List<SeriesWorkRow> Works { get; private set; } = [];
     public bool NotFound { get; private set; }
     public bool Saving { get; private set; }
     public string? SuccessMessage { get; set; }
+    public string? ErrorMessage { get; set; }
     public bool IsNew { get; private set; }
 
     public bool ConfirmingDeleteSeries { get; set; }
@@ -73,40 +83,35 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
     public async Task<int?> SaveAsync(int? seriesId)
     {
         Saving = true;
+        ErrorMessage = null;
+        // The aggregate normalises (trims name, nulls blank author/description,
+        // drops ExpectedCount for a Collection), so pass the raw form values.
         try
         {
-            await using var db = await dbFactory.CreateDbContextAsync();
-
             if (IsNew)
             {
-                var series = new Series
-                {
-                    Name = Input!.Name!.Trim(),
-                    Author = string.IsNullOrWhiteSpace(Input.Author) ? null : Input.Author.Trim(),
-                    Type = Input.Type,
-                    ExpectedCount = Input.Type == SeriesType.Series ? Input.ExpectedCount : null,
-                    Description = string.IsNullOrWhiteSpace(Input.Description) ? null : Input.Description.Trim()
-                };
-
-                db.Series.Add(series);
-                await db.SaveChangesAsync();
-                return series.Id;
+                return await dispatcher.Send(new CreateSeries(
+                    Input!.Name!, Input.Author, Input.Type, Input.ExpectedCount, Input.Description));
             }
             else
             {
-                var series = await db.Series.FindAsync(seriesId!.Value);
-                if (series is null) { NotFound = true; return null; }
-
-                series.Name = Input!.Name!.Trim();
-                series.Author = string.IsNullOrWhiteSpace(Input.Author) ? null : Input.Author.Trim();
-                series.Type = Input.Type;
-                series.ExpectedCount = Input.Type == SeriesType.Series ? Input.ExpectedCount : null;
-                series.Description = string.IsNullOrWhiteSpace(Input.Description) ? null : Input.Description.Trim();
-
-                await db.SaveChangesAsync();
+                await dispatcher.Send(new UpdateSeries(
+                    seriesId!.Value, Input!.Name!, Input.Author, Input.Type, Input.ExpectedCount, Input.Description));
                 SuccessMessage = "Series saved successfully.";
                 return seriesId;
             }
+        }
+        catch (DomainRuleException ex)
+        {
+            // Duplicate (or blank) name — surface the friendly message and stay put.
+            ErrorMessage = ex.Message;
+            return null;
+        }
+        catch (NotFoundException)
+        {
+            // Series deleted out from under the editor between load and save.
+            NotFound = true;
+            return null;
         }
         finally
         {
@@ -119,13 +124,7 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
         Deleting = true;
         try
         {
-            await using var db = await dbFactory.CreateDbContextAsync();
-            var series = await db.Series.FindAsync(seriesId);
-            if (series is not null)
-            {
-                db.Series.Remove(series);
-                await db.SaveChangesAsync();
-            }
+            await dispatcher.Send(new DeleteSeries(seriesId)); // idempotent — no-op if already gone
             return true;
         }
         finally
@@ -161,6 +160,9 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
 
     public async Task AddWorkToSeriesAsync(int seriesId, int workId)
     {
+        await dispatcher.Send(new AddWorkToSeries(seriesId, workId)); // handler assigns the next order
+
+        // Reload the work to build its row (and read the order the handler set).
         await using var db = await dbFactory.CreateDbContextAsync();
         var work = await db.Works
             .Include(w => w.Books)
@@ -168,50 +170,28 @@ public class SeriesEditViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
             .FirstOrDefaultAsync(w => w.Id == workId);
         if (work is null) return;
 
-        var nextOrder = Works.Count > 0 ? Works.Max(w => w.SeriesOrder ?? 0) + 1 : 1;
-
-        work.SeriesId = seriesId;
-        work.SeriesOrder = nextOrder;
-        work.SeriesOrderDisplay = null;
-        await db.SaveChangesAsync();
-
         Works.Add(new SeriesWorkRow(
             work.Id,
             work.Title,
             WorkAuthorshipFormatter.Display(work),
-            nextOrder,
-            null,
+            work.SeriesOrder,
+            work.SeriesOrderDisplay,
             work.Books.Select(b => new ContainingBook(b.Id, b.Title)).ToList()));
         WorkSearchResults.RemoveAll(r => r.Id == workId);
     }
 
     public async Task RemoveWorkFromSeriesAsync(int workId)
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var work = await db.Works.FindAsync(workId);
-        if (work is not null)
-        {
-            work.SeriesId = null;
-            work.SeriesOrder = null;
-            await db.SaveChangesAsync();
-        }
+        await dispatcher.Send(new RemoveWorkFromSeries(workId));
         Works.RemoveAll(w => w.Id == workId);
     }
 
     public async Task UpdateWorkOrderAsync(int workId, string? rawOrder)
     {
-        // Free-text so "4.5" interquels survive: parse into the integer sort
-        // key + an optional display override.
+        // Free-text so "4.5" interquels survive: the VM owns parsing into the
+        // integer sort key + optional display override; the handler just stores them.
         var (order, display) = SeriesOrderParser.Parse(rawOrder);
-
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var work = await db.Works.FindAsync(workId);
-        if (work is not null)
-        {
-            work.SeriesOrder = order;
-            work.SeriesOrderDisplay = display;
-            await db.SaveChangesAsync();
-        }
+        await dispatcher.Send(new SetWorkSeriesOrder(workId, order, display));
 
         var row = Works.FirstOrDefault(w => w.Id == workId);
         if (row is not null)

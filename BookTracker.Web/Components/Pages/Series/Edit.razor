@@ -31,6 +31,14 @@ else
         </div>
     }
 
+    @if (!string.IsNullOrEmpty(VM.ErrorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @VM.ErrorMessage
+            <button type="button" class="btn-close" @onclick="() => VM.ErrorMessage = null" aria-label="Close"></button>
+        </div>
+    }
+
     <EditForm Model="VM.Input" OnValidSubmit="SaveAsync" FormName="editSeries">
         <DataAnnotationsValidator />
 
