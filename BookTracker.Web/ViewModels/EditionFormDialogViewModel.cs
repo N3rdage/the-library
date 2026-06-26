@@ -1,5 +1,6 @@
 using BookTracker.Application;
 using BookTracker.Application.Books;
+using BookTracker.Application.Formatting;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
