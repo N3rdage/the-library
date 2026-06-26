@@ -1,6 +1,5 @@
-using BookTracker.Data;
-using BookTracker.Data.Models;
-using Microsoft.EntityFrameworkCore;
+using BookTracker.Application;
+using BookTracker.Application.Publishers;
 
 namespace BookTracker.Web.ViewModels;
 
@@ -12,14 +11,15 @@ namespace BookTracker.Web.ViewModels;
 // merge (target absorbs all editions, source deleted). Imprint-style
 // aliasing (Pan → Macmillan) is a future extension.
 //
-// Each row can be expanded to show a drill-down of the editions this
-// publisher covers. Editions load lazily on first expand and the cache is
-// invalidated whenever a structural change (rename / merge / delete)
-// could affect what's displayed.
-public class PublisherListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
+// Reads go through GetPublisherList / GetPublisherEditions; writes dispatch
+// RenamePublisher / DeleteUnusedPublisher / MergePublishers (PR6b-2). The VM
+// keeps only presentation state — the per-row expand set and the lazily-loaded
+// edition-detail cache, invalidated whenever a structural change could affect
+// what's displayed.
+public class PublisherListViewModel(IDispatcher dispatcher)
 {
     public bool Loading { get; private set; } = true;
-    public List<PublisherRow> Publishers { get; private set; } = [];
+    public IReadOnlyList<PublisherRow> Publishers { get; private set; } = [];
     public string? SuccessMessage { get; set; }
 
     public HashSet<int> ExpandedPublisherIds { get; private set; } = [];
@@ -28,20 +28,7 @@ public class PublisherListViewModel(IDbContextFactory<BookTrackerDbContext> dbFa
     public async Task LoadAsync()
     {
         Loading = true;
-        await using var db = await dbFactory.CreateDbContextAsync();
-
-        // OrderBy before Select so EF orders on the source entity column, not on
-        // a property of a constructed PublisherRow. EF Core 10.x can't translate
-        // OrderBy-on-record-projection when the record's constructor includes a
-        // navigation aggregate (here `p.Editions.Count`) — it tries to invoke
-        // the constructor inside the ORDER BY and fails. Anonymous types still
-        // translate fine because EF maps property names back to source columns;
-        // record positional constructors break that mapping.
-        Publishers = await db.Publishers
-            .OrderBy(p => p.Name)
-            .Select(p => new PublisherRow(p.Id, p.Name, p.Editions.Count))
-            .ToListAsync();
-
+        Publishers = await dispatcher.Query(new GetPublisherList());
         Loading = false;
     }
 
@@ -51,136 +38,42 @@ public class PublisherListViewModel(IDbContextFactory<BookTrackerDbContext> dbFa
         ExpandedPublisherIds.Add(publisherId);
         if (!DetailByPublisherId.ContainsKey(publisherId))
         {
-            DetailByPublisherId[publisherId] = await LoadDetailAsync(publisherId);
+            DetailByPublisherId[publisherId] = await dispatcher.Query(new GetPublisherEditions(publisherId));
         }
-    }
-
-    private async Task<PublisherDetail> LoadDetailAsync(int publisherId)
-    {
-        await using var db = await dbFactory.CreateDbContextAsync();
-
-        var editions = await db.Editions
-            .Where(e => e.PublisherId == publisherId)
-            .Include(e => e.Book)
-            .Include(e => e.Copies)
-            .OrderBy(e => e.Book.Title)
-            .ThenBy(e => e.DatePrinted)
-            .Select(e => new EditionRow(
-                e.Id,
-                e.BookId,
-                e.Book.Title,
-                e.Isbn,
-                e.Format,
-                e.DatePrinted,
-                e.CoverUrl,
-                e.Copies.Count))
-            .ToListAsync();
-
-        return new PublisherDetail(editions);
     }
 
     public async Task RenameAsync(int publisherId, string newName)
     {
-        var trimmed = newName.Trim();
-        if (string.IsNullOrEmpty(trimmed)) return;
-
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var publisher = await db.Publishers.FirstOrDefaultAsync(p => p.Id == publisherId);
-        if (publisher is null) return;
-
-        // Publisher.Name has a unique index — guard against colliding with
-        // another row explicitly so the user gets a helpful message instead
-        // of a DB exception.
-        var clash = await db.Publishers.AnyAsync(p => p.Id != publisherId && p.Name == trimmed);
-        if (clash)
-        {
-            SuccessMessage = $"A publisher named \"{trimmed}\" already exists. Use the merge action to combine them.";
-            return;
-        }
-
-        publisher.Name = trimmed;
-        await db.SaveChangesAsync();
-        SuccessMessage = $"Renamed to \"{trimmed}\".";
-        InvalidateDetailsFor(publisherId);
-        await LoadAsync();
+        var result = await dispatcher.Send(new RenamePublisher(publisherId, newName));
+        await ApplyAsync(result, publisherId);
     }
 
     public async Task DeleteUnusedAsync(int publisherId)
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var publisher = await db.Publishers
-            .Include(p => p.Editions)
-            .FirstOrDefaultAsync(p => p.Id == publisherId);
-        if (publisher is null) return;
-
-        // Edition.PublisherId has OnDelete.Restrict, so this would blow up
-        // at the DB if attempted with editions attached. Guard at VM level
-        // and surface a helpful message.
-        if (publisher.Editions.Count > 0)
-        {
-            SuccessMessage = $"Can't delete \"{publisher.Name}\" — {publisher.Editions.Count} edition{(publisher.Editions.Count == 1 ? "" : "s")} still reference it. Merge it into another publisher instead.";
-            return;
-        }
-
-        var name = publisher.Name;
-        db.Publishers.Remove(publisher);
-        await db.SaveChangesAsync();
-        SuccessMessage = $"Deleted unused publisher \"{name}\".";
-        InvalidateDetailsFor(publisherId);
-        await LoadAsync();
+        var result = await dispatcher.Send(new DeleteUnusedPublisher(publisherId));
+        await ApplyAsync(result, publisherId);
     }
 
     public async Task MergeAsync(int sourceId, int targetId)
     {
-        if (sourceId == targetId) return;
+        var result = await dispatcher.Send(new MergePublishers(sourceId, targetId));
+        await ApplyAsync(result, sourceId, targetId);
+    }
 
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var source = await db.Publishers
-            .Include(p => p.Editions)
-            .FirstOrDefaultAsync(p => p.Id == sourceId);
-        var target = await db.Publishers.FirstOrDefaultAsync(p => p.Id == targetId);
-        if (source is null || target is null) return;
-
-        var editionCount = source.Editions.Count;
-
-        // Reassign then delete in a single transaction so we never leave a
-        // half-merged state if SaveChanges fails partway. Matches the
-        // pattern in AuthorMergeService.
-        await using var tx = await db.Database.BeginTransactionAsync();
-
-        foreach (var edition in source.Editions)
+    // Surface the toast and, when the command changed data, drop the stale
+    // drill-down cache for the affected rows and reload the list.
+    private async Task ApplyAsync(PublisherAdminResult result, params int[] affectedIds)
+    {
+        if (result.Message is not null) SuccessMessage = result.Message;
+        if (result.Changed)
         {
-            edition.PublisherId = targetId;
+            InvalidateDetailsFor(affectedIds);
+            await LoadAsync();
         }
-        db.Publishers.Remove(source);
-
-        await db.SaveChangesAsync();
-        await tx.CommitAsync();
-
-        SuccessMessage = $"Merged \"{source.Name}\" into \"{target.Name}\" — {editionCount} edition{(editionCount == 1 ? "" : "s")} reassigned.";
-        InvalidateDetailsFor(sourceId, targetId);
-        await LoadAsync();
     }
 
     private void InvalidateDetailsFor(params int[] publisherIds)
     {
         foreach (var id in publisherIds) DetailByPublisherId.Remove(id);
     }
-
-    public record PublisherRow(int Id, string Name, int EditionCount);
-
-    public record PublisherDetail(IReadOnlyList<EditionRow> Editions)
-    {
-        public static PublisherDetail Empty => new([]);
-    }
-
-    public record EditionRow(
-        int Id,
-        int BookId,
-        string BookTitle,
-        string? Isbn,
-        BookFormat Format,
-        DateOnly? DatePrinted,
-        string? CoverUrl,
-        int CopyCount);
 }

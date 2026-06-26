@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using BookTracker.Data.Models;
 
-namespace BookTracker.Web.Services;
+namespace BookTracker.Application.Formatting;
 
 // Pair of (date, precision) used as the form-input shape for date fields
 // where the user often only knows year or month-year. Storage stays as

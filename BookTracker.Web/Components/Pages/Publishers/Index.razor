@@ -1,5 +1,6 @@
 @page "/publishers"
 @using BookTracker.Data.Models
+@using BookTracker.Application.Publishers
 @inject PublisherListViewModel VM
 @inject NavigationManager Nav
 
@@ -100,9 +101,9 @@
                                    render-tree blow-up that spiked working set to 700MB+ at ~200
                                    publishers). Autocomplete only materialises items when the user
                                    types, so per-row cost drops to O(1). *@
-                                <MudAutocomplete T="PublisherListViewModel.PublisherRow"
+                                <MudAutocomplete T="PublisherRow"
                                                  Value="null"
-                                                 ValueChanged="@((PublisherListViewModel.PublisherRow? other) => { if (other is not null) StartMerge(publisher.Id, other.Id); })"
+                                                 ValueChanged="@((PublisherRow? other) => { if (other is not null) StartMerge(publisher.Id, other.Id); })"
                                                  SearchFunc="@((string? value, CancellationToken _) => Task.FromResult(SearchMergeTargets(publisher.Id, value)))"
                                                  ToStringFunc="@(p => p?.Name ?? string.Empty)"
                                                  Label="Merge into…"
@@ -193,7 +194,7 @@
 
     private async Task OnToggleExpandAsync(int publisherId) => await VM.ToggleExpandAsync(publisherId);
 
-    private void StartRename(PublisherListViewModel.PublisherRow publisher)
+    private void StartRename(PublisherRow publisher)
     {
         renamingId = publisher.Id;
         renamingName = publisher.Name;
@@ -225,9 +226,9 @@
         ClearPendingMerge();
     }
 
-    private IEnumerable<PublisherListViewModel.PublisherRow> SearchMergeTargets(int sourceId, string? term)
+    private IEnumerable<PublisherRow> SearchMergeTargets(int sourceId, string? term)
     {
-        IEnumerable<PublisherListViewModel.PublisherRow> q = VM.Publishers.Where(p => p.Id != sourceId);
+        IEnumerable<PublisherRow> q = VM.Publishers.Where(p => p.Id != sourceId);
         if (!string.IsNullOrWhiteSpace(term))
         {
             q = q.Where(p => p.Name.Contains(term, StringComparison.OrdinalIgnoreCase));

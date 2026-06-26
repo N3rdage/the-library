@@ -1,16 +1,31 @@
-using BookTracker.Data.Models;
+using BookTracker.Application;
+using BookTracker.Application.Authors;
 using BookTracker.Web.ViewModels;
+using NSubstitute;
 
 namespace BookTracker.Tests.ViewModels;
 
-[Trait("Category", TestCategories.Integration)]
+// Thin unit tests for the VM-side of /authors/{id}: the not-found mapping, the
+// dispatch guards, and the success/error toast + reload wiring. The data reads
+// and write effects are covered by GetAuthorDetailHandlerTests /
+// AuthorAdminCommandsTests.
+[Trait("Category", TestCategories.Unit)]
 public class AuthorDetailViewModelTests
 {
+    private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
+
+    private static AuthorDetailResult Result(int id, string name, int? canonicalId = null, string? canonicalName = null) =>
+        new(new AuthorHeader(id, name, canonicalId, canonicalName), AuthorDetail.Empty, []);
+
+    private void StubDetail(int id, AuthorDetailResult? result) =>
+        _dispatcher.Query(Arg.Is<GetAuthorDetail>(q => q.AuthorId == id), Arg.Any<CancellationToken>())
+            .Returns(result);
+
     [Fact]
-    public async Task LoadAsync_NonExistentId_SetsNotFound()
+    public async Task LoadAsync_NullResult_SetsNotFound()
     {
-        var factory = new TestDbContextFactory();
-        var vm = new AuthorDetailViewModel(factory);
+        StubDetail(99999, null);
+        var vm = new AuthorDetailViewModel(_dispatcher);
 
         await vm.LoadAsync(99999);
 
@@ -19,213 +34,135 @@ public class AuthorDetailViewModelTests
     }
 
     [Fact]
-    public async Task LoadAsync_CanonicalRollsUpAliasWorks()
+    public async Task LoadAsync_PopulatesHeaderAndDetail()
     {
-        var factory = new TestDbContextFactory();
-        int kingId;
-        using (var db = factory.CreateDbContext())
-        {
-            var king = new Author { Name = "Stephen King" };
-            var bachman = new Author { Name = "Richard Bachman", CanonicalAuthor = king };
-            db.Authors.AddRange(king, bachman);
-            db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] });
-            db.Books.Add(new Book { Title = "Thinner", Works = [new Work { Title = "Thinner", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }] }] });
-            await db.SaveChangesAsync();
-            kingId = king.Id;
-        }
+        StubDetail(1, Result(1, "Stephen King"));
+        var vm = new AuthorDetailViewModel(_dispatcher);
 
-        var vm = new AuthorDetailViewModel(factory);
-        await vm.LoadAsync(kingId);
+        await vm.LoadAsync(1);
 
-        Assert.NotNull(vm.Header);
-        Assert.Equal("Stephen King", vm.Header.Name);
-        Assert.Equal(2, vm.Detail.Works.Count);
-        Assert.Contains(vm.Detail.Works, w => w.Title == "Carrie");
-        Assert.Contains(vm.Detail.Works, w => w.Title == "Thinner");
-        Assert.Contains("Richard Bachman", vm.Detail.AliasNames);
-
-        // Bachman work flagged with WrittenAs; King work isn't.
-        Assert.Equal("Richard Bachman", vm.Detail.Works.Single(w => w.Title == "Thinner").WrittenAs);
-        Assert.Null(vm.Detail.Works.Single(w => w.Title == "Carrie").WrittenAs);
+        Assert.False(vm.NotFound);
+        Assert.Equal("Stephen King", vm.Header!.Name);
     }
 
     [Fact]
-    public async Task LoadAsync_AliasShowsOwnWorksOnly()
+    public async Task RenameAsync_OnSuccess_SetsMessageAndReloads()
     {
-        var factory = new TestDbContextFactory();
-        int bachmanId;
-        using (var db = factory.CreateDbContext())
-        {
-            var king = new Author { Name = "Stephen King" };
-            var bachman = new Author { Name = "Richard Bachman", CanonicalAuthor = king };
-            db.Authors.AddRange(king, bachman);
-            db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] });
-            db.Books.Add(new Book { Title = "Thinner", Works = [new Work { Title = "Thinner", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }] }] });
-            await db.SaveChangesAsync();
-            bachmanId = bachman.Id;
-        }
+        StubDetail(1, Result(1, "Old"));
+        _dispatcher.Send(Arg.Any<RenameAuthor>(), Arg.Any<CancellationToken>())
+            .Returns(AuthorAdminResult.Ok("Renamed to \"New\"."));
+        var vm = new AuthorDetailViewModel(_dispatcher);
+        await vm.LoadAsync(1);
 
-        var vm = new AuthorDetailViewModel(factory);
-        await vm.LoadAsync(bachmanId);
+        await vm.RenameAsync("New");
 
-        Assert.Single(vm.Detail.Works);
-        Assert.Equal("Thinner", vm.Detail.Works[0].Title);
-        Assert.Empty(vm.Detail.AliasNames);
-        Assert.Null(vm.Detail.Works[0].WrittenAs);
+        Assert.Equal("Renamed to \"New\".", vm.SuccessMessage);
+        // Reload = a second GetAuthorDetail dispatch for the same id.
+        await _dispatcher.Received(2).Query(Arg.Is<GetAuthorDetail>(q => q.AuthorId == 1), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task LoadAsync_OrdersWorksByInSeriesThenSeriesOrderThenTitle()
+    public async Task RenameAsync_OnError_SetsErrorAndDoesNotReload()
     {
-        // Same fixture as the previous AuthorListViewModelTests Pratchett case;
-        // Discworld 1, 2, 3, ... clusters before Bromeliad alphabetically, then
-        // standalones tail at the end.
-        var factory = new TestDbContextFactory();
-        int authorId;
-        using (var db = factory.CreateDbContext())
-        {
-            var pratchett = new Author { Name = "Terry Pratchett" };
-            db.Authors.Add(pratchett);
-            var discworld = new Series { Name = "Discworld", Type = SeriesType.Collection };
-            var bromeliad = new Series { Name = "Bromeliad", Type = SeriesType.Series };
-            db.Series.AddRange(discworld, bromeliad);
+        StubDetail(1, Result(1, "Alice"));
+        _dispatcher.Send(Arg.Any<RenameAuthor>(), Arg.Any<CancellationToken>())
+            .Returns(AuthorAdminResult.Error("An author named \"Bob\" already exists."));
+        var vm = new AuthorDetailViewModel(_dispatcher);
+        await vm.LoadAsync(1);
 
-            db.Books.AddRange(
-                new Book { Title = "Good Omens", Works = [new Work { Title = "Good Omens", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }] }] },
-                new Book { Title = "Nation", Works = [new Work { Title = "Nation", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }] }] },
-                new Book { Title = "Mort", Works = [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = discworld, SeriesOrder = 4 }] },
-                new Book { Title = "The Colour of Magic", Works = [new Work { Title = "The Colour of Magic", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = discworld, SeriesOrder = 1 }] },
-                new Book { Title = "Equal Rites", Works = [new Work { Title = "Equal Rites", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = discworld, SeriesOrder = 3 }] },
-                new Book { Title = "Truckers", Works = [new Work { Title = "Truckers", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = bromeliad, SeriesOrder = 1 }] });
-            await db.SaveChangesAsync();
-            authorId = pratchett.Id;
-        }
-
-        var vm = new AuthorDetailViewModel(factory);
-        await vm.LoadAsync(authorId);
-
-        var titles = vm.Detail.Works.Select(w => w.Title).ToList();
-        Assert.Equal(
-            ["Truckers", "The Colour of Magic", "Equal Rites", "Mort", "Good Omens", "Nation"],
-            titles);
-    }
-
-    [Fact]
-    public async Task RenameAsync_UpdatesNameAndReloads()
-    {
-        var factory = new TestDbContextFactory();
-        int authorId;
-        using (var db = factory.CreateDbContext())
-        {
-            var a = new Author { Name = "Old Name" };
-            db.Authors.Add(a);
-            await db.SaveChangesAsync();
-            authorId = a.Id;
-        }
-
-        var vm = new AuthorDetailViewModel(factory);
-        await vm.LoadAsync(authorId);
-        await vm.RenameAsync("New Name");
-
-        Assert.NotNull(vm.Header);
-        Assert.Equal("New Name", vm.Header.Name);
-        Assert.NotNull(vm.SuccessMessage);
-    }
-
-    [Fact]
-    public async Task RenameAsync_RejectsNameClash()
-    {
-        var factory = new TestDbContextFactory();
-        int aliceId;
-        using (var db = factory.CreateDbContext())
-        {
-            db.Authors.AddRange(new Author { Name = "Alice" }, new Author { Name = "Bob" });
-            await db.SaveChangesAsync();
-            aliceId = db.Authors.Single(a => a.Name == "Alice").Id;
-        }
-
-        var vm = new AuthorDetailViewModel(factory);
-        await vm.LoadAsync(aliceId);
         await vm.RenameAsync("Bob");
 
-        Assert.NotNull(vm.Header);
-        Assert.Equal("Alice", vm.Header.Name); // unchanged
         Assert.NotNull(vm.ErrorMessage);
+        // No reload — still only the initial load dispatch.
+        await _dispatcher.Received(1).Query(Arg.Is<GetAuthorDetail>(q => q.AuthorId == 1), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task MarkAsAliasOfAsync_LinksToCanonicalAndRefreshesHeader()
+    public async Task Apply_SuccessAfterError_ClearsStaleErrorMessage()
     {
-        var factory = new TestDbContextFactory();
-        int kingId;
-        int bachmanId;
-        using (var db = factory.CreateDbContext())
-        {
-            var king = new Author { Name = "Stephen King" };
-            var bachman = new Author { Name = "Richard Bachman" };
-            db.Authors.AddRange(king, bachman);
-            await db.SaveChangesAsync();
-            kingId = king.Id;
-            bachmanId = bachman.Id;
-        }
+        // Regression: Apply must own both channels so a failed action's red error
+        // can't render alongside a later action's green success (Detail.razor shows
+        // SuccessMessage and ErrorMessage as two independent alerts).
+        StubDetail(1, Result(1, "Alice"));
+        _dispatcher.Send(Arg.Any<RenameAuthor>(), Arg.Any<CancellationToken>())
+            .Returns(AuthorAdminResult.Error("An author named \"Bob\" already exists."));
+        _dispatcher.Send(Arg.Any<MarkAuthorAsAliasOf>(), Arg.Any<CancellationToken>())
+            .Returns(AuthorAdminResult.Ok("linked"));
+        var vm = new AuthorDetailViewModel(_dispatcher);
+        await vm.LoadAsync(1);
 
-        var vm = new AuthorDetailViewModel(factory);
-        await vm.LoadAsync(bachmanId);
-        await vm.MarkAsAliasOfAsync(kingId);
+        await vm.RenameAsync("Bob");        // fails → ErrorMessage set
+        Assert.NotNull(vm.ErrorMessage);
 
-        Assert.NotNull(vm.Header);
-        Assert.Equal(kingId, vm.Header.CanonicalAuthorId);
-        Assert.Equal("Stephen King", vm.Header.CanonicalName);
+        await vm.MarkAsAliasOfAsync(2);     // succeeds → must clear the stale error
+
+        Assert.Equal("linked", vm.SuccessMessage);
+        Assert.Null(vm.ErrorMessage);
     }
 
     [Fact]
-    public async Task MarkAsAliasOfAsync_ChainedTarget_ReRootsToTopCanonical()
+    public async Task RenameAsync_NoHeader_DoesNotDispatch()
     {
-        // If A is an alias of B, and we mark C as alias-of-A, C should
-        // actually point at B (no two-hop chains).
-        var factory = new TestDbContextFactory();
-        int aId;
-        int bId;
-        int cId;
-        using (var db = factory.CreateDbContext())
-        {
-            var b = new Author { Name = "B" };
-            var a = new Author { Name = "A", CanonicalAuthor = b };
-            var c = new Author { Name = "C" };
-            db.Authors.AddRange(b, a, c);
-            await db.SaveChangesAsync();
-            aId = a.Id;
-            bId = b.Id;
-            cId = c.Id;
-        }
+        var vm = new AuthorDetailViewModel(_dispatcher);
 
-        var vm = new AuthorDetailViewModel(factory);
-        await vm.LoadAsync(cId);
-        await vm.MarkAsAliasOfAsync(aId);
+        await vm.RenameAsync("Whatever"); // never loaded → Header null
 
-        Assert.NotNull(vm.Header);
-        Assert.Equal(bId, vm.Header.CanonicalAuthorId);
+        await _dispatcher.DidNotReceive().Send(Arg.Any<RenameAuthor>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task PromoteToCanonicalAsync_DropsCanonicalLink()
+    public async Task MarkAsAliasOfAsync_TargetIsSelf_DoesNotDispatch()
     {
-        var factory = new TestDbContextFactory();
-        int bachmanId;
-        using (var db = factory.CreateDbContext())
-        {
-            var king = new Author { Name = "Stephen King" };
-            var bachman = new Author { Name = "Richard Bachman", CanonicalAuthor = king };
-            db.Authors.AddRange(king, bachman);
-            await db.SaveChangesAsync();
-            bachmanId = bachman.Id;
-        }
+        StubDetail(1, Result(1, "Self"));
+        var vm = new AuthorDetailViewModel(_dispatcher);
+        await vm.LoadAsync(1);
 
-        var vm = new AuthorDetailViewModel(factory);
-        await vm.LoadAsync(bachmanId);
+        await vm.MarkAsAliasOfAsync(1); // canonicalId == Header.Id
+
+        await _dispatcher.DidNotReceive().Send(Arg.Any<MarkAuthorAsAliasOf>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task MarkAsAliasOfAsync_Valid_DispatchesAndReloads()
+    {
+        StubDetail(2, Result(2, "Bachman"));
+        _dispatcher.Send(Arg.Any<MarkAuthorAsAliasOf>(), Arg.Any<CancellationToken>())
+            .Returns(AuthorAdminResult.Ok("linked"));
+        var vm = new AuthorDetailViewModel(_dispatcher);
+        await vm.LoadAsync(2);
+
+        await vm.MarkAsAliasOfAsync(1);
+
+        await _dispatcher.Received(1).Send(
+            Arg.Is<MarkAuthorAsAliasOf>(c => c.AliasId == 2 && c.CanonicalId == 1),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PromoteToCanonicalAsync_AlreadyCanonical_DoesNotDispatch()
+    {
+        StubDetail(1, Result(1, "Canonical", canonicalId: null));
+        var vm = new AuthorDetailViewModel(_dispatcher);
+        await vm.LoadAsync(1);
+
+        await vm.PromoteToCanonicalAsync(); // Header.CanonicalAuthorId is null
+
+        await _dispatcher.DidNotReceive().Send(Arg.Any<PromoteAuthorToCanonical>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PromoteToCanonicalAsync_Alias_DispatchesPromote()
+    {
+        StubDetail(2, Result(2, "Bachman", canonicalId: 1, canonicalName: "King"));
+        _dispatcher.Send(Arg.Any<PromoteAuthorToCanonical>(), Arg.Any<CancellationToken>())
+            .Returns(AuthorAdminResult.Ok("promoted"));
+        var vm = new AuthorDetailViewModel(_dispatcher);
+        await vm.LoadAsync(2);
+
         await vm.PromoteToCanonicalAsync();
 
-        Assert.NotNull(vm.Header);
-        Assert.Null(vm.Header.CanonicalAuthorId);
+        await _dispatcher.Received(1).Send(
+            Arg.Is<PromoteAuthorToCanonical>(c => c.AuthorId == 2),
+            Arg.Any<CancellationToken>());
     }
 }
