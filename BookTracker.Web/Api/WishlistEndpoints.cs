@@ -1,4 +1,6 @@
-using BookTracker.Web.Services.Wishlist;
+using BookTracker.Application;
+using BookTracker.Application.Catalog;
+using BookTracker.Web.Services;
 
 namespace BookTracker.Web.Api;
 
@@ -17,10 +19,11 @@ public static class WishlistEndpoints
         // as the contract MAUI will code against. See
         // docs/mobile-app-design.md.
         app.MapGet("/api/wishlist-snapshot", async (
-            IWishlistSnapshotService service,
+            IDispatcher dispatcher,
             CancellationToken ct) =>
         {
-            var snapshot = await service.GetSnapshotAsync(ct);
+            var snapshot = await dispatcher.Query(
+                new GetWishlistSnapshot(BuildInfo.ShortSha ?? "dev"), ct);
             return Results.Ok(snapshot);
         });
 

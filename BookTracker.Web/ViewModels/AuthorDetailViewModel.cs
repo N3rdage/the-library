@@ -2,6 +2,7 @@ using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using Microsoft.EntityFrameworkCore;
+using BookTracker.Application.Formatting;
 
 namespace BookTracker.Web.ViewModels;
 

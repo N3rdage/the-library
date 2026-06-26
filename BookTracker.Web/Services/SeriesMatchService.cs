@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
+using BookTracker.Application.Formatting;
 
 namespace BookTracker.Web.Services;
 

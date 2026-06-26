@@ -1,6 +1,5 @@
 using BookTracker.Application;
 using BookTracker.Application.Authors;
-using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
 using NSubstitute;
 
@@ -9,10 +8,9 @@ namespace BookTracker.Tests.ViewModels;
 [Trait("Category", TestCategories.Unit)]
 public class AuthorMergeViewModelTests
 {
-    private readonly IAuthorMergeService _merger = Substitute.For<IAuthorMergeService>();
     private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
 
-    private AuthorMergeViewModel CreateVm() => new(_merger, _dispatcher);
+    private AuthorMergeViewModel CreateVm() => new(_dispatcher);
 
     private static AuthorMergeDetail Detail(int id, string name) =>
         new(id, name, null, null, 0, 0, [], null);
@@ -20,7 +18,7 @@ public class AuthorMergeViewModelTests
     [Fact]
     public async Task LoadAsync_populates_both_details_and_clears_loading()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetAuthorMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new AuthorMergeLoadResult(Detail(1, "A"), Detail(2, "B"), null));
 
         var vm = CreateVm();
@@ -36,7 +34,7 @@ public class AuthorMergeViewModelTests
     [Fact]
     public async Task LoadAsync_sets_error_when_entity_missing()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetAuthorMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new AuthorMergeLoadResult(null, Detail(2, "B"), null));
 
         var vm = CreateVm();
@@ -48,7 +46,7 @@ public class AuthorMergeViewModelTests
     [Fact]
     public async Task LoadAsync_surfaces_incompatibility_reason()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetAuthorMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new AuthorMergeLoadResult(Detail(1, "A"), Detail(2, "B"), "nope"));
 
         var vm = CreateVm();
@@ -61,7 +59,7 @@ public class AuthorMergeViewModelTests
     [Fact]
     public async Task CanMerge_requires_a_selected_winner()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetAuthorMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new AuthorMergeLoadResult(Detail(1, "A"), Detail(2, "B"), null));
 
         var vm = CreateVm();
@@ -75,7 +73,7 @@ public class AuthorMergeViewModelTests
     [Fact]
     public async Task LoserId_flips_based_on_selected_winner()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetAuthorMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new AuthorMergeLoadResult(Detail(1, "A"), Detail(2, "B"), null));
 
         var vm = CreateVm();
@@ -90,7 +88,7 @@ public class AuthorMergeViewModelTests
     [Fact]
     public async Task MergeAsync_dispatches_command_with_picked_winner_and_loser()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetAuthorMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new AuthorMergeLoadResult(Detail(1, "A"), Detail(2, "B"), null));
         _dispatcher.Send(Arg.Any<MergeAuthors>(), Arg.Any<CancellationToken>())
             .Returns(new AuthorMergeResult(true, null, 3, 1, false, "A", "B"));
@@ -111,7 +109,7 @@ public class AuthorMergeViewModelTests
     [Fact]
     public async Task MergeAsync_surfaces_error_when_command_fails()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetAuthorMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new AuthorMergeLoadResult(Detail(1, "A"), Detail(2, "B"), null));
         _dispatcher.Send(Arg.Any<MergeAuthors>(), Arg.Any<CancellationToken>())
             .Returns(new AuthorMergeResult(false, "boom", 0, 0, false, null, null));
@@ -128,7 +126,7 @@ public class AuthorMergeViewModelTests
     [Fact]
     public async Task MergeAsync_is_noop_when_no_winner_selected()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetAuthorMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new AuthorMergeLoadResult(Detail(1, "A"), Detail(2, "B"), null));
 
         var vm = CreateVm();

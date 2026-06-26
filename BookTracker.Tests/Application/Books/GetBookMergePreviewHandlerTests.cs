@@ -1,23 +1,25 @@
+using BookTracker.Application.Books;
 using BookTracker.Data.Models;
-using BookTracker.Web.Services;
 
-namespace BookTracker.Tests.Services;
+namespace BookTracker.Tests;
 
-// Loader-only since PR5 — the merge write moved to MergeBooksHandler
-// (BookMergeHandlerTests). These cover the merge-preview reads.
+// Integration tests for the Book merge-preview read-model handler. Relocated
+// from BookMergeServiceTests when the loader became GetBookMergePreview (PR6);
+// the merge write is covered by BookMergeHandlerTests.
 [Trait("Category", TestCategories.Integration)]
-public class BookMergeServiceTests
+public class GetBookMergePreviewHandlerTests
 {
     private readonly TestDbContextFactory _factory = new();
 
-    private BookMergeService CreateService() => new(_factory);
+    private Task<BookMergeLoadResult> Preview(int idA, int idB) =>
+        new GetBookMergePreviewHandler(_factory).HandleAsync(new GetBookMergePreview(idA, idB));
 
     [Fact]
     public async Task LoadAsync_returns_both_details()
     {
         var (winnerId, loserId) = await SeedTwoBooksAsync();
 
-        var result = await CreateService().LoadAsync(winnerId, loserId);
+        var result = await Preview(winnerId, loserId);
 
         Assert.NotNull(result.Lower);
         Assert.NotNull(result.Higher);

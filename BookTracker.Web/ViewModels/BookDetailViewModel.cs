@@ -7,6 +7,7 @@ using BookTracker.Web.Services;
 using BookTracker.Web.Services.Covers;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.EntityFrameworkCore;
+using BookTracker.Application.Formatting;
 
 namespace BookTracker.Web.ViewModels;
 

@@ -1,18 +1,20 @@
+using BookTracker.Application.Authors;
 using BookTracker.Data.Models;
-using BookTracker.Web.Services;
 
-namespace BookTracker.Tests.Services;
+namespace BookTracker.Tests;
 
-// Loader-only since PR5 — the merge write moved to MergeAuthorsHandler
-// (AuthorMergeHandlerTests). These cover the merge-preview reads, including the
-// canonical-compatibility signal (shared with the handler via
-// AuthorMergeCompatibility) that the preview surfaces.
+// Integration tests for the Author merge-preview read-model handler, including
+// the canonical-compatibility signal (shared with the write handler via
+// AuthorMergeCompatibility). Relocated from AuthorMergeServiceTests when the
+// loader became GetAuthorMergePreview (PR6); the merge write is covered by
+// AuthorMergeHandlerTests.
 [Trait("Category", TestCategories.Integration)]
-public class AuthorMergeServiceTests
+public class GetAuthorMergePreviewHandlerTests
 {
     private readonly TestDbContextFactory _factory = new();
 
-    private AuthorMergeService CreateService() => new(_factory);
+    private Task<AuthorMergeLoadResult> Preview(int idA, int idB) =>
+        new GetAuthorMergePreviewHandler(_factory).HandleAsync(new GetAuthorMergePreview(idA, idB));
 
     [Fact]
     public async Task LoadAsync_returns_both_details_with_counts_and_samples()
@@ -21,7 +23,7 @@ public class AuthorMergeServiceTests
             ("Douglas Preston", ["Title A", "Title B", "Title C"]),
             ("Doug Preston", ["Title D"]));
 
-        var result = await CreateService().LoadAsync(ids[0], ids[1]);
+        var result = await Preview(ids[0], ids[1]);
 
         Assert.NotNull(result.Lower);
         Assert.NotNull(result.Higher);
@@ -45,7 +47,7 @@ public class AuthorMergeServiceTests
         db.Authors.AddRange(d1, d2);
         await db.SaveChangesAsync();
 
-        var result = await CreateService().LoadAsync(d1.Id, d2.Id);
+        var result = await Preview(d1.Id, d2.Id);
 
         Assert.NotNull(result.IncompatibilityReason);
     }
@@ -61,7 +63,7 @@ public class AuthorMergeServiceTests
         db.Authors.Add(alias);
         await db.SaveChangesAsync();
 
-        var result = await CreateService().LoadAsync(canonical.Id, alias.Id);
+        var result = await Preview(canonical.Id, alias.Id);
 
         Assert.Null(result.IncompatibilityReason);
     }

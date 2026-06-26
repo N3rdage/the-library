@@ -1,7 +1,6 @@
 using BookTracker.Application;
 using BookTracker.Application.Books;
 using BookTracker.Data.Models;
-using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
 using NSubstitute;
 
@@ -10,10 +9,9 @@ namespace BookTracker.Tests.ViewModels;
 [Trait("Category", TestCategories.Unit)]
 public class EditionMergeViewModelTests
 {
-    private readonly IEditionMergeService _merger = Substitute.For<IEditionMergeService>();
     private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
 
-    private EditionMergeViewModel CreateVm() => new(_merger, _dispatcher);
+    private EditionMergeViewModel CreateVm() => new(_dispatcher);
 
     private static EditionMergeDetail Detail(int id, string? isbn = null, string? coverUrl = null, string? publisherName = null, DateOnly? datePrinted = null) =>
         new(id, isbn, BookFormat.Hardcover, publisherName, datePrinted, DatePrecision.Day, 0, 1, "Book", coverUrl);
@@ -21,7 +19,7 @@ public class EditionMergeViewModelTests
     [Fact]
     public async Task LoadAsync_populates_details()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetEditionMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new EditionMergeLoadResult(Detail(1, isbn: "A"), Detail(2, isbn: "B"), null));
 
         var vm = CreateVm();
@@ -34,7 +32,7 @@ public class EditionMergeViewModelTests
     [Fact]
     public async Task LoadAsync_surfaces_incompatibility_reason()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetEditionMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new EditionMergeLoadResult(Detail(1), Detail(2), "cross-book"));
 
         var vm = CreateVm();
@@ -47,7 +45,7 @@ public class EditionMergeViewModelTests
     [Fact]
     public async Task EnrichmentHints_lists_fields_winner_will_take_from_loser()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetEditionMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new EditionMergeLoadResult(
                 Detail(1, isbn: null, coverUrl: null, publisherName: null, datePrinted: null),
                 Detail(2, isbn: "978123", coverUrl: "https://x", publisherName: "P", datePrinted: new DateOnly(2020, 5, 1)),
@@ -65,7 +63,7 @@ public class EditionMergeViewModelTests
     [Fact]
     public async Task EnrichmentHints_returns_empty_when_winner_has_everything()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetEditionMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new EditionMergeLoadResult(
                 Detail(1, isbn: "978", coverUrl: "c", publisherName: "P", datePrinted: new DateOnly(2020, 1, 1)),
                 Detail(2, isbn: "999", coverUrl: "d", publisherName: "Q", datePrinted: new DateOnly(1999, 1, 1)),
@@ -81,7 +79,7 @@ public class EditionMergeViewModelTests
     [Fact]
     public async Task MergeAsync_dispatches_merge_command()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetEditionMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new EditionMergeLoadResult(Detail(1), Detail(2), null));
         _dispatcher.Send(Arg.Any<MergeEditions>(), Arg.Any<CancellationToken>())
             .Returns(new EditionMergeResult(true, null, 2, 1, "A", "B"));

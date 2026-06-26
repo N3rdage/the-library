@@ -1,13 +1,13 @@
-using BookTracker.Application.Authors;
 using BookTracker.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace BookTracker.Web.Services;
+namespace BookTracker.Application.Authors;
 
-public interface IAuthorMergeService
-{
-    Task<AuthorMergeLoadResult> LoadAsync(int idA, int idB, CancellationToken ct = default);
-}
+// Read-model for the Author-merge preview page (/duplicates/merge/author/{a}/{b}).
+// The merge write itself is the MergeAuthors command; the compatibility rule the
+// preview shows is shared with that handler via AuthorMergeCompatibility.
+// Relocated from the Web AuthorMergeService loader in PR6.
+public sealed record GetAuthorMergePreview(int IdA, int IdB) : IQuery<AuthorMergeLoadResult>;
 
 public record AuthorMergeLoadResult(
     AuthorMergeDetail? Lower,
@@ -27,20 +27,16 @@ public record AuthorMergeDetail(
     // Book over a compendium.
     string? CoverArtUrl);
 
-// Read-only loader for the Author-merge preview page. The merge write itself is
-// the MergeAuthors command in BookTracker.Application.Authors (PR5); the
-// compatibility rule the preview shows is shared with that handler via
-// AuthorMergeCompatibility. These reads stay here until the read-model
-// relocation (PR6).
-public class AuthorMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory) : IAuthorMergeService
+public sealed class GetAuthorMergePreviewHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : IQueryHandler<GetAuthorMergePreview, AuthorMergeLoadResult>
 {
     private const int SampleWorkLimit = 5;
 
-    public async Task<AuthorMergeLoadResult> LoadAsync(int idA, int idB, CancellationToken ct = default)
+    public async Task<AuthorMergeLoadResult> HandleAsync(GetAuthorMergePreview query, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
-        var (lowerId, higherId) = idA < idB ? (idA, idB) : (idB, idA);
+        var (lowerId, higherId) = query.IdA < query.IdB ? (query.IdA, query.IdB) : (query.IdB, query.IdA);
 
         var lower = await LoadDetailAsync(db, lowerId, ct);
         var higher = await LoadDetailAsync(db, higherId, ct);
@@ -57,6 +53,7 @@ public class AuthorMergeService(IDbContextFactory<BookTrackerDbContext> dbFactor
     private static async Task<AuthorMergeDetail?> LoadDetailAsync(BookTrackerDbContext db, int id, CancellationToken ct)
     {
         var author = await db.Authors
+            .AsNoTracking()
             .Include(a => a.CanonicalAuthor)
             .FirstOrDefaultAsync(a => a.Id == id, ct);
         if (author is null) return null;

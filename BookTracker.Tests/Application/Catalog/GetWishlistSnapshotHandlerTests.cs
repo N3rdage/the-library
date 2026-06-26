@@ -1,19 +1,24 @@
+using BookTracker.Application.Catalog;
 using BookTracker.Data.Models;
-using BookTracker.Web.Services.Wishlist;
+using BookTracker.Shared.Wishlist;
 
-namespace BookTracker.Tests.Services;
+namespace BookTracker.Tests;
 
+// Integration tests for the wishlist-snapshot read-model handler against the
+// SQL container. Relocated from WishlistSnapshotServiceTests when the
+// projection moved to BookTracker.Application.Catalog (PR6).
 [Trait("Category", TestCategories.Integration)]
-public class WishlistSnapshotServiceTests
+public class GetWishlistSnapshotHandlerTests
 {
     private readonly TestDbContextFactory _factory = new();
 
-    private WishlistSnapshotService CreateService() => new(_factory);
+    private Task<WishlistSnapshot> GetSnapshot() =>
+        new GetWishlistSnapshotHandler(_factory).HandleAsync(new GetWishlistSnapshot("dev"));
 
     [Fact]
     public async Task GetSnapshotAsync_EmptyWishlist_ReturnsEmptyItems()
     {
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
 
         Assert.Empty(snapshot.Items);
         Assert.False(string.IsNullOrWhiteSpace(snapshot.Version));
@@ -38,7 +43,7 @@ public class WishlistSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
         var item = Assert.Single(snapshot.Items);
 
         Assert.Equal("The Dawn of Everything", item.Title);
@@ -64,7 +69,7 @@ public class WishlistSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
         var titles = snapshot.Items.Select(i => i.Title).ToList();
 
         Assert.Equal(["High older", "High newer", "Medium newer", "Low older"], titles);
@@ -90,7 +95,7 @@ public class WishlistSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
         var item = Assert.Single(snapshot.Items);
 
         Assert.NotNull(item.SeriesId);
@@ -127,7 +132,7 @@ public class WishlistSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
         var item = Assert.Single(snapshot.Items);
 
         Assert.Equal("https://covers.example/foundation.jpg", item.CoverUrl);
@@ -157,7 +162,7 @@ public class WishlistSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
         var item = Assert.Single(snapshot.Items);
         Assert.NotNull(item.Isbns);
         Assert.Equal("9781234567897", Assert.Single(item.Isbns!));

@@ -11,19 +11,20 @@ namespace BookTracker.Application;
 public static class DependencyInjection
 {
     private static readonly Type[] HandlerInterfaces =
-        [typeof(ICommandHandler<>), typeof(ICommandHandler<,>)];
+        [typeof(ICommandHandler<>), typeof(ICommandHandler<,>), typeof(IQueryHandler<,>)];
 
     /// <summary>
-    /// Registers the dispatcher and every command handler in this assembly.
+    /// Registers the dispatcher and every command/query handler in this assembly.
     /// </summary>
     /// <remarks>
     /// Handlers register by convention: any concrete type implementing
-    /// <see cref="ICommandHandler{TCommand}"/> (or the two-arg form) is wired to
-    /// that closed interface — implementing the interface IS the registration,
-    /// so a new handler can't be left unregistered. No attribute (the interface
-    /// is already the marker) and no MediatR. Everything is Scoped to match the
+    /// <see cref="ICommandHandler{TCommand}"/> (or the two-arg form) or
+    /// <see cref="IQueryHandler{TQuery, TResult}"/> is wired to that closed
+    /// interface — implementing the interface IS the registration, so a new
+    /// handler can't be left unregistered. No attribute (the interface is
+    /// already the marker) and no MediatR. Everything is Scoped to match the
     /// DbContextFactory's per-operation context lifetime. Find every handler
-    /// with <c>grep ": ICommandHandler&lt;"</c>.
+    /// with <c>grep ": ICommandHandler&lt;"</c> / <c>": IQueryHandler&lt;"</c>.
     /// </remarks>
     public static IServiceCollection AddApplicationLayer(this IServiceCollection services)
     {

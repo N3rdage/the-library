@@ -44,6 +44,17 @@ public class DispatcherTests
 
     public sealed record Unregistered() : ICommand;
 
+    // Read side — the Query path resolves IQueryHandler<,> the same way Send
+    // resolves ICommandHandler<,>.
+    public sealed record Echo(string Text) : IQuery<string>;
+    public sealed class EchoHandler : IQueryHandler<Echo, string>
+    {
+        public Task<string> HandleAsync(Echo query, CancellationToken ct = default) =>
+            Task.FromResult($"echo:{query.Text}");
+    }
+
+    public sealed record UnregisteredQuery() : IQuery<string>;
+
     private static (IDispatcher dispatcher, PingHandler ping) Build()
     {
         var ping = new PingHandler();
@@ -52,6 +63,7 @@ public class DispatcherTests
         services.AddSingleton<ICommandHandler<Ping>>(ping);
         services.AddScoped<ICommandHandler<Doubled, int>, DoubledHandler>();
         services.AddScoped<ICommandHandler<Boom>, BoomHandler>();
+        services.AddScoped<IQueryHandler<Echo, string>, EchoHandler>();
         var dispatcher = services.BuildServiceProvider().GetRequiredService<IDispatcher>();
         return (dispatcher, ping);
     }
@@ -88,14 +100,30 @@ public class DispatcherTests
     }
 
     [Fact]
+    public async Task Query_resolvesAndReturnsTheHandlersValue()
+    {
+        var (dispatcher, _) = Build();
+        var result = await dispatcher.Query(new Echo("hi"));
+        Assert.Equal("echo:hi", result);
+    }
+
+    [Fact]
+    public async Task Query_unregisteredQuery_throwsInvalidOperationException()
+    {
+        var (dispatcher, _) = Build();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => dispatcher.Query(new UnregisteredQuery()));
+    }
+
+    [Fact]
     public void AddApplicationLayer_registersHandlersByConvention()
     {
         var services = new ServiceCollection();
         services.AddApplicationLayer();
 
-        // The convention scan must pick up both handler arities + the dispatcher.
+        // The convention scan must pick up every handler arity + the dispatcher.
         Assert.Contains(services, d => d.ServiceType == typeof(IDispatcher));
-        Assert.Contains(services, d => d.ServiceType == typeof(ICommandHandler<RateBook>));              // void
-        Assert.Contains(services, d => d.ServiceType == typeof(ICommandHandler<AddEditionToBook, int>)); // result
+        Assert.Contains(services, d => d.ServiceType == typeof(ICommandHandler<RateBook>));              // void command
+        Assert.Contains(services, d => d.ServiceType == typeof(ICommandHandler<AddEditionToBook, int>)); // result command
+        Assert.Contains(services, d => d.ServiceType == typeof(IQueryHandler<GetBookMergePreview, BookMergeLoadResult>)); // query
     }
 }

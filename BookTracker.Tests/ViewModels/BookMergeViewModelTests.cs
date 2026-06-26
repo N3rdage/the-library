@@ -1,7 +1,6 @@
 using BookTracker.Application;
 using BookTracker.Application.Books;
 using BookTracker.Data.Models;
-using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
 using NSubstitute;
 
@@ -10,10 +9,9 @@ namespace BookTracker.Tests.ViewModels;
 [Trait("Category", TestCategories.Unit)]
 public class BookMergeViewModelTests
 {
-    private readonly IBookMergeService _merger = Substitute.For<IBookMergeService>();
     private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
 
-    private BookMergeViewModel CreateVm() => new(_merger, _dispatcher);
+    private BookMergeViewModel CreateVm() => new(_dispatcher);
 
     private static BookMergeDetail Detail(
         int id, string title,
@@ -25,7 +23,7 @@ public class BookMergeViewModelTests
     [Fact]
     public async Task LoadAsync_populates_details()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetBookMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new BookMergeLoadResult(Detail(1, "A"), Detail(2, "B")));
 
         var vm = CreateVm();
@@ -39,7 +37,7 @@ public class BookMergeViewModelTests
     [Fact]
     public async Task EnrichmentHints_lists_every_gap_winner_has_that_loser_fills()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetBookMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new BookMergeLoadResult(
                 Detail(1, "W", rating: 0, notes: null, cover: null),
                 Detail(2, "L", rating: 4, notes: "Good one", cover: "https://x")));
@@ -56,7 +54,7 @@ public class BookMergeViewModelTests
     [Fact]
     public async Task WorksToUnion_counts_loser_works_winner_does_not_have()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetBookMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new BookMergeLoadResult(
                 Detail(1, "W", works: ["Shared", "WinnerOnly"]),
                 Detail(2, "L", works: ["Shared", "LoserOnly1", "LoserOnly2"])));
@@ -71,7 +69,7 @@ public class BookMergeViewModelTests
     [Fact]
     public async Task TagsToUnion_counts_loser_tags_winner_does_not_have()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetBookMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new BookMergeLoadResult(
                 Detail(1, "W", tags: ["alpha"]),
                 Detail(2, "L", tags: ["alpha", "beta", "gamma"])));
@@ -86,7 +84,7 @@ public class BookMergeViewModelTests
     [Fact]
     public async Task MergeAsync_dispatches_merge_command()
     {
-        _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Any<GetBookMergePreview>(), Arg.Any<CancellationToken>())
             .Returns(new BookMergeLoadResult(Detail(1, "W"), Detail(2, "L")));
         _dispatcher.Send(Arg.Any<MergeBooks>(), Arg.Any<CancellationToken>())
             .Returns(new BookMergeResult(true, null, 1, 2, 0, 1, "W", "L"));

@@ -1,14 +1,14 @@
 using BookTracker.Application;
 using BookTracker.Application.Authors;
-using BookTracker.Web.Services;
 
 namespace BookTracker.Web.ViewModels;
 
 // Backs /duplicates/merge/author/{idA}/{idB}. Loads both Author details with
 // work/alias counts + sample titles for the review cards, then dispatches the
 // MergeAuthors command when the user confirms a winner. Errors (incompatible
-// aliases, missing entities) flow back through ErrorMessage.
-public class AuthorMergeViewModel(IAuthorMergeService merger, IDispatcher dispatcher)
+// aliases, missing entities) flow back through ErrorMessage. Dispatcher-only:
+// reads via GetAuthorMergePreview, writes via MergeAuthors.
+public class AuthorMergeViewModel(IDispatcher dispatcher)
 {
     public bool Loading { get; private set; } = true;
     public bool Merging { get; private set; }
@@ -43,7 +43,7 @@ public class AuthorMergeViewModel(IAuthorMergeService merger, IDispatcher dispat
     {
         Loading = true;
         ErrorMessage = null;
-        var result = await merger.LoadAsync(idA, idB);
+        var result = await dispatcher.Query(new GetAuthorMergePreview(idA, idB));
         Lower = result.Lower;
         Higher = result.Higher;
         IncompatibilityReason = result.IncompatibilityReason;

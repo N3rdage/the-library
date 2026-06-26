@@ -5,6 +5,7 @@ using BookTracker.Data.Models;
 using BookTracker.Shared.Catalog;
 using BookTracker.Web.Services;
 using Microsoft.EntityFrameworkCore;
+using BookTracker.Application.Formatting;
 
 namespace BookTracker.Web.ViewModels;
 

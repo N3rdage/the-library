@@ -1,13 +1,15 @@
+using BookTracker.Application.Formatting;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace BookTracker.Web.Services;
+namespace BookTracker.Application.Books;
 
-public interface IBookMergeService
-{
-    Task<BookMergeLoadResult> LoadAsync(int idA, int idB, CancellationToken ct = default);
-}
+// Read-model for the Book-merge preview page (/duplicates/merge/book/{a}/{b}).
+// The merge write itself is the MergeBooks command. Relocated from the Web
+// BookMergeService loader in PR6 — reads now live as query handlers in
+// Application alongside the writes.
+public sealed record GetBookMergePreview(int IdA, int IdB) : IQuery<BookMergeLoadResult>;
 
 public record BookMergeLoadResult(
     BookMergeDetail? Lower,
@@ -28,15 +30,13 @@ public record BookMergeDetail(
     IReadOnlyList<string> TagNames,
     string? CoverArtUrl);
 
-// Read-only loader for the Book-merge preview page. The merge write itself is
-// the MergeBooks command in BookTracker.Application.Books (PR5). These reads
-// stay here until the read-model relocation (PR6).
-public class BookMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory) : IBookMergeService
+public sealed class GetBookMergePreviewHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : IQueryHandler<GetBookMergePreview, BookMergeLoadResult>
 {
-    public async Task<BookMergeLoadResult> LoadAsync(int idA, int idB, CancellationToken ct = default)
+    public async Task<BookMergeLoadResult> HandleAsync(GetBookMergePreview query, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var (lowerId, higherId) = idA < idB ? (idA, idB) : (idB, idA);
+        var (lowerId, higherId) = query.IdA < query.IdB ? (query.IdA, query.IdB) : (query.IdB, query.IdA);
         return new BookMergeLoadResult(
             await LoadDetailAsync(db, lowerId, ct),
             await LoadDetailAsync(db, higherId, ct));
@@ -45,6 +45,7 @@ public class BookMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
     private static async Task<BookMergeDetail?> LoadDetailAsync(BookTrackerDbContext db, int id, CancellationToken ct)
     {
         var book = await db.Books
+            .AsNoTracking()
             .Include(b => b.Editions)
             .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .Include(b => b.Tags)
