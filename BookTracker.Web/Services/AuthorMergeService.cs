@@ -1,5 +1,5 @@
+using BookTracker.Application.Authors;
 using BookTracker.Data;
-using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.Services;
@@ -7,7 +7,6 @@ namespace BookTracker.Web.Services;
 public interface IAuthorMergeService
 {
     Task<AuthorMergeLoadResult> LoadAsync(int idA, int idB, CancellationToken ct = default);
-    Task<AuthorMergeResult> MergeAsync(int winnerId, int loserId, CancellationToken ct = default);
 }
 
 public record AuthorMergeLoadResult(
@@ -28,15 +27,11 @@ public record AuthorMergeDetail(
     // Book over a compendium.
     string? CoverArtUrl);
 
-public record AuthorMergeResult(
-    bool Success,
-    string? ErrorMessage,
-    int WorksReassigned,
-    int AliasesReassigned,
-    bool WinnerPromotedToCanonical,
-    string? WinnerName,
-    string? LoserName);
-
+// Read-only loader for the Author-merge preview page. The merge write itself is
+// the MergeAuthors command in BookTracker.Application.Authors (PR5); the
+// compatibility rule the preview shows is shared with that handler via
+// AuthorMergeCompatibility. These reads stay here until the read-model
+// relocation (PR6).
 public class AuthorMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory) : IAuthorMergeService
 {
     private const int SampleWorkLimit = 5;
@@ -57,114 +52,6 @@ public class AuthorMergeService(IDbContextFactory<BookTrackerDbContext> dbFactor
         }
 
         return new AuthorMergeLoadResult(lower, higher, incompatibility);
-    }
-
-    public async Task<AuthorMergeResult> MergeAsync(int winnerId, int loserId, CancellationToken ct = default)
-    {
-        if (winnerId == loserId)
-        {
-            return Failure("Winner and loser cannot be the same author.");
-        }
-
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-
-        var winner = await db.Authors.FirstOrDefaultAsync(a => a.Id == winnerId, ct);
-        var loser = await db.Authors.FirstOrDefaultAsync(a => a.Id == loserId, ct);
-        if (winner is null || loser is null)
-        {
-            return Failure("One or both authors could not be found — they may already have been merged or deleted.");
-        }
-
-        var winnerDetail = MinimalDetail(winner);
-        var loserDetail = MinimalDetail(loser);
-        var incompatibility = CheckCompatibility(winnerDetail, loserDetail);
-        if (incompatibility is not null)
-        {
-            return Failure(incompatibility);
-        }
-
-        // Case 4 in the compatibility matrix: winner is an alias of loser.
-        // Loser is about to be deleted, so winner must be promoted to canonical
-        // before the delete — otherwise winner's CanonicalAuthorId would dangle.
-        var winnerWasAliasOfLoser = winner.CanonicalAuthorId == loser.Id;
-
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-
-        if (winnerWasAliasOfLoser)
-        {
-            winner.CanonicalAuthorId = null;
-        }
-
-        // Reassign every WorkAuthor row from loser to winner. Composite PK
-        // (WorkId, AuthorId, Role) means we can't UPDATE the AuthorId column
-        // — delete + add. Dedup by (WorkId, Role): if winner is already
-        // credited on the same Work in the same Role, drop the loser row;
-        // otherwise re-add as winner so distinct roles survive (e.g. winner
-        // is Author of Work X, loser is Translator of Work X — both should
-        // exist post-merge under winner).
-        var loserWorkAuthors = await db.WorkAuthors
-            .Where(wa => wa.AuthorId == loser.Id)
-            .ToListAsync(ct);
-
-        var winnerCreditedByWorkAndRole = (await db.WorkAuthors
-            .Where(wa => wa.AuthorId == winner.Id)
-            .Select(wa => new { wa.WorkId, wa.Role })
-            .ToListAsync(ct))
-            .Select(x => (x.WorkId, x.Role))
-            .ToHashSet();
-
-        foreach (var wa in loserWorkAuthors)
-        {
-            db.WorkAuthors.Remove(wa);
-            if (!winnerCreditedByWorkAndRole.Contains((wa.WorkId, wa.Role)))
-            {
-                db.WorkAuthors.Add(new WorkAuthor
-                {
-                    WorkId = wa.WorkId,
-                    AuthorId = winner.Id,
-                    Order = wa.Order,
-                    Role = wa.Role,
-                });
-                winnerCreditedByWorkAndRole.Add((wa.WorkId, wa.Role));
-            }
-        }
-        var worksReassignedCount = loserWorkAuthors.Count;
-
-        // External aliases of the loser become aliases of the winner. Must
-        // exclude the winner explicitly — if winner was an alias of loser its
-        // CanonicalAuthorId was nulled in memory above, but the pending
-        // change isn't visible to this query via the InMemory provider, so
-        // the winner would otherwise be re-pointed at itself.
-        var aliases = await db.Authors
-            .Where(a => a.CanonicalAuthorId == loser.Id && a.Id != winner.Id)
-            .ToListAsync(ct);
-        foreach (var a in aliases)
-        {
-            a.CanonicalAuthorId = winner.Id;
-        }
-
-        // Clear any dismissed-dup rows referencing the loser — they're about to
-        // become orphans anyway. DetectAllAsync would sweep them on the next
-        // run, but removing them here keeps the UI tidy immediately.
-        var staleIgnores = await db.IgnoredDuplicates
-            .Where(d => d.EntityType == DuplicateEntityType.Author
-                    && (d.LowerId == loser.Id || d.HigherId == loser.Id))
-            .ToListAsync(ct);
-        db.IgnoredDuplicates.RemoveRange(staleIgnores);
-
-        db.Authors.Remove(loser);
-
-        await db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
-
-        return new AuthorMergeResult(
-            Success: true,
-            ErrorMessage: null,
-            WorksReassigned: worksReassignedCount,
-            AliasesReassigned: aliases.Count,
-            WinnerPromotedToCanonical: winnerWasAliasOfLoser,
-            WinnerName: winner.Name,
-            LoserName: loser.Name);
     }
 
     private static async Task<AuthorMergeDetail?> LoadDetailAsync(BookTrackerDbContext db, int id, CancellationToken ct)
@@ -205,21 +92,11 @@ public class AuthorMergeService(IDbContextFactory<BookTrackerDbContext> dbFactor
             cover);
     }
 
-    private static AuthorMergeDetail MinimalDetail(Author a) =>
-        new(a.Id, a.Name, a.CanonicalAuthorId, null, 0, 0, [], null);
-
-    // Compatibility matrix. Both authors must resolve to the same canonical
-    // (either directly or by one being an alias of the other). Anything else
-    // is refused — the user resolves alias relationships on /authors first.
-    private static string? CheckCompatibility(AuthorMergeDetail a, AuthorMergeDetail b)
-    {
-        if (a.CanonicalAuthorId == b.CanonicalAuthorId) return null;
-        if (a.CanonicalAuthorId == b.Id) return null;
-        if (b.CanonicalAuthorId == a.Id) return null;
-
-        return $"\"{a.Name}\" and \"{b.Name}\" resolve to different canonical authors, so merging them directly would silently drop the pen-name relationship. Resolve the aliases on /authors first (promote one to canonical, or alias both to the same root), then come back to merge.";
-    }
-
-    private static AuthorMergeResult Failure(string message) =>
-        new(false, message, 0, 0, false, null, null);
+    // Both authors must resolve to the same canonical (either directly or by one
+    // being an alias of the other). The rule lives in AuthorMergeCompatibility so
+    // the preview and the MergeAuthors write handler stay in lock-step.
+    private static string? CheckCompatibility(AuthorMergeDetail a, AuthorMergeDetail b) =>
+        AuthorMergeCompatibility.Check(
+            a.Id, a.CanonicalAuthorId, a.Name,
+            b.Id, b.CanonicalAuthorId, b.Name);
 }

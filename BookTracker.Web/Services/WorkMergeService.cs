@@ -7,7 +7,6 @@ namespace BookTracker.Web.Services;
 public interface IWorkMergeService
 {
     Task<WorkMergeLoadResult> LoadAsync(int idA, int idB, CancellationToken ct = default);
-    Task<WorkMergeResult> MergeAsync(int winnerId, int loserId, CancellationToken ct = default);
 }
 
 public record WorkMergeLoadResult(
@@ -36,18 +35,9 @@ public record WorkMergeDetail(
     // represents the Work), falling back to any Book containing it.
     string? CoverArtUrl);
 
-public record WorkMergeResult(
-    bool Success,
-    string? ErrorMessage,
-    int BooksReassigned,
-    int BooksAlreadyShared,
-    // Count of winner fields that were auto-filled from the loser because
-    // the winner had the field empty/null. Includes genre-union as one
-    // "field" contribution if any genres were added.
-    int FieldsAutoFilled,
-    string? WinnerTitle,
-    string? LoserTitle);
-
+// Read-only loader for the Work-merge preview page. The merge write itself is
+// the MergeWorks command in BookTracker.Application.Works (PR5). These reads
+// stay here until the read-model relocation (PR6).
 public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory) : IWorkMergeService
 {
     private const int SampleBookLimit = 5;
@@ -102,125 +92,6 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
         return new WorkMergeLoadResult(lower, higher, incompatibility, sharedBookCount);
     }
 
-    public async Task<WorkMergeResult> MergeAsync(int winnerId, int loserId, CancellationToken ct = default)
-    {
-        if (winnerId == loserId)
-        {
-            return Failure("Winner and loser cannot be the same Work.");
-        }
-
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-
-        var winner = await db.Works
-            .Include(w => w.Books)
-            .Include(w => w.Genres)
-            .Include(w => w.WorkAuthors)
-            .FirstOrDefaultAsync(w => w.Id == winnerId, ct);
-        var loser = await db.Works
-            .Include(w => w.Books)
-            .Include(w => w.Genres)
-            .Include(w => w.WorkAuthors)
-            .FirstOrDefaultAsync(w => w.Id == loserId, ct);
-        if (winner is null || loser is null)
-        {
-            return Failure("One or both Works could not be found — they may already have been merged or deleted.");
-        }
-
-        // Author sets must match — two Works with different authorship can't
-        // be merged into one (the result would conflate distinct creative
-        // credits). User's expected to merge authors first if pen-name aliases
-        // are involved. Distinct so multi-role rows (Tolkien as Author +
-        // Illustrator) don't fail the SequenceEqual.
-        var winnerAuthorIds = winner.WorkAuthors.Select(wa => wa.AuthorId).Distinct().OrderBy(id => id).ToList();
-        var loserAuthorIds = loser.WorkAuthors.Select(wa => wa.AuthorId).Distinct().OrderBy(id => id).ToList();
-        if (!winnerAuthorIds.SequenceEqual(loserAuthorIds))
-        {
-            return Failure("Works belong to different authors. Merge the authors first on /duplicates.");
-        }
-
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-
-        // ─── Auto-fill empty winner fields from loser ──────────────────
-        // Only fills gaps — never overwrites a value winner already has.
-        // Paired fields move together (date+precision, series+order) so the
-        // two halves stay consistent.
-        var fieldsAutoFilled = 0;
-
-        if (string.IsNullOrWhiteSpace(winner.Subtitle) && !string.IsNullOrWhiteSpace(loser.Subtitle))
-        {
-            winner.Subtitle = loser.Subtitle;
-            fieldsAutoFilled++;
-        }
-
-        if (winner.FirstPublishedDate is null && loser.FirstPublishedDate is not null)
-        {
-            winner.FirstPublishedDate = loser.FirstPublishedDate;
-            winner.FirstPublishedDatePrecision = loser.FirstPublishedDatePrecision;
-            fieldsAutoFilled++;
-        }
-
-        if (winner.SeriesId is null && loser.SeriesId is not null)
-        {
-            winner.SeriesId = loser.SeriesId;
-            winner.SeriesOrder = loser.SeriesOrder;
-            winner.SeriesOrderDisplay = loser.SeriesOrderDisplay;
-            fieldsAutoFilled++;
-        }
-
-        var winnerGenreIds = winner.Genres.Select(g => g.Id).ToHashSet();
-        var genresAdded = 0;
-        foreach (var g in loser.Genres.Where(g => !winnerGenreIds.Contains(g.Id)).ToList())
-        {
-            winner.Genres.Add(g);
-            genresAdded++;
-        }
-        if (genresAdded > 0) fieldsAutoFilled++;
-
-        // ─── Reassign BookWork rows ────────────────────────────────────
-        // Book-contains-both case: for each Book in loser.Books where winner
-        // is NOT already attached, add winner; otherwise skip (winner stays,
-        // loser just gets removed when we clear loser.Books).
-        var winnerBookIds = winner.Books.Select(b => b.Id).ToHashSet();
-
-        var booksReassigned = 0;
-        var booksAlreadyShared = 0;
-        foreach (var book in loser.Books.ToList())
-        {
-            if (winnerBookIds.Contains(book.Id))
-            {
-                booksAlreadyShared++;
-            }
-            else
-            {
-                book.Works.Add(winner);
-                winnerBookIds.Add(book.Id);
-                booksReassigned++;
-            }
-        }
-
-        loser.Books.Clear();
-
-        var staleIgnores = await db.IgnoredDuplicates
-            .Where(d => d.EntityType == DuplicateEntityType.Work
-                    && (d.LowerId == loser.Id || d.HigherId == loser.Id))
-            .ToListAsync(ct);
-        db.IgnoredDuplicates.RemoveRange(staleIgnores);
-
-        db.Works.Remove(loser);
-
-        await db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
-
-        return new WorkMergeResult(
-            Success: true,
-            ErrorMessage: null,
-            BooksReassigned: booksReassigned,
-            BooksAlreadyShared: booksAlreadyShared,
-            FieldsAutoFilled: fieldsAutoFilled,
-            WinnerTitle: winner.Title,
-            LoserTitle: loser.Title);
-    }
-
     private static async Task<WorkMergeDetail?> LoadDetailAsync(BookTrackerDbContext db, int id, CancellationToken ct)
     {
         var work = await db.Works
@@ -268,7 +139,4 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
             .CountAsync(b => b.Works.Any(w => w.Id == lowerId)
                           && b.Works.Any(w => w.Id == higherId), ct);
     }
-
-    private static WorkMergeResult Failure(string message) =>
-        new(false, message, 0, 0, 0, null, null);
 }

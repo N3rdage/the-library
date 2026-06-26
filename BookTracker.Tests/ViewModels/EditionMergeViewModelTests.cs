@@ -1,3 +1,5 @@
+using BookTracker.Application;
+using BookTracker.Application.Books;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
@@ -9,8 +11,9 @@ namespace BookTracker.Tests.ViewModels;
 public class EditionMergeViewModelTests
 {
     private readonly IEditionMergeService _merger = Substitute.For<IEditionMergeService>();
+    private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
 
-    private EditionMergeViewModel CreateVm() => new(_merger);
+    private EditionMergeViewModel CreateVm() => new(_merger, _dispatcher);
 
     private static EditionMergeDetail Detail(int id, string? isbn = null, string? coverUrl = null, string? publisherName = null, DateOnly? datePrinted = null) =>
         new(id, isbn, BookFormat.Hardcover, publisherName, datePrinted, DatePrecision.Day, 0, 1, "Book", coverUrl);
@@ -76,11 +79,11 @@ public class EditionMergeViewModelTests
     }
 
     [Fact]
-    public async Task MergeAsync_delegates_to_service()
+    public async Task MergeAsync_dispatches_merge_command()
     {
         _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
             .Returns(new EditionMergeLoadResult(Detail(1), Detail(2), null));
-        _merger.MergeAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Send(Arg.Any<MergeEditions>(), Arg.Any<CancellationToken>())
             .Returns(new EditionMergeResult(true, null, 2, 1, "A", "B"));
 
         var vm = CreateVm();
@@ -91,6 +94,8 @@ public class EditionMergeViewModelTests
 
         Assert.NotNull(result);
         Assert.True(result!.Success);
-        await _merger.Received(1).MergeAsync(1, 2, Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).Send(
+            Arg.Is<MergeEditions>(c => c.WinnerId == 1 && c.LoserId == 2),
+            Arg.Any<CancellationToken>());
     }
 }

@@ -1,14 +1,16 @@
+using BookTracker.Application;
+using BookTracker.Application.Works;
 using BookTracker.Web.Services;
 
 namespace BookTracker.Web.ViewModels;
 
 // Backs /duplicates/merge/work/{idA}/{idB}. Mirrors AuthorMergeViewModel
-// shape — load preview, user picks winner, commit via service. Merge is
-// auto-fill-empties: any winner field that's empty gets taken from the
+// shape — load preview, user picks winner, commit via the MergeWorks command.
+// Merge is auto-fill-empties: any winner field that's empty gets taken from the
 // loser; winner fields that are already set are preserved. Genres union.
 // The preview surfaces which fields will be auto-filled so the user can
 // override (by editing the winner) before confirming.
-public class WorkMergeViewModel(IWorkMergeService merger)
+public class WorkMergeViewModel(IWorkMergeService merger, IDispatcher dispatcher)
 {
     public bool Loading { get; private set; } = true;
     public bool Merging { get; private set; }
@@ -102,7 +104,7 @@ public class WorkMergeViewModel(IWorkMergeService merger)
         Merging = true;
         try
         {
-            var result = await merger.MergeAsync(SelectedWinnerId.Value, LoserId.Value);
+            var result = await dispatcher.Send(new MergeWorks(SelectedWinnerId.Value, LoserId.Value));
             if (!result.Success)
             {
                 ErrorMessage = result.ErrorMessage;

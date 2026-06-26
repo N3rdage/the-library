@@ -1,3 +1,5 @@
+using BookTracker.Application;
+using BookTracker.Application.Authors;
 using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
 using NSubstitute;
@@ -8,8 +10,9 @@ namespace BookTracker.Tests.ViewModels;
 public class AuthorMergeViewModelTests
 {
     private readonly IAuthorMergeService _merger = Substitute.For<IAuthorMergeService>();
+    private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
 
-    private AuthorMergeViewModel CreateVm() => new(_merger);
+    private AuthorMergeViewModel CreateVm() => new(_merger, _dispatcher);
 
     private static AuthorMergeDetail Detail(int id, string name) =>
         new(id, name, null, null, 0, 0, [], null);
@@ -85,11 +88,11 @@ public class AuthorMergeViewModelTests
     }
 
     [Fact]
-    public async Task MergeAsync_calls_service_with_picked_winner_and_loser()
+    public async Task MergeAsync_dispatches_command_with_picked_winner_and_loser()
     {
         _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
             .Returns(new AuthorMergeLoadResult(Detail(1, "A"), Detail(2, "B"), null));
-        _merger.MergeAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Send(Arg.Any<MergeAuthors>(), Arg.Any<CancellationToken>())
             .Returns(new AuthorMergeResult(true, null, 3, 1, false, "A", "B"));
 
         var vm = CreateVm();
@@ -100,15 +103,17 @@ public class AuthorMergeViewModelTests
 
         Assert.NotNull(result);
         Assert.True(result!.Success);
-        await _merger.Received(1).MergeAsync(1, 2, Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).Send(
+            Arg.Is<MergeAuthors>(c => c.WinnerId == 1 && c.LoserId == 2),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task MergeAsync_surfaces_error_when_service_fails()
+    public async Task MergeAsync_surfaces_error_when_command_fails()
     {
         _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
             .Returns(new AuthorMergeLoadResult(Detail(1, "A"), Detail(2, "B"), null));
-        _merger.MergeAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Send(Arg.Any<MergeAuthors>(), Arg.Any<CancellationToken>())
             .Returns(new AuthorMergeResult(false, "boom", 0, 0, false, null, null));
 
         var vm = CreateVm();
@@ -132,6 +137,6 @@ public class AuthorMergeViewModelTests
         var result = await vm.MergeAsync();
 
         Assert.Null(result);
-        await _merger.DidNotReceiveWithAnyArgs().MergeAsync(default, default, default);
+        await _dispatcher.DidNotReceiveWithAnyArgs().Send(Arg.Any<MergeAuthors>(), Arg.Any<CancellationToken>());
     }
 }
