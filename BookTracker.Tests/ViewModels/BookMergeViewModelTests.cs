@@ -1,3 +1,5 @@
+using BookTracker.Application;
+using BookTracker.Application.Books;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
@@ -9,8 +11,9 @@ namespace BookTracker.Tests.ViewModels;
 public class BookMergeViewModelTests
 {
     private readonly IBookMergeService _merger = Substitute.For<IBookMergeService>();
+    private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
 
-    private BookMergeViewModel CreateVm() => new(_merger);
+    private BookMergeViewModel CreateVm() => new(_merger, _dispatcher);
 
     private static BookMergeDetail Detail(
         int id, string title,
@@ -81,11 +84,11 @@ public class BookMergeViewModelTests
     }
 
     [Fact]
-    public async Task MergeAsync_delegates_to_service()
+    public async Task MergeAsync_dispatches_merge_command()
     {
         _merger.LoadAsync(1, 2, Arg.Any<CancellationToken>())
             .Returns(new BookMergeLoadResult(Detail(1, "W"), Detail(2, "L")));
-        _merger.MergeAsync(1, 2, Arg.Any<CancellationToken>())
+        _dispatcher.Send(Arg.Any<MergeBooks>(), Arg.Any<CancellationToken>())
             .Returns(new BookMergeResult(true, null, 1, 2, 0, 1, "W", "L"));
 
         var vm = CreateVm();
@@ -96,6 +99,8 @@ public class BookMergeViewModelTests
 
         Assert.NotNull(result);
         Assert.True(result!.Success);
-        await _merger.Received(1).MergeAsync(1, 2, Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).Send(
+            Arg.Is<MergeBooks>(c => c.WinnerId == 1 && c.LoserId == 2),
+            Arg.Any<CancellationToken>());
     }
 }

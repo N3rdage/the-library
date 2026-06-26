@@ -1,11 +1,13 @@
+using BookTracker.Application;
+using BookTracker.Application.Books;
 using BookTracker.Web.Services;
 
 namespace BookTracker.Web.ViewModels;
 
 // Backs /duplicates/merge/edition/{idA}/{idB}. Same shape as
-// WorkMergeViewModel. Auto-fill-empties semantics on merge; enrichment
-// preview recomputes on winner selection.
-public class EditionMergeViewModel(IEditionMergeService merger)
+// WorkMergeViewModel. Auto-fill-empties semantics on merge (the MergeEditions
+// command); enrichment preview recomputes on winner selection.
+public class EditionMergeViewModel(IEditionMergeService merger, IDispatcher dispatcher)
 {
     public bool Loading { get; private set; } = true;
     public bool Merging { get; private set; }
@@ -91,7 +93,7 @@ public class EditionMergeViewModel(IEditionMergeService merger)
         Merging = true;
         try
         {
-            var result = await merger.MergeAsync(SelectedWinnerId.Value, LoserId.Value);
+            var result = await dispatcher.Send(new MergeEditions(SelectedWinnerId.Value, LoserId.Value));
             if (!result.Success)
             {
                 ErrorMessage = result.ErrorMessage;
