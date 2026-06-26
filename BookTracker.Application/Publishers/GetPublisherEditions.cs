@@ -34,8 +34,6 @@ public sealed class GetPublisherEditionsHandler(IDbContextFactory<BookTrackerDbC
         var editions = await db.Editions
             .AsNoTracking()
             .Where(e => e.PublisherId == query.PublisherId)
-            .Include(e => e.Book)
-            .Include(e => e.Copies)
             .OrderBy(e => e.Book.Title)
             .ThenBy(e => e.DatePrinted)
             .Select(e => new EditionRow(

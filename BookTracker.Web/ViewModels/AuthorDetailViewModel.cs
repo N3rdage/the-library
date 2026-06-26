@@ -72,8 +72,11 @@ public class AuthorDetailViewModel(IDispatcher dispatcher)
 
     private void Apply(AuthorAdminResult result)
     {
-        if (result.SuccessMessage is not null) SuccessMessage = result.SuccessMessage;
-        if (result.ErrorMessage is not null) ErrorMessage = result.ErrorMessage;
+        // Each admin action owns exactly one channel — clear the opposite one so a
+        // stale alert from a prior action can't sit next to the new one (both render
+        // simultaneously in Detail.razor).
+        SuccessMessage = result.SuccessMessage;
+        ErrorMessage = result.ErrorMessage;
     }
 
     public enum AuthorViewMode { Works, Books }

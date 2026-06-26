@@ -78,6 +78,29 @@ public class AuthorDetailViewModelTests
     }
 
     [Fact]
+    public async Task Apply_SuccessAfterError_ClearsStaleErrorMessage()
+    {
+        // Regression: Apply must own both channels so a failed action's red error
+        // can't render alongside a later action's green success (Detail.razor shows
+        // SuccessMessage and ErrorMessage as two independent alerts).
+        StubDetail(1, Result(1, "Alice"));
+        _dispatcher.Send(Arg.Any<RenameAuthor>(), Arg.Any<CancellationToken>())
+            .Returns(AuthorAdminResult.Error("An author named \"Bob\" already exists."));
+        _dispatcher.Send(Arg.Any<MarkAuthorAsAliasOf>(), Arg.Any<CancellationToken>())
+            .Returns(AuthorAdminResult.Ok("linked"));
+        var vm = new AuthorDetailViewModel(_dispatcher);
+        await vm.LoadAsync(1);
+
+        await vm.RenameAsync("Bob");        // fails → ErrorMessage set
+        Assert.NotNull(vm.ErrorMessage);
+
+        await vm.MarkAsAliasOfAsync(2);     // succeeds → must clear the stale error
+
+        Assert.Equal("linked", vm.SuccessMessage);
+        Assert.Null(vm.ErrorMessage);
+    }
+
+    [Fact]
     public async Task RenameAsync_NoHeader_DoesNotDispatch()
     {
         var vm = new AuthorDetailViewModel(_dispatcher);
