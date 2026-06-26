@@ -1,6 +1,5 @@
-using BookTracker.Data;
-using BookTracker.Data.Models;
-using Microsoft.EntityFrameworkCore;
+using BookTracker.Application;
+using BookTracker.Application.Authors;
 
 namespace BookTracker.Web.ViewModels;
 
@@ -11,10 +10,10 @@ namespace BookTracker.Web.ViewModels;
 //
 // Detail / rename / alias-management lives at /authors/{id} via
 // AuthorDetailViewModel — this VM only renders the listing.
-public class AuthorListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
+public class AuthorListViewModel(IDispatcher dispatcher)
 {
     public bool Loading { get; private set; } = true;
-    public List<AuthorRow> Authors { get; private set; } = [];
+    public IReadOnlyList<AuthorRow> Authors { get; private set; } = [];
 
     /// <summary>Free-text filter; matches the row name OR any of its alias names so that
     /// typing a pen name surfaces the canonical row even when the alias row is hidden.</summary>
@@ -50,93 +49,7 @@ public class AuthorListViewModel(IDbContextFactory<BookTrackerDbContext> dbFacto
     public async Task LoadAsync()
     {
         Loading = true;
-        await using var db = await dbFactory.CreateDbContextAsync();
-
-        // Pull author + alias structure once. Counts are computed in-app from
-        // bulk-loaded join data — keeps the SQL simple (avoids the EF Core 10.x
-        // record-projection pitfalls) and the post-processing trivial at the
-        // 3000+ books target.
-        var authorsRaw = await db.Authors
-            .Include(a => a.CanonicalAuthor)
-            .Include(a => a.Aliases)
-            .OrderBy(a => a.Name)
-            .ToListAsync();
-
-        // Default rollup: Role = Author only. Editor/Translator/Illustrator
-        // contributions are intentionally excluded from the headline "books
-        // by X" count so reference-work translators don't pollute the list.
-        // Per-author drilldowns showing all contributions are a future opt-in.
-        var workAuthors = await db.WorkAuthors
-            .Where(wa => wa.Role == AuthorRole.Author)
-            .Select(wa => new { wa.AuthorId, wa.WorkId })
-            .ToListAsync();
-
-        var workSeries = await db.Works
-            .Where(w => w.SeriesId != null)
-            .Select(w => new { WorkId = w.Id, SeriesId = w.SeriesId!.Value })
-            .ToListAsync();
-
-        var bookWorkPairs = await db.Books
-            .SelectMany(b => b.Works.Select(w => new { BookId = b.Id, WorkId = w.Id }))
-            .ToListAsync();
-
-        var worksByAuthor = workAuthors
-            .GroupBy(wa => wa.AuthorId)
-            .ToDictionary(g => g.Key, g => g.Select(x => x.WorkId).ToHashSet());
-
-        var seriesByWork = workSeries
-            .GroupBy(w => w.WorkId)
-            .ToDictionary(g => g.Key, g => g.First().SeriesId);
-
-        var booksByWork = bookWorkPairs
-            .GroupBy(x => x.WorkId)
-            .ToDictionary(g => g.Key, g => g.Select(x => x.BookId).ToHashSet());
-
-        var rows = new List<AuthorRow>(authorsRaw.Count);
-        foreach (var a in authorsRaw)
-        {
-            // Canonical rollup: own author id PLUS every alias id pointing at it.
-            // Alias rows just count their own works/books/series — they exist
-            // mainly so the user can promote / rename / remove the alias link.
-            var rollupAuthorIds = a.CanonicalAuthorId is null
-                ? new[] { a.Id }.Concat(a.Aliases.Select(al => al.Id)).ToHashSet()
-                : new HashSet<int> { a.Id };
-
-            var workIds = rollupAuthorIds
-                .SelectMany(id => worksByAuthor.GetValueOrDefault(id, []))
-                .ToHashSet();
-
-            var bookIds = workIds
-                .SelectMany(wId => booksByWork.GetValueOrDefault(wId, []))
-                .ToHashSet();
-
-            var seriesIds = workIds
-                .Where(wId => seriesByWork.ContainsKey(wId))
-                .Select(wId => seriesByWork[wId])
-                .ToHashSet();
-
-            rows.Add(new AuthorRow(
-                a.Id,
-                a.Name,
-                a.CanonicalAuthorId,
-                a.CanonicalAuthor?.Name,
-                a.Aliases.Select(al => al.Name).OrderBy(n => n).ToList(),
-                workIds.Count,
-                bookIds.Count,
-                seriesIds.Count));
-        }
-
-        Authors = rows;
+        Authors = await dispatcher.Query(new GetAuthorList());
         Loading = false;
     }
-
-    public record AuthorRow(
-        int Id,
-        string Name,
-        int? CanonicalAuthorId,
-        string? CanonicalName,
-        IReadOnlyList<string> AliasNames,
-        int WorkCount,
-        int BookCount,
-        int SeriesCount);
 }
