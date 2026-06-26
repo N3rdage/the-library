@@ -1,17 +1,19 @@
+using BookTracker.Application.Works;
 using BookTracker.Data.Models;
-using BookTracker.Web.Services;
 
-namespace BookTracker.Tests.Services;
+namespace BookTracker.Tests;
 
-// Loader-only since PR5 — the merge write moved to MergeWorksHandler
-// (WorkMergeHandlerTests). These cover the merge-preview reads, including the
-// incompatibility + shared-book-count signals the preview surfaces.
+// Integration tests for the Work merge-preview read-model handler, including the
+// incompatibility + shared-book-count signals it surfaces. Relocated from
+// WorkMergeServiceTests when the loader became GetWorkMergePreview (PR6); the
+// merge write is covered by WorkMergeHandlerTests.
 [Trait("Category", TestCategories.Integration)]
-public class WorkMergeServiceTests
+public class GetWorkMergePreviewHandlerTests
 {
     private readonly TestDbContextFactory _factory = new();
 
-    private WorkMergeService CreateService() => new(_factory);
+    private Task<WorkMergeLoadResult> Preview(int idA, int idB) =>
+        new GetWorkMergePreviewHandler(_factory).HandleAsync(new GetWorkMergePreview(idA, idB));
 
     [Fact]
     public async Task LoadAsync_returns_both_details_with_book_samples()
@@ -20,7 +22,7 @@ public class WorkMergeServiceTests
             "The Hobbit", ["Hobbit HB"],
             "Hobbit", ["Hobbit PB"]);
 
-        var result = await CreateService().LoadAsync(winnerId, loserId);
+        var result = await Preview(winnerId, loserId);
 
         Assert.NotNull(result.Lower);
         Assert.NotNull(result.Higher);
@@ -40,7 +42,7 @@ public class WorkMergeServiceTests
         db.Books.Add(new Book { Title = "B", Works = [w2] });
         await db.SaveChangesAsync();
 
-        var result = await CreateService().LoadAsync(w1.Id, w2.Id);
+        var result = await Preview(w1.Id, w2.Id);
 
         Assert.NotNull(result.IncompatibilityReason);
     }
@@ -59,7 +61,7 @@ public class WorkMergeServiceTests
         db.Books.Add(new Book { Title = "Compendium", Works = [w1, w2] });
         await db.SaveChangesAsync();
 
-        var result = await CreateService().LoadAsync(w1.Id, w2.Id);
+        var result = await Preview(w1.Id, w2.Id);
 
         Assert.Equal(1, result.SharedBookCount);
     }

@@ -4,9 +4,8 @@ using BookTracker.Data.Interceptors;
 using BookTracker.Web.Api;
 using BookTracker.Web.Components;
 using BookTracker.Web.Services;
-using BookTracker.Web.Services.Catalog;
+
 using BookTracker.Web.Services.Covers;
-using BookTracker.Web.Services.Wishlist;
 using BookTracker.Web.Telemetry;
 using BookTracker.Web.ViewModels;
 using Microsoft.ApplicationInsights.Extensibility;
@@ -129,14 +128,8 @@ public static class ProgramSetup
         // See docs/BACKEND-REFACTOR-DESIGN.md.
         builder.Services.AddApplicationLayer();
 
-        builder.Services.AddScoped<ICatalogSnapshotService, CatalogSnapshotService>();
-        builder.Services.AddScoped<IWishlistSnapshotService, WishlistSnapshotService>();
         builder.Services.AddScoped<IDuplicateDetectionService, DuplicateDetectionService>();
-        builder.Services.AddScoped<IAuthorMergeService, AuthorMergeService>();
-        builder.Services.AddScoped<IWorkMergeService, WorkMergeService>();
         builder.Services.AddScoped<IWorkSearchService, WorkSearchService>();
-        builder.Services.AddScoped<IEditionMergeService, EditionMergeService>();
-        builder.Services.AddScoped<IBookMergeService, BookMergeService>();
 
         // One-shot startup task that re-classifies existing Editions using the
         // richer BookFormat enum (populated from upstream metadata). Idempotent via

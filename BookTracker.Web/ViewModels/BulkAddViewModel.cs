@@ -4,6 +4,7 @@ using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using BookTracker.Application.Formatting;
 
 namespace BookTracker.Web.ViewModels;
 

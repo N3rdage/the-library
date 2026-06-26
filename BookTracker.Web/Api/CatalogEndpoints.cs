@@ -1,5 +1,7 @@
 using System.Globalization;
-using BookTracker.Web.Services.Catalog;
+using BookTracker.Application;
+using BookTracker.Application.Catalog;
+using BookTracker.Web.Services;
 
 namespace BookTracker.Web.Api;
 
@@ -34,7 +36,7 @@ public static class CatalogEndpoints
         // on a UTC-stored column.
         app.MapGet("/api/catalog-snapshot", async (
             string? since,
-            ICatalogSnapshotService service,
+            IDispatcher dispatcher,
             CancellationToken ct) =>
         {
             DateTime? parsedSince = null;
@@ -52,7 +54,10 @@ public static class CatalogEndpoints
                 parsedSince = parsed;
             }
 
-            var snapshot = await service.GetSnapshotAsync(parsedSince, ct);
+            // BuildInfo (deployed SHA) stays a host concern — passed into the
+            // read-model query so the Application handler stays host-agnostic.
+            var snapshot = await dispatcher.Query(
+                new GetCatalogSnapshot(parsedSince, BuildInfo.ShortSha ?? "dev"), ct);
             return Results.Ok(snapshot);
         });
 

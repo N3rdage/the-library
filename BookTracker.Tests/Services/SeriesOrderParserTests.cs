@@ -1,4 +1,5 @@
 using BookTracker.Web.Services;
+using BookTracker.Application.Formatting;
 
 namespace BookTracker.Tests.Services;
 

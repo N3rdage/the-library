@@ -1,23 +1,25 @@
+using BookTracker.Application.Books;
 using BookTracker.Data.Models;
-using BookTracker.Web.Services;
 
-namespace BookTracker.Tests.Services;
+namespace BookTracker.Tests;
 
-// Loader-only since PR5 — the merge write moved to MergeEditionsHandler
-// (EditionMergeHandlerTests). These cover the merge-preview reads.
+// Integration tests for the Edition merge-preview read-model handler. Relocated
+// from EditionMergeServiceTests when the loader became GetEditionMergePreview
+// (PR6); the merge write is covered by EditionMergeHandlerTests.
 [Trait("Category", TestCategories.Integration)]
-public class EditionMergeServiceTests
+public class GetEditionMergePreviewHandlerTests
 {
     private readonly TestDbContextFactory _factory = new();
 
-    private EditionMergeService CreateService() => new(_factory);
+    private Task<EditionMergeLoadResult> Preview(int idA, int idB) =>
+        new GetEditionMergePreviewHandler(_factory).HandleAsync(new GetEditionMergePreview(idA, idB));
 
     [Fact]
     public async Task LoadAsync_returns_details_for_same_book_editions()
     {
         var (winnerId, loserId, _) = await SeedTwoEditionsOnSameBookAsync();
 
-        var result = await CreateService().LoadAsync(winnerId, loserId);
+        var result = await Preview(winnerId, loserId);
 
         Assert.NotNull(result.Lower);
         Assert.NotNull(result.Higher);
@@ -39,7 +41,7 @@ public class EditionMergeServiceTests
         db.Editions.AddRange(e1, e2);
         await db.SaveChangesAsync();
 
-        var result = await CreateService().LoadAsync(e1.Id, e2.Id);
+        var result = await Preview(e1.Id, e2.Id);
 
         Assert.NotNull(result.IncompatibilityReason);
     }

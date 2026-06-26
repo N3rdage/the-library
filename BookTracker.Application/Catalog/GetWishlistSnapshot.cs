@@ -2,24 +2,23 @@ using BookTracker.Data;
 using BookTracker.Shared.Wishlist;
 using Microsoft.EntityFrameworkCore;
 
-namespace BookTracker.Web.Services.Wishlist;
+namespace BookTracker.Application.Catalog;
 
-// Wishlist projection consumed by the /api/wishlist-snapshot endpoint.
-// Same shape as CatalogSnapshotService — slim, read-only, JSON-on-the-
-// wire, populated by a single query. See docs/mobile-app-design.md
-// for the consumer-side picture (BookTracker.Mobile MAUI app).
+// Wishlist projection consumed by the /api/wishlist-snapshot endpoint. Same
+// shape as the catalog snapshot — slim, read-only, JSON-on-the-wire, one query.
+// See docs/mobile-app-design.md for the consumer (BookTracker.Mobile MAUI app).
 //
-// Wishlist mutations (add / remove / "bought") stay online-only on the
-// Web app; the mobile companion is read-only in v1.
-public interface IWishlistSnapshotService
-{
-    Task<WishlistSnapshot> GetSnapshotAsync(CancellationToken ct = default);
-}
+// Wishlist mutations (add / remove / "bought") stay online-only on the Web app;
+// the mobile companion is read-only in v1.
+//
+// Relocated from BookTracker.Web.Services.Wishlist in PR6. `Version` is the
+// deployed commit SHA, supplied by the host endpoint.
+public sealed record GetWishlistSnapshot(string Version) : IQuery<WishlistSnapshot>;
 
-public class WishlistSnapshotService(
-    IDbContextFactory<BookTrackerDbContext> dbFactory) : IWishlistSnapshotService
+public sealed class GetWishlistSnapshotHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : IQueryHandler<GetWishlistSnapshot, WishlistSnapshot>
 {
-    public async Task<WishlistSnapshot> GetSnapshotAsync(CancellationToken ct = default)
+    public async Task<WishlistSnapshot> HandleAsync(GetWishlistSnapshot query, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
@@ -68,7 +67,7 @@ public class WishlistSnapshotService(
             .ToList();
 
         return new WishlistSnapshot(
-            BuildInfo.ShortSha ?? "dev",
+            query.Version,
             DateTime.UtcNow,
             items);
     }

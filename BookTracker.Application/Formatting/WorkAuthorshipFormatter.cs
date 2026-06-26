@@ -1,6 +1,6 @@
 using BookTracker.Data.Models;
 
-namespace BookTracker.Web.Services;
+namespace BookTracker.Application.Formatting;
 
 // Display-string formatter for multi-author Works. Centralised so every
 // read site renders authorship the same way:
@@ -20,9 +20,9 @@ namespace BookTracker.Web.Services;
 // follow, semicolon-separated, with the lowercase role name in
 // parentheses.
 //
-// Sites: BookListViewModel, BookDetailViewModel, AuthorListViewModel,
-// SeriesEditViewModel, ShoppingViewModel, HomeViewModel, the Library
-// list / BookDetail / Shopping Razor surfaces, and the merge dialogs.
+// Lives in BookTracker.Application so both the Web ViewModels/dialogs and
+// the Application read-model handlers (catalog snapshot, merge previews)
+// project authorship identically (relocated here in PR6).
 public static class WorkAuthorshipFormatter
 {
     /// <summary>

@@ -1,6 +1,5 @@
 using BookTracker.Application;
 using BookTracker.Application.Works;
-using BookTracker.Web.Services;
 
 namespace BookTracker.Web.ViewModels;
 
@@ -9,8 +8,9 @@ namespace BookTracker.Web.ViewModels;
 // Merge is auto-fill-empties: any winner field that's empty gets taken from the
 // loser; winner fields that are already set are preserved. Genres union.
 // The preview surfaces which fields will be auto-filled so the user can
-// override (by editing the winner) before confirming.
-public class WorkMergeViewModel(IWorkMergeService merger, IDispatcher dispatcher)
+// override (by editing the winner) before confirming. Dispatcher-only: reads
+// via GetWorkMergePreview, writes via MergeWorks.
+public class WorkMergeViewModel(IDispatcher dispatcher)
 {
     public bool Loading { get; private set; } = true;
     public bool Merging { get; private set; }
@@ -85,7 +85,7 @@ public class WorkMergeViewModel(IWorkMergeService merger, IDispatcher dispatcher
     {
         Loading = true;
         ErrorMessage = null;
-        var result = await merger.LoadAsync(idA, idB);
+        var result = await dispatcher.Query(new GetWorkMergePreview(idA, idB));
         Lower = result.Lower;
         Higher = result.Higher;
         IncompatibilityReason = result.IncompatibilityReason;

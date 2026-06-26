@@ -1,16 +1,21 @@
+using BookTracker.Application.Catalog;
 using BookTracker.Data.Models;
 using BookTracker.Shared.Catalog;
-using BookTracker.Web.Services.Catalog;
 using Microsoft.EntityFrameworkCore;
 
-namespace BookTracker.Tests.Services;
+namespace BookTracker.Tests;
 
+// Integration tests for the catalog-snapshot read-model handler against the SQL
+// container. Relocated from CatalogSnapshotServiceTests when the projection
+// moved to BookTracker.Application.Catalog (PR6). Version is passed as "dev"
+// (the host stamps the real SHA).
 [Trait("Category", TestCategories.Integration)]
-public class CatalogSnapshotServiceTests
+public class GetCatalogSnapshotHandlerTests
 {
     private readonly TestDbContextFactory _factory = new();
 
-    private CatalogSnapshotService CreateService() => new(_factory);
+    private Task<CatalogSnapshot> GetSnapshot(DateTime? since = null) =>
+        new GetCatalogSnapshotHandler(_factory).HandleAsync(new GetCatalogSnapshot(since, "dev"));
 
     [Fact]
     public async Task GetSnapshotAsync_PrimaryAndAllAuthors_OnSingleWorkBook()
@@ -27,7 +32,7 @@ public class CatalogSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
 
         var book = Assert.Single(snapshot.Books);
         Assert.Equal("Foundation", book.Title);
@@ -60,7 +65,7 @@ public class CatalogSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
 
         var book = Assert.Single(snapshot.Books);
         Assert.Equal("Isaac Asimov", book.PrimaryAuthor);
@@ -91,7 +96,7 @@ public class CatalogSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
 
         var kingRow = snapshot.Authors.Single(a => a.Name == "Stephen King");
         var bachmanRow = snapshot.Authors.Single(a => a.Name == "Richard Bachman");
@@ -133,7 +138,7 @@ public class CatalogSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
         var kingRow = snapshot.Authors.Single(a => a.Name == "Stephen King");
 
         // Despite the book being credited to both King AND Bachman (whose
@@ -164,7 +169,7 @@ public class CatalogSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
         var book = Assert.Single(snapshot.Books);
 
         Assert.Equal(2, book.Isbns.Count);
@@ -179,7 +184,7 @@ public class CatalogSnapshotServiceTests
         // so the SW can detect a deploy and invalidate cached snapshots.
         // SyncedAt is server clock at projection time.
         var before = DateTime.UtcNow.AddSeconds(-5);
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
         var after = DateTime.UtcNow.AddSeconds(5);
 
         Assert.False(string.IsNullOrWhiteSpace(snapshot.Version));
@@ -205,7 +210,7 @@ public class CatalogSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
         var book = Assert.Single(snapshot.Books);
 
         // Status is serialised as the enum's string name, not its
@@ -252,7 +257,7 @@ public class CatalogSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
 
         var foundation = snapshot.Books.Single(b => b.Title == "Foundation");
         Assert.NotNull(foundation.SeriesId);
@@ -295,7 +300,7 @@ public class CatalogSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
 
         var edgedancer = snapshot.Books.Single(b => b.Title == "Edgedancer");
         Assert.Equal(4, edgedancer.SeriesOrder);
@@ -335,7 +340,7 @@ public class CatalogSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
 
         Assert.Equal(2, snapshot.Series.Count);
         Assert.Contains(snapshot.Series, s => s.Name == "Foundation" && s.ExpectedCount == 7);
@@ -357,7 +362,7 @@ public class CatalogSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync(since: null);
+        var snapshot = await GetSnapshot(since: null);
 
         Assert.Equal(2, snapshot.Books.Count);
         // LatestUpdatedAt = max Book.UpdatedAt in the result. Both
@@ -379,7 +384,7 @@ public class CatalogSnapshotServiceTests
         }
 
         var farFuture = DateTime.UtcNow.AddDays(1);
-        var snapshot = await CreateService().GetSnapshotAsync(since: farFuture);
+        var snapshot = await GetSnapshot(since: farFuture);
 
         Assert.Empty(snapshot.Books);
         // Empty delta echoes back the supplied since — clients keep
@@ -413,7 +418,7 @@ public class CatalogSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var delta = await CreateService().GetSnapshotAsync(since: mid);
+        var delta = await GetSnapshot(since: mid);
 
         var book = Assert.Single(delta.Books);
         Assert.Equal("I, Robot", book.Title);
@@ -442,7 +447,7 @@ public class CatalogSnapshotServiceTests
 
         // No book changes after mid — delta should be empty for books,
         // but Authors + Series still full-listed.
-        var delta = await CreateService().GetSnapshotAsync(since: mid);
+        var delta = await GetSnapshot(since: mid);
 
         Assert.Empty(delta.Books);
         Assert.NotEmpty(delta.Authors);
@@ -477,7 +482,7 @@ public class CatalogSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
         var book = Assert.Single(snapshot.Books);
 
         Assert.NotNull(book.Editions);
@@ -514,7 +519,7 @@ public class CatalogSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
         var book = Assert.Single(snapshot.Books);
 
         Assert.NotNull(book.Works);
@@ -549,7 +554,7 @@ public class CatalogSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
         var book = Assert.Single(snapshot.Books);
 
         Assert.Equal("Catherine Soanes (editor)", book.PrimaryAuthor);
@@ -587,7 +592,7 @@ public class CatalogSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync();
+        var snapshot = await GetSnapshot();
 
         var surviving = Assert.Single(snapshot.Books);
         Assert.Equal(bookIdToKeep, surviving.Id);
@@ -611,7 +616,7 @@ public class CatalogSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var snapshot = await CreateService().GetSnapshotAsync(since: null);
+        var snapshot = await GetSnapshot(since: null);
 
         Assert.NotNull(snapshot.DeletedIds);
         Assert.Empty(snapshot.DeletedIds);
@@ -649,7 +654,7 @@ public class CatalogSnapshotServiceTests
             await db.SaveChangesAsync();
         }
 
-        var delta = await CreateService().GetSnapshotAsync(since: midpoint);
+        var delta = await GetSnapshot(since: midpoint);
 
         // Live Books with UpdatedAt > midpoint — none (the surviving
         // book hasn't changed since its creation, which was before
@@ -688,7 +693,7 @@ public class CatalogSnapshotServiceTests
         await Task.Delay(20);
         var afterDelete = DateTime.UtcNow;
 
-        var delta = await CreateService().GetSnapshotAsync(since: afterDelete);
+        var delta = await GetSnapshot(since: afterDelete);
 
         Assert.NotNull(delta.DeletedIds);
         Assert.Empty(delta.DeletedIds);

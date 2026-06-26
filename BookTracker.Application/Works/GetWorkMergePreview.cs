@@ -1,13 +1,13 @@
+using BookTracker.Application.Formatting;
 using BookTracker.Data;
-using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace BookTracker.Web.Services;
+namespace BookTracker.Application.Works;
 
-public interface IWorkMergeService
-{
-    Task<WorkMergeLoadResult> LoadAsync(int idA, int idB, CancellationToken ct = default);
-}
+// Read-model for the Work-merge preview page (/duplicates/merge/work/{a}/{b}).
+// The merge write itself is the MergeWorks command. Relocated from the Web
+// WorkMergeService loader in PR6.
+public sealed record GetWorkMergePreview(int IdA, int IdB) : IQuery<WorkMergeLoadResult>;
 
 public record WorkMergeLoadResult(
     WorkMergeDetail? Lower,
@@ -35,18 +35,16 @@ public record WorkMergeDetail(
     // represents the Work), falling back to any Book containing it.
     string? CoverArtUrl);
 
-// Read-only loader for the Work-merge preview page. The merge write itself is
-// the MergeWorks command in BookTracker.Application.Works (PR5). These reads
-// stay here until the read-model relocation (PR6).
-public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory) : IWorkMergeService
+public sealed class GetWorkMergePreviewHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : IQueryHandler<GetWorkMergePreview, WorkMergeLoadResult>
 {
     private const int SampleBookLimit = 5;
 
-    public async Task<WorkMergeLoadResult> LoadAsync(int idA, int idB, CancellationToken ct = default)
+    public async Task<WorkMergeLoadResult> HandleAsync(GetWorkMergePreview query, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
-        var (lowerId, higherId) = idA < idB ? (idA, idB) : (idB, idA);
+        var (lowerId, higherId) = query.IdA < query.IdB ? (query.IdA, query.IdB) : (query.IdB, query.IdA);
 
         var lower = await LoadDetailAsync(db, lowerId, ct);
         var higher = await LoadDetailAsync(db, higherId, ct);
@@ -66,6 +64,7 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
             // shouldn't make the merge incompatible with a Work that credits
             // Tolkien just as Author.
             var lowerAuthorIds = (await db.WorkAuthors
+                .AsNoTracking()
                 .Where(wa => wa.WorkId == lowerId)
                 .Select(wa => wa.AuthorId)
                 .Distinct()
@@ -73,6 +72,7 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
                 .OrderBy(id => id)
                 .ToList();
             var higherAuthorIds = (await db.WorkAuthors
+                .AsNoTracking()
                 .Where(wa => wa.WorkId == higherId)
                 .Select(wa => wa.AuthorId)
                 .Distinct()
@@ -95,6 +95,7 @@ public class WorkMergeService(IDbContextFactory<BookTrackerDbContext> dbFactory)
     private static async Task<WorkMergeDetail?> LoadDetailAsync(BookTrackerDbContext db, int id, CancellationToken ct)
     {
         var work = await db.Works
+            .AsNoTracking()
             .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .Include(w => w.Series)
             .Include(w => w.Genres)

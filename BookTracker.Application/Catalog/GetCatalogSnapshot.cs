@@ -1,47 +1,42 @@
+using BookTracker.Application.Formatting;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Shared.Catalog;
 using Microsoft.EntityFrameworkCore;
 
-namespace BookTracker.Web.Services.Catalog;
+namespace BookTracker.Application.Catalog;
 
 // Slim catalog projection consumed by the bookshop-mode offline cache
-// (see docs/bookshop-mode-design.md) and by the future BookTracker.Mobile
-// MAUI app (see docs/mobile-app-design.md). Returns just enough data
-// for the killer mobile use cases — ISBN-have-I-got-this and
-// author-lookup — without the bandwidth or PII of a full edit-flow
+// (see docs/bookshop-mode-design.md) and the BookTracker.Mobile MAUI app.
+// Returns just enough for the killer mobile use cases — ISBN-have-I-got-this
+// and author-lookup — without the bandwidth or PII of a full edit-flow
 // payload.
 //
 // Size budget at the 3000+ books target: ~480KB raw / ~150KB gzipped.
-// Single endpoint hit; SW pre-caches; IndexedDB stores client-side.
+// DTO records live in BookTracker.Shared.Catalog — no EF dependency there so
+// the mobile project can reference the contract cleanly.
 //
-// Includes Book.DefaultCoverArtUrl for Bookshelf cover display
-// (downloaded once + cached locally as a 200px JPEG). Omits notes,
-// tags, edition/copy detail — those are edit-flow concerns reached
-// via "Open in app" deep-links to /books/{id} (online only).
-// Bookcase's /bookshop ignores the CoverUrl field (it deep-links
-// for visuals).
+// Relocated from BookTracker.Web.Services.Catalog in PR6 — the canonical
+// read-model template (C5). `Version` is the deployed commit SHA, supplied by
+// the host endpoint (BuildInfo stays a host concern) so this handler stays
+// host-agnostic.
 //
-// DTO records live in BookTracker.Shared.Catalog — no EF dependency
-// there so the mobile project can reference the contract cleanly.
-public interface ICatalogSnapshotService
-{
-    /// <summary>Full snapshot when <paramref name="since"/> is null;
-    /// delta-of-Books-changed-after-since otherwise. Authors + Series
-    /// are always full-listed regardless of <paramref name="since"/>
-    /// (they're tiny and the client needs the full set anyway). The
-    /// returned <see cref="CatalogSnapshot.LatestUpdatedAt"/> is the
-    /// max Book.UpdatedAt across the response — clients store it and
-    /// send it as <c>?since=</c> on the next call.</summary>
-    Task<CatalogSnapshot> GetSnapshotAsync(DateTime? since = null, CancellationToken ct = default);
-}
+/// <summary>Full snapshot when <see cref="Since"/> is null; delta-of-Books-
+/// changed-after-since otherwise. Authors + Series are always full-listed
+/// regardless of <see cref="Since"/> (they're tiny and the client needs the
+/// full set anyway). The returned <see cref="CatalogSnapshot.LatestUpdatedAt"/>
+/// is the max Book.UpdatedAt across the response — clients store it and send it
+/// as <c>?since=</c> on the next call.</summary>
+public sealed record GetCatalogSnapshot(DateTime? Since, string Version) : IQuery<CatalogSnapshot>;
 
-public class CatalogSnapshotService(
-    IDbContextFactory<BookTrackerDbContext> dbFactory) : ICatalogSnapshotService
+public sealed class GetCatalogSnapshotHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : IQueryHandler<GetCatalogSnapshot, CatalogSnapshot>
 {
-    public async Task<CatalogSnapshot> GetSnapshotAsync(DateTime? since = null, CancellationToken ct = default)
+    public async Task<CatalogSnapshot> HandleAsync(GetCatalogSnapshot query, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
+
+        var since = query.Since;
 
         // Books — pull a flat shape and project in-memory. Bounded by total
         // catalog size (3000+ target), so the materialise-then-project cost
@@ -303,12 +298,11 @@ public class CatalogSnapshotService(
             _ => since ?? syncedAt,
         };
 
-        // Version is the deployed commit SHA when available (so the
-        // client-side cache can detect a deploy and trigger a refresh)
-        // or "dev" when running locally without the build-time SHA
-        // injection. SyncedAt is server clock at projection time.
+        // Version is the deployed commit SHA supplied by the host (so the
+        // client-side cache can detect a deploy and trigger a refresh).
+        // SyncedAt is server clock at projection time.
         return new CatalogSnapshot(
-            BuildInfo.ShortSha ?? "dev",
+            query.Version,
             syncedAt,
             books,
             authors,

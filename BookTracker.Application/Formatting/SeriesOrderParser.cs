@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 
-namespace BookTracker.Web.Services;
+namespace BookTracker.Application.Formatting;
 
 /// <summary>
 /// Splits a free-text series-order string into the integer sort key stored in

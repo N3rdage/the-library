@@ -39,4 +39,11 @@ public sealed class Dispatcher(IServiceProvider services) : IDispatcher
         dynamic handler = services.GetRequiredService(handlerType);
         return handler.HandleAsync((dynamic)command, ct);
     }
+
+    public Task<TResult> Query<TResult>(IQuery<TResult> query, CancellationToken ct = default)
+    {
+        var handlerType = typeof(IQueryHandler<,>).MakeGenericType(query.GetType(), typeof(TResult));
+        dynamic handler = services.GetRequiredService(handlerType);
+        return handler.HandleAsync((dynamic)query, ct);
+    }
 }
