@@ -21,10 +21,6 @@
          runners, never alpine. Suppressing rather than carrying the
          noise on every build. -->
     <NoWarn>$(NoWarn);NETSDK1206</NoWarn>
-    <!-- TD-11: opted out of the repo-wide TreatWarningsAsErrors until the
-         Mobile PR bumps SQLitePCLRaw off the NU1903-flagged 2.1.2 (high-severity
-         vuln, transitive via sqlite-net-pcl). Delete this line once clean. -->
-    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
@@ -37,6 +33,19 @@
          native SQLite via SQLitePCLRaw; works on Android, iOS, and
          desktop with no manual native-library hookup. -->
     <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
+    <!-- Pin the native SQLite binary ahead of what sqlite-net-pcl drags in
+         transitively (SQLitePCLRaw.lib.e_sqlite3 2.1.2). 2.1.2 is flagged by
+         NU1903 / CVE-2025-6965 (SQLite < 3.50.2 aggregate-terms memory
+         corruption). The native-lib package renumbered to track the bundled
+         SQLite version, so 3.50.3 ships patched SQLite 3.50.3 — overriding just
+         the native binary is safe (SQLite's C ABI is stable; the managed
+         core/provider stay on 2.1.x via sqlite-net-pcl).
+         PrivateAssets="all" keeps this DESKTOP/CI fix from flowing into the
+         Android app (BookTracker.Mobile): the 3.50.x base package also carries
+         an Android .so, which would collide with the .android AAR (XA4301 dup).
+         Android keeps its own native (.android 2.1.2) until upstream ships a
+         3.50.x .android — see BookTracker.Mobile's targeted NoWarn. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" PrivateAssets="all" />
     <!-- SkiaSharp: cross-platform image decode + resize. Pulls native
          assets for Android (via transitive SkiaSharp.NativeAssets.*)
          and for the test runner OS automatically. Used by

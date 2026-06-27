@@ -17,10 +17,18 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 
-		<!-- TD-11: opted out of the repo-wide TreatWarningsAsErrors until the
-		     Mobile PR handles XA0141 (16KB-page alignment of ZXing camera-core +
-		     SQLitePCLRaw native libs) — partly NoWarn, partly upstream bumps. -->
-		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+		<!-- TD-11: TreatWarningsAsErrors stays ON (inherited) so real warnings in
+		     OUR code still gate, but two upstream-bound Android warnings are
+		     exempted (they can't be fixed here today):
+		       NU1903 — SQLitePCLRaw.lib.e_sqlite3.android 2.1.2 (CVE-2025-6965).
+		                No 3.50.x .android native has shipped yet; the desktop/CI
+		                build is already pinned to the patched 3.50.3.
+		       XA0141 — 16KB-page alignment. ZXing.Net.MAUI 0.4.0 (latest) ships an
+		                unaligned androidx.camera.camera-core; SQLitePCLRaw's
+		                Android .so is also unaligned at 2.1.2. Not a current break
+		                (devices still run 4KB pages); revisit when upstream aligns.
+		     Drop each from this list when its upstream fix lands (TD-10/TD-11). -->
+		<WarningsNotAsErrors>NU1903;XA0141</WarningsNotAsErrors>
 
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
 
