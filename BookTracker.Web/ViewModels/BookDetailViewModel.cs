@@ -1,12 +1,10 @@
 using BookTracker.Application;
 using BookTracker.Application.Books;
 using BookTracker.Application.Works;
-using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.Services.Covers;
 using Microsoft.AspNetCore.Components.Forms;
-using Microsoft.EntityFrameworkCore;
 using BookTracker.Application.Formatting;
 
 namespace BookTracker.Web.ViewModels;
@@ -17,11 +15,13 @@ namespace BookTracker.Web.ViewModels;
 // notes, tags) mutate the Current* properties + persist in the same call,
 // keeping the page focused on one value at a time. Larger structural
 // edits (Work, Edition, Copy) happen in modal dialogs in a later PR.
-// Book/Edition/Copy writes now route through BookTracker.Application command
-// handlers (PR1b of the back-end refactor); the VM keeps the detail read
-// (InitializeAsync) and the Work/Tag mutations until their own aggregates land.
+// As of PR6b-3 the VM is fully off DbContext: every read (InitializeAsync ->
+// GetBookDetail, the tag autocomplete -> GetTagSuggestions) and every write
+// (rating/status/notes/works/copies/cover, and now tags -> AddTagToBook /
+// RemoveTagFromBook) routes through BookTracker.Application via IDispatcher.
+// The VM keeps only presentation state (the Current* inline-edit fields and
+// the loaded BookDetail snapshot).
 public class BookDetailViewModel(
-    IDbContextFactory<BookTrackerDbContext> dbFactory,
     IBookCoverStorage coverStorage,
     IWorkSearchService workSearch,
     ILogger<BookDetailViewModel> logger,
@@ -55,54 +55,14 @@ public class BookDetailViewModel(
 
     public async Task InitializeAsync(int bookId)
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-
-        var book = await db.Books
-            .AsNoTracking()
-            .Include(b => b.Tags)
-            .Include(b => b.Editions)
-                .ThenInclude(e => e.Copies)
-            .Include(b => b.Editions)
-                .ThenInclude(e => e.Publisher)
-            .Include(b => b.Works)
-                .ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .Include(b => b.Works)
-                .ThenInclude(w => w.Genres)
-            .Include(b => b.Works)
-                .ThenInclude(w => w.Series)
-            .AsSplitQuery()
-            .FirstOrDefaultAsync(b => b.Id == bookId);
-
+        var book = await dispatcher.Query(new GetBookDetail(bookId));
         if (book is null)
         {
             NotFound = true;
             return;
         }
 
-        Book = new BookDetail(
-            book.Id,
-            book.Title,
-            book.Category,
-            book.Status,
-            book.Rating,
-            book.Notes,
-            book.DefaultCoverArtUrl,
-            book.DateAdded,
-            book.Works
-                .OrderBy(w => w.SeriesOrder ?? int.MaxValue)
-                .ThenBy(w => w.Title)
-                .Select(ToWorkDetail)
-                .ToList(),
-            book.Editions
-                .OrderBy(e => e.DatePrinted ?? DateOnly.MaxValue)
-                .ThenBy(e => e.Id)
-                .Select(ToEditionDetail)
-                .ToList(),
-            book.Tags
-                .OrderBy(t => t.Name)
-                .Select(t => new TagDetail(t.Id, t.Name))
-                .ToList());
-
+        Book = book;
         CurrentRating = book.Rating;
         CurrentStatus = book.Status;
         CurrentNotes = book.Notes ?? "";
@@ -141,36 +101,26 @@ public class BookDetailViewModel(
         }
     }
 
-    /// <summary>Returns the added (or existing, re-attached) tag. Null if the name was blank.</summary>
+    /// <summary>Returns the added (or existing, re-attached) tag. Null if the name was blank or already on the book.</summary>
     public async Task<TagDetail?> AddTagAsync(string name)
     {
         if (Book is null || string.IsNullOrWhiteSpace(name)) return null;
 
-        var normalized = name.Trim().ToLowerInvariant();
-        if (CurrentTags.Any(t => t.Name.Equals(normalized, StringComparison.OrdinalIgnoreCase)))
+        // Dedup against tags already on the book, case-insensitively, so a
+        // casing variant of an existing chip can't be re-added. (TagResolver
+        // owns storage-side normalisation; here we only need to match.)
+        var trimmed = name.Trim();
+        if (CurrentTags.Any(t => t.Name.Equals(trimmed, StringComparison.OrdinalIgnoreCase)))
         {
             return null;
         }
 
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books.Include(b => b.Tags).FirstOrDefaultAsync(b => b.Id == Book.Id);
-        if (book is null) return null;
+        // The handler returns the tag's actual stored Name — which can differ in
+        // casing from the input when it resolved to an existing row — so the
+        // optimistic chip matches what a reload will show.
+        var detail = await dispatcher.Send(new AddTagToBook(Book.Id, name));
+        if (detail is null) return null;
 
-        var tag = await db.Tags.FirstOrDefaultAsync(t => t.Name == normalized);
-        if (tag is null)
-        {
-            tag = new Tag { Name = normalized };
-            db.Tags.Add(tag);
-        }
-
-        if (book.Tags.All(t => t.Id != tag.Id || tag.Id == 0))
-        {
-            book.Tags.Add(tag);
-        }
-
-        await db.SaveChangesAsync();
-
-        var detail = new TagDetail(tag.Id, tag.Name);
         CurrentTags.Add(detail);
         CurrentTags = CurrentTags.OrderBy(t => t.Name).ToList();
         return detail;
@@ -257,17 +207,7 @@ public class BookDetailViewModel(
     {
         if (Book is null) return;
 
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books.Include(b => b.Tags).FirstOrDefaultAsync(b => b.Id == Book.Id);
-        if (book is null) return;
-
-        var tag = book.Tags.FirstOrDefault(t => t.Id == tagId);
-        if (tag is not null)
-        {
-            book.Tags.Remove(tag);
-            await db.SaveChangesAsync();
-        }
-
+        await dispatcher.Send(new RemoveTagFromBook(Book.Id, tagId));
         CurrentTags.RemoveAll(t => t.Id == tagId);
     }
 
@@ -412,91 +352,8 @@ public class BookDetailViewModel(
     /// <summary>Tag autocomplete — returns existing tags not already assigned, filtered by substring.</summary>
     public async Task<IEnumerable<string>> SearchTagsAsync(string query, CancellationToken ct)
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
         var assigned = CurrentTags.Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var q = (query ?? "").Trim().ToLowerInvariant();
-
-        var names = await db.Tags
-            .AsNoTracking()
-            .Where(t => string.IsNullOrEmpty(q) || t.Name.Contains(q))
-            .OrderBy(t => t.Name)
-            .Select(t => t.Name)
-            .Take(20)
-            .ToListAsync(ct);
-
+        var names = await dispatcher.Query(new GetTagSuggestions(query ?? ""), ct);
         return names.Where(n => !assigned.Contains(n));
     }
-
-    private static WorkDetail ToWorkDetail(Work w) => new(
-        w.Id,
-        w.Title,
-        w.Subtitle,
-        // AuthorName carries the formatted multi-author display ("Preston & Child")
-        // post-PR2; the field name stays so Razor consumers don't have to change.
-        WorkAuthorshipFormatter.Display(w),
-        // LeadAuthorId is the first WorkAuthor entry's Author — used by the
-        // BookDetail '+author' link to deep-link into the /authors page.
-        w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.AuthorId).FirstOrDefault(),
-        PartialDateParser.Format(w.FirstPublishedDate, w.FirstPublishedDatePrecision),
-        w.Genres.OrderBy(g => g.Name).Select(g => g.Name).ToList(),
-        w.Series is null ? null : new SeriesInfo(w.Series.Id, w.Series.Name, w.Series.Type, SeriesOrderParser.Format(w.SeriesOrder, w.SeriesOrderDisplay)));
-
-    private static EditionDetail ToEditionDetail(Edition e) => new(
-        e.Id,
-        e.Isbn,
-        e.Format,
-        e.Format.DisplayName(),
-        e.Publisher?.Name,
-        PartialDateParser.Format(e.DatePrinted, e.DatePrintedPrecision),
-        e.CoverUrl,
-        e.IsUserSupplied,
-        e.Copies
-            .OrderBy(c => c.DateAcquired ?? DateTime.MaxValue)
-            .ThenBy(c => c.Id)
-            .Select(c => new CopyDetail(c.Id, c.Condition, c.DateAcquired, c.Notes))
-            .ToList(),
-        e.EditionNumber);
-
-    public record BookDetail(
-        int Id,
-        string Title,
-        BookCategory Category,
-        BookStatus Status,
-        int Rating,
-        string? Notes,
-        string? CoverUrl,
-        DateTime DateAdded,
-        IReadOnlyList<WorkDetail> Works,
-        IReadOnlyList<EditionDetail> Editions,
-        IReadOnlyList<TagDetail> Tags);
-
-    public record WorkDetail(
-        int Id,
-        string Title,
-        string? Subtitle,
-        /// <summary>Formatted display string ("Preston" / "Preston &amp; Child" / "Preston, Child, Pendergast").</summary>
-        string AuthorName,
-        /// <summary>The lead author'\''s Id — used for /authors/{id} deep-links from the BookDetail page.</summary>
-        int LeadAuthorId,
-        string FirstPublishedDisplay,
-        IReadOnlyList<string> Genres,
-        SeriesInfo? Series);
-
-    public record SeriesInfo(int Id, string Name, SeriesType Type, string? OrderLabel);
-
-    public record EditionDetail(
-        int Id,
-        string? Isbn,
-        BookFormat Format,
-        string FormatDisplay,
-        string? Publisher,
-        string DatePrintedDisplay,
-        string? CoverUrl,
-        bool IsUserSupplied,
-        IReadOnlyList<CopyDetail> Copies,
-        int? EditionNumber = null);
-
-    public record CopyDetail(int Id, BookCondition Condition, DateTime? DateAcquired, string? Notes);
-
-    public record TagDetail(int Id, string Name);
 }

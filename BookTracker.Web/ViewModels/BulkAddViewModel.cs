@@ -1,4 +1,5 @@
 using BookTracker.Application.Authors;
+using BookTracker.Application.Books;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
@@ -299,12 +300,9 @@ public class BulkAddViewModel(
 
     private static async Task EnsureFollowUpTagAsync(BookTrackerDbContext db, Book book)
     {
-        var tag = await db.Tags.FirstOrDefaultAsync(t => t.Name == "follow-up");
-        if (tag is null)
-        {
-            tag = new Tag { Name = "follow-up" };
-            db.Tags.Add(tag);
-        }
+        // Shared find-or-create seam (TD-15) — same resolver the BookDetail tag
+        // writes and MarkWishlistItemBought use.
+        var tag = await TagResolver.FindOrCreateAsync("follow-up", db);
         if (!book.Tags.Any(t => t.Name == "follow-up"))
         {
             book.Tags.Add(tag);

@@ -16,8 +16,7 @@ namespace BookTracker.Tests.ViewModels;
 public class BookDetailViewModelTests
 {
     private static BookDetailViewModel CreateVm(TestDbContextFactory factory, IBookCoverStorage? coverStorage = null) =>
-        new(factory,
-            coverStorage ?? Substitute.For<IBookCoverStorage>(),
+        new(coverStorage ?? Substitute.For<IBookCoverStorage>(),
             new WorkSearchService(factory),
             NullLogger<BookDetailViewModel>.Instance,
             BuildDispatcher(factory));
@@ -311,6 +310,44 @@ public class BookDetailViewModelTests
         using var db2 = factory.CreateDbContext();
         var tagCount = db2.Tags.Count(t => t.Name == "follow-up");
         Assert.Equal(1, tagCount); // not duplicated
+    }
+
+    [Fact]
+    public async Task AddTagAsync_MatchesExistingMixedCaseRow_ChipUsesStoredCasing()
+    {
+        // Regression (PR6b-3 review F1): a pre-existing mixed-case tag row
+        // resolves case-insensitively, and the optimistic chip must show the
+        // STORED casing ("Sci-Fi"), not the lowercased input — otherwise the
+        // chip flips casing on the next page load.
+        var factory = new TestDbContextFactory();
+        int bookId;
+        using (var db = factory.CreateDbContext())
+        {
+            db.Tags.Add(new Tag { Name = "Sci-Fi" }); // legacy mixed-case row
+            var book = new Book
+            {
+                Title = "T",
+                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
+            };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            bookId = book.Id;
+        }
+
+        var vm = CreateVm(factory);
+        await vm.InitializeAsync(bookId);
+        var added = await vm.AddTagAsync("sci-fi");
+
+        Assert.NotNull(added);
+        Assert.Equal("Sci-Fi", added!.Name); // stored casing, not the lowercased input
+        Assert.Contains(vm.CurrentTags, t => t.Name == "Sci-Fi");
+
+        // Resolved to the existing row, not a lowercase duplicate — a single tag
+        // row survives, still in its original casing. (Count-by-name is no good
+        // here: SQL Server's case-insensitive collation matches either spelling.)
+        using var verify = factory.CreateDbContext();
+        var stored = Assert.Single(verify.Tags);
+        Assert.Equal("Sci-Fi", stored.Name);
     }
 
     [Fact]
