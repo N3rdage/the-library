@@ -13,10 +13,11 @@ namespace BookTracker.Application.Authors;
 //
 // All counts use Author-role authorship only — Editor/Translator/Illustrator are
 // excluded from "books by X" so reference-work contributors don't pollute the
-// list. The per-author dedup — the expensive part — is pushed to SQL (a
-// `SELECT DISTINCT` over the authorship join); the distinct pairs come back and
-// the final group-count is a trivial in-memory tally bounded by the catalogue
-// size (EF can't translate `Distinct().GroupBy()` to a single SQL statement).
+// list. Each count is a correlated `COUNT(DISTINCT ...)` subquery over the
+// author's Author-role links, computed in SQL — one row per author comes back,
+// no per-link payload (EF can't fold `Distinct().GroupBy()` / `GROUP BY
+// COUNT(DISTINCT)` over the join into one statement, but it DOES translate the
+// per-author correlated subquery — the shape the old snapshot directCounts used).
 //
 // Canonical rollup is a plain in-memory SUM of the member authors' counts (own +
 // aliases) — see RollUpToCanonical. A title credited to BOTH a canonical author
@@ -28,36 +29,53 @@ public static class AuthorRollups
 {
     public record AuthorCounts(int WorkCount, int BookCount, int SeriesCount);
 
-    // EF projection target — named (not anonymous) so the grouped-count helper
-    // can take it as IQueryable<KeyVal>. EF translates `new KeyVal(a, b)` to a
-    // two-column projection and `.Distinct()` to SQL DISTINCT over those columns.
-    public sealed record KeyVal(int Key, int Val);
-
     // Distinct work/book/series counts keyed by individual author id (Author-role
-    // only). The single SQL touch-point; canonical totals are summed from this.
+    // only). Canonical totals are summed from this.
     public static async Task<Dictionary<int, AuthorCounts>> PerAuthorAsync(
         BookTrackerDbContext db, CancellationToken ct)
     {
-        var baseQ = db.WorkAuthors.AsNoTracking().Where(wa => wa.Role == AuthorRole.Author);
-        var works = await CountByKeyAsync(
-            baseQ.Select(wa => new KeyVal(wa.AuthorId, wa.WorkId)), ct);
-        var books = await CountByKeyAsync(
-            baseQ.SelectMany(wa => wa.Work.Books.Select(b => new KeyVal(wa.AuthorId, b.Id))), ct);
-        var series = await CountByKeyAsync(
-            baseQ.Where(wa => wa.Work.SeriesId != null)
-                 .Select(wa => new KeyVal(wa.AuthorId, wa.Work.SeriesId!.Value)), ct);
-        return Merge(works, books, series);
+        var rows = await db.Authors
+            .AsNoTracking()
+            .Select(a => new
+            {
+                a.Id,
+                Works = a.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author)
+                    .Select(wa => wa.WorkId).Distinct().Count(),
+                Books = a.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author)
+                    .SelectMany(wa => wa.Work.Books).Select(b => b.Id).Distinct().Count(),
+                Series = a.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author && wa.Work.SeriesId != null)
+                    .Select(wa => wa.Work.SeriesId!.Value).Distinct().Count(),
+            })
+            .ToListAsync(ct);
+
+        // Authors with no Author-role works are dropped (no entry → callers
+        // default to 0), matching the old grouping which produced no key for them.
+        return rows
+            .Where(x => x.Works > 0)
+            .ToDictionary(x => x.Id, x => new AuthorCounts(x.Works, x.Books, x.Series));
     }
 
     // Just the distinct book count per author (Author-role) — for consumers that
     // need only BookCount (Home top-authors, the catalog snapshot) and shouldn't
-    // pay for the works + series distinct scans PerAuthorAsync also runs (F3).
-    public static Task<Dictionary<int, int>> PerAuthorBookCountAsync(
+    // pay for the works + series counts (F3). The "Author-role distinct books"
+    // definition is kept identical to PerAuthorAsync's Books above so /authors and
+    // the snapshot can't drift (TD-17 b: their BookCounts are documented to match).
+    public static async Task<Dictionary<int, int>> PerAuthorBookCountAsync(
         BookTrackerDbContext db, CancellationToken ct)
     {
-        var baseQ = db.WorkAuthors.AsNoTracking().Where(wa => wa.Role == AuthorRole.Author);
-        return CountByKeyAsync(
-            baseQ.SelectMany(wa => wa.Work.Books.Select(b => new KeyVal(wa.AuthorId, b.Id))), ct);
+        var rows = await db.Authors
+            .AsNoTracking()
+            .Select(a => new
+            {
+                a.Id,
+                Books = a.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author)
+                    .SelectMany(wa => wa.Work.Books).Select(b => b.Id).Distinct().Count(),
+            })
+            .ToListAsync(ct);
+
+        return rows
+            .Where(x => x.Books > 0)
+            .ToDictionary(x => x.Id, x => x.Books);
     }
 
     // Roll per-author counts up onto canonical authors by summing each canonical's
@@ -97,32 +115,18 @@ public static class AuthorRollups
         return result;
     }
 
-    // DISTINCT the (key, value) pairs server-side, then group-count in memory.
-    // EF can't translate `Distinct().GroupBy(...)` to SQL (it walls on the
-    // grouped subquery — the same limitation the old in-app rollups dodged), but
-    // it DOES translate `Select(pair).Distinct()` to a `SELECT DISTINCT` over the
-    // join (GetCatalogSnapshot's proven shape). So the dedup — the heavy part —
-    // runs in SQL; only the distinct pairs cross the wire and the final count is
-    // a trivial in-memory tally bounded by the catalogue size.
-    static async Task<Dictionary<int, int>> CountByKeyAsync(IQueryable<KeyVal> pairs, CancellationToken ct)
-    {
-        var distinct = await pairs.Distinct().ToListAsync(ct);
-        return distinct
-            .GroupBy(x => x.Key)
-            .ToDictionary(g => g.Key, g => g.Count());
-    }
-
-    static Dictionary<int, AuthorCounts> Merge(
-        Dictionary<int, int> works, Dictionary<int, int> books, Dictionary<int, int> series)
-    {
-        // Work-count keys are the superset (an author with no Author-role works
-        // produces no rows in any grouping and correctly has no entry → callers
-        // default to 0).
-        return works.Keys.ToDictionary(
-            id => id,
-            id => new AuthorCounts(
-                works.GetValueOrDefault(id),
-                books.GetValueOrDefault(id),
-                series.GetValueOrDefault(id)));
-    }
+    // The single canonical-vs-alias display rule shared by /authors and the
+    // snapshot: a canonical row (authorId == its own canonical id) shows the
+    // rolled-up total (own + aliases) from `byCanonical`; an alias row shows just
+    // its own per-author value from `perAuthor`. Missing keys default (0 / null)
+    // so works-less authors read as zero. Generic over the value type — int for
+    // the snapshot's BookCount, AuthorCounts for the /authors triple.
+    public static TVal? SelectForDisplay<TVal>(
+        int authorId,
+        int canonicalId,
+        IReadOnlyDictionary<int, TVal> byCanonical,
+        IReadOnlyDictionary<int, TVal> perAuthor)
+        => authorId == canonicalId
+            ? byCanonical.GetValueOrDefault(authorId)
+            : perAuthor.GetValueOrDefault(authorId);
 }

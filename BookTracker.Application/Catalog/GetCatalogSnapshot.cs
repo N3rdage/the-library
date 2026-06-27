@@ -189,10 +189,11 @@ public sealed class GetCatalogSnapshotHandler(IDbContextFactory<BookTrackerDbCon
 
         // Authors — BookCount per row via the shared SQL-side rollup (Author-role
         // distinct books), so /authors, Home, and this snapshot read one
-        // definition. Canonical rows take the rolled-up count (own + aliases,
-        // de-duped at the canonical key so a book credited to both counts once);
-        // alias rows take their own (tapping "Richard Bachman" shows just
-        // Bachman's titles, "Stephen King" the rolled-up total).
+        // definition. Canonical rows take the rolled-up count (own + aliases
+        // summed — a title credited to both a canonical and one of its aliases
+        // counts once per crediting member; see AuthorRollups); alias rows take
+        // their own (tapping "Richard Bachman" shows just Bachman's titles,
+        // "Stephen King" the rolled-up total).
         var authorRows = await db.Authors
             .AsNoTracking()
             .Select(a => new { a.Id, a.Name, CanonicalId = a.CanonicalAuthorId ?? a.Id })
@@ -207,9 +208,8 @@ public sealed class GetCatalogSnapshotHandler(IDbContextFactory<BookTrackerDbCon
                 a.Id,
                 a.Name,
                 a.CanonicalId,
-                BookCount: a.Id == a.CanonicalId
-                    ? byCanonical.GetValueOrDefault(a.CanonicalId)
-                    : perAuthorBooks.GetValueOrDefault(a.Id)))
+                BookCount: AuthorRollups.SelectForDisplay(
+                    a.Id, a.CanonicalId, byCanonical, perAuthorBooks)))
             .OrderBy(a => a.Name)
             .ToList();
 

@@ -48,9 +48,8 @@ public sealed class GetAuthorListHandler(IDbContextFactory<BookTrackerDbContext>
         var rows = new List<AuthorRow>(authorsRaw.Count);
         foreach (var a in authorsRaw)
         {
-            var counts = a.CanonicalAuthorId is null
-                ? byCanonical.GetValueOrDefault(a.Id)
-                : perAuthor.GetValueOrDefault(a.Id);
+            var counts = AuthorRollups.SelectForDisplay(
+                a.Id, a.CanonicalAuthorId ?? a.Id, byCanonical, perAuthor);
 
             rows.Add(new AuthorRow(
                 a.Id,
