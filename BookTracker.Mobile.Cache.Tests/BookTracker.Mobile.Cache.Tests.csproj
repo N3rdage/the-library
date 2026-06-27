@@ -13,15 +13,17 @@
     <IsPackable>false</IsPackable>
     <!-- Same SQLitePCLRaw alpine-RID noise as the Cache project. -->
     <NoWarn>$(NoWarn);NETSDK1206</NoWarn>
-    <!-- TD-11: opted out until the Mobile PR bumps SQLitePCLRaw off the
-         NU1903-flagged 2.1.2 (inherited transitively from the Cache project). -->
-    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.6.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <!-- Same NU1903 native-SQLite override as the Cache project, pinned
+         directly here because the Cache project's copy is PrivateAssets="all"
+         and so doesn't flow across the ProjectReference (sqlite-net-pcl's
+         transitive 2.1.2 still would). See BookTracker.Mobile.Cache.csproj. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" />
   </ItemGroup>
 
   <ItemGroup>

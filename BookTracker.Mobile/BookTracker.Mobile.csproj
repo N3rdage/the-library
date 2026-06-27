@@ -17,10 +17,14 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 
-		<!-- TD-11: opted out of the repo-wide TreatWarningsAsErrors until the
-		     Mobile PR handles XA0141 (16KB-page alignment of ZXing camera-core +
-		     SQLitePCLRaw native libs) — partly NoWarn, partly upstream bumps. -->
-		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+		<!-- TD-11: TreatWarningsAsErrors stays ON (inherited) so real warnings in
+		     OUR code still gate. XA0141 (16KB-page alignment) is exempted: ZXing.Net
+		     .MAUI 0.4.0 (latest) ships an unaligned androidx.camera.camera-core and
+		     SQLitePCLRaw's .android .so is unaligned at 2.1.2 — both upstream-bound,
+		     and not a current break (devices still run 4KB pages). XA0141 has no
+		     per-package scope, so it's a blanket NoWarn; revisit when upstream
+		     aligns. The NU1903 SQLite vuln is handled per-advisory below. -->
+		<WarningsNotAsErrors>XA0141</WarningsNotAsErrors>
 
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
 
@@ -59,6 +63,17 @@
 		     CameraBarcodeReaderView control with a BarcodesDetected
 		     event. Configured for EAN-13/EAN-8 only (book barcodes). -->
 		<PackageReference Include="ZXing.Net.MAUI.Controls" Version="0.4.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- CVE-2025-6965 / NU1903 in SQLitePCLRaw.lib.e_sqlite3.android 2.1.2 (the
+		     Android SQLite native). No patched .android (3.50.x) has shipped yet;
+		     the desktop/CI build is already on the fixed 3.50.3. Suppress THIS
+		     advisory specifically (by URL) rather than exempting the whole NU1903
+		     High-severity class — a future High advisory on any other package still
+		     fails the build under TreatWarningsAsErrors. Remove when a 3.50.x
+		     .android native ships (TD-10/TD-11). -->
+		<NuGetAuditSuppress Include="https://github.com/advisories/GHSA-2m69-gcr7-jv3q" />
 	</ItemGroup>
 
 	<ItemGroup>

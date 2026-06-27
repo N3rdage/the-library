@@ -10,11 +10,11 @@
     This only PROMOTES existing warnings — it adds no new analyzers and no
     stricter nullable/analysis settings.
 
-    Projects not yet warning-clean opt out with their own
-    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>. Current opt-outs
-    (cleared in the TD-11/TD-10 Mobile PR): BookTracker.Mobile.Cache,
-    BookTracker.Mobile.Cache.Tests, BookTracker.Mobile — all blocked on the
-    SQLitePCLRaw bump (NU1903 + XA0141).
+    Every project builds warning-clean under this today. The one carve-out is
+    BookTracker.Mobile, which keeps TreatWarningsAsErrors ON but exempts two
+    upstream-bound Android warnings (NU1903 on the .android SQLite native +
+    XA0141 16KB-page alignment) via a scoped <WarningsNotAsErrors> — see that
+    csproj. No project uses a blanket <TreatWarningsAsErrors>false</...> opt-out.
   -->
   <PropertyGroup>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
