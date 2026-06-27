@@ -1,3 +1,4 @@
+using BookTracker.Application.Books;
 using BookTracker.Data.Models;
 using BookTracker.Web.ViewModels;
 
@@ -9,7 +10,7 @@ namespace BookTracker.Tests.ViewModels;
 [Trait("Category", TestCategories.Unit)]
 public class BookListViewModelQueryStateTests
 {
-    private static BookListViewModel NewVm() => new(null!, null!);
+    private static BookListViewModel NewVm() => new(null!);
 
     [Fact]
     public void ToQueryParameters_OmitsDefaults()
@@ -140,7 +141,7 @@ public class BookListViewModelQueryStateTests
         vm.SelectedGroupBy = LibraryGroupBy.Author;
         vm.CurrentPage = 3;
 
-        var q = vm.BuildGroupDrillParameters(new BookListViewModel.GroupRow("42", "Stephen King", 7));
+        var q = vm.BuildGroupDrillParameters(new GroupRow("42", "Stephen King", 7));
 
         Assert.Equal(LibraryGroupBy.None.ToString(), q["group"]);
         Assert.Null(q["page"]); // paging reset
@@ -153,7 +154,7 @@ public class BookListViewModelQueryStateTests
         var vm = NewVm();
         vm.SelectedGroupBy = LibraryGroupBy.Genre;
 
-        var q = vm.BuildGroupDrillParameters(new BookListViewModel.GroupRow("8", "Horror", 5));
+        var q = vm.BuildGroupDrillParameters(new GroupRow("8", "Horror", 5));
 
         Assert.Equal(LibraryGroupBy.None.ToString(), q["group"]);
         Assert.Equal(8, q["genre"]);
@@ -166,7 +167,7 @@ public class BookListViewModelQueryStateTests
         vm.SelectedGroupBy = LibraryGroupBy.Genre;
 
         var q = vm.BuildGroupDrillParameters(
-            new BookListViewModel.GroupRow(BookListViewModel.NoneKey, "(no genre)", 3));
+            new GroupRow(GroupRow.NoneKey, "(no genre)", 3));
 
         Assert.Equal(-1, q["genre"]);
     }

@@ -1,3 +1,4 @@
+using BookTracker.Application.Books;
 using BookTracker.Data.Models;
 using BookTracker.Web.ViewModels;
 
@@ -62,7 +63,7 @@ public class BookListViewModelTests
         var factory = new TestDbContextFactory();
         await SeedSampleLibraryAsync(factory);
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory)) { SelectedGroupBy = LibraryGroupBy.Author };
+        var vm = new BookListViewModel(TestDispatcher.For(factory)) { SelectedGroupBy = LibraryGroupBy.Author };
         await vm.InitializeAsync();
 
         // Christie has 2 books; King has 2 (Carrie + Bachman's The Long Walk
@@ -79,7 +80,7 @@ public class BookListViewModelTests
         var factory = new TestDbContextFactory();
         await SeedSampleLibraryAsync(factory);
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory)) { SelectedGroupBy = LibraryGroupBy.Genre };
+        var vm = new BookListViewModel(TestDispatcher.For(factory)) { SelectedGroupBy = LibraryGroupBy.Genre };
         await vm.InitializeAsync();
 
         // Horror: 2 (Carrie, The Long Walk). Mystery: 1 (Orient Express).
@@ -105,7 +106,7 @@ public class BookListViewModelTests
         using (var db = factory.CreateDbContext())
             poirotId = db.Series.Single(s => s.Name == "Hercule Poirot").Id;
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory))
+        var vm = new BookListViewModel(TestDispatcher.For(factory))
         {
             SelectedGroupBy = LibraryGroupBy.None,
             SelectedSeriesId = poirotId,
@@ -122,7 +123,7 @@ public class BookListViewModelTests
         var factory = new TestDbContextFactory();
         await SeedSampleLibraryAsync(factory);
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory))
+        var vm = new BookListViewModel(TestDispatcher.For(factory))
         {
             SelectedGroupBy = LibraryGroupBy.None,
             SelectedSeriesId = -1, // "(no series)"
@@ -143,7 +144,7 @@ public class BookListViewModelTests
         var factory = new TestDbContextFactory();
         await SeedSampleLibraryAsync(factory);
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory))
+        var vm = new BookListViewModel(TestDispatcher.For(factory))
         {
             SelectedGroupBy = LibraryGroupBy.None,
             SelectedGenreId = -1, // "(no genre)"
@@ -174,7 +175,7 @@ public class BookListViewModelTests
             seriesId = dune.Id;
         }
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory))
+        var vm = new BookListViewModel(TestDispatcher.For(factory))
         {
             SelectedGroupBy = LibraryGroupBy.None,
             SelectedSeriesId = seriesId,
@@ -206,7 +207,7 @@ public class BookListViewModelTests
             seriesId = dune.Id;
         }
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory))
+        var vm = new BookListViewModel(TestDispatcher.For(factory))
         {
             SelectedGroupBy = LibraryGroupBy.Author, // the default — NOT None
             SelectedSeriesId = seriesId,
@@ -245,7 +246,7 @@ public class BookListViewModelTests
             seriesId = dune.Id;
         }
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory))
+        var vm = new BookListViewModel(TestDispatcher.For(factory))
         {
             SelectedGroupBy = LibraryGroupBy.None,
             SelectedSeriesId = seriesId,
@@ -265,7 +266,7 @@ public class BookListViewModelTests
         var factory = new TestDbContextFactory();
         await SeedSampleLibraryAsync(factory); // 4 books → 1 page
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory))
+        var vm = new BookListViewModel(TestDispatcher.For(factory))
         {
             SelectedGroupBy = LibraryGroupBy.None,
             CurrentPage = 5,
@@ -284,7 +285,7 @@ public class BookListViewModelTests
         var factory = new TestDbContextFactory();
         await SeedSampleLibraryAsync(factory);
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory))
+        var vm = new BookListViewModel(TestDispatcher.For(factory))
         {
             SelectedGroupBy = LibraryGroupBy.None,
             SelectedAuthor = "Stephen King",
@@ -335,7 +336,7 @@ public class BookListViewModelTests
             await db.SaveChangesAsync();
         }
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory)) { SelectedGroupBy = LibraryGroupBy.None };
+        var vm = new BookListViewModel(TestDispatcher.For(factory)) { SelectedGroupBy = LibraryGroupBy.None };
         await vm.InitializeAsync();
 
         var single = vm.Books.Single(b => b.Title == "The Shining");
@@ -383,7 +384,7 @@ public class BookListViewModelTests
             await db.SaveChangesAsync();
         }
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory))
+        var vm = new BookListViewModel(TestDispatcher.For(factory))
         {
             SelectedGroupBy = LibraryGroupBy.Author,
             SelectedAuthor = "Isaac Asimov",
@@ -403,7 +404,7 @@ public class BookListViewModelTests
         var factory = new TestDbContextFactory();
         await SeedSampleLibraryAsync(factory);
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory))
+        var vm = new BookListViewModel(TestDispatcher.For(factory))
         {
             SelectedGroupBy = LibraryGroupBy.Author,
             SelectedAuthor = "Richard Bachman",
@@ -446,7 +447,7 @@ public class BookListViewModelTests
             await db.SaveChangesAsync();
         }
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory))
+        var vm = new BookListViewModel(TestDispatcher.For(factory))
         {
             SelectedGroupBy = LibraryGroupBy.Author,
             SearchTerm = "Funhouse",
@@ -485,7 +486,7 @@ public class BookListViewModelTests
             await db.SaveChangesAsync();
         }
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory)) { SelectedGroupBy = LibraryGroupBy.Author };
+        var vm = new BookListViewModel(TestDispatcher.For(factory)) { SelectedGroupBy = LibraryGroupBy.Author };
         await vm.InitializeAsync();
 
         // Both authors should have a group row (the deliberate fan-out).
@@ -506,7 +507,7 @@ public class BookListViewModelTests
             mystery = db.Genres.Single(g => g.Name == "Mystery");
         }
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory))
+        var vm = new BookListViewModel(TestDispatcher.For(factory))
         {
             SelectedGroupBy = LibraryGroupBy.Genre,
             SelectedGenreId = mystery.Id,
@@ -559,7 +560,7 @@ public class BookListViewModelTests
             await db.SaveChangesAsync();
         }
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory))
+        var vm = new BookListViewModel(TestDispatcher.For(factory))
         {
             SelectedGroupBy = LibraryGroupBy.None,
             SelectedStatus = BookStatus.Unread,
@@ -576,7 +577,7 @@ public class BookListViewModelTests
         var factory = new TestDbContextFactory();
         var bookId = await SeedSingleBookAsync(factory, status: BookStatus.Unread);
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory)) { SelectedGroupBy = LibraryGroupBy.None };
+        var vm = new BookListViewModel(TestDispatcher.For(factory)) { SelectedGroupBy = LibraryGroupBy.None };
         await vm.InitializeAsync();
 
         await vm.SetStatusAsync(bookId, BookStatus.Reading);
@@ -595,7 +596,7 @@ public class BookListViewModelTests
         var factory = new TestDbContextFactory();
         var bookId = await SeedSingleBookAsync(factory, status: BookStatus.Unread);
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory)) { SelectedGroupBy = LibraryGroupBy.None };
+        var vm = new BookListViewModel(TestDispatcher.For(factory)) { SelectedGroupBy = LibraryGroupBy.None };
         await vm.InitializeAsync();
 
         await vm.MarkReadAsync(bookId, rating: 4, notes: "Great read");
@@ -620,7 +621,7 @@ public class BookListViewModelTests
         var factory = new TestDbContextFactory();
         var bookId = await SeedSingleBookAsync(factory, status: BookStatus.Unread, notes: "keep me");
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory)) { SelectedGroupBy = LibraryGroupBy.None };
+        var vm = new BookListViewModel(TestDispatcher.For(factory)) { SelectedGroupBy = LibraryGroupBy.None };
         await vm.InitializeAsync();
 
         await vm.MarkReadAsync(bookId, rating: 3, notes: null);
@@ -638,7 +639,7 @@ public class BookListViewModelTests
         var factory = new TestDbContextFactory();
         var bookId = await SeedSingleBookAsync(factory, status: BookStatus.Unread);
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory))
+        var vm = new BookListViewModel(TestDispatcher.For(factory))
         {
             SelectedGroupBy = LibraryGroupBy.None,
             SelectedStatus = BookStatus.Unread,
@@ -663,7 +664,7 @@ public class BookListViewModelTests
         var factory = new TestDbContextFactory();
         var bookId = await SeedSingleBookAsync(factory, rating: 0);
 
-        var vm = new BookListViewModel(factory, TestDispatcher.For(factory)) { SelectedGroupBy = LibraryGroupBy.None };
+        var vm = new BookListViewModel(TestDispatcher.For(factory)) { SelectedGroupBy = LibraryGroupBy.None };
         await vm.InitializeAsync();
 
         await vm.SetRatingAsync(bookId, 5);
