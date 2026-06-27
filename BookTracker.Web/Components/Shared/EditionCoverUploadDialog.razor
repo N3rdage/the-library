@@ -21,22 +21,28 @@
                for accept="image/*" alone — they fall back to the file picker.
                iOS Safari respects the hint by pre-selecting "Take Photo or
                Video" in the action sheet but still allows gallery via the
-               same sheet. Forwarded through MudFileUpload's InputAttributes
-               which propagate to the underlying <input type="file">. *@
+               same sheet. Passed via @attributes → MudFileUpload's captured
+               UserAttributes, which it spreads onto the underlying
+               <input type="file"> (MudBlazor 9 dropped the old InputAttributes
+               parameter). *@
             <MudFileUpload T="IBrowserFile"
                            FilesChanged="OnFileChanged"
                            Accept="image/*"
                            MaximumFileCount="1"
-                           InputAttributes="@(new Dictionary<string, object?> { ["capture"] = "environment" })">
-                <ActivatorContent>
+                           @attributes="@(new Dictionary<string, object> { ["capture"] = "environment" })">
+                @* MudBlazor 9 replaced ActivatorContent with CustomContent,
+                   which no longer auto-wires a label to the hidden input —
+                   the activator must call OpenFilePickerAsync() itself. *@
+                <CustomContent>
                     <MudButton Variant="Variant.Outlined"
                                StartIcon="@Icons.Material.Filled.CameraAlt"
                                Color="Color.Primary"
                                FullWidth="true"
-                               Disabled="@uploading">
+                               Disabled="@uploading"
+                               OnClick="@(() => context.OpenFilePickerAsync())">
                         @(picked is null ? "Choose photo" : "Choose different photo")
                     </MudButton>
-                </ActivatorContent>
+                </CustomContent>
             </MudFileUpload>
 
             @if (picked is not null)
