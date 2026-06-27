@@ -62,76 +62,128 @@ public sealed class GetBookDetailHandler(IDbContextFactory<BookTrackerDbContext>
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
+        // Project the display shape directly — pull only the scalars and the
+        // small contributor / genre / copy lists the records need, rather than
+        // hydrating the whole Book→Editions→Copies / Works→{WorkAuthors,Genres,
+        // Series} / Tags graph (the old 6-Include AsSplitQuery read). The C#
+        // formatters (multi-author display, partial dates, format / series
+        // labels) run over the materialised projection below.
         var book = await db.Books
             .AsNoTracking()
-            .Include(b => b.Tags)
-            .Include(b => b.Editions)
-                .ThenInclude(e => e.Copies)
-            .Include(b => b.Editions)
-                .ThenInclude(e => e.Publisher)
-            .Include(b => b.Works)
-                .ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .Include(b => b.Works)
-                .ThenInclude(w => w.Genres)
-            .Include(b => b.Works)
-                .ThenInclude(w => w.Series)
-            .AsSplitQuery()
-            .FirstOrDefaultAsync(b => b.Id == query.BookId, ct);
+            .Where(b => b.Id == query.BookId)
+            .Select(b => new
+            {
+                b.Id,
+                b.Title,
+                b.Category,
+                b.Status,
+                b.Rating,
+                b.Notes,
+                b.DefaultCoverArtUrl,
+                b.DateAdded,
+                Works = b.Works.Select(w => new
+                {
+                    w.Id,
+                    w.Title,
+                    w.Subtitle,
+                    w.SeriesOrder,
+                    w.SeriesOrderDisplay,
+                    w.FirstPublishedDate,
+                    w.FirstPublishedDatePrecision,
+                    Contributors = w.WorkAuthors.Select(wa => new
+                    {
+                        wa.AuthorId,
+                        wa.Author.Name,
+                        wa.Role,
+                        wa.Order,
+                    }).ToList(),
+                    Genres = w.Genres.Select(g => g.Name).ToList(),
+                    SeriesId = w.SeriesId,
+                    SeriesName = w.Series == null ? null : w.Series.Name,
+                    SeriesType = w.Series == null ? (SeriesType?)null : w.Series.Type,
+                }).ToList(),
+                Editions = b.Editions.Select(e => new
+                {
+                    e.Id,
+                    e.Isbn,
+                    e.Format,
+                    PublisherName = e.Publisher == null ? null : e.Publisher.Name,
+                    e.DatePrinted,
+                    e.DatePrintedPrecision,
+                    e.CoverUrl,
+                    e.IsUserSupplied,
+                    e.EditionNumber,
+                    Copies = e.Copies.Select(c => new
+                    {
+                        c.Id,
+                        c.Condition,
+                        c.DateAcquired,
+                        c.Notes,
+                    }).ToList(),
+                }).ToList(),
+                Tags = b.Tags.Select(t => new { t.Id, t.Name }).ToList(),
+            })
+            .FirstOrDefaultAsync(ct);
 
         if (book is null) return null;
 
+        var works = book.Works
+            .OrderBy(w => w.SeriesOrder ?? int.MaxValue)
+            .ThenBy(w => w.Title)
+            .Select(w => new WorkDetail(
+                w.Id,
+                w.Title,
+                w.Subtitle,
+                // AuthorName carries the formatted multi-author display
+                // ("Preston & Child"); contributors are sorted Author-first then
+                // (Role, Order) to match WorkAuthorshipFormatter.Display(Work).
+                WorkAuthorshipFormatter.Display(w.Contributors
+                    .OrderBy(c => c.Role == AuthorRole.Author ? 0 : 1)
+                    .ThenBy(c => (int)c.Role)
+                    .ThenBy(c => c.Order)
+                    .Select(c => (c.Name, c.Role))),
+                // LeadAuthorId — first Author-role contributor — for the
+                // BookDetail '+author' deep-link into /authors.
+                w.Contributors
+                    .Where(c => c.Role == AuthorRole.Author)
+                    .OrderBy(c => c.Order)
+                    .Select(c => c.AuthorId)
+                    .FirstOrDefault(),
+                PartialDateParser.Format(w.FirstPublishedDate, w.FirstPublishedDatePrecision),
+                w.Genres.OrderBy(g => g).ToList(),
+                w.SeriesId is null
+                    ? null
+                    : new SeriesInfo(w.SeriesId.Value, w.SeriesName!, w.SeriesType!.Value,
+                        SeriesOrderParser.Format(w.SeriesOrder, w.SeriesOrderDisplay))))
+            .ToList();
+
+        var editions = book.Editions
+            .OrderBy(e => e.DatePrinted ?? DateOnly.MaxValue)
+            .ThenBy(e => e.Id)
+            .Select(e => new EditionDetail(
+                e.Id,
+                e.Isbn,
+                e.Format,
+                e.Format.DisplayName(),
+                e.PublisherName,
+                PartialDateParser.Format(e.DatePrinted, e.DatePrintedPrecision),
+                e.CoverUrl,
+                e.IsUserSupplied,
+                e.Copies
+                    .OrderBy(c => c.DateAcquired ?? DateTime.MaxValue)
+                    .ThenBy(c => c.Id)
+                    .Select(c => new CopyDetail(c.Id, c.Condition, c.DateAcquired, c.Notes))
+                    .ToList(),
+                e.EditionNumber))
+            .ToList();
+
+        var tags = book.Tags
+            .OrderBy(t => t.Name)
+            .Select(t => new TagDetail(t.Id, t.Name))
+            .ToList();
+
         return new BookDetail(
-            book.Id,
-            book.Title,
-            book.Category,
-            book.Status,
-            book.Rating,
-            book.Notes,
-            book.DefaultCoverArtUrl,
-            book.DateAdded,
-            book.Works
-                .OrderBy(w => w.SeriesOrder ?? int.MaxValue)
-                .ThenBy(w => w.Title)
-                .Select(ToWorkDetail)
-                .ToList(),
-            book.Editions
-                .OrderBy(e => e.DatePrinted ?? DateOnly.MaxValue)
-                .ThenBy(e => e.Id)
-                .Select(ToEditionDetail)
-                .ToList(),
-            book.Tags
-                .OrderBy(t => t.Name)
-                .Select(t => new TagDetail(t.Id, t.Name))
-                .ToList());
+            book.Id, book.Title, book.Category, book.Status, book.Rating,
+            book.Notes, book.DefaultCoverArtUrl, book.DateAdded, works, editions, tags);
     }
-
-    private static WorkDetail ToWorkDetail(Work w) => new(
-        w.Id,
-        w.Title,
-        w.Subtitle,
-        // AuthorName carries the formatted multi-author display ("Preston & Child")
-        // post-PR2; the field name stays so Razor consumers don't have to change.
-        WorkAuthorshipFormatter.Display(w),
-        // LeadAuthorId is the first WorkAuthor entry's Author — used by the
-        // BookDetail '+author' link to deep-link into the /authors page.
-        w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.AuthorId).FirstOrDefault(),
-        PartialDateParser.Format(w.FirstPublishedDate, w.FirstPublishedDatePrecision),
-        w.Genres.OrderBy(g => g.Name).Select(g => g.Name).ToList(),
-        w.Series is null ? null : new SeriesInfo(w.Series.Id, w.Series.Name, w.Series.Type, SeriesOrderParser.Format(w.SeriesOrder, w.SeriesOrderDisplay)));
-
-    private static EditionDetail ToEditionDetail(Edition e) => new(
-        e.Id,
-        e.Isbn,
-        e.Format,
-        e.Format.DisplayName(),
-        e.Publisher?.Name,
-        PartialDateParser.Format(e.DatePrinted, e.DatePrintedPrecision),
-        e.CoverUrl,
-        e.IsUserSupplied,
-        e.Copies
-            .OrderBy(c => c.DateAcquired ?? DateTime.MaxValue)
-            .ThenBy(c => c.Id)
-            .Select(c => new CopyDetail(c.Id, c.Condition, c.DateAcquired, c.Notes))
-            .ToList(),
-        e.EditionNumber);
 }
