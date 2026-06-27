@@ -135,13 +135,10 @@ public sealed class GetBookDetailHandler(IDbContextFactory<BookTrackerDbContext>
                 w.Title,
                 w.Subtitle,
                 // AuthorName carries the formatted multi-author display
-                // ("Preston & Child"); contributors are sorted Author-first then
-                // (Role, Order) to match WorkAuthorshipFormatter.Display(Work).
-                WorkAuthorshipFormatter.Display(w.Contributors
-                    .OrderBy(c => c.Role == AuthorRole.Author ? 0 : 1)
-                    .ThenBy(c => (int)c.Role)
-                    .ThenBy(c => c.Order)
-                    .Select(c => (c.Name, c.Role))),
+                // ("Preston & Child"); the (Name, Role, Order) overload owns the
+                // canonical contributor sort so it isn't re-spelled here.
+                WorkAuthorshipFormatter.Display(
+                    w.Contributors.Select(c => (c.Name, c.Role, c.Order))),
                 // LeadAuthorId — first Author-role contributor — for the
                 // BookDetail '+author' deep-link into /authors.
                 w.Contributors
