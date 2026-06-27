@@ -26,7 +26,11 @@ internal static class SqlServerContainer
 
     private static MsSqlContainer StartAndMigrate()
     {
-        var c = new MsSqlBuilder()
+        // Pin the image explicitly — Testcontainers 4.x deprecated the implicit
+        // default (and the MsSqlImage const) so an engine change can't slip in on
+        // a package bump. This literal is the 4.12.0 default, so behaviour is
+        // unchanged; bump it deliberately when we want a newer SQL Server CU.
+        var c = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04")
             .WithCleanUp(true)
             .Build();
 

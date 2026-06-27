@@ -13,6 +13,9 @@
     <IsPackable>false</IsPackable>
     <!-- Same SQLitePCLRaw alpine-RID noise as the Cache project. -->
     <NoWarn>$(NoWarn);NETSDK1206</NoWarn>
+    <!-- TD-11: opted out until the Mobile PR bumps SQLitePCLRaw off the
+         NU1903-flagged 2.1.2 (inherited transitively from the Cache project). -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
