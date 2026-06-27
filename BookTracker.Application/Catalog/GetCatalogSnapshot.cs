@@ -1,3 +1,4 @@
+using BookTracker.Application.Authors;
 using BookTracker.Application.Formatting;
 using BookTracker.Data;
 using BookTracker.Data.Models;
@@ -186,54 +187,28 @@ public sealed class GetCatalogSnapshotHandler(IDbContextFactory<BookTrackerDbCon
             .OrderBy(b => b.Title)
             .ToList();
 
-        // Authors — direct counts per row. For canonicals, the rolled-up
-        // count (canonical + all aliases' books) needs a separate query
-        // to avoid double-counting books that are credited to BOTH a
-        // canonical and its alias.
-        var directCounts = await db.Authors
+        // Authors — BookCount per row via the shared SQL-side rollup (Author-role
+        // distinct books), so /authors, Home, and this snapshot read one
+        // definition. Canonical rows take the rolled-up count (own + aliases,
+        // de-duped at the canonical key so a book credited to both counts once);
+        // alias rows take their own (tapping "Richard Bachman" shows just
+        // Bachman's titles, "Stephen King" the rolled-up total).
+        var authorRows = await db.Authors
             .AsNoTracking()
-            .Select(a => new
-            {
-                a.Id,
-                a.Name,
-                CanonicalId = a.CanonicalAuthorId ?? a.Id,
-                DirectBookCount = a.Works.SelectMany(w => w.Books).Select(b => b.Id).Distinct().Count(),
-            })
+            .Select(a => new { a.Id, a.Name, CanonicalId = a.CanonicalAuthorId ?? a.Id })
             .ToListAsync(ct);
 
-        // Distinct (canonical_id, book_id) pairs across the whole
-        // WorkAuthor graph. Group-by canonical gives the rolled-up
-        // count without double-counting books credited to both
-        // canonical and alias. Filtered to Role = Author so the snapshot's
-        // BookCount stays a true "books this person wrote" rollup —
-        // matches the /authors and Home top-authors semantics.
-        var canonicalBookPairs = await db.WorkAuthors
-            .AsNoTracking()
-            .Where(wa => wa.Role == AuthorRole.Author)
-            .SelectMany(wa => wa.Work.Books.Select(b => new
-            {
-                CanonicalId = wa.Author.CanonicalAuthorId ?? wa.AuthorId,
-                BookId = b.Id,
-            }))
-            .Distinct()
-            .ToListAsync(ct);
+        var byCanonical = await AuthorRollups.ByCanonicalAsync(db, ct);
+        var byAuthor = await AuthorRollups.ByAuthorAsync(db, ct);
 
-        var canonicalCounts = canonicalBookPairs
-            .GroupBy(x => x.CanonicalId)
-            .ToDictionary(g => g.Key, g => g.Count());
-
-        var authors = directCounts
+        var authors = authorRows
             .Select(a => new AuthorSnapshot(
                 a.Id,
                 a.Name,
                 a.CanonicalId,
-                // Canonical row → use the rolled-up count.
-                // Alias row → use its own direct count (so tapping
-                // "Richard Bachman" shows just Bachman's titles, while
-                // tapping "Stephen King" shows the rolled-up total).
                 BookCount: a.Id == a.CanonicalId
-                    ? canonicalCounts.GetValueOrDefault(a.CanonicalId, 0)
-                    : a.DirectBookCount))
+                    ? byCanonical.GetValueOrDefault(a.CanonicalId)?.BookCount ?? 0
+                    : byAuthor.GetValueOrDefault(a.Id)?.BookCount ?? 0))
             .OrderBy(a => a.Name)
             .ToList();
 

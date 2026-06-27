@@ -1,4 +1,5 @@
 using System.Text.Json;
+using BookTracker.Application.Genres;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Shared.Catalog;
@@ -210,12 +211,7 @@ Rules:
             .Take(15)
             .ToListAsync(ct);
 
-        var topGenres = await db.Genres
-            .Select(g => new { g.Name, Count = g.Works.Count })
-            .Where(g => g.Count > 0)
-            .OrderByDescending(g => g.Count)
-            .Take(10)
-            .ToListAsync(ct);
+        var topGenres = await GenreReads.TopGenresAsync(db, 10, ct);
 
         var highlyRated = await db.Books
             .Include(b => b.Works)
