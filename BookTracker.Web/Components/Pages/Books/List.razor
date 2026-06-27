@@ -1,5 +1,6 @@
 @page "/books"
 @using Microsoft.AspNetCore.Components.Web.Virtualization
+@using BookTracker.Application.Books
 @inject BookListViewModel VM
 @inject NavigationManager Nav
 @inject IDialogService DialogService
@@ -56,7 +57,7 @@
                 <MudGrid Spacing="2">
                     <MudItem xs="6" md="2">
                         <MudSelect T="LibraryGroupBy"
-                                   Value="@GroupBySelected"
+                                   Value="@VM.SelectedGroupBy"
                                    ValueChanged="@OnGroupByChanged"
                                    Label="Group by"
                                    Variant="Variant.Outlined"
@@ -235,7 +236,6 @@
 
 @code {
     private bool showFilters;
-    private LibraryGroupBy GroupBySelected { get; set; } = LibraryGroupBy.Author;
 
     // Filter state lives in the query string so the view is a navigable URL:
     // drilling into a book and pressing browser Back restores the exact filtered
@@ -272,7 +272,6 @@
         appliedQuery = incoming;
 
         VM.ApplyQueryParameters(QueryTerm, QueryGroup, QueryCategory, QueryGenre, QueryTag, QuerySeries, QueryStatus, QueryAuthor, QueryPage);
-        GroupBySelected = VM.SelectedGroupBy;
         await VM.ReloadAsync();
 
         // Keep the URL the source of truth: if the requested page was clamped
@@ -317,7 +316,6 @@
 
     private void OnGroupByChanged(LibraryGroupBy value)
     {
-        GroupBySelected = value;
         VM.SelectedGroupBy = value;
         ApplyFilterChange();
     }
@@ -384,7 +382,7 @@
     // Drill a group row into a flat, filtered book list (URL building lives on
     // the VM — see BuildGroupDrillParameters). Push-nav (no replace:true) so
     // Back returns to the group list: the group list → flat list → book stack.
-    private void DrillIntoGroup(BookListViewModel.GroupRow group)
+    private void DrillIntoGroup(GroupRow group)
     {
         Nav.NavigateTo(Nav.GetUriWithQueryParameters(VM.BuildGroupDrillParameters(group)));
     }
@@ -400,7 +398,7 @@
     // are captured before the row potentially leaves an active status filter;
     // every other status persists immediately. The row is patched in place by
     // the VM, so it stays visible until the next explicit reload.
-    private async Task OnStatusPicked(BookListViewModel.BookListItem book, BookStatus status)
+    private async Task OnStatusPicked(BookListItem book, BookStatus status)
     {
         if (status == book.Status) return;
 
@@ -414,7 +412,7 @@
         catch (Exception ex) { Snackbar.Add($"Couldn't update status: {ex.Message}", Severity.Error); }
     }
 
-    private async Task OpenMarkReadDialog(BookListViewModel.BookListItem book)
+    private async Task OpenMarkReadDialog(BookListItem book)
     {
         var parameters = new DialogParameters<MarkReadDialog>
         {
@@ -431,7 +429,7 @@
         }
     }
 
-    private async Task OnRatingPicked(BookListViewModel.BookListItem book, int rating)
+    private async Task OnRatingPicked(BookListItem book, int rating)
     {
         try { await VM.SetRatingAsync(book.Id, rating); }
         catch (Exception ex) { Snackbar.Add($"Couldn't save rating: {ex.Message}", Severity.Error); }
@@ -447,7 +445,7 @@
         </MudStack>
     </text>;
 
-    private RenderFragment RenderBooks(IReadOnlyList<BookListViewModel.BookListItem> books) =>
+    private RenderFragment RenderBooks(IReadOnlyList<BookListItem> books) =>
     @<text>
         @* Navigation is on the cover + title only (explicit links), NOT the whole
            row. That keeps the inline status menu / rating editable without a

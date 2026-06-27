@@ -1,20 +1,19 @@
 using BookTracker.Application;
 using BookTracker.Application.Books;
-using BookTracker.Data;
 using BookTracker.Data.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
 
-// Series is deliberately NOT a grouping mode: browsing a series is "filter to
-// that series + reading-order sort" (see LoadBooksAsync), which the Series
-// filter already gives. The grouped Series view was retired once it became a
-// redundant second door to the same flat list (TODO #53c).
-public enum LibraryGroupBy { None, Author, Genre }
-
-public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory, IDispatcher dispatcher)
+// View model for the Library page (/books). As of PR6b-4 it's fully off
+// DbContext: the reads dispatch GetLibraryFilterOptions / GetLibraryBooks /
+// GetLibraryGroups, and the inline writes dispatch SetBookStatus / MarkBookRead /
+// RateBook. The VM owns presentation + URL state only — the bound filter fields,
+// pagination, the filter ⇄ query-string mapping, and the group-drill routing.
+public class BookListViewModel(IDispatcher dispatcher)
 {
-    public const int PageSize = 20;
+    // Mirrors the page size the read handler paginates by, so the page's
+    // "showing X–Y of Z" label keys off one source of truth.
+    public const int PageSize = GetLibraryBooks.PageSize;
 
     public bool Loading { get; private set; } = true;
 
@@ -52,7 +51,7 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
     // grouping. Clearing the series filter reverts to the chosen grouping. The
     // page render branch + paging clamp key off this same property so the
     // loaded shape and the rendered shape can't disagree.
-    public bool ShowingFlatList => SelectedGroupBy == LibraryGroupBy.None || SelectedSeriesId > 0;
+    public bool ShowingFlatList => SelectedGroupBy == LibraryGroupBy.None || LibraryFilter.IsSpecificSeries(SelectedSeriesId);
 
     public List<GenreOption> AllGenres { get; private set; } = [];
     public List<TagOption> AllTags { get; private set; } = [];
@@ -79,321 +78,36 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
 
     public async Task LoadFilterOptionsAsync()
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-
-        var genres = await db.Genres
-            .OrderBy(g => g.Name)
-            .Select(g => new GenreOption(g.Id, g.Name, g.ParentGenreId))
-            .ToListAsync();
-
-        var topLevel = genres.Where(g => g.ParentGenreId is null).OrderBy(g => g.Name).ToList();
-        AllGenres = [];
-        foreach (var parent in topLevel)
-        {
-            AllGenres.Add(parent);
-            var children = genres.Where(g => g.ParentGenreId == parent.Id).OrderBy(g => g.Name);
-            AllGenres.AddRange(children);
-        }
-
-        AllTags = await db.Tags
-            .OrderBy(t => t.Name)
-            .Select(t => new TagOption(t.Id, t.Name))
-            .ToListAsync();
-
-        AllSeries = await db.Series
-            .OrderBy(s => s.Name)
-            .Select(s => new SeriesOption(s.Id, s.Name))
-            .ToListAsync();
-
-        // Author dropdown lists every Author entity (including pen names) by
-        // name so the user can filter by either the canonical or an alias.
-        AllAuthors = await db.Authors
-            .OrderBy(a => a.Name)
-            .Select(a => a.Name)
-            .ToListAsync();
+        var options = await dispatcher.Query(new GetLibraryFilterOptions());
+        AllGenres = options.Genres.ToList();
+        AllTags = options.Tags.ToList();
+        AllSeries = options.Series.ToList();
+        AllAuthors = options.Authors.ToList();
     }
 
     public async Task LoadBooksAsync()
     {
         Loading = true;
-        await using var db = await dbFactory.CreateDbContextAsync();
-
-        var query = ApplyFilters(BookQueryWithIncludes(db));
-
-        TotalCount = await query.CountAsync();
-        TotalPages = Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
-        if (CurrentPage > TotalPages) CurrentPage = TotalPages;
-
-        // Filtering to a single series (via the Series filter) sorts by that
-        // series' reading order rather than DateAdded — reading order is the
-        // whole point of looking at a series, and is what replaced the retired
-        // Series grouping (TODO #53c). Every other view keeps newest-first.
-        IQueryable<Book> ordered = SelectedSeriesId > 0
-            ? query
-                .OrderBy(b => b.Works
-                    .Where(w => w.SeriesId == SelectedSeriesId)
-                    .Min(w => (int?)w.SeriesOrder) ?? int.MaxValue)
-                .ThenBy(b => b.Title)
-            : query.OrderByDescending(b => b.DateAdded);
-
-        var raw = await ordered
-            .Skip((CurrentPage - 1) * PageSize)
-            .Take(PageSize)
-            .ToListAsync();
-
-        Books = raw.Select(ToBookListItem).ToList();
+        var result = await dispatcher.Query(new GetLibraryBooks(CurrentFilter(), CurrentPage));
+        Books = result.Books.ToList();
+        TotalCount = result.TotalCount;
+        TotalPages = result.TotalPages;
+        // The handler clamps an out-of-range page; reflect the effective page so
+        // OnParametersSetAsync can write the correction back to the URL.
+        CurrentPage = result.Page;
         Loading = false;
     }
 
     public async Task LoadGroupsAsync()
     {
         Loading = true;
-        Groups = [];
-
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var filtered = ApplyFilters(BookQueryWithIncludes(db));
-
-        // Each grouping reduces the filtered set into (Key, Label, Count)
-        // rows. The Genre grouping buckets ungenred books into an explicit
-        // "(no genre)" row at the end; Author has no "(none)" bucket. (A
-        // specific series filter never reaches here — it forces the flat list
-        // via ShowingFlatList — so there's no "(no series)" grouping bucket.)
-        Groups = SelectedGroupBy switch
-        {
-            LibraryGroupBy.Author => await GroupByAuthorAsync(db, filtered),
-            LibraryGroupBy.Genre => await GroupByGenreAsync(db, filtered),
-            _ => [],
-        };
-
+        Groups = (await dispatcher.Query(new GetLibraryGroups(CurrentFilter(), SelectedGroupBy))).ToList();
         Loading = false;
     }
 
-    private async Task<List<GroupRow>> GroupByAuthorAsync(BookTrackerDbContext db, IQueryable<Book> filtered)
-    {
-        // Filter-aware grouping. When the user has explicitly narrowed the
-        // result set, the default fan-out across every credited author of
-        // every matched book becomes confusing — filtering for "Asimov" on a
-        // library with an Asimov-contributed compendium would surface every
-        // co-author of that compendium (King, Bradbury, …) as separate group
-        // rows. Same shape happens with a book-title search hitting a
-        // compendium. Two narrowed paths, one default fan-out:
-        if (!string.IsNullOrWhiteSpace(SelectedAuthor))
-        {
-            return await SingleAuthorGroupAsync(db, filtered, SelectedAuthor.Trim());
-        }
-
-        if (!string.IsNullOrWhiteSpace(SearchTerm))
-        {
-            return await PrimaryAuthorGroupAsync(db, filtered);
-        }
-
-        // Default: fan out across all credited authors, rolling aliases up
-        // to canonicals. A Bachman title appears under King; a Preston +
-        // Child co-authored work appears under BOTH (post-PR2 behaviour).
-        var raw = await filtered
-            .SelectMany(b => b.Works.SelectMany(w => w.Authors.Select(a => new
-            {
-                BookId = b.Id,
-                CanonicalId = a.CanonicalAuthorId ?? a.Id,
-            })))
-            .Distinct() // Avoid double-counting a book whose two Works share a canonical author.
-            .GroupBy(x => x.CanonicalId)
-            .Select(g => new { CanonicalId = g.Key, Count = g.Count() })
-            .ToListAsync();
-
-        var canonicalIds = raw.Select(r => r.CanonicalId).ToList();
-        var names = await db.Authors
-            .Where(a => canonicalIds.Contains(a.Id))
-            .Select(a => new { a.Id, a.Name })
-            .ToDictionaryAsync(x => x.Id, x => x.Name);
-
-        return raw
-            .Select(r => new GroupRow(
-                Key: r.CanonicalId.ToString(),
-                Label: names.GetValueOrDefault(r.CanonicalId) ?? "(unknown)",
-                Count: r.Count))
-            .OrderBy(g => g.Label)
-            .ToList();
-    }
-
-    private async Task<List<GroupRow>> SingleAuthorGroupAsync(BookTrackerDbContext db, IQueryable<Book> filtered, string selectedName)
-    {
-        // Resolve the typed name to its canonical author. The name might be
-        // an alias (e.g. "Richard Bachman"); the group should still be keyed
-        // and labelled by the canonical (King), matching the rollup behaviour
-        // of the unfiltered fan-out path.
-        var matched = await db.Authors
-            .Where(a => a.Name == selectedName)
-            .Select(a => new
-            {
-                CanonicalId = a.CanonicalAuthorId ?? a.Id,
-                CanonicalName = a.CanonicalAuthor != null ? a.CanonicalAuthor.Name : a.Name,
-            })
-            .FirstOrDefaultAsync();
-
-        if (matched is null) return [];
-
-        var count = await filtered.CountAsync();
-        return count == 0
-            ? []
-            : [new GroupRow(matched.CanonicalId.ToString(), matched.CanonicalName, count)];
-    }
-
-    private async Task<List<GroupRow>> PrimaryAuthorGroupAsync(BookTrackerDbContext db, IQueryable<Book> filtered)
-    {
-        // For each matched book, attribute it to its primary author —
-        // the lowest-Order WorkAuthor of the first Work (by Work.Id). For
-        // single-Work books this is unambiguous; for compendiums it's the
-        // primary of whichever Work sorts first, which avoids the M-author
-        // fan-out at the cost of a small simplification (other Works'
-        // primaries don't get separate group rows). The book itself still
-        // renders its full author list inside the group (via ToBookListItem).
-        var rawAuthors = await filtered
-            .SelectMany(b => b.Works.SelectMany(w => w.WorkAuthors.Select(wa => new
-            {
-                BookId = b.Id,
-                CanonicalId = wa.Author.CanonicalAuthorId ?? wa.AuthorId,
-                WorkId = w.Id,
-                wa.Order,
-            })))
-            .ToListAsync();
-
-        // Pick the primary (smallest WorkId, then smallest Order) per book
-        // in-memory. Bounded by matched-books × authors-per-book; fine at the
-        // 3000+ books target since search narrows the set first.
-        var raw = rawAuthors
-            .GroupBy(x => x.BookId)
-            .Select(g => g.OrderBy(x => x.WorkId).ThenBy(x => x.Order).First())
-            .GroupBy(x => x.CanonicalId)
-            .Select(g => new { CanonicalId = g.Key, Count = g.Count() })
-            .ToList();
-
-        var canonicalIds = raw.Select(r => r.CanonicalId).ToList();
-        var names = await db.Authors
-            .Where(a => canonicalIds.Contains(a.Id))
-            .Select(a => new { a.Id, a.Name })
-            .ToDictionaryAsync(x => x.Id, x => x.Name);
-
-        return raw
-            .Select(r => new GroupRow(
-                Key: r.CanonicalId.ToString(),
-                Label: names.GetValueOrDefault(r.CanonicalId) ?? "(unknown)",
-                Count: r.Count))
-            .OrderBy(g => g.Label)
-            .ToList();
-    }
-
-    private async Task<List<GroupRow>> GroupByGenreAsync(BookTrackerDbContext db, IQueryable<Book> filtered)
-    {
-        var raw = await filtered
-            .SelectMany(b => b.Works.SelectMany(w => w.Genres.Select(g => new { BookId = b.Id, GenreId = g.Id })))
-            .Distinct()
-            .GroupBy(x => x.GenreId)
-            .Select(g => new { GenreId = g.Key, Count = g.Count() })
-            .ToListAsync();
-
-        var genreIds = raw.Select(r => r.GenreId).ToList();
-        var names = await db.Genres
-            .Where(g => genreIds.Contains(g.Id))
-            .Select(g => new { g.Id, g.Name })
-            .ToDictionaryAsync(x => x.Id, x => x.Name);
-
-        var groups = raw
-            .Select(r => new GroupRow(
-                Key: r.GenreId.ToString(),
-                Label: names.GetValueOrDefault(r.GenreId) ?? "(unknown)",
-                Count: r.Count))
-            .OrderBy(g => g.Label)
-            .ToList();
-
-        var ungenredCount = await filtered.CountAsync(b => !b.Works.Any(w => w.Genres.Any()));
-        if (ungenredCount > 0)
-        {
-            groups.Add(new GroupRow(NoneKey, "(no genre)", ungenredCount));
-        }
-        return groups;
-    }
-
-    private IQueryable<Book> BookQueryWithIncludes(BookTrackerDbContext db) => db.Books
-        .Include(b => b.Tags)
-        .Include(b => b.Works).ThenInclude(w => w.Genres)
-        .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author);
-
-    private IQueryable<Book> ApplyFilters(IQueryable<Book> query)
-    {
-        if (!string.IsNullOrWhiteSpace(SearchTerm))
-        {
-            var term = SearchTerm.Trim();
-            query = query.Where(b =>
-                b.Title.Contains(term) ||
-                b.Works.Any(w => w.Title.Contains(term) || w.Authors.Any(a => a.Name.Contains(term))));
-        }
-
-        if (!string.IsNullOrEmpty(SelectedCategory) && Enum.TryParse<BookCategory>(SelectedCategory, out var cat))
-        {
-            query = query.Where(b => b.Category == cat);
-        }
-
-        if (SelectedGenreId > 0)
-        {
-            query = query.Where(b => b.Works.Any(w => w.Genres.Any(g => g.Id == SelectedGenreId)));
-        }
-        else if (SelectedGenreId == -1)
-        {
-            query = query.Where(b => !b.Works.Any(w => w.Genres.Any()));
-        }
-
-        if (SelectedSeriesId > 0)
-        {
-            query = query.Where(b => b.Works.Any(w => w.SeriesId == SelectedSeriesId));
-        }
-        else if (SelectedSeriesId == -1)
-        {
-            query = query.Where(b => !b.Works.Any(w => w.SeriesId.HasValue));
-        }
-
-        if (SelectedTagId > 0)
-        {
-            query = query.Where(b => b.Tags.Any(t => t.Id == SelectedTagId));
-        }
-
-        if (SelectedStatus.HasValue)
-        {
-            query = query.Where(b => b.Status == SelectedStatus.Value);
-        }
-
-        if (!string.IsNullOrWhiteSpace(SelectedAuthor))
-        {
-            var author = SelectedAuthor.Trim();
-            query = query.Where(b => b.Works.Any(w =>
-                w.Authors.Any(a =>
-                    a.Name == author ||
-                    (a.CanonicalAuthor != null && a.CanonicalAuthor.Name == author))));
-        }
-
-        return query;
-    }
-
-    private static BookListItem ToBookListItem(Book b) => new(
-        b.Id,
-        b.Title,
-        // Subtitle only renders for single-Work books — for collections (Works
-        // > 1) the inner-Work subtitle would be the subtitle of an arbitrary
-        // story, which reads as data noise in the list. Collections surface
-        // their multi-Work-ness via the WorkCount indicator below the title.
-        b.Works.Count == 1 ? b.Works.First().Subtitle : null,
-        // Comma-join unique author names across all Works on this Book. For a
-        // single-Work co-authored book this renders "Preston, Child" rather
-        // than the prettier "Preston & Child" — list views stay uniform; the
-        // " & " formatter is reserved for single-book / single-Work surfaces
-        // (BookDetail, dialogs).
-        string.Join(", ", b.Works.SelectMany(w => w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.Author.Name)).Distinct()),
-        b.DefaultCoverArtUrl,
-        b.Status,
-        b.Rating,
-        b.Works.Count,
-        b.Works.SelectMany(w => w.Genres).Select(g => g.Name).Distinct().ToList(),
-        b.Tags.Select(t => t.Name).ToList());
+    // Snapshot the bound filter fields into the query contract.
+    private LibraryFilter CurrentFilter() => new(
+        SearchTerm, SelectedCategory, SelectedGenreId, SelectedTagId, SelectedSeriesId, SelectedAuthor, SelectedStatus);
 
     // Filter state ⇄ query string. The URL is the source of truth for the
     // Library view: every filter, the grouping, and the flat-list page live in
@@ -463,7 +177,7 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
                 dict["author"] = group.Label;
                 break;
             case LibraryGroupBy.Genre:
-                dict["genre"] = group.Key == NoneKey ? -1 : int.Parse(group.Key);
+                dict["genre"] = group.Key == GroupRow.NoneKey ? -1 : int.Parse(group.Key);
                 break;
             // None never reaches here — drill is only invoked from rendered
             // group rows, which exist only when grouping is Author/Genre. A new
@@ -530,16 +244,4 @@ public class BookListViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory
         BookStatus.Reference => "bg-info",
         _ => "bg-secondary"
     };
-
-    public const string NoneKey = "_none";
-
-    public record GroupRow(string Key, string Label, int Count);
-
-    public record BookListItem(
-        int Id, string Title, string? Subtitle, string Author, string? CoverUrl,
-        BookStatus Status, int Rating, int WorkCount, List<string> Genres, List<string> Tags);
-
-    public record GenreOption(int Id, string Name, int? ParentGenreId);
-    public record TagOption(int Id, string Name);
-    public record SeriesOption(int Id, string Name);
 }
