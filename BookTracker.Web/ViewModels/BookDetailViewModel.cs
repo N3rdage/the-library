@@ -106,18 +106,21 @@ public class BookDetailViewModel(
     {
         if (Book is null || string.IsNullOrWhiteSpace(name)) return null;
 
-        // Normalise here too: the dedup guard + the optimistic CurrentTags entry
-        // must use the same rule the handler's TagResolver stores by.
-        var normalized = name.Trim().ToLowerInvariant();
-        if (CurrentTags.Any(t => t.Name.Equals(normalized, StringComparison.OrdinalIgnoreCase)))
+        // Dedup against tags already on the book, case-insensitively, so a
+        // casing variant of an existing chip can't be re-added. (TagResolver
+        // owns storage-side normalisation; here we only need to match.)
+        var trimmed = name.Trim();
+        if (CurrentTags.Any(t => t.Name.Equals(trimmed, StringComparison.OrdinalIgnoreCase)))
         {
             return null;
         }
 
-        var tagId = await dispatcher.Send(new AddTagToBook(Book.Id, name));
-        if (tagId is null) return null;
+        // The handler returns the tag's actual stored Name — which can differ in
+        // casing from the input when it resolved to an existing row — so the
+        // optimistic chip matches what a reload will show.
+        var detail = await dispatcher.Send(new AddTagToBook(Book.Id, name));
+        if (detail is null) return null;
 
-        var detail = new TagDetail(tagId.Value, normalized);
         CurrentTags.Add(detail);
         CurrentTags = CurrentTags.OrderBy(t => t.Name).ToList();
         return detail;

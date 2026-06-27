@@ -16,7 +16,9 @@ public sealed class GetTagSuggestionsHandler(IDbContextFactory<BookTrackerDbCont
     public async Task<IReadOnlyList<string>> HandleAsync(GetTagSuggestions query, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var q = (query.Query ?? "").Trim().ToLowerInvariant();
+        // Same normalisation the resolver stores by, so a query matches the
+        // (lower-cased) stored names (TagResolver is the single owner).
+        var q = TagResolver.Normalize(query.Query);
 
         return await db.Tags
             .AsNoTracking()

@@ -15,9 +15,15 @@ namespace BookTracker.Application.Books;
 /// </summary>
 public static class TagResolver
 {
+    /// <summary>The one tag-name normalisation rule — trim + lower-case — so
+    /// "Signed" and "signed" resolve to a single row. Every path that decides
+    /// "is this the same tag?" (find-or-create here, the autocomplete query in
+    /// GetTagSuggestions) routes through this, so they can't drift apart.</summary>
+    public static string Normalize(string? name) => name?.Trim().ToLowerInvariant() ?? "";
+
     public static async Task<Tag> FindOrCreateAsync(string name, BookTrackerDbContext db, CancellationToken ct = default)
     {
-        var normalized = name?.Trim().ToLowerInvariant();
+        var normalized = Normalize(name);
         if (string.IsNullOrEmpty(normalized))
             throw new ArgumentException("Tag name must be non-empty.", nameof(name));
 
