@@ -37,11 +37,20 @@ public sealed class GetHomeDashboardHandler(IDbContextFactory<BookTrackerDbConte
             .Where(a => a.CanonicalAuthorId == null)
             .CountAsync(ct);
 
-        // Top canonical authors by distinct book count. Order by count then id
-        // for a deterministic boundary, look up the canonical names, then sort
-        // for display (count desc, name asc).
-        var rollup = await AuthorRollups.ByCanonicalAsync(db, ct);
+        // Top canonical authors by distinct book count. Roll per-author counts up
+        // onto canonicals (aliases fold into their canonical), drop authors with
+        // no surviving books so a works-but-all-tombstoned author can't land a
+        // "0 books" row in the headline, order by count then id for a
+        // deterministic boundary, then sort for display (count desc, name asc).
+        var perAuthor = await AuthorRollups.PerAuthorAsync(db, ct);
+        var membership = await db.Authors
+            .AsNoTracking()
+            .Select(a => new { a.Id, Canonical = a.CanonicalAuthorId ?? a.Id })
+            .ToListAsync(ct);
+        var rollup = AuthorRollups.RollUpToCanonical(
+            perAuthor, membership.Select(m => (m.Id, m.Canonical)));
         var top = rollup
+            .Where(kv => kv.Value.BookCount > 0)
             .OrderByDescending(kv => kv.Value.BookCount)
             .ThenBy(kv => kv.Key)
             .Take(10)

@@ -198,8 +198,9 @@ public sealed class GetCatalogSnapshotHandler(IDbContextFactory<BookTrackerDbCon
             .Select(a => new { a.Id, a.Name, CanonicalId = a.CanonicalAuthorId ?? a.Id })
             .ToListAsync(ct);
 
-        var byCanonical = await AuthorRollups.ByCanonicalAsync(db, ct);
-        var byAuthor = await AuthorRollups.ByAuthorAsync(db, ct);
+        var perAuthor = await AuthorRollups.PerAuthorAsync(db, ct);
+        var byCanonical = AuthorRollups.RollUpToCanonical(
+            perAuthor, authorRows.Select(a => (a.Id, a.CanonicalId)));
 
         var authors = authorRows
             .Select(a => new AuthorSnapshot(
@@ -208,7 +209,7 @@ public sealed class GetCatalogSnapshotHandler(IDbContextFactory<BookTrackerDbCon
                 a.CanonicalId,
                 BookCount: a.Id == a.CanonicalId
                     ? byCanonical.GetValueOrDefault(a.CanonicalId)?.BookCount ?? 0
-                    : byAuthor.GetValueOrDefault(a.Id)?.BookCount ?? 0))
+                    : perAuthor.GetValueOrDefault(a.Id)?.BookCount ?? 0))
             .OrderBy(a => a.Name)
             .ToList();
 

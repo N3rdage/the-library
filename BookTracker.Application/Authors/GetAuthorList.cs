@@ -37,19 +37,20 @@ public sealed class GetAuthorListHandler(IDbContextFactory<BookTrackerDbContext>
             .OrderBy(a => a.Name)
             .ToListAsync(ct);
 
-        // SQL-side distinct counts (Author-role only). Canonical rows read the
-        // rolled-up totals (own + aliases, de-duped at the canonical key); alias
-        // rows read their own. An author with no Author-role works has no entry
-        // in either map → 0s via the null-coalesce below.
-        var byCanonical = await AuthorRollups.ByCanonicalAsync(db, ct);
-        var byAuthor = await AuthorRollups.ByAuthorAsync(db, ct);
+        // SQL-side per-author distinct counts (Author-role only). Canonical rows
+        // read the rolled-up totals (own + aliases, summed); alias rows read their
+        // own. An author with no Author-role works has no entry in either map →
+        // 0s via the null-coalesce below.
+        var perAuthor = await AuthorRollups.PerAuthorAsync(db, ct);
+        var byCanonical = AuthorRollups.RollUpToCanonical(
+            perAuthor, authorsRaw.Select(a => (a.Id, a.CanonicalAuthorId ?? a.Id)));
 
         var rows = new List<AuthorRow>(authorsRaw.Count);
         foreach (var a in authorsRaw)
         {
             var counts = a.CanonicalAuthorId is null
                 ? byCanonical.GetValueOrDefault(a.Id)
-                : byAuthor.GetValueOrDefault(a.Id);
+                : perAuthor.GetValueOrDefault(a.Id);
 
             rows.Add(new AuthorRow(
                 a.Id,
