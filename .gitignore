@@ -3,6 +3,10 @@ bin/
 obj/
 [Dd]ebug/
 [Rr]elease/
+
+# Test run output (dotnet test --logger trx writes TestResults/*.trx)
+TestResults/
+*.trx
 x64/
 x86/
 [Bb]uild/
