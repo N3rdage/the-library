@@ -41,28 +41,54 @@ public sealed class GetLibraryBooksHandler(IDbContextFactory<BookTrackerDbContex
                 .ThenBy(b => b.Title)
             : filtered.OrderByDescending(b => b.DateAdded);
 
+        // Project the page in SQL — pull only the scalars + the small per-Work
+        // author/genre name lists and the tag names, instead of hydrating the
+        // Book→Works→{WorkAuthors,Genres}+Tags graph (the old TD-2 cartesian).
+        // The display computations (single-Work subtitle, distinct author join,
+        // distinct genres) run over the materialised projection below, identical
+        // to the old in-memory map.
         var raw = await ordered
             .Skip((page - 1) * GetLibraryBooks.PageSize)
             .Take(GetLibraryBooks.PageSize)
+            .Select(b => new
+            {
+                b.Id,
+                b.Title,
+                b.DefaultCoverArtUrl,
+                b.Status,
+                b.Rating,
+                WorksCount = b.Works.Count,
+                Works = b.Works.Select(w => new
+                {
+                    w.Subtitle,
+                    Authors = w.WorkAuthors
+                        .Where(wa => wa.Role == AuthorRole.Author)
+                        .OrderBy(wa => wa.Order)
+                        .Select(wa => wa.Author.Name)
+                        .ToList(),
+                    Genres = w.Genres.Select(g => g.Name).ToList(),
+                }).ToList(),
+                Tags = b.Tags.Select(t => t.Name).ToList(),
+            })
             .ToListAsync(ct);
 
-        return new LibraryBooksResult(
-            raw.Select(ToBookListItem).ToList(), totalCount, totalPages, page);
-    }
+        var items = raw.Select(b => new BookListItem(
+            b.Id,
+            b.Title,
+            // Subtitle only renders for single-Work books — for collections the
+            // inner-Work subtitle would be an arbitrary story's, which reads as noise.
+            b.WorksCount == 1 ? b.Works[0].Subtitle : null,
+            // Comma-join unique author names across all Works (each Work's authors
+            // already ordered by Order in SQL). List views stay uniform; the " & "
+            // formatter is reserved for single-Work surfaces.
+            string.Join(", ", b.Works.SelectMany(w => w.Authors).Distinct()),
+            b.DefaultCoverArtUrl,
+            b.Status,
+            b.Rating,
+            b.WorksCount,
+            b.Works.SelectMany(w => w.Genres).Distinct().ToList(),
+            b.Tags)).ToList();
 
-    private static BookListItem ToBookListItem(Book b) => new(
-        b.Id,
-        b.Title,
-        // Subtitle only renders for single-Work books — for collections the
-        // inner-Work subtitle would be an arbitrary story's, which reads as noise.
-        b.Works.Count == 1 ? b.Works.First().Subtitle : null,
-        // Comma-join unique author names across all Works. List views stay
-        // uniform; the " & " formatter is reserved for single-Work surfaces.
-        string.Join(", ", b.Works.SelectMany(w => w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.Author.Name)).Distinct()),
-        b.DefaultCoverArtUrl,
-        b.Status,
-        b.Rating,
-        b.Works.Count,
-        b.Works.SelectMany(w => w.Genres).Select(g => g.Name).Distinct().ToList(),
-        b.Tags.Select(t => t.Name).ToList());
+        return new LibraryBooksResult(items, totalCount, totalPages, page);
+    }
 }

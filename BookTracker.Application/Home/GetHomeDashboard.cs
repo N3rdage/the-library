@@ -42,28 +42,27 @@ public sealed class GetHomeDashboardHandler(IDbContextFactory<BookTrackerDbConte
         // no surviving books so a works-but-all-tombstoned author can't land a
         // "0 books" row in the headline, order by count then id for a
         // deterministic boundary, then sort for display (count desc, name asc).
-        var perAuthor = await AuthorRollups.PerAuthorAsync(db, ct);
-        var membership = await db.Authors
+        var perAuthorBooks = await AuthorRollups.PerAuthorBookCountAsync(db, ct);
+        // One pass over Authors carries both the canonical membership (for the
+        // rollup) and the names (for the display lookup) — no second round-trip
+        // just to resolve the top-10 canonical names.
+        var authors = await db.Authors
             .AsNoTracking()
-            .Select(a => new { a.Id, Canonical = a.CanonicalAuthorId ?? a.Id })
+            .Select(a => new { a.Id, a.Name, Canonical = a.CanonicalAuthorId ?? a.Id })
             .ToListAsync(ct);
         var rollup = AuthorRollups.RollUpToCanonical(
-            perAuthor, membership.Select(m => (m.Id, m.Canonical)));
+            perAuthorBooks, authors.Select(m => (m.Id, m.Canonical)));
         var top = rollup
-            .Where(kv => kv.Value.BookCount > 0)
-            .OrderByDescending(kv => kv.Value.BookCount)
+            .Where(kv => kv.Value > 0)
+            .OrderByDescending(kv => kv.Value)
             .ThenBy(kv => kv.Key)
             .Take(10)
             .ToList();
 
-        var canonicalIds = top.Select(t => t.Key).ToList();
-        var nameLookup = await db.Authors
-            .Where(a => canonicalIds.Contains(a.Id))
-            .Select(a => new { a.Id, a.Name })
-            .ToDictionaryAsync(x => x.Id, x => x.Name, ct);
+        var nameById = authors.ToDictionary(a => a.Id, a => a.Name);
 
         var topAuthors = top
-            .Select(t => new AuthorCount(t.Key, nameLookup.GetValueOrDefault(t.Key) ?? "(unknown)", t.Value.BookCount))
+            .Select(t => new AuthorCount(t.Key, nameById.GetValueOrDefault(t.Key) ?? "(unknown)", t.Value))
             .OrderByDescending(a => a.Count)
             .ThenBy(a => a.Author)
             .ToList();
