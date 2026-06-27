@@ -17,6 +17,11 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 
+		<!-- TD-11: opted out of the repo-wide TreatWarningsAsErrors until the
+		     Mobile PR handles XA0141 (16KB-page alignment of ZXing camera-core +
+		     SQLitePCLRaw native libs) — partly NoWarn, partly upstream bumps. -->
+		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
 
 		<ApplicationTitle>Bookshelf</ApplicationTitle>

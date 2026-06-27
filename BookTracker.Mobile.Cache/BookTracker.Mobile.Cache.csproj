@@ -21,6 +21,10 @@
          runners, never alpine. Suppressing rather than carrying the
          noise on every build. -->
     <NoWarn>$(NoWarn);NETSDK1206</NoWarn>
+    <!-- TD-11: opted out of the repo-wide TreatWarningsAsErrors until the
+         Mobile PR bumps SQLitePCLRaw off the NU1903-flagged 2.1.2 (high-severity
+         vuln, transitive via sqlite-net-pcl). Delete this line once clean. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

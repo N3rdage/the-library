@@ -1,0 +1,23 @@
+<Project>
+
+  <!--
+    Repo-wide build policy (TD-11). Promotes compiler + restore warnings to
+    errors so deprecations, nullable holes, analyzer hits, and NuGet audit
+    advisories gate a PR instead of slipping through an incremental build
+    (which only recompiles changed assemblies, so warnings in untouched code
+    silently vanish — see .claude-memory/feedback_verify_warnings_clean_build.md).
+
+    This only PROMOTES existing warnings — it adds no new analyzers and no
+    stricter nullable/analysis settings.
+
+    Projects not yet warning-clean opt out with their own
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>. Current opt-outs
+    (cleared in the TD-11/TD-10 Mobile PR): BookTracker.Mobile.Cache,
+    BookTracker.Mobile.Cache.Tests, BookTracker.Mobile — all blocked on the
+    SQLitePCLRaw bump (NU1903 + XA0141).
+  -->
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>
