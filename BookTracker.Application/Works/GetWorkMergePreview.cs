@@ -110,18 +110,10 @@ public sealed class GetWorkMergePreviewHandler(IDbContextFactory<BookTrackerDbCo
             .Select(b => b.Title)
             .ToListAsync(ct);
 
-        // Cover pick: prefer a single-Work Book (its cover represents this
-        // Work faithfully); fall back to any Book.
-        var singleWorkBookCover = await db.Books
-            .Where(b => b.Works.Any(w => w.Id == id) && b.Works.Count == 1)
-            .Select(b => b.DefaultCoverArtUrl)
-            .FirstOrDefaultAsync(ct);
-        var fallbackCover = singleWorkBookCover is null
-            ? await db.Books
-                .Where(b => b.Works.Any(w => w.Id == id))
-                .Select(b => b.DefaultCoverArtUrl)
-                .FirstOrDefaultAsync(ct)
-            : singleWorkBookCover;
+        // Cover pick: prefer a single-Work Book, fall back to any Book
+        // containing this Work (shared rule — BookCovers).
+        var fallbackCover = await Books.BookCovers.PickAsync(
+            db.Books.Where(b => b.Works.Any(w => w.Id == id)), ct);
 
         return new WorkMergeDetail(
             work.Id, work.Title, work.Subtitle,

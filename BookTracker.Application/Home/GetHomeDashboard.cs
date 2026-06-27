@@ -42,16 +42,16 @@ public sealed class GetHomeDashboardHandler(IDbContextFactory<BookTrackerDbConte
         // no surviving books so a works-but-all-tombstoned author can't land a
         // "0 books" row in the headline, order by count then id for a
         // deterministic boundary, then sort for display (count desc, name asc).
-        var perAuthor = await AuthorRollups.PerAuthorAsync(db, ct);
+        var perAuthorBooks = await AuthorRollups.PerAuthorBookCountAsync(db, ct);
         var membership = await db.Authors
             .AsNoTracking()
             .Select(a => new { a.Id, Canonical = a.CanonicalAuthorId ?? a.Id })
             .ToListAsync(ct);
         var rollup = AuthorRollups.RollUpToCanonical(
-            perAuthor, membership.Select(m => (m.Id, m.Canonical)));
+            perAuthorBooks, membership.Select(m => (m.Id, m.Canonical)));
         var top = rollup
-            .Where(kv => kv.Value.BookCount > 0)
-            .OrderByDescending(kv => kv.Value.BookCount)
+            .Where(kv => kv.Value > 0)
+            .OrderByDescending(kv => kv.Value)
             .ThenBy(kv => kv.Key)
             .Take(10)
             .ToList();
@@ -63,7 +63,7 @@ public sealed class GetHomeDashboardHandler(IDbContextFactory<BookTrackerDbConte
             .ToDictionaryAsync(x => x.Id, x => x.Name, ct);
 
         var topAuthors = top
-            .Select(t => new AuthorCount(t.Key, nameLookup.GetValueOrDefault(t.Key) ?? "(unknown)", t.Value.BookCount))
+            .Select(t => new AuthorCount(t.Key, nameLookup.GetValueOrDefault(t.Key) ?? "(unknown)", t.Value))
             .OrderByDescending(a => a.Count)
             .ThenBy(a => a.Author)
             .ToList();

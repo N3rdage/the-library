@@ -49,6 +49,17 @@ public static class AuthorRollups
         return Merge(works, books, series);
     }
 
+    // Just the distinct book count per author (Author-role) — for consumers that
+    // need only BookCount (Home top-authors, the catalog snapshot) and shouldn't
+    // pay for the works + series distinct scans PerAuthorAsync also runs (F3).
+    public static Task<Dictionary<int, int>> PerAuthorBookCountAsync(
+        BookTrackerDbContext db, CancellationToken ct)
+    {
+        var baseQ = db.WorkAuthors.AsNoTracking().Where(wa => wa.Role == AuthorRole.Author);
+        return CountByKeyAsync(
+            baseQ.SelectMany(wa => wa.Work.Books.Select(b => new KeyVal(wa.AuthorId, b.Id))), ct);
+    }
+
     // Roll per-author counts up onto canonical authors by summing each canonical's
     // members. `membership` maps every author id to its canonical id (own id when
     // not an alias) — callers build it from data they already load. Result is
@@ -67,6 +78,21 @@ public static class AuthorRollups
                 cur.WorkCount + c.WorkCount,
                 cur.BookCount + c.BookCount,
                 cur.SeriesCount + c.SeriesCount);
+        }
+        return result;
+    }
+
+    // Int overload — sum a single per-author scalar (e.g. BookCount) up onto
+    // canonicals. Same membership + accepted cross-member double-count as above.
+    public static Dictionary<int, int> RollUpToCanonical(
+        IReadOnlyDictionary<int, int> perAuthor,
+        IEnumerable<(int AuthorId, int CanonicalId)> membership)
+    {
+        var result = new Dictionary<int, int>();
+        foreach (var (authorId, canonicalId) in membership)
+        {
+            if (!perAuthor.TryGetValue(authorId, out var v)) continue;
+            result[canonicalId] = result.GetValueOrDefault(canonicalId) + v;
         }
         return result;
     }

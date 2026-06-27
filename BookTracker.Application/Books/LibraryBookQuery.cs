@@ -4,20 +4,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Application.Books;
 
-// Shared filtered Book query for the Library read models — the include graph +
-// the filter predicate, lifted verbatim from BookListViewModel so the flat-list
-// (GetLibraryBooks) and grouped (GetLibraryGroups) reads filter identically.
-// NOTE: the load-then-project shape with a 4-collection Include (the TD-2
-// cartesian) is preserved as-is; pushing the projection to SQL is deferred to
-// the TD-17 close-out consolidation.
+// Shared filtered Book query for the Library read models — just the filter
+// predicate, so the flat-list (GetLibraryBooks) and grouped (GetLibraryGroups)
+// reads filter identically. The filters are all `.Any()` → SQL `EXISTS`, so no
+// Includes are needed: GetLibraryGroups projects via SelectMany/GroupBy and
+// GetLibraryBooks projects its page (both close-2b), so the old 4-collection
+// Include cartesian (TD-2) is gone.
 internal static class LibraryBookQuery
 {
     public static IQueryable<Book> Filtered(BookTrackerDbContext db, LibraryFilter f)
     {
-        IQueryable<Book> query = db.Books
-            .Include(b => b.Tags)
-            .Include(b => b.Works).ThenInclude(w => w.Genres)
-            .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author);
+        IQueryable<Book> query = db.Books;
 
         if (!string.IsNullOrWhiteSpace(f.SearchTerm))
         {

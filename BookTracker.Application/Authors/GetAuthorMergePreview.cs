@@ -67,19 +67,10 @@ public sealed class GetAuthorMergePreviewHandler(IDbContextFactory<BookTrackerDb
             .Select(w => w.Title)
             .ToListAsync(ct);
 
-        // Cover pick: prefer a Book that contains a single Work credited to
-        // this author (its cover faithfully represents one of the author's
-        // Works); fall back to any Book by the author.
-        var singleWorkBookCover = await db.Books
-            .Where(b => b.Works.Any(w => w.Authors.Any(a => a.Id == id)) && b.Works.Count == 1)
-            .Select(b => b.DefaultCoverArtUrl)
-            .FirstOrDefaultAsync(ct);
-        var cover = singleWorkBookCover is null
-            ? await db.Books
-                .Where(b => b.Works.Any(w => w.Authors.Any(a => a.Id == id)))
-                .Select(b => b.DefaultCoverArtUrl)
-                .FirstOrDefaultAsync(ct)
-            : singleWorkBookCover;
+        // Cover pick: prefer a Book that contains a single Work credited to this
+        // author, fall back to any Book by the author (shared rule — BookCovers).
+        var cover = await Books.BookCovers.PickAsync(
+            db.Books.Where(b => b.Works.Any(w => w.Authors.Any(a => a.Id == id))), ct);
 
         return new AuthorMergeDetail(
             author.Id, author.Name,
