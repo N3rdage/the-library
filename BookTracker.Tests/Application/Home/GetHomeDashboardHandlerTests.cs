@@ -78,6 +78,30 @@ public class GetHomeDashboardHandlerTests
     }
 
     [Fact]
+    public async Task TopAuthors_ExcludesAuthorsWithNoSurvivingBooks()
+    {
+        // An author whose only book is soft-deleted still has an Author-role
+        // Work (WorkCount>0) but zero live books. The card ranks by distinct
+        // BookCount, so without a positive-count guard a "0 books" row could
+        // slip into the headline when few authors have surviving books. Guard:
+        // such authors are dropped from the top-authors list.
+        using (var db = _factory.CreateDbContext())
+        {
+            var live = new Author { Name = "Live Author" };
+            var ghost = new Author { Name = "Ghost Author" };
+            db.Books.Add(new Book { Title = "Live Book", Works = [new Work { Title = "Live Book", WorkAuthors = [new WorkAuthor { Author = live, Order = 0 }] }] });
+            db.Books.Add(new Book { Title = "Deleted Book", DeletedAt = DateTime.UtcNow, Works = [new Work { Title = "Deleted Book", WorkAuthors = [new WorkAuthor { Author = ghost, Order = 0 }] }] });
+            await db.SaveChangesAsync();
+        }
+
+        var dashboard = await Load();
+
+        Assert.Single(dashboard.TopAuthors);
+        Assert.Equal("Live Author", dashboard.TopAuthors[0].Author);
+        Assert.DoesNotContain(dashboard.TopAuthors, a => a.Author == "Ghost Author");
+    }
+
+    [Fact]
     public async Task WithGenres_ReturnsTopGenres()
     {
         using (var db = _factory.CreateDbContext())

@@ -109,11 +109,15 @@ public class GetCatalogSnapshotHandlerTests
     }
 
     [Fact]
-    public async Task GetSnapshotAsync_BookCreditedToBothCanonicalAndAlias_NotDoubleCountedInRollup()
+    public async Task GetSnapshotAsync_BookCreditedToBothCanonicalAndAlias_CountedPerCreditingMember()
     {
         // Edge case: a single book has WorkAuthors crediting both King AND
         // Bachman (rare but possible — e.g. a foreword/author note that
-        // names the alias). Canonical rollup must not double-count.
+        // names the alias). The canonical rollup is a SUM of member counts, so
+        // such a book is counted once per crediting member — a deliberate
+        // accepted imprecision (see AuthorRollups), traded for dropping a
+        // cross-member DISTINCT for numeric perfection nobody can see. The only
+        // real instance in ~2000 books is King's own-name Bachman omnibus.
         using (var db = _factory.CreateDbContext())
         {
             var king = new Author { Name = "Stephen King" };
@@ -141,9 +145,9 @@ public class GetCatalogSnapshotHandlerTests
         var snapshot = await GetSnapshot();
         var kingRow = snapshot.Authors.Single(a => a.Name == "Stephen King");
 
-        // Despite the book being credited to both King AND Bachman (whose
-        // canonical is King), the rollup should count it once.
-        Assert.Equal(1, kingRow.BookCount);
+        // Credited to both King AND Bachman (whose canonical is King), so the
+        // summed rollup counts it once per member = 2. Accepted (see above).
+        Assert.Equal(2, kingRow.BookCount);
     }
 
     [Fact]
