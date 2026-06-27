@@ -1,11 +1,7 @@
 using BookTracker.Application;
 using BookTracker.Application.Wishlist;
-using BookTracker.Data;
 using BookTracker.Data.Models;
-using BookTracker.Shared.Catalog;
 using BookTracker.Web.Services;
-using Microsoft.EntityFrameworkCore;
-using BookTracker.Application.Formatting;
 
 namespace BookTracker.Web.ViewModels;
 
@@ -24,7 +20,6 @@ namespace BookTracker.Web.ViewModels;
 // The "Do I have this?" search that lived here pre-2026-05-25 was
 // deleted in PR A — duplicate of /bookshop's scan + Bookshelf ScanPage.
 public class WishlistViewModel(
-    IDbContextFactory<BookTrackerDbContext> dbFactory,
     IBookLookupService lookup,
     IDispatcher dispatcher,
     ILogger<WishlistViewModel> logger)
@@ -86,7 +81,7 @@ public class WishlistViewModel(
                     // tells them before they click. Text-search candidates
                     // don't get this check (no ISBN to match against).
                     var (ownedBookId, wishlistedItemId) =
-                        await FindDuplicateMatchesAsync(cleaned, ct);
+                        await dispatcher.Query(new GetWishlistDuplicate(cleaned), ct);
 
                     SearchCandidates = [new WishlistCandidate(
                         Title: hit.Title,
@@ -161,7 +156,7 @@ public class WishlistViewModel(
                 if (hit is not null)
                 {
                     var (ownedBookId, wishlistedItemId) =
-                        await FindDuplicateMatchesAsync(cleaned, ct);
+                        await dispatcher.Query(new GetWishlistDuplicate(cleaned), ct);
                     SearchCandidates = [new WishlistCandidate(
                         Title: hit.Title,
                         Author: hit.Author,
@@ -202,29 +197,6 @@ public class WishlistViewModel(
             Searching = false;
             SearchedOnce = true;
         }
-    }
-
-    /// <summary>Returns (existing Book.Id if owned, existing WishlistItem.Id
-    /// if wishlisted) for the given ISBN, or (null, null) for neither.
-    /// Owned check hits Edition.Isbn (filtered-unique index → seek). Wishlist
-    /// check unions the legacy single column with the new WishlistItemIsbn
-    /// table so both shapes of wishlist row are caught.</summary>
-    private async Task<(int? OwnedBookId, int? WishlistedItemId)> FindDuplicateMatchesAsync(
-        string isbn, CancellationToken ct)
-    {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-
-        var ownedBookId = await db.Editions
-            .Where(e => e.Isbn == isbn)
-            .Select(e => (int?)e.BookId)
-            .FirstOrDefaultAsync(ct);
-
-        var wishlistedItemId = await db.WishlistItems
-            .Where(w => w.Isbn == isbn || w.Isbns.Any(i => i.Isbn == isbn))
-            .Select(w => (int?)w.Id)
-            .FirstOrDefaultAsync(ct);
-
-        return (ownedBookId, wishlistedItemId);
     }
 
     public void ClearSearch()
@@ -274,83 +246,9 @@ public class WishlistViewModel(
 
     public async Task LoadSeriesGapsAsync()
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-
-        // Structured series with a known expected count where we're missing works.
-        // Series → Works → Books gives us the parent book(s) to link to.
-        var incompleteSeries = await db.Series
-            .Include(s => s.Works).ThenInclude(w => w.Books)
-            .Where(s => s.Type == SeriesType.Series && s.ExpectedCount != null)
-            .ToListAsync();
-
-        SeriesGaps = incompleteSeries
-            .Select(s =>
-            {
-                // Only true numbered volumes occupy a slot (shared rule —
-                // SeriesSlots.OccupiesNumberedSlot). A floored interquel ("4.5",
-                // SeriesOrderDisplay set) must not count as owning slot #4, or
-                // the real #4 gap is silently hidden.
-                var ownedPositions = s.Works
-                    .Where(w => SeriesSlots.OccupiesNumberedSlot(w.SeriesOrder, w.SeriesOrderDisplay))
-                    .Select(w => w.SeriesOrder!.Value)
-                    .Where(o => o <= s.ExpectedCount!.Value)
-                    .ToHashSet();
-
-                var missing = new List<int>();
-                for (int i = 1; i <= s.ExpectedCount!.Value; i++)
-                {
-                    if (!ownedPositions.Contains(i))
-                        missing.Add(i);
-                }
-
-                return new SeriesGap(
-                    s.Id,
-                    s.Name,
-                    s.Author,
-                    ownedPositions.Count,
-                    s.ExpectedCount.Value,
-                    missing,
-                    s.Works.OrderBy(w => w.SeriesOrder ?? int.MaxValue)
-                        .Select(w => new OwnedSeriesBook(
-                            w.Books.FirstOrDefault()?.Id ?? 0,
-                            w.Title,
-                            SeriesOrderParser.Format(w.SeriesOrder, w.SeriesOrderDisplay)))
-                        .ToList());
-            })
-            .Where(g => g.MissingPositions.Count > 0)
-            .OrderBy(g => g.SeriesName)
-            .ToList();
-
-        // Open-ended series — no ExpectedCount, but the user owns at
-        // least one numbered book. Drive the "add next N missing" flow
-        // on /wishlist. Highest-owned-order seeds the suggestion ("you
-        // own up to #7, add the next 10?"); series with all-null
-        // SeriesOrder still surface (HighestOwnedOrder=0) so the user
-        // can mark the first 10 sought from scratch.
-        var openSeries = await db.Series
-            .Include(s => s.Works)
-            .Where(s => s.Type == SeriesType.Series && s.ExpectedCount == null && s.Works.Any())
-            .ToListAsync();
-
-        OpenSeriesList = openSeries
-            .OrderBy(s => s.Name)
-            .Select(s =>
-            {
-                var orders = s.Works
-                    .Where(w => w.SeriesOrder.HasValue)
-                    .Select(w => w.SeriesOrder!.Value)
-                    .OrderBy(n => n)
-                    .ToList();
-                return new OpenSeries(
-                    s.Id,
-                    s.Name,
-                    s.Author,
-                    s.Works.Count,
-                    orders.Count == 0 ? 0 : orders.Max(),
-                    orders);
-            })
-            .ToList();
-
+        var result = await dispatcher.Query(new GetSeriesGaps());
+        SeriesGaps = result.Gaps.ToList();
+        OpenSeriesList = result.OpenSeries.ToList();
         GapsLoaded = true;
     }
 
@@ -386,17 +284,7 @@ public class WishlistViewModel(
 
     public async Task LoadWishlistAsync()
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        Wishlist = await db.WishlistItems
-            .Include(w => w.Series)
-            .OrderByDescending(w => w.Priority)
-            .ThenBy(w => w.Title)
-            .Select(w => new WishlistRow(
-                w.Id, w.Title, w.Author, w.Priority, w.Isbn,
-                w.CoverUrl,
-                w.Series != null ? w.Series.Name : null,
-                w.SeriesOrder))
-            .ToListAsync();
+        Wishlist = (await dispatcher.Query(new GetWishlist())).ToList();
         WishlistLoaded = true;
     }
 
@@ -466,10 +354,6 @@ public class WishlistViewModel(
         public WishlistPriority Priority { get; set; } = WishlistPriority.Medium;
     }
 
-    public record WishlistRow(
-        int Id, string Title, string Author, WishlistPriority Priority,
-        string? Isbn, string? CoverUrl, string? SeriesName, int? SeriesOrder);
-
     /// <summary>Unified shape for search candidates from both the ISBN
     /// lookup (BookLookupResult) and the title/author search
     /// (BookSearchCandidate). Carries enough metadata to populate a
@@ -488,25 +372,4 @@ public class WishlistViewModel(
         string Source,
         int? AlreadyOwnedBookId = null,
         int? AlreadyWishlistedItemId = null);
-
-    public record SeriesGap(
-        int SeriesId, string SeriesName, string? Author,
-        int OwnedCount, int ExpectedCount,
-        List<int> MissingPositions,
-        List<OwnedSeriesBook> OwnedBooks);
-
-    public record OwnedSeriesBook(int Id, string Title, string? SeriesOrderLabel);
-
-    /// <summary>Series with no ExpectedCount where the user owns at least
-    /// one Work. HighestOwnedOrder seeds the "Add next N missing" flow
-    /// (0 when no Works carry a SeriesOrder yet — UI suggests starting
-    /// from #1). OwnedOrders is the full set so the suggestion can skip
-    /// slots the user already owns when computing the next-N range.</summary>
-    public record OpenSeries(
-        int SeriesId,
-        string SeriesName,
-        string? Author,
-        int OwnedCount,
-        int HighestOwnedOrder,
-        IReadOnlyList<int> OwnedOrders);
 }

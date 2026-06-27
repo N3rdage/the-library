@@ -1,5 +1,6 @@
 @page "/wishlist"
 @page "/shopping"
+@using BookTracker.Application.Wishlist
 @inject WishlistViewModel VM
 @inject NavigationManager Nav
 
@@ -513,7 +514,7 @@
         }
     }
 
-    private async Task AddNextOpenSeriesAsync(WishlistViewModel.OpenSeries open)
+    private async Task AddNextOpenSeriesAsync(OpenSeries open)
     {
         var n = GetOpenN(open.SeriesId);
         if (n <= 0) return;
@@ -571,7 +572,7 @@
         await VM.AddCandidateAsync(candidate);
     }
 
-    private async Task BoughtAsync(WishlistViewModel.WishlistRow item)
+    private async Task BoughtAsync(WishlistRow item)
     {
         var bookId = await VM.MarkAsBoughtAsync(item);
         if (bookId.HasValue)
