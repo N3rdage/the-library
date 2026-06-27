@@ -17,10 +17,12 @@ Target deployment for Bookcase: Azure App Service + Azure SQL (Basic tier) via G
 
 ```
 BookTracker.slnx
-  BookTracker.Data/                Class library — entities, DbContext, EF migrations
+  BookTracker.Data/                Class library — entities (rich aggregates), DbContext, EF migrations
+  BookTracker.Application/         Command + query handlers, the IDispatcher, read-model
+                                   projections + formatters — the DDD/CQRS spine (TODO #55)
   BookTracker.Shared/              Wire-format DTOs (CatalogSnapshot, BookSnapshot, …)
                                    — no EF dependency, referenced by Web + Mobile
-  BookTracker.Web/                 Blazor Web App (Bookcase) — UI, services, ViewModels, /api/*
+  BookTracker.Web/                 Blazor Web App (Bookcase) — UI, ViewModels (dispatch-only), /api/*
   BookTracker.Mobile/              .NET MAUI Android app (Bookshelf) — net10.0-android
   BookTracker.Mobile.Cache/        SQLite-backed catalog cache library — pure net10.0
                                    (referenced by Mobile + tested independently)
@@ -102,22 +104,40 @@ Key design decisions:
 - **Book.UpdatedAt** is auto-stamped on aggregate change via `BookUpdatedAtInterceptor` (a `SaveChangesInterceptor`) — any change to the Book itself OR to its Edition / Copy / Work / WorkAuthor / Tag membership bumps the Book row's timestamp. Backs the delta-sync `?since=` filter on `/api/catalog-snapshot`. Save sites don't need to set it explicitly. A value converter pins `Kind=Utc` on read so cross-timezone clients round-trip the watermark correctly.
 - **Book.DeletedAt** drives a soft-delete shape: a global EF `HasQueryFilter(b => b.DeletedAt == null)` hides tombstoned rows from every normal query (Library / View / search / merge). The husk row survives only so the catalog snapshot can emit it in `deletedIds[]` for Bookshelf clients to drop locally. Aggregate children (Editions + Copies + joins) are hard-removed at delete time — the husk has no aggregate. `BookDetailViewModel.DeleteBookAsync` and `BookMergeService` (loser-side) are the two soft-delete callsites.
 
-## Architecture pattern — MVVM
+## Architecture pattern — MVVM over a CQRS spine
 
-The app follows an MVVM (Model-View-ViewModel) pattern:
+The app follows MVVM at the UI edge, with all data access behind a thin DDD/CQRS
+application layer (the [back-end refactor arc](#application-layer--cqrs-spine),
+TODO #55):
 
 ```
-[Razor Component (.razor)]  ←→  [ViewModel (.cs)]  ←→  [DbContext / Services]
-     View (UI binding)           State + Logic           Data + External APIs
+[Razor Component (.razor)]  ←→  [ViewModel (.cs)]  ──IDispatcher──▶  [Command / Query handlers]
+     View (UI binding)           State + UI logic                    (BookTracker.Application)
+                                  (no DbContext)                              │
+                                                                    ┌─────────┴─────────┐
+                                                              [Rich aggregates]   [Read projections]
+                                                              (BookTracker.Data)   (AsNoTracking → DTO)
 ```
 
-- **ViewModels** are plain C# classes under `BookTracker.Web/ViewModels/`. They hold all state and business logic.
-- **Razor components** are thin views that inject a VM and bind to its properties. They handle only UI concerns: JS interop, navigation, Blazor lifecycle.
-- **Services** handle external concerns: ISBN lookup (Open Library / Google Books / Trove), AI features (Anthropic API), series matching.
+- **ViewModels** are plain C# classes under `BookTracker.Web/ViewModels/`. They hold UI state + presentation logic and **dispatch commands/queries** — they no longer touch `DbContext` directly (every display VM was migrated off it during the arc).
+- **Razor components** are thin views that inject a VM and bind to its properties. UI concerns only: JS interop, navigation, Blazor lifecycle.
+- **Services** still handle genuinely external concerns: ISBN lookup (Open Library / Google Books / Trove), AI features (Anthropic API), cover storage. The old per-entity *merge* services were dissolved into commands + query handlers (see below).
 
 VM lifetime:
 - **Transient**: most VMs — each component instance gets its own.
 - **Scoped**: `AIAssistantViewModel` and `IAIAssistantService` — shared across the Blazor circuit so the call counter and prompt cache persist per session.
+
+## Application layer — CQRS spine
+
+`BookTracker.Application` is the seam between the UI and the data. It owns the
+write **and** read logic that used to live inline in ViewModels and services.
+Design + binding conventions (C1–C12) live in `docs/BACKEND-REFACTOR-DESIGN.md`.
+
+- **Dispatcher.** A thin hand-rolled `IDispatcher` (`Send(ICommand)` / `Query(IQuery<T>)`) — **no MediatR**. Handlers are discovered by a convention scan (`AddApplicationLayer()`) over the assembly, so a new handler is registered the moment it exists (which is why the integration tests auto-track relocated reads).
+- **Commands** name **atomic user gestures, not table columns** (C10): `MarkBookRead(rating, notes)` is one command, not `SetStatus` + `RateBook` + `UpdateNotes` — one load, one save, one `UpdatedAt` bump. Handlers load the aggregate, call a method on it, and save; invariants live **on the entity** (e.g. `Book.Rate` enforces 0–5, `Work` self-orphans at ref-count 0 — C11). Merge operations are transactional commands (`MergeBooks`/`MergeWorks`/`MergeAuthors`/`MergeEditions`/`MergePublishers`).
+- **Queries** are read-only `AsNoTracking()` SQL **projections to custom read-model records** (C5), not `Include` graphs — the heavy lifting stays in SQL and only the displayed scalars cross the wire (see [[feedback_light_reads_custom_projections]]). Each display VM has a matching `Get*` query handler under `Application/<Feature>/`.
+- **Shared read-models (close-out consolidation).** Counts/cover-picks that several readers need have one owner: `AuthorRollups` (per-author distinct work/book/series counts via correlated `COUNT(DISTINCT)` subqueries; canonical totals sum the alias members) backs `/authors`, the catalog snapshot, and Home's top-authors; `GenreReads.TopGenresAsync` backs Home + the AI prompt; `BookCovers.PickAsync` is the single-Work-cover-else-any pick shared by the merge previews. Pure display formatters (`WorkAuthorshipFormatter`, `SeriesOrderParser`, `PartialDateParser`, `BookFormatExtensions`) live in `Application/Formatting/` so a read handler can project a formatted field on the same side of the boundary as its DTO.
+- **Testing shape.** DB-backed assertions are integration tests under `BookTracker.Tests/Application/<Feature>/*HandlerTests` (real SQL via Testcontainers, dispatched through `AddApplicationLayer()`); VMs keep thin `IDispatcher`-mock unit tests over the presentation logic that genuinely stayed in the VM.
 
 ## DbContext lifetime
 
@@ -174,10 +194,20 @@ Lightweight JSON surface consumed by Bookshelf (MAUI) and `/bookshop` (PWA). Eac
 
 ## Services
 
-### CatalogSnapshotService
+> **Note (back-end refactor arc, TODO #55):** the catalog/wishlist snapshot
+> *services* and the four per-entity *merge services* listed below were dissolved
+> into `BookTracker.Application` during the arc — their read logic became `Get*`
+> query handlers and their writes became transactional `Merge*` commands. The
+> entries are kept here because they still describe the **domain behaviour**
+> faithfully (the projection shapes and merge semantics are unchanged); only the
+> home of the code moved. New handler locations are noted inline.
+
+### GetCatalogSnapshot (was CatalogSnapshotService)
+*Now `BookTracker.Application/Catalog/GetCatalogSnapshot.cs` (query handler).*
 Projects the catalog into the slim wire-format `CatalogSnapshot` consumed by Bookshelf (MAUI) and `/bookshop` (PWA). Carries Books (with nested Editions + Works for the enhanced ScanPage view), Authors (with canonical/alias rollup counts), Series (always full-listed regardless of `since`), and the `LatestUpdatedAt` watermark + `DeletedIds[]` tombstones for delta-sync. The `?since=` filter is a B-tree seek on `IX_Books_UpdatedAt`; tombstones come from `IgnoreQueryFilters().Where(DeletedAt > since)` since the soft-delete filter would otherwise hide them.
 
-### WishlistSnapshotService
+### GetWishlistSnapshot (was WishlistSnapshotService)
+*Now `BookTracker.Application/Catalog/GetWishlistSnapshot.cs` (query handler).*
 Read-only wishlist projection for `/api/wishlist-snapshot`. Bookcase web remains the canonical write surface — add/remove/edit happen there. `/bookshop` and the future Bookshelf wishlist surface consume this DTO read-only and synthesise a local "bought" flag that self-heals on each catalog refresh.
 
 ### BookCoverStorage
@@ -194,16 +224,20 @@ Looks up book metadata by ISBN. Tries Open Library first, falls back to Google B
 ### DuplicateDetectionService
 Scans the library for candidate duplicate pairs across Authors, Works, Books, and Editions. Authors match on either normalised full name *or* shared surname + first-name initial (so "Doug Preston" / "Douglas Preston" / "D Preston" all surface together). Works, Books, and Editions use exact-after-normalisation. Dismissed pairs are persisted in `IgnoredDuplicate` (polymorphic table, unique on `(EntityType, LowerId, HigherId)`) and orphaned rows are swept on each run. Returns a `DuplicateReport`.
 
-### AuthorMergeService
+### MergeAuthors (was AuthorMergeService)
+*Now the `MergeAuthors` command + `GetAuthorMergePreview` query in `BookTracker.Application/Authors/`; compatibility check shared via `AuthorMergeCompatibility`.*
 Merges two Author rows after user review. Refuses when the two authors resolve to different canonicals (user must resolve aliases on `/authors` first). Otherwise runs in one transaction: reassigns `Work.AuthorId`, reassigns external aliases' `CanonicalAuthorId`, clears any `IgnoredDuplicate` rows mentioning the loser, deletes the loser. One edge case: when the winner is itself an alias of the loser, winner is promoted to canonical before the delete so its `CanonicalAuthorId` doesn't dangle. Returns a result with reassignment counts + a flag for the promotion case.
 
-### WorkMergeService
+### MergeWorks (was WorkMergeService)
+*Now the `MergeWorks` command + `GetWorkMergePreview` query in `BookTracker.Application/Works/`.*
 Merges two Work rows after user review. **Auto-fill-empties** semantics: any winner field that's null/empty gets taken from loser (Subtitle, FirstPublishedDate+Precision pair, SeriesId+SeriesOrder+SeriesOrderDisplay pair); Genres are unioned. Fields the winner already has are preserved. The VM's `EnrichmentHints` surfaces exactly what will move so the user can override (by editing the winner) before confirming. Refuses if the two Works have different `AuthorId`. Transactional: for each Book attached to the loser, adds the winner if not already present then clears `loser.Books`, which deletes the `BookWork` rows; clears any `IgnoredDuplicate` referencing the loser; deletes the loser Work. The "Book contains both" count is surfaced in preview + result so the UI can flag that those Books will just lose the loser attachment (winner stays).
 
-### EditionMergeService
+### MergeEditions (was EditionMergeService)
+*Now the `MergeEditions` command + `GetEditionMergePreview` query in `BookTracker.Application/Books/`.*
 Merges two Edition rows belonging to the same Book after user review. Same shape as WorkMergeService: transactional, auto-fill-empties (ISBN, DatePrinted+Precision pair, CoverUrl, PublisherId), reassigns `Copy.EditionId`, clears stale `IgnoredDuplicate` rows, deletes the loser Edition. Refuses cross-Book merges (if the Editions are really the same, the Books themselves are duplicates and the Book-level merge should happen first).
 
-### BookMergeService
+### MergeBooks (was BookMergeService)
+*Now the `MergeBooks` command + `GetBookMergePreview` query in `BookTracker.Application/Books/`; loser-side soft-delete.*
 Merges two Book rows. Reassigns Editions (which carry their Copies) via `Edition.BookId`, unions Works and Tags (dedup by ID), auto-fills empty winner fields (Notes, DefaultCoverArtUrl, Rating — where `Rating == 0` is treated as "unrated" since the stars-1-to-5 UI can't produce an active 0). Transactional; clears stale `IgnoredDuplicate` rows; deletes the loser Book. No structural incompatibility path — the Edition unique-ISBN index is global so two Books can never hold editions with overlapping non-null ISBNs. Any resulting no-ISBN Edition duplicates (same format/publisher/date) surface on `/duplicates` for separate cleanup.
 
 ### WorkSearchService
