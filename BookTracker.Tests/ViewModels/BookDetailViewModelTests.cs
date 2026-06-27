@@ -16,8 +16,7 @@ namespace BookTracker.Tests.ViewModels;
 public class BookDetailViewModelTests
 {
     private static BookDetailViewModel CreateVm(TestDbContextFactory factory, IBookCoverStorage? coverStorage = null) =>
-        new(factory,
-            coverStorage ?? Substitute.For<IBookCoverStorage>(),
+        new(coverStorage ?? Substitute.For<IBookCoverStorage>(),
             new WorkSearchService(factory),
             NullLogger<BookDetailViewModel>.Instance,
             BuildDispatcher(factory));

@@ -1,4 +1,5 @@
 using BookTracker.Application.Authors;
+using BookTracker.Application.Books;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -23,10 +24,9 @@ public sealed class MarkWishlistItemBoughtHandler(IDbContextFactory<BookTrackerD
         var item = await db.WishlistItems.FindAsync([command.ItemId], ct);
         if (item is null) return null; // gone between click + save — no duplicate book
 
-        // Find-or-create the shared "follow-up" tag (a flat lookup, C9). A new
-        // tag is reachable through book.Tags below, so EF inserts it with the graph.
-        var followUpTag = await db.Tags.FirstOrDefaultAsync(t => t.Name == "follow-up", ct)
-            ?? new Tag { Name = "follow-up" };
+        // Find-or-create the shared "follow-up" tag (a flat lookup, C9) via the
+        // one shared resolver — same seam BookDetail's tag writes use (TD-15).
+        var followUpTag = await TagResolver.FindOrCreateAsync("follow-up", db, ct);
 
         var author = await AuthorResolver.FindOrCreateAsync(item.Author, db, ct);
         var book = new Book { Title = item.Title, Tags = [followUpTag] };
