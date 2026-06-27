@@ -23,7 +23,16 @@ public record LibraryFilter(
     int TagId,
     int SeriesId,
     string? Author,
-    BookStatus? Status);
+    BookStatus? Status)
+{
+    // The single rule for "a specific series is selected", which means a flat,
+    // reading-order view: GetLibraryBooks sorts by that series' order, and the
+    // VM's ShowingFlatList forces the flat list over any grouping. Both layers
+    // call this so the sort trigger and the flat-vs-grouped gate can't drift
+    // (e.g. one updated for a multi-series rule and the other not, which would
+    // render a single-series view sorted DateAdded-desc instead of reading order).
+    public static bool IsSpecificSeries(int seriesId) => seriesId > 0;
+}
 
 public record GroupRow(string Key, string Label, int Count)
 {

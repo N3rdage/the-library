@@ -51,7 +51,7 @@ public class BookListViewModel(IDispatcher dispatcher)
     // grouping. Clearing the series filter reverts to the chosen grouping. The
     // page render branch + paging clamp key off this same property so the
     // loaded shape and the rendered shape can't disagree.
-    public bool ShowingFlatList => SelectedGroupBy == LibraryGroupBy.None || SelectedSeriesId > 0;
+    public bool ShowingFlatList => SelectedGroupBy == LibraryGroupBy.None || LibraryFilter.IsSpecificSeries(SelectedSeriesId);
 
     public List<GenreOption> AllGenres { get; private set; } = [];
     public List<TagOption> AllTags { get; private set; } = [];

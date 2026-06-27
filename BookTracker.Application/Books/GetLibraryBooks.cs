@@ -33,7 +33,7 @@ public sealed class GetLibraryBooksHandler(IDbContextFactory<BookTrackerDbContex
         // than DateAdded — reading order is the whole point of looking at a
         // series (the replacement for the retired Series grouping, TODO #53c).
         // Every other view keeps newest-first.
-        IQueryable<Book> ordered = f.SeriesId > 0
+        IQueryable<Book> ordered = LibraryFilter.IsSpecificSeries(f.SeriesId)
             ? filtered
                 .OrderBy(b => b.Works
                     .Where(w => w.SeriesId == f.SeriesId)
