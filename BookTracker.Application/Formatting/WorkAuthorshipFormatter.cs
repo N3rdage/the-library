@@ -65,18 +65,26 @@ public static class WorkAuthorshipFormatter
     }
 
     /// <summary>
+    /// Role-aware overload taking UNSORTED contributors with their Order. Sorts
+    /// into canonical display order — Author-role first, then other roles in
+    /// enum order, each by Order — then formats. The single owner of the
+    /// contributor ordering: Display(Work) and projection-based read handlers
+    /// (which have no Work entity to pass) both route through it.
+    /// </summary>
+    public static string Display(IEnumerable<(string Name, AuthorRole Role, int Order)> contributors) =>
+        Display((contributors ?? [])
+            .OrderBy(c => c.Role == AuthorRole.Author ? 0 : 1) // Author first
+            .ThenBy(c => (int)c.Role)                          // then other roles in enum order
+            .ThenBy(c => c.Order)
+            .Select(c => (c.Name, c.Role)));
+
+    /// <summary>
     /// Convenience overload: pull contributors directly from a Work's
-    /// WorkAuthors collection, sorted by (Role, Order) so Author-role
-    /// contributors come first then other roles each in their own Order
-    /// sequence. Caller is responsible for having loaded WorkAuthors +
-    /// Author.
+    /// WorkAuthors collection. Caller is responsible for having loaded
+    /// WorkAuthors + Author. Ordering lives in the (Name, Role, Order) overload.
     /// </summary>
     public static string Display(Work work) =>
-        Display(work.WorkAuthors
-            .OrderBy(wa => wa.Role == AuthorRole.Author ? 0 : 1) // Author first
-            .ThenBy(wa => (int)wa.Role)                          // then other roles in enum order
-            .ThenBy(wa => wa.Order)
-            .Select(wa => (wa.Author.Name, wa.Role)));
+        Display(work.WorkAuthors.Select(wa => (wa.Author.Name, wa.Role, wa.Order)));
 
     /// <summary>
     /// Single-string "primary contributor" for snapshot / rollup surfaces

@@ -95,19 +95,36 @@ public sealed class GetAuthorDetailHandler(IDbContextFactory<BookTrackerDbContex
             ids.AddRange(author.Aliases.Select(a => a.Id));
         }
 
-        // Default drilldown: only Works where this author is in an
-        // Author role. Editor/translator/illustrator contributions can be
-        // shown via a future opt-in toggle.
+        // Default drilldown: only Works where this author is in an Author role.
+        // Editor/translator/illustrator contributions can be shown via a future
+        // opt-in toggle. Projected to a lightweight shape — the lead author (for
+        // the "written as" tag) + the in-books id/title — so neither the
+        // WorkAuthors/Series graph nor the Books are hydrated as entities.
         var works = await db.Works
             .AsNoTracking()
-            .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .Include(w => w.Books)
-            .Include(w => w.Series)
             .Where(w => w.WorkAuthors.Any(wa => ids.Contains(wa.AuthorId) && wa.Role == AuthorRole.Author))
             .OrderBy(w => w.SeriesId == null)
             .ThenBy(w => w.Series!.Name)
             .ThenBy(w => w.SeriesOrder ?? int.MaxValue)
             .ThenBy(w => w.Title)
+            .Select(w => new
+            {
+                w.Id,
+                w.Title,
+                w.Subtitle,
+                w.FirstPublishedDate,
+                w.FirstPublishedDatePrecision,
+                SeriesName = w.Series == null ? null : w.Series.Name,
+                SeriesType = w.Series == null ? (SeriesType?)null : w.Series.Type,
+                w.SeriesOrder,
+                w.SeriesOrderDisplay,
+                LeadAuthor = w.WorkAuthors
+                    .Where(wa => wa.Role == AuthorRole.Author)
+                    .OrderBy(wa => wa.Order)
+                    .Select(wa => new { wa.Author.Id, wa.Author.Name })
+                    .FirstOrDefault(),
+                Books = w.Books.Select(b => new { b.Id, b.Title }).ToList(),
+            })
             .ToListAsync(ct);
 
         var workRows = works.Select(w => new WorkRow(
@@ -116,37 +133,30 @@ public sealed class GetAuthorDetailHandler(IDbContextFactory<BookTrackerDbContex
             w.Subtitle,
             // "Written as" tag only on canonical drill-downs; alias rows always
             // are themselves so the label would be redundant.
-            isCanonical
-                ? w.WorkAuthors
-                    .Where(wa => wa.Role == AuthorRole.Author)
-                    .OrderBy(wa => wa.Order)
-                    .Select(wa => wa.Author)
-                    .FirstOrDefault() is { } leadAuthor && leadAuthor.Id != author.Id
-                        ? leadAuthor.Name
-                        : null
+            isCanonical && w.LeadAuthor is { } lead && lead.Id != author.Id
+                ? lead.Name
                 : null,
             PartialDateParser.Format(w.FirstPublishedDate, w.FirstPublishedDatePrecision),
-            w.Series?.Name,
-            w.Series?.Type,
+            w.SeriesName,
+            w.SeriesType,
             SeriesOrderParser.Format(w.SeriesOrder, w.SeriesOrderDisplay),
             w.Books.Select(b => new BookRef(b.Id, b.Title)).ToList()
         )).ToList();
 
+        // Book summaries — edition/copy counts projected to SQL aggregates so no
+        // Edition/Copy rows are materialised (a prolific author can own hundreds).
         var bookIds = works.SelectMany(w => w.Books).Select(b => b.Id).Distinct().ToList();
-        var books = await db.Books
+        var bookRows = await db.Books
             .AsNoTracking()
             .Where(b => bookIds.Contains(b.Id))
-            .Include(b => b.Editions).ThenInclude(e => e.Copies)
             .OrderBy(b => b.Title)
+            .Select(b => new BookSummaryRow(
+                b.Id,
+                b.Title,
+                b.DefaultCoverArtUrl,
+                b.Editions.Count,
+                b.Editions.Sum(e => e.Copies.Count)))
             .ToListAsync(ct);
-
-        var bookRows = books.Select(b => new BookSummaryRow(
-            b.Id,
-            b.Title,
-            b.DefaultCoverArtUrl,
-            b.Editions.Count,
-            b.Editions.Sum(e => e.Copies.Count)
-        )).ToList();
 
         var aliasNames = isCanonical
             ? author.Aliases.Select(a => a.Name).OrderBy(n => n).ToList()
