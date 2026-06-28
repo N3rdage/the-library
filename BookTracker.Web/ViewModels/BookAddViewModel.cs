@@ -1,4 +1,6 @@
 using BookTracker.Application.Authors;
+using BookTracker.Application.Books;
+using BookTracker.Application.Series;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
@@ -475,17 +477,7 @@ public class BookAddViewModel(
                 .Where(g => selectedGenreIds.Contains(g.Id))
                 .ToListAsync();
 
-            Publisher? publisher = null;
-            var publisherName = EditionInput.Publisher?.Trim();
-            if (!string.IsNullOrEmpty(publisherName))
-            {
-                publisher = await db.Publishers.FirstOrDefaultAsync(p => p.Name == publisherName);
-                if (publisher is null)
-                {
-                    publisher = new Publisher { Name = publisherName };
-                    db.Publishers.Add(publisher);
-                }
-            }
+            var publisher = await PublisherResolver.ResolveAsync(db, EditionInput.Publisher);
 
             List<Work> works;
             if (IsCollection)
@@ -648,15 +640,7 @@ public class BookAddViewModel(
                     }
                     else if (!string.IsNullOrWhiteSpace(AcceptedSeriesName))
                     {
-                        var seriesName = AcceptedSeriesName.Trim();
-                        var series = await db.Series
-                            .FirstOrDefaultAsync(s => s.Name.ToLower() == seriesName.ToLower());
-                        if (series is null)
-                        {
-                            series = new Series { Name = seriesName, Type = SeriesType.Series };
-                            db.Series.Add(series);
-                        }
-                        work.Series = series;
+                        work.Series = await SeriesResolver.ResolveAsync(db, AcceptedSeriesName);
                         work.SeriesOrder = acceptedOrder;
                         work.SeriesOrderDisplay = acceptedOrderDisplay;
                     }

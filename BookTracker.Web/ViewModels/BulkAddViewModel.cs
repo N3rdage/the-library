@@ -1,5 +1,6 @@
 using BookTracker.Application.Authors;
 using BookTracker.Application.Books;
+using BookTracker.Application.Series;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
@@ -192,17 +193,7 @@ public class BulkAddViewModel(
             return;
         }
 
-        Publisher? publisher = null;
-        var pubName = row.Publisher?.Trim();
-        if (!string.IsNullOrEmpty(pubName))
-        {
-            publisher = await db.Publishers.FirstOrDefaultAsync(p => p.Name == pubName);
-            if (publisher is null)
-            {
-                publisher = new Publisher { Name = pubName };
-                db.Publishers.Add(publisher);
-            }
-        }
+        var publisher = await PublisherResolver.ResolveAsync(db, row.Publisher);
 
         var bookTitle = (row.Title ?? $"Unknown book — {row.Isbn}").Trim();
         // row.Author can be a comma- or ampersand-separated list of names from
@@ -236,15 +227,7 @@ public class BulkAddViewModel(
             }
             else if (!string.IsNullOrWhiteSpace(row.AcceptedSeriesName))
             {
-                var seriesName = row.AcceptedSeriesName.Trim();
-                var series = await db.Series
-                    .FirstOrDefaultAsync(s => s.Name.ToLower() == seriesName.ToLower());
-                if (series is null)
-                {
-                    series = new Series { Name = seriesName, Type = SeriesType.Series };
-                    db.Series.Add(series);
-                }
-                work.Series = series;
+                work.Series = await SeriesResolver.ResolveAsync(db, row.AcceptedSeriesName);
                 work.SeriesOrder = acceptedOrder;
                 work.SeriesOrderDisplay = acceptedOrderDisplay;
             }
