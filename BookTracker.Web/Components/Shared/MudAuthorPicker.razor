@@ -22,9 +22,12 @@
    came back stale. *@
 
 @implements IDisposable
+@using BookTracker.Application
+@using BookTracker.Application.Authors
 @using BookTracker.Data
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<BookTrackerDbContext> DbFactory
+@inject IDispatcher Dispatcher
 @inject IJSRuntime JS
 
 <MudPaper Outlined="true" Class="pa-2">
@@ -138,6 +141,12 @@
         // is a no-op rather than a duplicate.
         if (!Authors.Any(a => a.Equals(trimmed, StringComparison.OrdinalIgnoreCase)))
         {
+            // Eager find-or-create (TD-15a): the Author row exists the moment
+            // the chip is committed, not at the aggregate save. Idempotent, so
+            // committing a name that already exists is a harmless no-op. The
+            // save still find-or-creates as a net (Option B), but for names
+            // entered here it always hits the find branch.
+            await Dispatcher.Send(new CreateAuthor(trimmed));
             Authors.Add(trimmed);
             await AuthorsChanged.InvokeAsync(Authors);
         }

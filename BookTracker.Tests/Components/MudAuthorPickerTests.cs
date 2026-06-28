@@ -1,3 +1,5 @@
+using BookTracker.Application;
+using BookTracker.Application.Authors;
 using BookTracker.Data;
 using BookTracker.Web.Components.Shared;
 using Bunit;
@@ -25,6 +27,8 @@ namespace BookTracker.Tests.Components;
 [Trait("Category", TestCategories.Component)]
 public class MudAuthorPickerTests : ComponentTestBase
 {
+    private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
+
     public MudAuthorPickerTests()
     {
         // MudAuthorPicker injects IDbContextFactory for SearchAsync (the
@@ -33,6 +37,11 @@ public class MudAuthorPickerTests : ComponentTestBase
         // chip-add paths don't touch the DB.
         var dbFactory = Substitute.For<IDbContextFactory<BookTrackerDbContext>>();
         Services.AddSingleton(dbFactory);
+
+        // It also dispatches CreateAuthor on commit (TD-15a eager create).
+        // A substitute returns a completed Task<int> by default, so the
+        // chip-add path proceeds; one test asserts the dispatch happens.
+        Services.AddSingleton(_dispatcher);
     }
 
     [Fact]
@@ -70,6 +79,33 @@ public class MudAuthorPickerTests : ComponentTestBase
         Assert.Equal(["Preston"], authors);
         Assert.NotNull(captured);
         Assert.Equal(["Preston"], captured!);
+    }
+
+    [Fact]
+    public async Task OnCommitKey_NewName_EagerCreatesViaDispatcher()
+    {
+        // TD-15a: committing a chip dispatches CreateAuthor so the row exists
+        // immediately, rather than waiting for the aggregate save.
+        var cut = Render<MudAuthorPicker>(p => p
+            .Add(c => c.Authors, new List<string>()));
+
+        await cut.InvokeAsync(() => cut.Instance.OnCommitKey("Preston"));
+
+        await _dispatcher.Received(1).Send(
+            Arg.Is<CreateAuthor>(c => c.Name == "Preston"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task OnCommitKey_DuplicateName_DoesNotEagerCreate()
+    {
+        // De-duped commits are a no-op — no chip, and no wasted CreateAuthor.
+        var cut = Render<MudAuthorPicker>(p => p
+            .Add(c => c.Authors, new List<string> { "Preston" }));
+
+        await cut.InvokeAsync(() => cut.Instance.OnCommitKey("PRESTON"));
+
+        await _dispatcher.DidNotReceive().Send(
+            Arg.Any<CreateAuthor>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
