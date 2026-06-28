@@ -9,11 +9,16 @@ namespace BookTracker.Application.Books;
 /// Publisher is a flat lookup table with no invariants of its own
 /// (convention C9), so it's resolved inline by the Edition handlers rather
 /// than promoted to its own aggregate. A blank name resolves to null.
+/// Public so the Add / Bulk Add ViewModels can route their inline
+/// publisher find-or-creates through the single owner (TD-15b). Shares the
+/// plain check-then-insert race tracked as TD-15 (single-user app, race
+/// near-impossible); the unique-index-catch upgrade lands on all resolvers
+/// together when concurrent writes arrive.
 /// </summary>
-internal static class PublisherResolver
+public static class PublisherResolver
 {
     public static async Task<Publisher?> ResolveAsync(
-        BookTrackerDbContext db, string? name, CancellationToken ct)
+        BookTrackerDbContext db, string? name, CancellationToken ct = default)
     {
         var trimmed = name.TrimToNull();
         if (trimmed is null) return null;
