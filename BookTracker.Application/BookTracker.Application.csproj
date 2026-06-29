@@ -28,7 +28,7 @@
   <ItemGroup>
     <!-- DI extension surface so the host calls one AddApplicationLayer()
          and every handler self-registers from inside this project. -->
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.8" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9" />
   </ItemGroup>
 
   <ItemGroup>
