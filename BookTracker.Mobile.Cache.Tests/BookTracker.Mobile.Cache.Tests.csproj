@@ -27,7 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- SkiaSharp 3.x's meta-package no longer ships cross-platform
+    <!-- SkiaSharp 3.x+'s meta-package no longer ships cross-platform
          native assets transitively (it relies on the consuming TFM
          for Android / iOS / etc.). The test project runs on plain
          net10.0, so platform-specific natives have to be pulled in

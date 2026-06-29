@@ -53,6 +53,22 @@ public class CoverImageProcessorTests
     }
 
     [Fact]
+    public void Process_ExtremeAspectRatio_ClampsShortEdgeToOne()
+    {
+        // 3000×1 source — long edge 3000 > cap. Short edge scales to 1200/3000 = 0.4,
+        // which rounds to 0 without the Math.Max(1, …) floor; a zero-dimension
+        // SKImageInfo makes Resize return null and we'd fall back to raw bytes.
+        var jpegBytes = MakeJpeg(width: 3000, height: 1);
+
+        var result = CoverImageProcessor.Process(jpegBytes, sourceContentType: "image/jpeg");
+
+        Assert.True(result.WasNormalised);
+        var (width, height) = Decode(result.Bytes);
+        Assert.Equal(CoverImageProcessor.MaxEdgePixels, width);
+        Assert.Equal(1, height); // floored, not 0
+    }
+
+    [Fact]
     public void Process_LeavesSmallImagesAlone()
     {
         // 400×600 — under the 1200 cap, no resize.
@@ -130,6 +146,7 @@ public class CoverImageProcessorTests
         canvas.Clear(SKColors.SlateGray); // non-empty content so encoders have something to write
         using var image = SKImage.FromBitmap(bitmap);
         using var data = image.Encode(format, 85);
+        Assert.NotNull(data); // clear failure if the encoder ever returns null, not an opaque NRE
         return data.ToArray();
     }
 

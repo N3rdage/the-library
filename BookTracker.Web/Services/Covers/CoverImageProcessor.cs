@@ -73,8 +73,12 @@ public static class CoverImageProcessor
         }
 
         var scale = (double)MaxEdgePixels / longEdge;
-        var newWidth = (int)Math.Round(source.Width * scale);
-        var newHeight = (int)Math.Round(source.Height * scale);
+        // Floor each edge at 1px so an extreme aspect ratio (e.g. 3000x1, where the
+        // short edge rounds to 0) can't produce a zero-dimension SKImageInfo —
+        // Resize returns null on that and we'd silently store the raw un-normalised
+        // bytes. Mirrors CatalogCache.ScaleToLongEdge.
+        var newWidth = Math.Max(1, (int)Math.Round(source.Width * scale));
+        var newHeight = Math.Max(1, (int)Math.Round(source.Height * scale));
         using var resized = source.Resize(
             new SKImageInfo(newWidth, newHeight, source.ColorType, source.AlphaType),
             new SKSamplingOptions(SKCubicResampler.Mitchell));
