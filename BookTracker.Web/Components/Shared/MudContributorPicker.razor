@@ -12,7 +12,12 @@
        fine for the rare-case surface, and a role must be picked
        deliberately anyway. *@
 
+@using BookTracker.Application
+@using BookTracker.Application.Authors
+@using Microsoft.Extensions.Logging
 @inject IDbContextFactory<BookTrackerDbContext> DbFactory
+@inject IDispatcher Dispatcher
+@inject ILogger<MudContributorPicker> Logger
 
 <MudPaper Outlined="true" Class="pa-2">
     @if (Contributors.Count > 0)
@@ -116,6 +121,19 @@
         if (!Contributors.Any(c => c.Name.Equals(trimmed, StringComparison.OrdinalIgnoreCase)
                                    && c.Role == pendingRole))
         {
+            // Eager find-or-create (TD-15a) — same as MudAuthorPicker: the
+            // Author row exists the moment the chip is committed. Idempotent.
+            // Best-effort: a transient fault / accepted race (TD-15) must not
+            // abort the add — the save's find-or-create net (Option B) still
+            // guarantees the row, so on failure we log and add the chip anyway.
+            try
+            {
+                await Dispatcher.Send(new CreateAuthor(trimmed));
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Eager author create failed for {Name}; the save will create it", trimmed);
+            }
             Contributors.Add(new ContributorEntry(trimmed, pendingRole));
             await ContributorsChanged.InvokeAsync(Contributors);
         }
