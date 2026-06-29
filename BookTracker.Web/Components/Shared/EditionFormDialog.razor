@@ -141,27 +141,34 @@
 
     private async Task LookupAsync() => await VM.LookupAsync();
 
-    private async Task OnPublisherCommittedAsync(string? value)
+    internal async Task OnPublisherCommittedAsync(string? value)
     {
         // Fires when the user picks a suggestion or leaves free text in the field
         // (CoerceValue="true"). Store the value, then eagerly find-or-create the
-        // Publisher row (TD-15a) so it exists the moment it's chosen, not at the
-        // Edition save. Idempotent — committing an existing name is a harmless
-        // no-op, a blank name is skipped.
+        // Publisher row (TD-15a) so it exists the moment it's chosen.
+        //
+        // Existing pick (already in the cached list) → no create round-trip; only
+        // a genuinely new name dispatches CreatePublisher. Blank is skipped.
         //
         // Best-effort: a transient DB fault or the accepted check-then-insert
         // race (TD-15) must not abort the field edit — the save's
         // PublisherResolver net (Option B) still guarantees the row, so on
         // failure we log and keep the typed value.
         VM.Publisher = value;
-        if (string.IsNullOrWhiteSpace(value)) return;
+        var trimmed = value?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return;
+        if (VM.ExistingPublishers.Any(p => p.Name.Equals(trimmed, StringComparison.OrdinalIgnoreCase))) return;
         try
         {
-            await Dispatcher.Send(new CreatePublisher(value));
+            var id = await Dispatcher.Send(new CreatePublisher(trimmed));
+            if (id is int newId)
+            {
+                VM.ExistingPublishers.Add(new EditionFormDialogViewModel.PublisherOption(newId, trimmed));
+            }
         }
         catch (Exception ex)
         {
-            Logger.LogWarning(ex, "Eager publisher create failed for {Name}; the save will create it", value);
+            Logger.LogWarning(ex, "Eager publisher create failed for {Name}; the save will create it", trimmed);
         }
     }
 

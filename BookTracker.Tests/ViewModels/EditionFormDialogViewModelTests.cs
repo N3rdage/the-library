@@ -210,6 +210,27 @@ public class EditionFormDialogViewModelTests
     }
 
     [Fact]
+    public async Task InitializeForAdd_CachesExistingPublishersOrderedByName()
+    {
+        // The publisher autocomplete + eager-create commit (TD-15a) work off this
+        // client-side cache: filtered locally for suggestions, and consulted to
+        // tell an existing pick from a genuinely new name.
+        var factory = new TestDbContextFactory();
+        using (var db = factory.CreateDbContext())
+        {
+            db.Publishers.AddRange(
+                new Publisher { Name = "Orbit" },
+                new Publisher { Name = "Corgi" });
+            await db.SaveChangesAsync();
+        }
+
+        var vm = new EditionFormDialogViewModel(factory, _lookup, TestDispatcher.For(factory));
+        await vm.InitializeForAddAsync(1);
+
+        Assert.Equal(["Corgi", "Orbit"], vm.ExistingPublishers.Select(p => p.Name));
+    }
+
+    [Fact]
     public async Task SearchPublishersAsync_MatchesSubstring()
     {
         var factory = new TestDbContextFactory();
