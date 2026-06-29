@@ -1,6 +1,4 @@
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.Processing;
+using SkiaSharp;
 
 namespace BookTracker.Web.Services.Covers;
 
@@ -9,6 +7,11 @@ namespace BookTracker.Web.Services.Covers;
 // to "store the bytes raw" — the upload still succeeds and the browser will
 // render whatever it can. Per Drew's call: log a warning on conversion
 // failure and let mis-rendered images surface as bugs to address manually.
+//
+// Uses SkiaSharp — the same imaging library as the Bookshelf cover cache
+// (BookTracker.Mobile.Cache) — replacing SixLabors.ImageSharp, which moved to
+// a build-time licence key in v4. Decode/resize/encode mirrors
+// CatalogCache.ResizeToJpeg.
 public static class CoverImageProcessor
 {
     /// <summary>Long-edge max in pixels. 1200 is plenty for retina displays of a cover thumbnail.</summary>
@@ -24,38 +27,67 @@ public static class CoverImageProcessor
     /// JPEG. Returns the normalised payload on success.
     /// On failure (HEIC without codec, corrupt bytes, animated formats etc.),
     /// returns the original bytes with a best-effort content type / extension
-    /// derived from <paramref name="sourceContentType"/> + <see cref="WasNormalised"/>=false.
+    /// derived from <paramref name="sourceContentType"/> + <see cref="ProcessedImage.WasNormalised"/>=false.
     /// Caller is expected to log the failure path so unrenderable images are visible.
     /// </summary>
     public static ProcessedImage Process(byte[] inputBytes, string? sourceContentType)
     {
         try
         {
-            using var image = Image.Load(inputBytes);
-
-            var longEdge = Math.Max(image.Width, image.Height);
-            if (longEdge > MaxEdgePixels)
+            var normalised = TryNormalise(inputBytes);
+            if (normalised is not null)
             {
-                var scale = (double)MaxEdgePixels / longEdge;
-                var newWidth = (int)Math.Round(image.Width * scale);
-                var newHeight = (int)Math.Round(image.Height * scale);
-                image.Mutate(x => x.Resize(newWidth, newHeight));
+                return new ProcessedImage(normalised, NormalisedContentType, NormalisedExtension, WasNormalised: true);
             }
-
-            using var output = new MemoryStream();
-            var encoder = new JpegEncoder { Quality = JpegQuality };
-            image.Save(output, encoder);
-            return new ProcessedImage(output.ToArray(), NormalisedContentType, NormalisedExtension, WasNormalised: true);
         }
         catch
         {
-            // Caller logs; we just return the raw bytes so the upload still
-            // happens. Pick the closest content-type / extension we can
-            // derive — falls back to octet-stream if the source didn't
-            // declare one.
-            var (contentType, extension) = InferRawShape(sourceContentType);
-            return new ProcessedImage(inputBytes, contentType, extension, WasNormalised: false);
+            // Fall through to the raw-bytes path. SkiaSharp can throw (e.g.
+            // ArgumentNullException on null bytes) as well as return null;
+            // both mean "couldn't normalise".
         }
+
+        // Couldn't decode/encode — return the raw bytes so the upload still
+        // happens. Pick the closest content-type / extension we can derive —
+        // falls back to octet-stream if the source didn't declare one.
+        var (contentType, extension) = InferRawShape(sourceContentType);
+        return new ProcessedImage(inputBytes, contentType, extension, WasNormalised: false);
+    }
+
+    // Decode -> (resize if over the long-edge cap) -> JPEG encode. Returns null
+    // when the bytes aren't a decodable image (SKBitmap.Decode returns null).
+    // SkiaSharp's Resize takes SKSamplingOptions (the SKFilterQuality
+    // replacement); Mitchell cubic is a good downscale fit for cover art and
+    // matches the Mobile cover cache.
+    private static byte[]? TryNormalise(byte[] inputBytes)
+    {
+        using var source = SKBitmap.Decode(inputBytes);
+        if (source is null) return null;
+
+        var longEdge = Math.Max(source.Width, source.Height);
+        if (longEdge <= MaxEdgePixels)
+        {
+            // Under the cap — re-encode the decoded bitmap to JPEG so the format
+            // is still normalised (the old ImageSharp path did the same).
+            return EncodeJpeg(source);
+        }
+
+        var scale = (double)MaxEdgePixels / longEdge;
+        var newWidth = (int)Math.Round(source.Width * scale);
+        var newHeight = (int)Math.Round(source.Height * scale);
+        using var resized = source.Resize(
+            new SKImageInfo(newWidth, newHeight, source.ColorType, source.AlphaType),
+            new SKSamplingOptions(SKCubicResampler.Mitchell));
+        if (resized is null) return null;
+
+        return EncodeJpeg(resized);
+    }
+
+    private static byte[]? EncodeJpeg(SKBitmap bitmap)
+    {
+        using var image = SKImage.FromBitmap(bitmap);
+        using var encoded = image.Encode(SKEncodedImageFormat.Jpeg, JpegQuality);
+        return encoded?.ToArray();
     }
 
     private static (string ContentType, string Extension) InferRawShape(string? sourceContentType)

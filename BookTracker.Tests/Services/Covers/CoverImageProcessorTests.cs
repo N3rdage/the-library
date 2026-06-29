@@ -1,8 +1,5 @@
 using BookTracker.Web.Services.Covers;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.Formats.Png;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 
 namespace BookTracker.Tests.Services.Covers;
 
@@ -21,9 +18,9 @@ public class CoverImageProcessorTests
         Assert.Equal(CoverImageProcessor.NormalisedExtension, result.Extension);
 
         // Re-decode the output to confirm dimensions preserved (no resize since under cap).
-        using var output = Image.Load(result.Bytes);
-        Assert.Equal(200, output.Width);
-        Assert.Equal(300, output.Height);
+        var (width, height) = Decode(result.Bytes);
+        Assert.Equal(200, width);
+        Assert.Equal(300, height);
     }
 
     [Fact]
@@ -35,10 +32,10 @@ public class CoverImageProcessorTests
         var result = CoverImageProcessor.Process(jpegBytes, sourceContentType: "image/jpeg");
 
         Assert.True(result.WasNormalised);
-        using var output = Image.Load(result.Bytes);
-        Assert.Equal(CoverImageProcessor.MaxEdgePixels, output.Width);
+        var (width, height) = Decode(result.Bytes);
+        Assert.Equal(CoverImageProcessor.MaxEdgePixels, width);
         // 1200 / 2000 = 0.6; 1000 * 0.6 = 600.
-        Assert.Equal(600, output.Height);
+        Assert.Equal(600, height);
     }
 
     [Fact]
@@ -49,10 +46,10 @@ public class CoverImageProcessorTests
 
         var result = CoverImageProcessor.Process(jpegBytes, sourceContentType: "image/jpeg");
 
-        using var output = Image.Load(result.Bytes);
-        Assert.Equal(CoverImageProcessor.MaxEdgePixels, output.Height);
+        var (width, height) = Decode(result.Bytes);
+        Assert.Equal(CoverImageProcessor.MaxEdgePixels, height);
         // 1200 / 3000 = 0.4; 1000 * 0.4 = 400.
-        Assert.Equal(400, output.Width);
+        Assert.Equal(400, width);
     }
 
     [Fact]
@@ -63,15 +60,15 @@ public class CoverImageProcessorTests
 
         var result = CoverImageProcessor.Process(jpegBytes, sourceContentType: "image/jpeg");
 
-        using var output = Image.Load(result.Bytes);
-        Assert.Equal(400, output.Width);
-        Assert.Equal(600, output.Height);
+        var (width, height) = Decode(result.Bytes);
+        Assert.Equal(400, width);
+        Assert.Equal(600, height);
     }
 
     [Fact]
     public void Process_CorruptBytes_FallsBackToRaw_WithRecognisedContentType()
     {
-        // Random bytes — ImageSharp can't decode. Should return WasNormalised=false
+        // Random bytes — SkiaSharp can't decode. Should return WasNormalised=false
         // with the bytes preserved and a sensible content-type derived from the
         // hint we passed in.
         var garbage = new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04 };
@@ -122,19 +119,24 @@ public class CoverImageProcessorTests
         Assert.Equal("bin", result.Extension);
     }
 
-    private static byte[] MakePng(int width, int height)
+    private static byte[] MakePng(int width, int height) => MakeImage(width, height, SKEncodedImageFormat.Png);
+
+    private static byte[] MakeJpeg(int width, int height) => MakeImage(width, height, SKEncodedImageFormat.Jpeg);
+
+    private static byte[] MakeImage(int width, int height, SKEncodedImageFormat format)
     {
-        using var image = new Image<Rgba32>(width, height);
-        using var ms = new MemoryStream();
-        image.Save(ms, new PngEncoder());
-        return ms.ToArray();
+        using var bitmap = new SKBitmap(width, height);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.SlateGray); // non-empty content so encoders have something to write
+        using var image = SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(format, 85);
+        return data.ToArray();
     }
 
-    private static byte[] MakeJpeg(int width, int height)
+    private static (int Width, int Height) Decode(byte[] bytes)
     {
-        using var image = new Image<Rgba32>(width, height);
-        using var ms = new MemoryStream();
-        image.Save(ms, new JpegEncoder { Quality = 85 });
-        return ms.ToArray();
+        using var bitmap = SKBitmap.Decode(bytes);
+        Assert.NotNull(bitmap);
+        return (bitmap!.Width, bitmap.Height);
     }
 }
