@@ -42,6 +42,10 @@ public class MudAuthorPickerTests : ComponentTestBase
         // A substitute returns a completed Task<int> by default, so the
         // chip-add path proceeds; one test asserts the dispatch happens.
         Services.AddSingleton(_dispatcher);
+
+        // The eager-create dispatch is wrapped in try/catch and logs on
+        // failure, so the component resolves an ILogger.
+        Services.AddLogging();
     }
 
     [Fact]
@@ -106,6 +110,24 @@ public class MudAuthorPickerTests : ComponentTestBase
 
         await _dispatcher.DidNotReceive().Send(
             Arg.Any<CreateAuthor>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task OnCommitKey_EagerCreateThrows_StillAddsChip()
+    {
+        // Best-effort (TD-15a review #2): if the eager CreateAuthor dispatch
+        // faults (transient DB error / accepted race), the chip is still added
+        // — the aggregate save's find-or-create net is the guarantee — and no
+        // exception escapes the commit.
+        _dispatcher.Send(Arg.Any<CreateAuthor>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<int>(new InvalidOperationException("transient")));
+        var authors = new List<string>();
+        var cut = Render<MudAuthorPicker>(p => p
+            .Add(c => c.Authors, authors));
+
+        await cut.InvokeAsync(() => cut.Instance.OnCommitKey("Preston"));
+
+        Assert.Equal(["Preston"], authors);
     }
 
     [Fact]

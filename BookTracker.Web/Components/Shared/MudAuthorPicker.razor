@@ -26,8 +26,10 @@
 @using BookTracker.Application.Authors
 @using BookTracker.Data
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Logging
 @inject IDbContextFactory<BookTrackerDbContext> DbFactory
 @inject IDispatcher Dispatcher
+@inject ILogger<MudAuthorPicker> Logger
 @inject IJSRuntime JS
 
 <MudPaper Outlined="true" Class="pa-2">
@@ -143,10 +145,20 @@
         {
             // Eager find-or-create (TD-15a): the Author row exists the moment
             // the chip is committed, not at the aggregate save. Idempotent, so
-            // committing a name that already exists is a harmless no-op. The
-            // save still find-or-creates as a net (Option B), but for names
-            // entered here it always hits the find branch.
-            await Dispatcher.Send(new CreateAuthor(trimmed));
+            // committing a name that already exists is a harmless no-op.
+            //
+            // Best-effort: a transient DB fault or the accepted check-then-insert
+            // race (TD-15) must not abort the chip-add — the aggregate save's
+            // find-or-create net (Option B) still guarantees the row, so on
+            // failure we log and add the chip anyway.
+            try
+            {
+                await Dispatcher.Send(new CreateAuthor(trimmed));
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Eager author create failed for {Name}; the save will create it", trimmed);
+            }
             Authors.Add(trimmed);
             await AuthorsChanged.InvokeAsync(Authors);
         }
