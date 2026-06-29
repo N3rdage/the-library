@@ -65,8 +65,8 @@
                 </MudSelect>
 
                 <MudAutocomplete T="string"
-                                 Value="VM.Publisher"
-                                 ValueChanged="OnPublisherCommittedAsync"
+                                 @bind-Value="VM.Publisher"
+                                 OnBlur="OnPublisherBlurAsync"
                                  SearchFunc="VM.SearchPublishersAsync"
                                  Label="Publisher"
                                  Variant="Variant.Outlined"
@@ -141,20 +141,18 @@
 
     private async Task LookupAsync() => await VM.LookupAsync();
 
-    internal async Task OnPublisherCommittedAsync(string? value)
+    // Commit gesture = the field losing focus. @bind-Value keeps the value
+    // updated as the user types (no side effect — a pause to think or fix a
+    // typo is NOT a save point); only on blur do we eagerly find-or-create a
+    // genuinely new publisher (TD-15a).
+    private Task OnPublisherBlurAsync() => EagerCreatePublisherIfNewAsync(VM.Publisher);
+
+    internal async Task EagerCreatePublisherIfNewAsync(string? value)
     {
-        // Fires when the user picks a suggestion or leaves free text in the field
-        // (CoerceValue="true"). Store the value, then eagerly find-or-create the
-        // Publisher row (TD-15a) so it exists the moment it's chosen.
-        //
-        // Existing pick (already in the cached list) → no create round-trip; only
-        // a genuinely new name dispatches CreatePublisher. Blank is skipped.
-        //
-        // Best-effort: a transient DB fault or the accepted check-then-insert
-        // race (TD-15) must not abort the field edit — the save's
-        // PublisherResolver net (Option B) still guarantees the row, so on
-        // failure we log and keep the typed value.
-        VM.Publisher = value;
+        // Existing (cached) name → no create round-trip; blank → skip. Only a
+        // genuinely new name dispatches CreatePublisher, appended to the cache.
+        // Best-effort — the save's PublisherResolver net (Option B) guarantees
+        // the row, so a fault here just logs.
         var trimmed = value?.Trim();
         if (string.IsNullOrEmpty(trimmed)) return;
         if (VM.ExistingPublishers.Any(p => p.Name.Equals(trimmed, StringComparison.OrdinalIgnoreCase))) return;

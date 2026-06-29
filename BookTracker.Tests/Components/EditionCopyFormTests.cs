@@ -11,12 +11,13 @@ using Xunit;
 namespace BookTracker.Tests.Components;
 
 /// <summary>
-/// bUnit tests for EditionCopyForm's publisher eager-create wiring (TD-15a).
-/// The publisher MudAutocomplete commits via ValueChanged (pick or coerced
-/// free text), which stores the value and — only for a name not already in the
-/// cached publisher list — dispatches <see cref="CreatePublisher"/> best-effort
-/// so the row exists immediately. An existing pick is a no-op (no wire call).
-/// Mirrors the author-picker pattern in <see cref="MudAuthorPickerTests"/>.
+/// bUnit tests for EditionCopyForm's publisher eager-create (TD-15a). The
+/// commit gesture is the field losing focus (OnBlur) — NOT per-keystroke
+/// ValueChanged, which fired on every character and created a publisher row
+/// for each partial string. On blur, a name not already in the cached list is
+/// eager-created via <see cref="CreatePublisher"/> (best-effort); an existing
+/// name or blank is a no-op (no wire call). @bind-Value handles the field value
+/// itself, so these tests drive the eager-create method directly.
 ///
 /// Integration-flavoured: EditionCopyForm.OnInitializedAsync loads existing
 /// publishers from the DB, so it needs a real <see cref="TestDbContextFactory"/>
@@ -47,20 +48,19 @@ public class EditionCopyFormTests : ComponentTestBase
             .Add(c => c.CopyInput, copy));
 
     [Fact]
-    public async Task PublisherCommit_NewName_StoresValueAndEagerCreates()
+    public async Task PublisherBlur_NewName_EagerCreates()
     {
         var (edition, copy) = Inputs();
         var cut = RenderForm(edition, copy);
 
-        await cut.InvokeAsync(() => cut.Instance.OnPublisherCommittedAsync("Gollancz"));
+        await cut.InvokeAsync(() => cut.Instance.EagerCreatePublisherIfNewAsync("Gollancz"));
 
-        Assert.Equal("Gollancz", edition.Publisher);
         await _dispatcher.Received(1).Send(
             Arg.Is<CreatePublisher>(c => c.Name == "Gollancz"), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task PublisherCommit_ExistingName_StoresValueButDoesNotEagerCreate()
+    public async Task PublisherBlur_ExistingName_DoesNotEagerCreate()
     {
         // Seed an existing publisher; OnInitializedAsync caches it. Committing it
         // (even with a case clash) is a pure pick — no CreatePublisher round-trip.
@@ -72,38 +72,38 @@ public class EditionCopyFormTests : ComponentTestBase
         var (edition, copy) = Inputs();
         var cut = RenderForm(edition, copy);
 
-        await cut.InvokeAsync(() => cut.Instance.OnPublisherCommittedAsync("penguin books"));
+        await cut.InvokeAsync(() => cut.Instance.EagerCreatePublisherIfNewAsync("penguin books"));
 
-        Assert.Equal("penguin books", edition.Publisher);
         await _dispatcher.DidNotReceive().Send(
             Arg.Any<CreatePublisher>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task PublisherCommit_Blank_StoresValueButDoesNotEagerCreate()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task PublisherBlur_Blank_DoesNotEagerCreate(string? value)
     {
         var (edition, copy) = Inputs();
         var cut = RenderForm(edition, copy);
 
-        await cut.InvokeAsync(() => cut.Instance.OnPublisherCommittedAsync("   "));
+        await cut.InvokeAsync(() => cut.Instance.EagerCreatePublisherIfNewAsync(value));
 
-        Assert.Equal("   ", edition.Publisher);
         await _dispatcher.DidNotReceive().Send(
             Arg.Any<CreatePublisher>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task PublisherCommit_EagerCreateThrows_StillStoresValue()
+    public async Task PublisherBlur_EagerCreateThrows_DoesNotSurface()
     {
-        // Best-effort: a faulting dispatch must not abort the field edit — the
-        // save's PublisherResolver net guarantees the row.
+        // Best-effort: a faulting dispatch must not throw out of the blur handler
+        // — the save's PublisherResolver net guarantees the row.
         _dispatcher.Send(Arg.Any<CreatePublisher>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException<int?>(new InvalidOperationException("transient")));
         var (edition, copy) = Inputs();
         var cut = RenderForm(edition, copy);
 
-        await cut.InvokeAsync(() => cut.Instance.OnPublisherCommittedAsync("Gollancz"));
-
-        Assert.Equal("Gollancz", edition.Publisher);
+        // Should complete without throwing.
+        await cut.InvokeAsync(() => cut.Instance.EagerCreatePublisherIfNewAsync("Gollancz"));
     }
 }
