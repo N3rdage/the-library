@@ -40,6 +40,17 @@ public class EditionFormDialogViewModel(
     // Edition needs at least one Copy, so the Add flow captures it here.
     public BookCondition FirstCopyCondition { get; set; } = BookCondition.Good;
 
+    // Publisher lookup cached client-side (loaded once on init). Publishers
+    // are a small lookup table, so the autocomplete filters this in-memory
+    // rather than round-tripping the DB per keystroke. It also lets the
+    // commit handler tell an existing pick (already in this list → no create
+    // call) from a genuinely new name (TD-15a eager create). A newly-created
+    // publisher is appended here so it's known to subsequent commits + shows
+    // in suggestions.
+    public List<PublisherOption> ExistingPublishers { get; private set; } = [];
+
+    public record PublisherOption(int Id, string Name);
+
     public string? LookupMessage { get; private set; }
     public bool LookingUp { get; private set; }
 
@@ -48,6 +59,9 @@ public class EditionFormDialogViewModel(
         IsNew = true;
         BookId = bookId;
         EditionId = null;
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        ExistingPublishers = await LoadPublishersAsync(db);
     }
 
     public async Task InitializeForEditAsync(int editionId)
@@ -65,27 +79,27 @@ public class EditionFormDialogViewModel(
         Publisher = edition.Publisher?.Name;
         FirstPublishedOrPrintedDate = PartialDateParser.Format(edition.DatePrinted, edition.DatePrintedPrecision);
         CoverUrl = edition.CoverUrl;
+        ExistingPublishers = await LoadPublishersAsync(db);
     }
 
-    public async Task<IEnumerable<string>> SearchPublishersAsync(string query, CancellationToken ct)
-    {
-        // .ToLower() inside the Where keeps behaviour consistent across
-        // providers. SQL Server defaults to case-insensitive collation so
-        // raw Contains would match either way in prod, but the EF InMemory
-        // provider used in tests is case-sensitive — explicit lowering
-        // prevents tests and prod from disagreeing.
-        var q = (query ?? "").Trim().ToLower();
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var matches = db.Publishers.AsQueryable();
-        if (!string.IsNullOrEmpty(q))
-        {
-            matches = matches.Where(p => p.Name.ToLower().Contains(q));
-        }
-        return await matches
+    private static Task<List<PublisherOption>> LoadPublishersAsync(BookTrackerDbContext db) =>
+        db.Publishers
             .OrderBy(p => p.Name)
-            .Select(p => p.Name)
-            .Take(20)
-            .ToListAsync(ct);
+            .Select(p => new PublisherOption(p.Id, p.Name))
+            .ToListAsync();
+
+    public Task<IEnumerable<string>> SearchPublishersAsync(string query, CancellationToken ct)
+    {
+        // Filters the cached ExistingPublishers in-memory (loaded once on
+        // init) rather than hitting the DB per keystroke. Case-insensitive
+        // Contains; the cache is already name-ordered.
+        var q = (query ?? "").Trim();
+        IEnumerable<string> matches = string.IsNullOrEmpty(q)
+            ? ExistingPublishers.Select(p => p.Name)
+            : ExistingPublishers
+                .Where(p => p.Name.Contains(q, StringComparison.OrdinalIgnoreCase))
+                .Select(p => p.Name);
+        return Task.FromResult(matches.Take(20));
     }
 
     public async Task LookupAsync()

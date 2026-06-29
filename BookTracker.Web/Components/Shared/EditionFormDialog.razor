@@ -2,8 +2,13 @@
    picks between the two flows — Add shows the ISBN-lookup button and a
    first-copy condition field; Edit is field-only. *@
 
+@using BookTracker.Application
+@using BookTracker.Application.Books
+@using Microsoft.Extensions.Logging
 @inject EditionFormDialogViewModel VM
 @inject ISnackbar Snackbar
+@inject IDispatcher Dispatcher
+@inject ILogger<EditionFormDialog> Logger
 
 <MudDialog>
     <DialogContent>
@@ -61,6 +66,7 @@
 
                 <MudAutocomplete T="string"
                                  @bind-Value="VM.Publisher"
+                                 OnBlur="OnPublisherBlurAsync"
                                  SearchFunc="VM.SearchPublishersAsync"
                                  Label="Publisher"
                                  Variant="Variant.Outlined"
@@ -134,6 +140,35 @@
     }
 
     private async Task LookupAsync() => await VM.LookupAsync();
+
+    // Commit gesture = the field losing focus. @bind-Value keeps the value
+    // updated as the user types (no side effect — a pause to think or fix a
+    // typo is NOT a save point); only on blur do we eagerly find-or-create a
+    // genuinely new publisher (TD-15a).
+    private Task OnPublisherBlurAsync() => EagerCreatePublisherIfNewAsync(VM.Publisher);
+
+    internal async Task EagerCreatePublisherIfNewAsync(string? value)
+    {
+        // Existing (cached) name → no create round-trip; blank → skip. Only a
+        // genuinely new name dispatches CreatePublisher, appended to the cache.
+        // Best-effort — the save's PublisherResolver net (Option B) guarantees
+        // the row, so a fault here just logs.
+        var trimmed = value?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return;
+        if (VM.ExistingPublishers.Any(p => p.Name.Equals(trimmed, StringComparison.OrdinalIgnoreCase))) return;
+        try
+        {
+            var id = await Dispatcher.Send(new CreatePublisher(trimmed));
+            if (id is int newId)
+            {
+                VM.ExistingPublishers.Add(new EditionFormDialogViewModel.PublisherOption(newId, trimmed));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Eager publisher create failed for {Name}; the save will create it", trimmed);
+        }
+    }
 
     private async Task SaveAsync()
     {
