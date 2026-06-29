@@ -89,7 +89,7 @@ Config under `AI:` section in appsettings. Only providers with valid config are 
 
 ## Cover storage
 
-Book cover images are mirrored from upstream providers (Open Library, Google Books, Trove) into Azure Blob Storage so renders never depend on upstream latency. `IBookCoverStorage` (`BookTracker.Web/Services/Covers/`) downloads the upstream URL, normalises via ImageSharp (JPEG, max 1200px on the long edge — falls back to raw bytes with a logged warning if conversion fails per Drew's call), uploads to the `book-covers` container, and the URL stored on `Edition.CoverUrl` / `Book.DefaultCoverArtUrl` swaps to the blob URL.
+Book cover images are mirrored from upstream providers (Open Library, Google Books, Trove) into Azure Blob Storage so renders never depend on upstream latency. `IBookCoverStorage` (`BookTracker.Web/Services/Covers/`) downloads the upstream URL, normalises via SkiaSharp (JPEG, max 1200px on the long edge — falls back to raw bytes with a logged warning if conversion fails per Drew's call; same imaging library as the Bookshelf cover cache, replacing SixLabors.ImageSharp after it moved to a build-time licence key in v4), uploads to the `book-covers` container, and the URL stored on `Edition.CoverUrl` / `Book.DefaultCoverArtUrl` swaps to the blob URL.
 
 `CoverMirrorBackgroundService` polls every 30s for un-mirrored URLs and processes them in batches of 50. Same service handles both initial backfill (legacy upstream URLs in the DB before this shipped) and ongoing mirroring of newly-added covers — there's no save-site integration in PR1 (PR2 will move new-cover mirroring inline at the save site so the polling becomes backfill-only).
 

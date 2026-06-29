@@ -15,7 +15,14 @@
     <PackageReference Include="Azure.AI.OpenAI" Version="2.1.0" />
     <PackageReference Include="Azure.Storage.Blobs" Version="12.29.1" />
     <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.23.0" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <!-- SkiaSharp: cover image decode/resize/encode (replaces SixLabors.ImageSharp,
+         which moved to a build-time licence key in v4). NoDependencies on Linux
+         because the cover pipeline is headless decode/resize/encode — no fonts, so
+         we don't need fontconfig in the App Service container. Win32 asset covers
+         local Windows dev + the BookTracker.Tests run. Same 4.148.0 as Mobile. -->
+    <PackageReference Include="SkiaSharp" Version="4.148.0" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.148.0" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="4.148.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>

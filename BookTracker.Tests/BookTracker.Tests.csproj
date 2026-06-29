@@ -9,6 +9,15 @@
 
   <ItemGroup>
     <PackageReference Include="bunit" Version="2.7.2" />
+    <!-- SkiaSharp for the CoverImageProcessor tests (make/decode sample images).
+         Native assets explicit so the test host decodes on Windows (local) +
+         Linux (CI). Linux.NoDependencies (not the full .Linux) because these
+         tests only decode/resize/encode — no text rendering, so fontconfig
+         isn't needed; mirrors the headless asset choice in BookTracker.Web.
+         (BookTracker.Mobile.Cache.Tests uses the full .Linux + macOS set.) -->
+    <PackageReference Include="SkiaSharp" Version="4.148.0" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="4.148.0" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.148.0" />
     <PackageReference Include="coverlet.collector" Version="10.0.1" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.9" />
     <PackageReference Include="Microsoft.Playwright" Version="1.61.0" />

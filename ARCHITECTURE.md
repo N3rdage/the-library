@@ -211,7 +211,7 @@ Projects the catalog into the slim wire-format `CatalogSnapshot` consumed by Boo
 Read-only wishlist projection for `/api/wishlist-snapshot`. Bookcase web remains the canonical write surface — add/remove/edit happen there. `/bookshop` and the future Bookshelf wishlist surface consume this DTO read-only and synthesise a local "bought" flag that self-heals on each catalog refresh.
 
 ### BookCoverStorage
-Mirrors upstream cover URLs (Open Library / Google Books / Trove) into Azure Blob Storage so renders never depend on upstream latency. Downloads, normalises via ImageSharp (JPEG, max 1200px long edge — falls back to raw bytes with a logged warning if conversion fails), uploads to the `book-covers` container, swaps the URL on `Edition.CoverUrl` / `Book.DefaultCoverArtUrl` to the blob URL.
+Mirrors upstream cover URLs (Open Library / Google Books / Trove) into Azure Blob Storage so renders never depend on upstream latency. Downloads, normalises via SkiaSharp (JPEG, max 1200px long edge — falls back to raw bytes with a logged warning if conversion fails), uploads to the `book-covers` container, swaps the URL on `Edition.CoverUrl` / `Book.DefaultCoverArtUrl` to the blob URL.
 
 `CoverMirrorBackgroundService` (hosted service) polls every 30s for un-mirrored URLs and processes them in batches of 50. Handles both the initial backfill and ongoing mirroring. Local dev uses Azurite on `localhost:10000`; prod uses a real Storage Account provisioned by `infra/modules/cover-storage.bicep` with the connection string in Key Vault.
 
