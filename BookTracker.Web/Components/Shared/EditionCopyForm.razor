@@ -1,4 +1,9 @@
+@using BookTracker.Application
+@using BookTracker.Application.Books
+@using Microsoft.Extensions.Logging
 @inject EditionFormViewModel EditionVM
+@inject IDispatcher Dispatcher
+@inject ILogger<EditionCopyForm> Logger
 
 @* Edition + Copy fields for a new book being captured on /books/add.
    Publisher input is an autocomplete over existing Publisher rows
@@ -76,7 +81,8 @@
                    time find-or-create works the same as the previous datalist
                    shape (user can either pick or type-new). *@
                 <MudAutocomplete T="string"
-                                 @bind-Value="EditionInput.Publisher"
+                                 Value="EditionInput.Publisher"
+                                 ValueChanged="OnPublisherCommittedAsync"
                                  SearchFunc="@SearchPublishers"
                                  Label="Publisher"
                                  Placeholder="Penguin Books"
@@ -113,6 +119,32 @@
     protected override async Task OnInitializedAsync()
     {
         await EditionVM.InitializeAsync();
+    }
+
+    // internal (not private) so the bUnit wiring test can invoke it directly —
+    // BookTracker.Web exposes internals to BookTracker.Tests.
+    internal async Task OnPublisherCommittedAsync(string? value)
+    {
+        // Fires when the user picks a suggestion or leaves free text in the field
+        // (CoerceValue="true"). Store the value, then eagerly find-or-create the
+        // Publisher row (TD-15a) so it exists the moment it's chosen, not at the
+        // Edition save. Idempotent — committing an existing name is a harmless
+        // no-op, a blank name is skipped.
+        //
+        // Best-effort: a transient DB fault or the accepted check-then-insert
+        // race (TD-15) must not abort the field edit — the save's
+        // PublisherResolver net (Option B) still guarantees the row, so on
+        // failure we log and keep the typed value.
+        EditionInput.Publisher = value;
+        if (string.IsNullOrWhiteSpace(value)) return;
+        try
+        {
+            await Dispatcher.Send(new CreatePublisher(value));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Eager publisher create failed for {Name}; the save will create it", value);
+        }
     }
 
     private Task<IEnumerable<string>> SearchPublishers(string? query, CancellationToken ct)
