@@ -34,9 +34,9 @@
          explicitly — Linux for CI ubuntu runners, Win32 for local
          Windows dev, macOS for completeness. The runtime picks the
          one matching its RID and ignores the others. -->
-    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.4" />
-    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="3.119.4" />
-    <PackageReference Include="SkiaSharp.NativeAssets.macOS" Version="3.119.4" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.148.0" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="4.148.0" />
+    <PackageReference Include="SkiaSharp.NativeAssets.macOS" Version="4.148.0" />
   </ItemGroup>
 
   <ItemGroup>
