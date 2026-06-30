@@ -100,6 +100,23 @@ public class MudAuthorPickerTests : ComponentTestBase
     }
 
     [Fact]
+    public async Task OnPickedAsync_DropdownPick_DoesNotEagerCreate()
+    {
+        // TD-15a close-out: a dropdown selection is always an existing author
+        // (the search only returns rows that exist), so picking one must NOT fire
+        // a redundant CreateAuthor round-trip — only the typed-commit path does.
+        var authors = new List<string>();
+        var cut = Render<MudAuthorPicker>(p => p
+            .Add(c => c.Authors, authors));
+
+        await cut.InvokeAsync(() => cut.Instance.OnPickedAsync("Terry Pratchett"));
+
+        Assert.Equal(["Terry Pratchett"], authors); // chip still added
+        await _dispatcher.DidNotReceive().Send(
+            Arg.Any<CreateAuthor>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task OnCommitKey_DuplicateName_DoesNotEagerCreate()
     {
         // De-duped commits are a no-op — no chip, and no wasted CreateAuthor.

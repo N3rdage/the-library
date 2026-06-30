@@ -113,12 +113,14 @@
             .ToListAsync(ct);
     }
 
-    private async Task OnPickedAsync(string? value)
+    internal async Task OnPickedAsync(string? value)
     {
         // Fires when the user selects a name from the suggestion dropdown.
         // CoerceValue="false" prevents this from firing on intermediate
-        // keystrokes (the original chip-per-keystroke bug).
-        await TryAddAsync(value);
+        // keystrokes (the original chip-per-keystroke bug). A dropdown pick is
+        // always an existing author (the search only returns rows that exist),
+        // so there's nothing to eager-create — skip the redundant round-trip.
+        await TryAddAsync(value, eagerCreate: false);
     }
 
     [JSInvokable]
@@ -128,12 +130,13 @@
         // or comma. `text` is the input.value at the exact moment of keydown
         // — reading the autocomplete's .NET-side Text property in OnKeyDown
         // had been returning stale or empty values, so the JS reads
-        // input.value directly and passes it across.
-        await TryAddAsync(text);
+        // input.value directly and passes it across. Typed text can be a brand-
+        // new author, so this path eager-creates.
+        await TryAddAsync(text, eagerCreate: true);
         StateHasChanged();
     }
 
-    private async Task TryAddAsync(string? value)
+    private async Task TryAddAsync(string? value, bool eagerCreate)
     {
         if (string.IsNullOrWhiteSpace(value)) return;
         var trimmed = value.Trim().TrimEnd(',', ';', '&').Trim();
@@ -143,21 +146,25 @@
         // is a no-op rather than a duplicate.
         if (!Authors.Any(a => a.Equals(trimmed, StringComparison.OrdinalIgnoreCase)))
         {
-            // Eager find-or-create (TD-15a): the Author row exists the moment
-            // the chip is committed, not at the aggregate save. Idempotent, so
-            // committing a name that already exists is a harmless no-op.
+            // Eager find-or-create (TD-15a): a genuinely new author (typed +
+            // committed) gets its row the moment the chip is added, not at the
+            // aggregate save. A dropdown pick (eagerCreate: false) is already an
+            // existing row, so it skips the round-trip.
             //
             // Best-effort: a transient DB fault or the accepted check-then-insert
             // race (TD-15) must not abort the chip-add — the aggregate save's
             // find-or-create net (Option B) still guarantees the row, so on
             // failure we log and add the chip anyway.
-            try
+            if (eagerCreate)
             {
-                await Dispatcher.Send(new CreateAuthor(trimmed));
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning(ex, "Eager author create failed for {Name}; the save will create it", trimmed);
+                try
+                {
+                    await Dispatcher.Send(new CreateAuthor(trimmed));
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "Eager author create failed for {Name}; the save will create it", trimmed);
+                }
             }
             Authors.Add(trimmed);
             await AuthorsChanged.InvokeAsync(Authors);
