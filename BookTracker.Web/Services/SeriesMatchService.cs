@@ -82,9 +82,8 @@ public partial class SeriesMatchService(IDbContextFactory<BookTrackerDbContext> 
 
         await using var db = await dbFactory.CreateDbContextAsync();
 
-        // Strategy 1: Check if the author already has works in a series
+        // Strategy 1: Check if the author already has a series (by Series.Author).
         var authorSeries = await db.Series
-            .Include(s => s.Works)
             .Where(s => s.Author != null && s.Author == author.Trim())
             .ToListAsync();
 

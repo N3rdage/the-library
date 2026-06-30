@@ -106,7 +106,6 @@ Rules:
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
         var uncategorised = await db.Books
-            .Include(b => b.Works)
             .Where(b => b.SeriesId == null)
             .OrderBy(b => b.Title)
             .Select(b => new

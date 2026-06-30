@@ -273,4 +273,51 @@ public class SeriesEditViewModelTests
         Assert.Single(vm.Books);
         Assert.Equal(bookId, vm.Books[0].Id);
     }
+
+    [Fact]
+    public async Task SearchBooksAsync_MultiAuthorBook_ShowsSameAuthorStringAsTheAddedRow()
+    {
+        // Guards (a) the search query translates against real SQL and (b) the
+        // dropdown author matches the row the book becomes once added — both built
+        // via BookAuthorDisplay, so a multi-author book reads consistently.
+        var seriesId = await SeedSeriesAsync();
+        int bookId;
+        await using (var db = _factory.CreateDbContext())
+        {
+            var preston = new Author { Name = "Douglas Preston" };
+            var child = new Author { Name = "Lincoln Child" };
+            var book = new Book
+            {
+                Title = "Relic",
+                Works =
+                [
+                    new Work
+                    {
+                        Title = "Relic",
+                        WorkAuthors =
+                        [
+                            new WorkAuthor { Author = preston, Order = 0, Role = AuthorRole.Author },
+                            new WorkAuthor { Author = child, Order = 1, Role = AuthorRole.Author },
+                        ],
+                    },
+                ],
+            };
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            bookId = book.Id;
+        }
+
+        var vm = NewVm();
+        await vm.InitializeAsync(seriesId);
+        vm.BookSearchTerm = "Relic";
+        await vm.SearchBooksAsync(); // must translate, not throw
+
+        var result = Assert.Single(vm.BookSearchResults);
+        Assert.Equal(bookId, result.Id);
+        Assert.Equal("Douglas Preston, Lincoln Child", result.Author); // lead-first, joined
+
+        await vm.AddBookToSeriesAsync(seriesId, bookId);
+        var row = Assert.Single(vm.Books);
+        Assert.Equal(result.Author, row.Author); // search dropdown == added row
+    }
 }

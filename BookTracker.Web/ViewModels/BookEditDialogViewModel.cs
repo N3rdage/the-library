@@ -43,7 +43,13 @@ public class BookEditDialogViewModel(
         Category = book.Category;
         CoverUrl = book.DefaultCoverArtUrl;
         SelectedSeriesId = book.SeriesId;
-        SeriesOrderInput = SeriesOrderParser.Format(book.SeriesOrder, book.SeriesOrderDisplay);
+        // Only surface an order when the book is actually in a series. A series
+        // delete SET NULLs SeriesId but leaves SeriesOrder behind, so a stale
+        // order must not pre-fill the field and silently ride into the next
+        // series the user picks.
+        SeriesOrderInput = book.SeriesId is null
+            ? null
+            : SeriesOrderParser.Format(book.SeriesOrder, book.SeriesOrderDisplay);
 
         AvailableSeries = await db.Series
             .OrderBy(s => s.Name)

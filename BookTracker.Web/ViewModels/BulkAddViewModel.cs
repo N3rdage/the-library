@@ -253,26 +253,11 @@ public class BulkAddViewModel(
         };
 
         // Series attachment if the user accepted the suggestion on this row.
-        // Series membership is a per-Book concept (the book is installment N), so
-        // it lands on the Book. Mirrors BookAddViewModel.SaveAsync: an existing
-        // local series wins via SeriesId; otherwise find-or-create by name.
+        // Series membership is a per-Book concept (the book is installment N);
+        // AttachToBookAsync is the shared seam with BookAddViewModel.SaveAsync.
         if (row.SeriesSuggestionAccepted)
         {
-            // Derive the (sort int, display) pair from the captured label at
-            // save time — never freeze the int at accept time.
-            var (acceptedOrder, acceptedOrderDisplay) = SeriesOrderParser.Parse(row.AcceptedSeriesOrderLabel);
-            if (row.AcceptedSeriesId is int existingId)
-            {
-                newBook.SeriesId = existingId;
-                newBook.SeriesOrder = acceptedOrder;
-                newBook.SeriesOrderDisplay = acceptedOrderDisplay;
-            }
-            else if (!string.IsNullOrWhiteSpace(row.AcceptedSeriesName))
-            {
-                newBook.Series = await SeriesResolver.ResolveAsync(db, row.AcceptedSeriesName);
-                newBook.SeriesOrder = acceptedOrder;
-                newBook.SeriesOrderDisplay = acceptedOrderDisplay;
-            }
+            await SeriesResolver.AttachToBookAsync(db, newBook, row.AcceptedSeriesId, row.AcceptedSeriesName, row.AcceptedSeriesOrderLabel);
         }
 
         db.Books.Add(newBook);

@@ -99,7 +99,6 @@ Rules:
         // Books not in any series. Project the contained Works' authors since
         // Book no longer carries Author directly.
         var uncategorised = await db.Books
-            .Include(b => b.Works)
             .Where(b => b.SeriesId == null)
             .OrderBy(b => b.Title)
             .Select(b => new

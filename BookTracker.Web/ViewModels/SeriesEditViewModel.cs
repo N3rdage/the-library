@@ -147,22 +147,21 @@ public class SeriesEditViewModel(
         var currentBookIds = Books.Select(b => b.Id).ToHashSet();
 
         await using var db = await dbFactory.CreateDbContextAsync();
-        BookSearchResults = await db.Books
+        // Load the works+authors graph for the (≤10) matches and build the author
+        // string via BookAuthorDisplay — the SAME helper the in-series rows use —
+        // so a book shows one consistent author in the search dropdown and in the
+        // table once it's added.
+        var matches = await db.Books
+            .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .Where(b => !currentBookIds.Contains(b.Id))
             .Where(b => b.Title.Contains(term) || b.Works.Any(w => w.Title.Contains(term) || w.Authors.Any(a => a.Name.Contains(term))))
             .OrderBy(b => b.Title)
             .Take(10)
-            .Select(b => new BookSearchResult(
-                b.Id,
-                b.Title,
-                // Lead author of the book's first Work (by Id) — order the Works
-                // before flattening so a multi-Work book picks deterministically.
-                b.Works
-                    .OrderBy(w => w.Id)
-                    .SelectMany(w => w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.Author.Name))
-                    .FirstOrDefault() ?? "",
-                b.SeriesId))
             .ToListAsync();
+
+        BookSearchResults = matches
+            .Select(b => new BookSearchResult(b.Id, b.Title, BookAuthorDisplay(b), b.SeriesId))
+            .ToList();
     }
 
     public async Task AddBookToSeriesAsync(int seriesId, int bookId)
