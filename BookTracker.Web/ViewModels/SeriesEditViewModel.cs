@@ -155,7 +155,10 @@ public class SeriesEditViewModel(
             .Select(b => new BookSearchResult(
                 b.Id,
                 b.Title,
+                // Lead author of the book's first Work (by Id) — order the Works
+                // before flattening so a multi-Work book picks deterministically.
                 b.Works
+                    .OrderBy(w => w.Id)
                     .SelectMany(w => w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.Author.Name))
                     .FirstOrDefault() ?? "",
                 b.SeriesId))

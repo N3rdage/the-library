@@ -165,9 +165,8 @@ public class AIAssistantViewModel(
             Description = grouping.Reasoning
         };
 
-        // Try to set the author if all matched books' primary works share one
+        // Try to set the author if all matched books' works share one
         var matchedBooks = await db.Books
-            .Include(b => b.Works).ThenInclude(w => w.Series)
             .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .Where(b => grouping.BookTitles.Contains(b.Title))
             .ToListAsync();
@@ -182,15 +181,13 @@ public class AIAssistantViewModel(
         db.Series.Add(series);
         await db.SaveChangesAsync();
 
-        // Assign each matched book's primary work to the series.
+        // Assign each matched book to the series — series membership is a per-Book
+        // concept (the book is installment N). Skip any book already in a series.
         var order = 1;
         foreach (var book in matchedBooks)
         {
-            var primary = book.Works.FirstOrDefault();
-            if (primary is null || primary.SeriesId is not null) continue;
-
-            primary.SeriesId = series.Id;
-            primary.SeriesOrder = order++;
+            if (book.SeriesId is not null) continue;
+            book.AssignToSeries(series.Id, order++, orderDisplay: null);
         }
         await db.SaveChangesAsync();
     }

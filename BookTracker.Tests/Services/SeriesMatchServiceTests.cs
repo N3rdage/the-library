@@ -66,6 +66,33 @@ public class SeriesMatchServiceTests
     }
 
     [Fact]
+    public async Task FindMatchAsync_AuthorBooksAllInSeries_DoesNotSuggestCollection()
+    {
+        // Regression for the Work→Book series cutover (#56). Series membership
+        // lives on the Book now and Work.SeriesId stays null, so Strategy 2 must
+        // count Book-level membership — otherwise an author whose books are ALL
+        // already in a series gets a spurious "create a collection" suggestion.
+        var factory = new TestDbContextFactory();
+        using (var db = factory.CreateDbContext())
+        {
+            var author = new Author { Name = "Grouped Author" };
+            // Series has no Author string, so Strategy 1 (match by Series.Author)
+            // can't fire — isolating Strategy 2's book-count behaviour.
+            var series = new Series { Name = "Existing Series", Type = SeriesType.Series };
+            db.Books.AddRange(
+                new Book { Title = "Book A", Series = series, SeriesOrder = 1, Works = [new Work { Title = "Book A", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }] },
+                new Book { Title = "Book B", Series = series, SeriesOrder = 2, Works = [new Work { Title = "Book B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }] }
+            );
+            await db.SaveChangesAsync();
+        }
+
+        var service = new SeriesMatchService(factory);
+        var match = await service.FindMatchAsync("Book C", "Grouped Author");
+
+        Assert.Null(match); // both books already in a series → no "ungrouped books" hint
+    }
+
+    [Fact]
     public async Task FindMatchAsync_NoMatch_ReturnsNull()
     {
         var factory = new TestDbContextFactory();

@@ -113,16 +113,18 @@ public partial class SeriesMatchService(IDbContextFactory<BookTrackerDbContext> 
                 $"This author has {authorSeries.Count} series/collections in the library");
         }
 
-        // Strategy 2: Check if the author has other works (not yet in a series)
-        // that might suggest grouping
+        // Strategy 2: Check if the author has other books (not yet in a series)
+        // that might suggest grouping. Series membership lives on the Book now,
+        // so count this author's books with no Book-level series.
         var authorName = author.Trim();
-        var authorWorkCount = await db.Works
-            .CountAsync(w => w.Authors.Any(a => a.Name == authorName) && w.SeriesId == null);
+        var authorBookCount = await db.Books
+            .CountAsync(b => b.SeriesId == null
+                && b.Works.Any(w => w.Authors.Any(a => a.Name == authorName)));
 
-        if (authorWorkCount >= 2)
+        if (authorBookCount >= 2)
         {
             return new SeriesMatch(null, null, null, MatchReason.AuthorHasMultipleBooks,
-                $"This author has {authorWorkCount} other works not in any series — consider creating a collection");
+                $"This author has {authorBookCount} other books not in any series — consider creating a collection");
         }
 
         // Strategy 3: Title pattern matching for series indicators
