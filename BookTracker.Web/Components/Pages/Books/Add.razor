@@ -265,15 +265,15 @@
                            or choose the "Add …" row to create a new one. Creation
                            is an explicit selection (no commit-on-blur guessing).
                            The ISBN-lookup suggestion above fills this same field. *@
-                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-2">Optional — applies to the work above. Pick an existing series, or choose &quot;Add …&quot; to create a new one.</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-2">Optional — applies to the work above. Pick an existing series, or choose the “Add …” row to create a new one.</MudText>
                         <MudGrid Spacing="3">
                             <MudItem xs="12" md="8">
-                                <CreatableAutocomplete Value="VM.AcceptedSeriesName"
+                                <CreatableAutocomplete Value="@VM.AcceptedSeriesName"
                                                        ValueChanged="VM.OnSeriesChosenAsync"
                                                        SearchExisting="VM.SearchSeriesAsync"
                                                        Label="Series"
                                                        Placeholder="e.g. The Stormlight Archive"
-                                                       HelperText="Pick an existing series, or choose &quot;Add …&quot; to create a new one." />
+                                                       HelperText="Pick an existing series, or choose the “Add …” row to create a new one." />
                             </MudItem>
                             @if (!string.IsNullOrWhiteSpace(VM.AcceptedSeriesName))
                             {
