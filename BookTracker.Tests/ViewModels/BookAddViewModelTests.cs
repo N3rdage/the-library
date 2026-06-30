@@ -735,7 +735,7 @@ public class BookAddViewModelTests
         Assert.Equal(MatchReason.ApiMatchExisting, vm.SeriesSuggestion!.Reason);
 
         await vm.AcceptSeriesSuggestion();
-        Assert.True(vm.SeriesSuggestionAccepted);
+        Assert.Equal("Discworld", vm.AcceptedSeriesName); // filled the chosen-series field
 
         await vm.SaveAsync(new List<int>());
 
@@ -858,25 +858,26 @@ public class BookAddViewModelTests
     }
 
     [Fact]
-    public async Task CommitSeriesAsync_NewName_EagerCreatesAndPinsId()
+    public async Task OnSeriesChosenAsync_NewName_EagerCreatesAndPinsId()
     {
+        // Selecting the "Add …" row is the explicit create gesture — the Series
+        // row is created and pinned at the selection, not deferred to save.
         var vm = CreateVm();
         await vm.InitializeAsync(); // empty cache
 
-        vm.OnSeriesNameChanged("The Stormlight Archive");
-        await vm.CommitSeriesAsync();
+        await vm.OnSeriesChosenAsync("The Stormlight Archive");
 
         Assert.NotNull(vm.AcceptedSeriesId); // eager-created + pinned
         using var db = _factory.CreateDbContext();
         var series = Assert.Single(db.Series); // row exists at the gesture
         Assert.Equal("The Stormlight Archive", series.Name);
         Assert.Equal(vm.AcceptedSeriesId, series.Id);
-        // Appended to the cache so a re-commit is a no-op.
+        // Appended to the cache so a re-pick is a no-op.
         Assert.Contains(vm.ExistingSeries, s => s.Name == "The Stormlight Archive");
     }
 
     [Fact]
-    public async Task CommitSeriesAsync_ExistingCachedName_PinsIdWithNoDuplicate()
+    public async Task OnSeriesChosenAsync_ExistingCachedName_PinsIdWithNoDuplicate()
     {
         int seededId;
         using (var db = _factory.CreateDbContext())
@@ -890,8 +891,7 @@ public class BookAddViewModelTests
         var vm = CreateVm();
         await vm.InitializeAsync();
 
-        vm.OnSeriesNameChanged("discworld"); // case clash
-        await vm.CommitSeriesAsync();
+        await vm.OnSeriesChosenAsync("discworld"); // case clash
 
         Assert.Equal(seededId, vm.AcceptedSeriesId); // resolved from the cache
         using var db2 = _factory.CreateDbContext();
@@ -899,41 +899,92 @@ public class BookAddViewModelTests
     }
 
     [Fact]
-    public async Task CommitSeriesAsync_Blank_ClearsResolvedId()
+    public async Task OnSeriesChosenAsync_Blank_ClearsSelection()
     {
         var vm = CreateVm();
         await vm.InitializeAsync();
-        vm.OnSeriesNameChanged("Mistborn");
-        await vm.CommitSeriesAsync();
+        await vm.OnSeriesChosenAsync("Mistborn");
         Assert.NotNull(vm.AcceptedSeriesId);
 
-        vm.OnSeriesNameChanged("   ");
-        await vm.CommitSeriesAsync();
+        // The Clearable X commits a null selection.
+        await vm.OnSeriesChosenAsync("   ");
 
         Assert.Null(vm.AcceptedSeriesId);
+        Assert.Null(vm.AcceptedSeriesName);
     }
 
     [Fact]
-    public async Task OnSeriesNameChanged_InvalidatesPreviouslyResolvedId()
+    public async Task OnSeriesChosenAsync_DifferentSeries_ReResolvesIdAndClearsOrder()
     {
+        // Choosing a different series re-resolves the id AND drops the order — the
+        // order belonged to the previous series and must not bleed onto the new
+        // one. This is the structural fix for the old carryover bug: there is no
+        // free-edit of a committed name, so a stale order can't survive a swap.
         var vm = CreateVm();
         await vm.InitializeAsync();
-        vm.OnSeriesNameChanged("Mistborn");
-        await vm.CommitSeriesAsync();
-        Assert.NotNull(vm.AcceptedSeriesId);
+        await vm.OnSeriesChosenAsync("Mistborn");
+        var firstId = vm.AcceptedSeriesId;
+        Assert.NotNull(firstId);
+        vm.AcceptedSeriesOrderLabel = "3";
 
-        // Typing a different name must invalidate the stale id (re-resolved on
-        // the next commit) so the save can't attach the wrong series.
-        vm.OnSeriesNameChanged("Elantris");
+        await vm.OnSeriesChosenAsync("Elantris");
 
-        Assert.Null(vm.AcceptedSeriesId);
         Assert.Equal("Elantris", vm.AcceptedSeriesName);
+        Assert.NotNull(vm.AcceptedSeriesId);
+        Assert.NotEqual(firstId, vm.AcceptedSeriesId); // a different series row
+        Assert.Null(vm.AcceptedSeriesOrderLabel);       // the "3" did not carry over
+    }
+
+    [Fact]
+    public async Task OnSeriesChosenAsync_SameName_KeepsOrder()
+    {
+        // Re-confirming the same series (no change) must not wipe a set order.
+        var vm = CreateVm();
+        await vm.InitializeAsync();
+        await vm.OnSeriesChosenAsync("Mistborn");
+        vm.AcceptedSeriesOrderLabel = "3";
+
+        await vm.OnSeriesChosenAsync("Mistborn");
+
+        Assert.Equal("3", vm.AcceptedSeriesOrderLabel);
+    }
+
+    [Fact]
+    public async Task SaveAsync_AcceptThenChooseDifferentSeries_DoesNotCarryStaleOrder()
+    {
+        // End-to-end carryover guard: "Use this" fills Mistborn #3, then the user
+        // picks a different series in the typeahead. The work must attach to the
+        // new series with NO order — the "3" was Mistborn's.
+        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: "9780765326355", Title: "The Way of Kings", Subtitle: null,
+                Author: "Brandon Sanderson", Publisher: null,
+                GenreCandidates: [], DatePrinted: null, CoverUrl: null,
+                Source: "Open Library",
+                Series: "Mistborn", SeriesNumber: 3, SeriesNumberRaw: "3"));
+
+        var vm = CreateVm();
+        await vm.InitializeAsync();
+        vm.LookupIsbn = "9780765326355";
+        await vm.LookupAsync();
+        await vm.AcceptSeriesSuggestion();     // Mistborn #3 filled
+        Assert.Equal("3", vm.AcceptedSeriesOrderLabel);
+
+        await vm.OnSeriesChosenAsync("Discworld"); // explicit swap → order drops
+
+        await vm.SaveAsync(new List<int>());
+
+        using var db = _factory.CreateDbContext();
+        var discworld = await db.Series.SingleAsync(s => s.Name == "Discworld");
+        var work = db.Works.Include(w => w.Series).Single();
+        Assert.Equal(discworld.Id, work.SeriesId);
+        Assert.Null(work.SeriesOrder); // NOT 3 — that order was Mistborn's
     }
 
     [Fact]
     public async Task SaveAsync_WithManualSeries_AttachesWorkToEagerCreatedSeries()
     {
-        // Lookup carries no series; the user types one manually.
+        // Lookup carries no series; the user picks/creates one manually.
         _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new BookLookupResult(
                 Isbn: "9780765326355", Title: "The Way of Kings", Subtitle: null,
@@ -947,9 +998,8 @@ public class BookAddViewModelTests
         vm.LookupIsbn = "9780765326355";
         await vm.LookupAsync();
 
-        vm.OnSeriesNameChanged("The Stormlight Archive");
-        vm.AcceptedSeriesOrderLabel = "1";
-        await vm.CommitSeriesAsync(); // blur
+        await vm.OnSeriesChosenAsync("The Stormlight Archive"); // explicit "Add …"
+        vm.AcceptedSeriesOrderLabel = "1"; // user types the order after choosing
 
         await vm.SaveAsync(new List<int>());
 
@@ -1267,8 +1317,7 @@ public class BookAddViewModelTests
         Assert.Equal(MatchReason.AuthorHasMultipleBooks, vm.SeriesSuggestion!.Reason);
 
         await vm.AcceptSeriesSuggestion();
-        // Accept call is a no-op — SeriesSuggestionAccepted stays false.
-        Assert.False(vm.SeriesSuggestionAccepted);
+        // Accept is a no-op on a local-fallback reason — nothing chosen.
         Assert.Null(vm.AcceptedSeriesId);
         Assert.Null(vm.AcceptedSeriesName);
     }
