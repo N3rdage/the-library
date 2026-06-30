@@ -68,10 +68,6 @@ public class WorkMergeViewModel(IDispatcher dispatcher)
         {
             hints.Add($"First-published year {loser.FirstPublishedYear}");
         }
-        if (string.IsNullOrEmpty(winner.SeriesName) && !string.IsNullOrEmpty(loser.SeriesName))
-        {
-            hints.Add($"Series \"{loser.SeriesName}\"" + (!string.IsNullOrEmpty(loser.SeriesOrderLabel) ? $" (#{loser.SeriesOrderLabel})" : ""));
-        }
         var winnerGenres = winner.GenreNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var addedGenres = loser.GenreNames.Where(g => !winnerGenres.Contains(g)).ToList();
         if (addedGenres.Count > 0)

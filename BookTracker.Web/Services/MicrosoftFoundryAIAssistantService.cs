@@ -106,8 +106,7 @@ Rules:
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
         var uncategorised = await db.Books
-            .Include(b => b.Works)
-            .Where(b => b.Works.All(w => w.SeriesId == null))
+            .Where(b => b.SeriesId == null)
             .OrderBy(b => b.Title)
             .Select(b => new
             {
@@ -120,11 +119,11 @@ Rules:
             return new CollectionSuggestionResult([], "All books are already in a series or collection.");
 
         var existingSeries = await db.Series.OrderBy(s => s.Name)
-            .Select(s => new { s.Name, s.Type, WorkCount = s.Works.Count }).ToListAsync(ct);
+            .Select(s => new { s.Name, s.Type, BookCount = s.Books.Count }).ToListAsync(ct);
 
         var booksText = string.Join("\n", uncategorised.Select(b => $"- \"{b.Title}\" by {b.Author}"));
         var seriesText = existingSeries.Count > 0
-            ? "Existing series/collections:\n" + string.Join("\n", existingSeries.Select(s => $"- {s.Name} ({s.Type}, {s.WorkCount} works)"))
+            ? "Existing series/collections:\n" + string.Join("\n", existingSeries.Select(s => $"- {s.Name} ({s.Type}, {s.BookCount} books)"))
             : "No existing series or collections.";
 
         var response = await CallWithSystemAsync(SharedParsers.BuildCollectionSystemPrompt(seriesText),

@@ -23,7 +23,10 @@ public record BookDetail(
     DateTime DateAdded,
     IReadOnlyList<WorkDetail> Works,
     IReadOnlyList<EditionDetail> Editions,
-    IReadOnlyList<TagDetail> Tags);
+    IReadOnlyList<TagDetail> Tags,
+    // Series membership lives on the Book — the Book is installment N of a
+    // publication series. Null when the book isn't part of one.
+    SeriesInfo? Series);
 
 public record WorkDetail(
     int Id,
@@ -34,8 +37,7 @@ public record WorkDetail(
     /// <summary>The lead author's Id — used for /authors/{id} deep-links from the BookDetail page.</summary>
     int LeadAuthorId,
     string FirstPublishedDisplay,
-    IReadOnlyList<string> Genres,
-    SeriesInfo? Series);
+    IReadOnlyList<string> Genres);
 
 public record SeriesInfo(int Id, string Name, SeriesType Type, string? OrderLabel);
 
@@ -81,13 +83,16 @@ public sealed class GetBookDetailHandler(IDbContextFactory<BookTrackerDbContext>
                 b.Notes,
                 b.DefaultCoverArtUrl,
                 b.DateAdded,
+                b.SeriesOrder,
+                b.SeriesOrderDisplay,
+                SeriesId = b.SeriesId,
+                SeriesName = b.Series == null ? null : b.Series.Name,
+                SeriesType = b.Series == null ? (SeriesType?)null : b.Series.Type,
                 Works = b.Works.Select(w => new
                 {
                     w.Id,
                     w.Title,
                     w.Subtitle,
-                    w.SeriesOrder,
-                    w.SeriesOrderDisplay,
                     w.FirstPublishedDate,
                     w.FirstPublishedDatePrecision,
                     Contributors = w.WorkAuthors.Select(wa => new
@@ -98,9 +103,6 @@ public sealed class GetBookDetailHandler(IDbContextFactory<BookTrackerDbContext>
                         wa.Order,
                     }).ToList(),
                     Genres = w.Genres.Select(g => g.Name).ToList(),
-                    SeriesId = w.SeriesId,
-                    SeriesName = w.Series == null ? null : w.Series.Name,
-                    SeriesType = w.Series == null ? (SeriesType?)null : w.Series.Type,
                 }).ToList(),
                 Editions = b.Editions.Select(e => new
                 {
@@ -128,8 +130,7 @@ public sealed class GetBookDetailHandler(IDbContextFactory<BookTrackerDbContext>
         if (book is null) return null;
 
         var works = book.Works
-            .OrderBy(w => w.SeriesOrder ?? int.MaxValue)
-            .ThenBy(w => w.Title)
+            .OrderBy(w => w.Title)
             .Select(w => new WorkDetail(
                 w.Id,
                 w.Title,
@@ -147,11 +148,7 @@ public sealed class GetBookDetailHandler(IDbContextFactory<BookTrackerDbContext>
                     .Select(c => c.AuthorId)
                     .FirstOrDefault(),
                 PartialDateParser.Format(w.FirstPublishedDate, w.FirstPublishedDatePrecision),
-                w.Genres.OrderBy(g => g).ToList(),
-                w.SeriesId is null
-                    ? null
-                    : new SeriesInfo(w.SeriesId.Value, w.SeriesName!, w.SeriesType!.Value,
-                        SeriesOrderParser.Format(w.SeriesOrder, w.SeriesOrderDisplay))))
+                w.Genres.OrderBy(g => g).ToList()))
             .ToList();
 
         var editions = book.Editions
@@ -179,8 +176,13 @@ public sealed class GetBookDetailHandler(IDbContextFactory<BookTrackerDbContext>
             .Select(t => new TagDetail(t.Id, t.Name))
             .ToList();
 
+        var series = book.SeriesId is null
+            ? null
+            : new SeriesInfo(book.SeriesId.Value, book.SeriesName!, book.SeriesType!.Value,
+                SeriesOrderParser.Format(book.SeriesOrder, book.SeriesOrderDisplay));
+
         return new BookDetail(
             book.Id, book.Title, book.Category, book.Status, book.Rating,
-            book.Notes, book.DefaultCoverArtUrl, book.DateAdded, works, editions, tags);
+            book.Notes, book.DefaultCoverArtUrl, book.DateAdded, works, editions, tags, series);
     }
 }

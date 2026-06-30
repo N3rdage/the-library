@@ -35,9 +35,7 @@ public sealed class GetLibraryBooksHandler(IDbContextFactory<BookTrackerDbContex
         // Every other view keeps newest-first.
         IQueryable<Book> ordered = LibraryFilter.IsSpecificSeries(f.SeriesId)
             ? filtered
-                .OrderBy(b => b.Works
-                    .Where(w => w.SeriesId == f.SeriesId)
-                    .Min(w => (int?)w.SeriesOrder) ?? int.MaxValue)
+                .OrderBy(b => b.SeriesOrder ?? int.MaxValue)
                 .ThenBy(b => b.Title)
             : filtered.OrderByDescending(b => b.DateAdded);
 

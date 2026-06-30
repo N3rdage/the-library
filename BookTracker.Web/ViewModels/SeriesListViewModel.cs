@@ -46,14 +46,14 @@ public class SeriesListViewModel(IDispatcher dispatcher)
     public static string CompletionText(SeriesListItem item)
     {
         if (item.Type == SeriesType.Series && item.ExpectedCount.HasValue)
-            return $"{item.WorkCount} / {item.ExpectedCount}";
-        return $"{item.WorkCount} works";
+            return $"{item.BookCount} / {item.ExpectedCount}";
+        return $"{item.BookCount} books";
     }
 
     public static string CompletionBadgeClass(SeriesListItem item)
     {
         if (item.Type == SeriesType.Series && item.ExpectedCount.HasValue)
-            return item.WorkCount >= item.ExpectedCount.Value ? "bg-success" : "bg-warning text-dark";
+            return item.BookCount >= item.ExpectedCount.Value ? "bg-success" : "bg-warning text-dark";
         return "bg-light text-dark border";
     }
 }

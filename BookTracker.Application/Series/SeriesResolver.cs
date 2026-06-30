@@ -1,3 +1,4 @@
+using BookTracker.Application.Formatting;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -43,5 +44,37 @@ public static class SeriesResolver
         var series = SeriesAggregate.Create(trimmed, null, SeriesType.Series, null, null);
         db.Series.Add(series);
         return series;
+    }
+
+    /// <summary>Attaches a Book to the series the user accepted on the Add / Bulk
+    /// Add page — an existing pick by id, else find-or-create by name — parsing the
+    /// free-text order label into the (sort int, display override) pair. No-op when
+    /// nothing was accepted (null id + blank name). Series membership is a per-Book
+    /// concept (the book is installment N), so this is the single place both
+    /// single-add and bulk-add reconcile it.</summary>
+    public static async Task AttachToBookAsync(
+        BookTrackerDbContext db,
+        Book book,
+        int? acceptedSeriesId,
+        string? acceptedSeriesName,
+        string? orderLabel,
+        CancellationToken ct = default)
+    {
+        // Derive the (sort int, display) pair from the captured label at save
+        // time — never freeze the int at accept time.
+        var (order, orderDisplay) = SeriesOrderParser.Parse(orderLabel);
+        if (acceptedSeriesId is int existingId)
+        {
+            book.AssignToSeries(existingId, order, orderDisplay);
+        }
+        else if (!string.IsNullOrWhiteSpace(acceptedSeriesName))
+        {
+            // No resolved id — find-or-create by name (covers an eager-create that
+            // was skipped/failed). New series default to SeriesType.Series; flip to
+            // Collection on /series/{id} later.
+            book.Series = await ResolveAsync(db, acceptedSeriesName, ct);
+            book.SeriesOrder = order;
+            book.SeriesOrderDisplay = orderDisplay;
+        }
     }
 }

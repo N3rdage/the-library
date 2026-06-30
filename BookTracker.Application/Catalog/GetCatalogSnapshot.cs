@@ -111,14 +111,14 @@ public sealed class GetCatalogSnapshotHandler(IDbContextFactory<BookTrackerDbCon
                             .ToList(),
                     })
                     .ToList(),
-                // Series membership lives on Work. For multi-Work
-                // compendiums take the first Work by Work.Id —
-                // matches the PrimaryAuthor convention. Single-Work
-                // books are unambiguous.
-                FirstWorkSeries = b.Works
-                    .OrderBy(w => w.Id)
-                    .Select(w => new { w.SeriesId, w.SeriesOrder, w.SeriesOrderDisplay })
-                    .FirstOrDefault(),
+                // Series membership lives on the Book — the Book is
+                // installment N of a publication series. Projected
+                // straight off the Book now (was a lossy "first Work
+                // by Id" pick while series lived on Work — which gave
+                // multi-Work collection books the wrong story's series).
+                b.SeriesId,
+                b.SeriesOrder,
+                b.SeriesOrderDisplay,
             })
             .ToListAsync(ct);
 
@@ -155,12 +155,12 @@ public sealed class GetCatalogSnapshotHandler(IDbContextFactory<BookTrackerDbCon
                 b.Status.ToString(),
                 b.Rating,
                 b.Isbns.Distinct().ToList(),
-                b.FirstWorkSeries?.SeriesId,
+                b.SeriesId,
                 // Real (floored) integer order. Mobile now carries
                 // SeriesOrderDisplay and applies the same "display-only orders
                 // don't claim a numbered slot" guard as the web gap detection,
                 // so the floored int is safe to ship.
-                b.FirstWorkSeries?.SeriesOrder,
+                b.SeriesOrder,
                 b.DefaultCoverArtUrl,
                 Editions: b.Editions
                     .Select(e => new EditionSnapshot(e.Id, e.Isbn, e.Format.ToString(), e.CoverUrl, e.EditionNumber))
@@ -183,7 +183,7 @@ public sealed class GetCatalogSnapshotHandler(IDbContextFactory<BookTrackerDbCon
                             .Select(c => new AuthorContribution(c.Name, c.Role.ToString()))
                             .ToList()))
                     .ToList(),
-                SeriesOrderDisplay: b.FirstWorkSeries?.SeriesOrderDisplay))
+                SeriesOrderDisplay: b.SeriesOrderDisplay))
             .OrderBy(b => b.Title)
             .ToList();
 

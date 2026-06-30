@@ -740,9 +740,9 @@ public class BookAddViewModelTests
         await vm.SaveAsync(new List<int>());
 
         using var db2 = _factory.CreateDbContext();
-        var work = db2.Works.Include(w => w.Series).Single();
-        Assert.Equal(seededSeriesId, work.SeriesId);
-        Assert.Equal(5, work.SeriesOrder);
+        var book = db2.Books.Include(b => b.Series).Single();
+        Assert.Equal(seededSeriesId, book.SeriesId);
+        Assert.Equal(5, book.SeriesOrder);
         // No new Series row created — attached to the existing one.
         Assert.Equal(1, db2.Series.Count());
     }
@@ -804,9 +804,9 @@ public class BookAddViewModelTests
         Assert.Equal("The Stormlight Archive", series.Name);
         Assert.Equal(SeriesType.Series, series.Type); // Q1 default — not Collection.
 
-        var work = db.Works.Include(w => w.Series).Single();
-        Assert.Equal(series.Id, work.SeriesId);
-        Assert.Equal(1, work.SeriesOrder);
+        var book = db.Books.Include(b => b.Series).Single();
+        Assert.Equal(series.Id, book.SeriesId);
+        Assert.Equal(1, book.SeriesOrder);
     }
 
     [Fact]
@@ -830,9 +830,9 @@ public class BookAddViewModelTests
 
         using var db = _factory.CreateDbContext();
         Assert.Empty(db.Series);
-        var work = db.Works.Single();
-        Assert.Null(work.SeriesId);
-        Assert.Null(work.SeriesOrder);
+        var book = db.Books.Single();
+        Assert.Null(book.SeriesId);
+        Assert.Null(book.SeriesOrder);
     }
 
     // --- Manual series entry on single Add Book (the typeahead, not the
@@ -976,9 +976,9 @@ public class BookAddViewModelTests
 
         using var db = _factory.CreateDbContext();
         var discworld = await db.Series.SingleAsync(s => s.Name == "Discworld");
-        var work = db.Works.Include(w => w.Series).Single();
-        Assert.Equal(discworld.Id, work.SeriesId);
-        Assert.Null(work.SeriesOrder); // NOT 3 — that order was Mistborn's
+        var book = db.Books.Include(b => b.Series).Single();
+        Assert.Equal(discworld.Id, book.SeriesId);
+        Assert.Null(book.SeriesOrder); // NOT 3 — that order was Mistborn's
     }
 
     [Fact]
@@ -1006,9 +1006,9 @@ public class BookAddViewModelTests
         using var db = _factory.CreateDbContext();
         var series = Assert.Single(db.Series);
         Assert.Equal("The Stormlight Archive", series.Name);
-        var work = db.Works.Include(w => w.Series).Single();
-        Assert.Equal(series.Id, work.SeriesId);
-        Assert.Equal(1, work.SeriesOrder);
+        var book = db.Books.Include(b => b.Series).Single();
+        Assert.Equal(series.Id, book.SeriesId);
+        Assert.Equal(1, book.SeriesOrder);
     }
 
     [Fact]

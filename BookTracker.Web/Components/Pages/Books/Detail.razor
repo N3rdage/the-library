@@ -143,14 +143,14 @@
                                Size="Size.Small">
                         Delete book
                     </MudButton>
-                    @if (primary?.Series is not null)
+                    @if (book.Series is not null)
                     {
                         <MudTooltip Text="Coming soon — browse all books in this series">
                             <MudButton Disabled="true"
                                        Variant="Variant.Text"
                                        StartIcon="@Icons.Material.Filled.Collections"
                                        Size="Size.Small">
-                                Browse @primary.Series.Name
+                                Browse @book.Series.Name
                             </MudButton>
                         </MudTooltip>
                     }
@@ -173,12 +173,12 @@
                         {
                             <FieldRow Label="First published" Value="@primary.FirstPublishedDisplay" />
                         }
-                        @if (primary.Series is not null)
+                        @if (book.Series is not null)
                         {
-                            var seriesValue = !string.IsNullOrEmpty(primary.Series.OrderLabel)
-                                ? $"{primary.Series.Name} (#{primary.Series.OrderLabel})"
-                                : primary.Series.Name;
-                            <FieldRow Label="@(primary.Series.Type == SeriesType.Collection ? "Collection" : "Series")" Value="@seriesValue" />
+                            var seriesValue = !string.IsNullOrEmpty(book.Series.OrderLabel)
+                                ? $"{book.Series.Name} (#{book.Series.OrderLabel})"
+                                : book.Series.Name;
+                            <FieldRow Label="@(book.Series.Type == SeriesType.Collection ? "Collection" : "Series")" Value="@seriesValue" />
                         }
                         @if (primary.Genres.Count > 0)
                         {
@@ -209,6 +209,15 @@
                     </CardHeaderContent>
                 </MudCardHeader>
                 <MudCardContent>
+                    @if (book.Series is not null)
+                    {
+                        var collectionSeriesValue = !string.IsNullOrEmpty(book.Series.OrderLabel)
+                            ? $"{book.Series.Name} (#{book.Series.OrderLabel})"
+                            : book.Series.Name;
+                        <div class="mb-2">
+                            <FieldRow Label="@(book.Series.Type == SeriesType.Collection ? "Collection" : "Series")" Value="@collectionSeriesValue" />
+                        </div>
+                    }
                     @if (book.Works.Count > 10)
                     {
                         <MudTextField @bind-Value="workFilter"
@@ -244,7 +253,7 @@
                                         <MudIcon Icon="@(expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" Size="Size.Small" />
                                         <MudStack Spacing="0" Class="flex-grow-1" Style="min-width: 0;">
                                             <MudText Typo="Typo.body1" Style="word-break: break-word;">
-                                                @(!string.IsNullOrEmpty(w.Series?.OrderLabel) ? $"{w.Series!.OrderLabel}. " : "")@w.Title
+                                                @w.Title
                                             </MudText>
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">@w.AuthorName</MudText>
                                         </MudStack>
@@ -262,11 +271,6 @@
                                                 @if (!string.IsNullOrEmpty(w.FirstPublishedDisplay))
                                                 {
                                                     <FieldRow Label="First published" Value="@w.FirstPublishedDisplay" />
-                                                }
-                                                @if (w.Series is not null)
-                                                {
-                                                    var seriesValue = !string.IsNullOrEmpty(w.Series.OrderLabel) ? $"{w.Series.Name} (#{w.Series.OrderLabel})" : w.Series.Name;
-                                                    <FieldRow Label="@(w.Series.Type == SeriesType.Collection ? "Collection" : "Series")" Value="@seriesValue" />
                                                 }
                                                 @if (w.Genres.Count > 0)
                                                 {

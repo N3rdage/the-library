@@ -49,10 +49,9 @@ public record BookSnapshot(
     string Status,
     int Rating,
     IReadOnlyList<string> Isbns,
-    // Series membership lives on Work, not Book. For multi-Work
-    // compendiums the snapshot takes the first Work (by Work.Id),
-    // matching the same convention used for PrimaryAuthor. Nullable
-    // because most books aren't part of a series.
+    // Series membership lives on the Book — the Book is installment N
+    // of a publication series. Projected straight off the Book.
+    // Nullable because most books aren't part of a series.
     int? SeriesId,
     int? SeriesOrder,
     // Book-level default cover URL. Nullable — pre-1974 / no-ISBN books

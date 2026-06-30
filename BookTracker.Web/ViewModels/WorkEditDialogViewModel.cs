@@ -10,8 +10,8 @@ namespace BookTracker.Web.ViewModels;
 
 // Dialog-scoped VM for "Edit work" on the View page. Edits a single
 // Work's title, subtitle, author (find-or-create with typeahead), first
-// published date (PartialDateParser), series membership + order, and
-// genres (via MudGenrePicker — PR B).
+// published date (PartialDateParser), and genres (via MudGenrePicker — PR B).
+// Series membership is a per-Book concept now — edited via BookEditDialog.
 public class WorkEditDialogViewModel(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
     IDispatcher dispatcher)
@@ -28,14 +28,7 @@ public class WorkEditDialogViewModel(
     // AuthorNames at init, written via AssignAuthors' contributors parameter.
     public List<ContributorEntry> Contributors { get; set; } = [];
     public string FirstPublishedDate { get; set; } = "";
-    public int? SelectedSeriesId { get; set; }
-    // Free-text so the user can enter "4.5" interquels / "1A" hierarchical
-    // positions — parsed into (SeriesOrder int sort key, SeriesOrderDisplay
-    // override) on save via SeriesOrderParser.
-    public string? SeriesOrderInput { get; set; }
     public List<int> SelectedGenreIds { get; set; } = [];
-
-    public List<SeriesOption> AvailableSeries { get; private set; } = [];
 
     public async Task InitializeAsync(int workId)
     {
@@ -65,14 +58,7 @@ public class WorkEditDialogViewModel(
             .Select(wa => new ContributorEntry(wa.Author.Name, wa.Role))
             .ToList();
         FirstPublishedDate = PartialDateParser.Format(work.FirstPublishedDate, work.FirstPublishedDatePrecision);
-        SelectedSeriesId = work.SeriesId;
-        SeriesOrderInput = SeriesOrderParser.Format(work.SeriesOrder, work.SeriesOrderDisplay);
         SelectedGenreIds = work.Genres.Select(g => g.Id).ToList();
-
-        AvailableSeries = await db.Series
-            .OrderBy(s => s.Name)
-            .Select(s => new SeriesOption(s.Id, s.Name, s.Type))
-            .ToListAsync();
     }
 
     public async Task<IEnumerable<string>> SearchAuthorsAsync(string query, CancellationToken ct)
@@ -100,10 +86,6 @@ public class WorkEditDialogViewModel(
         if (NotFound || string.IsNullOrWhiteSpace(Title) || AuthorNames.All(string.IsNullOrWhiteSpace)) return;
 
         var parsed = PartialDateParser.TryParse(FirstPublishedDate) ?? PartialDate.Empty;
-        int? seriesOrder = null;
-        string? seriesOrderDisplay = null;
-        if (SelectedSeriesId.HasValue)
-            (seriesOrder, seriesOrderDisplay) = SeriesOrderParser.Parse(SeriesOrderInput);
 
         var contributorInputs = Contributors
             .Where(c => !string.IsNullOrWhiteSpace(c.Name))
@@ -114,14 +96,11 @@ public class WorkEditDialogViewModel(
         {
             await dispatcher.Send(new UpdateWork(
                 WorkId, Title, Subtitle, AuthorNames, contributorInputs,
-                parsed.Date, parsed.Precision, SelectedGenreIds,
-                SelectedSeriesId, seriesOrder, seriesOrderDisplay));
+                parsed.Date, parsed.Precision, SelectedGenreIds));
         }
         catch (NotFoundException)
         {
             // Work deleted between opening the dialog and saving — no-op.
         }
     }
-
-    public record SeriesOption(int Id, string Name, SeriesType Type);
 }

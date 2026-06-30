@@ -117,12 +117,46 @@ public class BookCommandHandlersTests
     {
         var id = await SeedBookAsync();
         await new UpdateBookDetailsHandler(_factory).HandleAsync(
-            new UpdateBookDetails(id, "New Title", BookCategory.NonFiction, "http://c"));
+            new UpdateBookDetails(id, "New Title", BookCategory.NonFiction, "http://c", null, null, null));
 
         await using var db = _factory.CreateDbContext();
         var book = await db.Books.FindAsync(id);
         Assert.Equal("New Title", book!.Title);
         Assert.Equal(BookCategory.NonFiction, book.Category);
+    }
+
+    [Fact]
+    public async Task UpdateBookDetails_assignsThenClearsSeries()
+    {
+        int seriesId;
+        await using (var db = _factory.CreateDbContext())
+        {
+            var series = new Series { Name = "Discworld", Type = SeriesType.Series };
+            db.Series.Add(series);
+            await db.SaveChangesAsync();
+            seriesId = series.Id;
+        }
+        var bookId = await SeedBookAsync();
+
+        // Assign via the Book-edit dialog path.
+        await new UpdateBookDetailsHandler(_factory).HandleAsync(
+            new UpdateBookDetails(bookId, "T", BookCategory.Fiction, null, seriesId, 3, null));
+        await using (var db = _factory.CreateDbContext())
+        {
+            var book = await db.Books.FindAsync(bookId);
+            Assert.Equal(seriesId, book!.SeriesId);
+            Assert.Equal(3, book.SeriesOrder);
+        }
+
+        // A null SeriesId reconciles membership to "none" — clears the link + order.
+        await new UpdateBookDetailsHandler(_factory).HandleAsync(
+            new UpdateBookDetails(bookId, "T", BookCategory.Fiction, null, null, null, null));
+        await using (var db = _factory.CreateDbContext())
+        {
+            var book = await db.Books.FindAsync(bookId);
+            Assert.Null(book!.SeriesId);
+            Assert.Null(book.SeriesOrder);
+        }
     }
 
     [Fact]

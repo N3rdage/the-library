@@ -25,8 +25,6 @@ public record WorkMergeDetail(
     string? Subtitle,
     string AuthorName,
     int? FirstPublishedYear,
-    string? SeriesName,
-    string? SeriesOrderLabel,
     IReadOnlyList<string> GenreNames,
     int BookCount,
     IReadOnlyList<string> SampleBookTitles,
@@ -97,7 +95,6 @@ public sealed class GetWorkMergePreviewHandler(IDbContextFactory<BookTrackerDbCo
         var work = await db.Works
             .AsNoTracking()
             .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .Include(w => w.Series)
             .Include(w => w.Genres)
             .FirstOrDefaultAsync(w => w.Id == id, ct);
         if (work is null) return null;
@@ -119,8 +116,6 @@ public sealed class GetWorkMergePreviewHandler(IDbContextFactory<BookTrackerDbCo
             work.Id, work.Title, work.Subtitle,
             WorkAuthorshipFormatter.Display(work),
             work.FirstPublishedDate?.Year,
-            work.Series?.Name,
-            SeriesOrderParser.Format(work.SeriesOrder, work.SeriesOrderDisplay),
             work.Genres.Select(g => g.Name).OrderBy(n => n).ToList(),
             bookCount, sampleBookTitles,
             fallbackCover);

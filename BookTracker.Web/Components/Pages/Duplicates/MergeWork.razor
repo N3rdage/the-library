@@ -155,14 +155,6 @@ else
                     <span class="mx-1">·</span>
                     id @detail.Id
                 </div>
-                @if (!string.IsNullOrEmpty(detail.SeriesName))
-                {
-                    <div class="small mb-2">
-                        <span class="badge bg-light text-dark border">
-                            Series: @detail.SeriesName@(!string.IsNullOrEmpty(detail.SeriesOrderLabel) ? $" #{detail.SeriesOrderLabel}" : "")
-                        </span>
-                    </div>
-                }
                 @if (detail.GenreNames.Count > 0)
                 {
                     <div class="small mb-2">

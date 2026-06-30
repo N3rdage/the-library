@@ -43,8 +43,12 @@ public static class AuthorRollups
                     .Select(wa => wa.WorkId).Distinct().Count(),
                 Books = a.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author)
                     .SelectMany(wa => wa.Work.Books).Select(b => b.Id).Distinct().Count(),
-                Series = a.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author && wa.Work.SeriesId != null)
-                    .Select(wa => wa.Work.SeriesId!.Value).Distinct().Count(),
+                // Series now lives on the Book — count distinct series across the
+                // books this author's works appear in (was wa.Work.SeriesId).
+                Series = a.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author)
+                    .SelectMany(wa => wa.Work.Books)
+                    .Where(b => b.SeriesId != null)
+                    .Select(b => b.SeriesId!.Value).Distinct().Count(),
             })
             .ToListAsync(ct);
 

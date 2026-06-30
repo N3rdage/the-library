@@ -227,7 +227,7 @@ Rules:
             .ToListAsync(ct);
 
         var incompleteSeries = await db.Series
-            .Include(s => s.Works)
+            .Include(s => s.Books)
             .Where(s => s.Type == SeriesType.Series && s.ExpectedCount != null)
             .ToListAsync(ct);
 
@@ -239,9 +239,9 @@ Rules:
                 // SeriesOrderDisplay set) shares an int for sort adjacency but
                 // must NOT count as owning that slot, or it masks a genuinely-
                 // missing numbered volume.
-                var ownedSlots = s.Works
-                    .Where(w => SeriesSlots.OccupiesNumberedSlot(w.SeriesOrder, w.SeriesOrderDisplay))
-                    .Select(w => w.SeriesOrder!.Value)
+                var ownedSlots = s.Books
+                    .Where(b => SeriesSlots.OccupiesNumberedSlot(b.SeriesOrder, b.SeriesOrderDisplay))
+                    .Select(b => b.SeriesOrder!.Value)
                     .Where(o => o <= s.ExpectedCount!.Value)
                     .ToHashSet();
                 var missing = Enumerable.Range(1, s.ExpectedCount!.Value)

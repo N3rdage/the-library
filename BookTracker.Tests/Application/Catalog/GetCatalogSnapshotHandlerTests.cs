@@ -225,11 +225,10 @@ public class GetCatalogSnapshotHandlerTests
     }
 
     [Fact]
-    public async Task GetSnapshotAsync_BookSeriesIdAndOrderProjectedFromFirstWork()
+    public async Task GetSnapshotAsync_BookSeriesIdAndOrderProjectedFromBook()
     {
-        // Single-Work book in a numbered series: seriesId + seriesOrder
-        // come from that Work. Multi-Work compendium takes the first
-        // Work by Work.Id, matching the PrimaryAuthor convention.
+        // Series membership lives on the Book — the snapshot projects seriesId +
+        // seriesOrder straight off it (a book with no series ships nulls).
         using (var db = _factory.CreateDbContext())
         {
             var asimov = new Author { Name = "Isaac Asimov" };
@@ -241,13 +240,13 @@ public class GetCatalogSnapshotHandlerTests
             db.Books.Add(new Book
             {
                 Title = "Foundation",
+                SeriesId = foundationSeries.Id,
+                SeriesOrder = 1,
                 Works =
                 [
                     new Work
                     {
                         Title = "Foundation",
-                        SeriesId = foundationSeries.Id,
-                        SeriesOrder = 1,
                         WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }],
                     },
                 ],
@@ -289,14 +288,14 @@ public class GetCatalogSnapshotHandlerTests
             db.Books.Add(new Book
             {
                 Title = "Edgedancer",
+                SeriesId = stormlight.Id,
+                SeriesOrder = 4,
+                SeriesOrderDisplay = "4.5",
                 Works =
                 [
                     new Work
                     {
                         Title = "Edgedancer",
-                        SeriesId = stormlight.Id,
-                        SeriesOrder = 4,
-                        SeriesOrderDisplay = "4.5",
                         WorkAuthors = [new WorkAuthor { Author = sanderson, Order = 0 }],
                     },
                 ],
@@ -309,6 +308,47 @@ public class GetCatalogSnapshotHandlerTests
         var edgedancer = snapshot.Books.Single(b => b.Title == "Edgedancer");
         Assert.Equal(4, edgedancer.SeriesOrder);
         Assert.Equal("4.5", edgedancer.SeriesOrderDisplay);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_MultiWorkCollectionBook_ShipsTheBooksSeries()
+    {
+        // The keystone case for the Work→Book series move: a short-story-
+        // collection book is installment #1 of a series. Its constituent Works
+        // carry no series of their own — pre-cutover the snapshot took the
+        // *first Work's* series and so shipped null for exactly this shape.
+        // Now it reads the Book, so the collection ships its true series.
+        int seriesId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var author = new Author { Name = "Andrzej Sapkowski" };
+            db.Authors.Add(author);
+            var witcher = new Series { Name = "The Witcher", Type = SeriesType.Series, ExpectedCount = 8 };
+            db.Series.Add(witcher);
+            await db.SaveChangesAsync();
+            seriesId = witcher.Id;
+
+            db.Books.Add(new Book
+            {
+                Title = "The Last Wish",
+                SeriesId = witcher.Id,
+                SeriesOrder = 1,
+                Works =
+                [
+                    new Work { Title = "The Witcher", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] },
+                    new Work { Title = "A Grain of Truth", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] },
+                    new Work { Title = "The Lesser Evil", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] },
+                ],
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var snapshot = await GetSnapshot();
+
+        var lastWish = snapshot.Books.Single(b => b.Title == "The Last Wish");
+        Assert.Equal(seriesId, lastWish.SeriesId);   // from the Book, not its series-less first Work
+        Assert.Equal(1, lastWish.SeriesOrder);
+        Assert.Equal(3, lastWish.Works!.Count);      // still a real compendium
     }
 
     [Fact]

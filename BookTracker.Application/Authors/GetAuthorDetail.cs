@@ -103,10 +103,6 @@ public sealed class GetAuthorDetailHandler(IDbContextFactory<BookTrackerDbContex
         var works = await db.Works
             .AsNoTracking()
             .Where(w => w.WorkAuthors.Any(wa => ids.Contains(wa.AuthorId) && wa.Role == AuthorRole.Author))
-            .OrderBy(w => w.SeriesId == null)
-            .ThenBy(w => w.Series!.Name)
-            .ThenBy(w => w.SeriesOrder ?? int.MaxValue)
-            .ThenBy(w => w.Title)
             .Select(w => new
             {
                 w.Id,
@@ -114,10 +110,21 @@ public sealed class GetAuthorDetailHandler(IDbContextFactory<BookTrackerDbContex
                 w.Subtitle,
                 w.FirstPublishedDate,
                 w.FirstPublishedDatePrecision,
-                SeriesName = w.Series == null ? null : w.Series.Name,
-                SeriesType = w.Series == null ? (SeriesType?)null : w.Series.Type,
-                w.SeriesOrder,
-                w.SeriesOrderDisplay,
+                // Series lives on the Book now — derive a work's series from the
+                // book(s) it appears in (lowest SeriesOrder wins for a work that
+                // spans more than one book/series; 1:1 for ordinary books).
+                BookSeries = w.Books
+                    .Where(b => b.SeriesId != null)
+                    .OrderBy(b => b.SeriesOrder ?? int.MaxValue)
+                    .Select(b => new
+                    {
+                        b.SeriesId,
+                        SeriesName = b.Series!.Name,
+                        SeriesType = (SeriesType?)b.Series!.Type,
+                        b.SeriesOrder,
+                        b.SeriesOrderDisplay,
+                    })
+                    .FirstOrDefault(),
                 LeadAuthor = w.WorkAuthors
                     .Where(wa => wa.Role == AuthorRole.Author)
                     .OrderBy(wa => wa.Order)
@@ -127,21 +134,28 @@ public sealed class GetAuthorDetailHandler(IDbContextFactory<BookTrackerDbContex
             })
             .ToListAsync(ct);
 
-        var workRows = works.Select(w => new WorkRow(
-            w.Id,
-            w.Title,
-            w.Subtitle,
-            // "Written as" tag only on canonical drill-downs; alias rows always
-            // are themselves so the label would be redundant.
-            isCanonical && w.LeadAuthor is { } lead && lead.Id != author.Id
-                ? lead.Name
-                : null,
-            PartialDateParser.Format(w.FirstPublishedDate, w.FirstPublishedDatePrecision),
-            w.SeriesName,
-            w.SeriesType,
-            SeriesOrderParser.Format(w.SeriesOrder, w.SeriesOrderDisplay),
-            w.Books.Select(b => new BookRef(b.Id, b.Title)).ToList()
-        )).ToList();
+        var workRows = works
+            // Series-first ordering — was SQL-side off Work.Series. The derived
+            // series comes from the Book now, so order in memory after materialising.
+            .OrderBy(w => w.BookSeries == null)
+            .ThenBy(w => w.BookSeries?.SeriesName)
+            .ThenBy(w => w.BookSeries?.SeriesOrder ?? int.MaxValue)
+            .ThenBy(w => w.Title)
+            .Select(w => new WorkRow(
+                w.Id,
+                w.Title,
+                w.Subtitle,
+                // "Written as" tag only on canonical drill-downs; alias rows always
+                // are themselves so the label would be redundant.
+                isCanonical && w.LeadAuthor is { } lead && lead.Id != author.Id
+                    ? lead.Name
+                    : null,
+                PartialDateParser.Format(w.FirstPublishedDate, w.FirstPublishedDatePrecision),
+                w.BookSeries?.SeriesName,
+                w.BookSeries?.SeriesType,
+                SeriesOrderParser.Format(w.BookSeries?.SeriesOrder, w.BookSeries?.SeriesOrderDisplay),
+                w.Books.Select(b => new BookRef(b.Id, b.Title)).ToList()
+            )).ToList();
 
         // Book summaries — edition/copy counts projected to SQL aggregates so no
         // Edition/Copy rows are materialised (a prolific author can own hundreds).

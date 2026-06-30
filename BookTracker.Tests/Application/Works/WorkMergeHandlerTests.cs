@@ -169,18 +169,16 @@ public class WorkMergeHandlerTests
         var result = await Merge(winner.Id, loser.Id);
 
         Assert.True(result.Success);
-        // 4 "fields": subtitle, firstPub date, series, genres-union (counted once)
-        Assert.Equal(4, result.FieldsAutoFilled);
+        // 3 "fields": subtitle, firstPub date, genres-union (counted once).
+        // Series is NOT carried across a Work merge — it lives on the Book now.
+        Assert.Equal(3, result.FieldsAutoFilled);
 
         using var verify = _factory.CreateDbContext();
         var reloaded = verify.Works
-            .Include(w => w.Series)
             .Include(w => w.Genres)
             .First(w => w.Id == winner.Id);
         Assert.Equal("Dark Tower I", reloaded.Subtitle);
         Assert.Equal(new DateOnly(1982, 6, 10), reloaded.FirstPublishedDate);
-        Assert.Equal("The Dark Tower", reloaded.Series?.Name);
-        Assert.Equal(1, reloaded.SeriesOrder);
         Assert.Equal(2, reloaded.Genres.Count);
     }
 
