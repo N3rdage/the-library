@@ -5,6 +5,7 @@ using BookTracker.Application.Series;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
+using BookTracker.Web.Components.Shared;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using BookTracker.Application.Formatting;
@@ -350,19 +351,12 @@ public class BulkAddViewModel(
 
         // Accept is the commit gesture (a discrete per-row button click), so
         // eager-create a genuinely-new series now (TD-15a) and pin its id — the
-        // save then attaches by id instead of find-or-creating. Best-effort: on
-        // failure the id stays null and the save's SeriesResolver net still
-        // creates it by name.
+        // save then attaches by id instead of find-or-creating. Best-effort (shared
+        // SeriesEagerCreate): on failure the id stays null and the save's
+        // SeriesResolver net still creates it by name.
         if (row.AcceptedSeriesId is null && !string.IsNullOrWhiteSpace(row.AcceptedSeriesName))
         {
-            try
-            {
-                row.AcceptedSeriesId = await dispatcher.Send(new EnsureSeries(row.AcceptedSeriesName));
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Eager series create failed for {Name}; the save will create it", row.AcceptedSeriesName);
-            }
+            row.AcceptedSeriesId = await SeriesEagerCreate.EnsureAsync(row.AcceptedSeriesName, dispatcher, logger);
         }
     }
 

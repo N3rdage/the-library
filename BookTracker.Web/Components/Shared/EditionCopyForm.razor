@@ -132,14 +132,8 @@
         }
     }
 
+    // Shared trim/Contains/cap rule — bounded (was uncapped here) so an empty-query
+    // focus doesn't marshal the whole publisher list across the circuit at scale.
     private Task<IEnumerable<string>> SearchPublishers(string? query, CancellationToken ct)
-    {
-        var q = (query ?? string.Empty).Trim();
-        IEnumerable<string> matches = string.IsNullOrEmpty(q)
-            ? EditionVM.ExistingPublishers.Select(p => p.Name)
-            : EditionVM.ExistingPublishers
-                .Where(p => p.Name.Contains(q, StringComparison.OrdinalIgnoreCase))
-                .Select(p => p.Name);
-        return Task.FromResult(matches);
-    }
+        => Task.FromResult(LookupSearch.Filter(EditionVM.ExistingPublishers.Select(p => p.Name), query));
 }

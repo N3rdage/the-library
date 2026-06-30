@@ -5,6 +5,7 @@ using BookTracker.Application.Series;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
+using BookTracker.Web.Components.Shared;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using BookTracker.Application.Formatting;
@@ -264,15 +265,7 @@ public class BookAddViewModel(
     }
 
     public Task<IEnumerable<string>> SearchSeriesAsync(string? query, CancellationToken ct)
-    {
-        var q = (query ?? "").Trim();
-        IEnumerable<string> matches = string.IsNullOrEmpty(q)
-            ? ExistingSeries.Select(s => s.Name)
-            : ExistingSeries
-                .Where(s => s.Name.Contains(q, StringComparison.OrdinalIgnoreCase))
-                .Select(s => s.Name);
-        return Task.FromResult(matches.Take(20));
-    }
+        => Task.FromResult(LookupSearch.Filter(ExistingSeries.Select(s => s.Name), query));
 
     // The ONLY commit point for the manual series typeahead: an explicit
     // selection (an existing pick, the "Add …" row, or the Clearable X → null).
@@ -306,21 +299,11 @@ public class BookAddViewModel(
     }
 
     // Shared by the suggestion-Accept path and the manual field: eager find-or-
-    // create a series by name → id. Best-effort — a transient fault / accepted
-    // race (TD-15) must not surface; the save's SeriesResolver net still creates
-    // the row, so on failure we log and return null (save resolves by name).
-    private async Task<int?> EagerEnsureSeriesAsync(string name)
-    {
-        try
-        {
-            return await dispatcher.Send(new EnsureSeries(name));
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Eager series create failed for {Name}; the save will create it", name);
-            return null;
-        }
-    }
+    // create a series by name → id (best-effort; the save's SeriesResolver net
+    // still creates the row on a swallowed fault). Delegates to the shared
+    // SeriesEagerCreate so BookAdd + BulkAdd carry one copy.
+    private Task<int?> EagerEnsureSeriesAsync(string name)
+        => SeriesEagerCreate.EnsureAsync(name, dispatcher, logger);
 
     // Existing-book detection — set during LookupAsync when the ISBN
     // already maps to an Edition in the library. The Add page surfaces a
