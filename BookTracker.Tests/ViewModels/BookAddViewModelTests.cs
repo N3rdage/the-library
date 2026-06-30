@@ -835,6 +835,132 @@ public class BookAddViewModelTests
         Assert.Null(work.SeriesOrder);
     }
 
+    // --- Manual series entry on single Add Book (the typeahead, not the
+    // lookup-suggestion banner). Resolves an existing series with no create
+    // round-trip, eager-creates a genuinely new one, and feeds the same save
+    // path as the suggestion-accept flow. ---
+
+    [Fact]
+    public async Task InitializeAsync_CachesExistingSeriesOrderedByName()
+    {
+        using (var db = _factory.CreateDbContext())
+        {
+            db.Series.AddRange(
+                new Series { Name = "Mistborn", Type = SeriesType.Series },
+                new Series { Name = "Discworld", Type = SeriesType.Series });
+            await db.SaveChangesAsync();
+        }
+
+        var vm = CreateVm();
+        await vm.InitializeAsync();
+
+        Assert.Equal(["Discworld", "Mistborn"], vm.ExistingSeries.Select(s => s.Name));
+    }
+
+    [Fact]
+    public async Task CommitSeriesAsync_NewName_EagerCreatesAndPinsId()
+    {
+        var vm = CreateVm();
+        await vm.InitializeAsync(); // empty cache
+
+        vm.OnSeriesNameChanged("The Stormlight Archive");
+        await vm.CommitSeriesAsync();
+
+        Assert.NotNull(vm.AcceptedSeriesId); // eager-created + pinned
+        using var db = _factory.CreateDbContext();
+        var series = Assert.Single(db.Series); // row exists at the gesture
+        Assert.Equal("The Stormlight Archive", series.Name);
+        Assert.Equal(vm.AcceptedSeriesId, series.Id);
+        // Appended to the cache so a re-commit is a no-op.
+        Assert.Contains(vm.ExistingSeries, s => s.Name == "The Stormlight Archive");
+    }
+
+    [Fact]
+    public async Task CommitSeriesAsync_ExistingCachedName_PinsIdWithNoDuplicate()
+    {
+        int seededId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var series = new Series { Name = "Discworld", Type = SeriesType.Series };
+            db.Series.Add(series);
+            await db.SaveChangesAsync();
+            seededId = series.Id;
+        }
+
+        var vm = CreateVm();
+        await vm.InitializeAsync();
+
+        vm.OnSeriesNameChanged("discworld"); // case clash
+        await vm.CommitSeriesAsync();
+
+        Assert.Equal(seededId, vm.AcceptedSeriesId); // resolved from the cache
+        using var db2 = _factory.CreateDbContext();
+        Assert.Equal(1, db2.Series.Count()); // no duplicate created
+    }
+
+    [Fact]
+    public async Task CommitSeriesAsync_Blank_ClearsResolvedId()
+    {
+        var vm = CreateVm();
+        await vm.InitializeAsync();
+        vm.OnSeriesNameChanged("Mistborn");
+        await vm.CommitSeriesAsync();
+        Assert.NotNull(vm.AcceptedSeriesId);
+
+        vm.OnSeriesNameChanged("   ");
+        await vm.CommitSeriesAsync();
+
+        Assert.Null(vm.AcceptedSeriesId);
+    }
+
+    [Fact]
+    public async Task OnSeriesNameChanged_InvalidatesPreviouslyResolvedId()
+    {
+        var vm = CreateVm();
+        await vm.InitializeAsync();
+        vm.OnSeriesNameChanged("Mistborn");
+        await vm.CommitSeriesAsync();
+        Assert.NotNull(vm.AcceptedSeriesId);
+
+        // Typing a different name must invalidate the stale id (re-resolved on
+        // the next commit) so the save can't attach the wrong series.
+        vm.OnSeriesNameChanged("Elantris");
+
+        Assert.Null(vm.AcceptedSeriesId);
+        Assert.Equal("Elantris", vm.AcceptedSeriesName);
+    }
+
+    [Fact]
+    public async Task SaveAsync_WithManualSeries_AttachesWorkToEagerCreatedSeries()
+    {
+        // Lookup carries no series; the user types one manually.
+        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: "9780765326355", Title: "The Way of Kings", Subtitle: null,
+                Author: "Brandon Sanderson", Publisher: null,
+                GenreCandidates: [], DatePrinted: null, CoverUrl: null,
+                Source: "Open Library",
+                Series: null, SeriesNumber: null, SeriesNumberRaw: null));
+
+        var vm = CreateVm();
+        await vm.InitializeAsync();
+        vm.LookupIsbn = "9780765326355";
+        await vm.LookupAsync();
+
+        vm.OnSeriesNameChanged("The Stormlight Archive");
+        vm.AcceptedSeriesOrderLabel = "1";
+        await vm.CommitSeriesAsync(); // blur
+
+        await vm.SaveAsync(new List<int>());
+
+        using var db = _factory.CreateDbContext();
+        var series = Assert.Single(db.Series);
+        Assert.Equal("The Stormlight Archive", series.Name);
+        var work = db.Works.Include(w => w.Series).Single();
+        Assert.Equal(series.Id, work.SeriesId);
+        Assert.Equal(1, work.SeriesOrder);
+    }
+
     [Fact]
     public async Task SaveAsync_CollectionMode_MixedNewAndAttachedRows_AttachesExistingAndCreatesNew()
     {

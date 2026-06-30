@@ -202,12 +202,21 @@ public class BookAddViewModel(
     // can't bleed across captures.
     public bool SeriesSuggestionAccepted { get; private set; }
     public int? AcceptedSeriesId { get; private set; }
-    public string? AcceptedSeriesName { get; private set; }
+    // Settable: the manual series typeahead on single Add Book binds to these so
+    // the user can pick an existing series or type a new one even when the lookup
+    // surfaced no suggestion. The suggestion-Accept path writes the same fields,
+    // so the save sees one "chosen series" source of truth either way.
+    public string? AcceptedSeriesName { get; set; }
     // Single round-trippable order label captured at accept time ("5" or
     // "4.5"); re-parsed into (SeriesOrder, SeriesOrderDisplay) at save so the
-    // stored int can't skew from the parser. Null when the suggestion carries
-    // no order.
-    public string? AcceptedSeriesOrderLabel { get; private set; }
+    // stored int can't skew from the parser. Null when no order.
+    public string? AcceptedSeriesOrderLabel { get; set; }
+
+    // Existing series cached client-side (loaded on init) for the manual
+    // typeahead: filtered in-memory for suggestions, and consulted on commit to
+    // tell an existing pick (no create call) from a genuinely new name.
+    public List<SeriesOption> ExistingSeries { get; private set; } = [];
+    public record SeriesOption(int Id, string Name);
 
     public async Task AcceptSeriesSuggestion()
     {
@@ -230,14 +239,7 @@ public class BookAddViewModel(
         // id stays null and the save's SeriesResolver net still creates it by name.
         if (AcceptedSeriesId is null && !string.IsNullOrWhiteSpace(AcceptedSeriesName))
         {
-            try
-            {
-                AcceptedSeriesId = await dispatcher.Send(new EnsureSeries(AcceptedSeriesName));
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Eager series create failed for {Name}; the save will create it", AcceptedSeriesName);
-            }
+            AcceptedSeriesId = await EagerEnsureSeriesAsync(AcceptedSeriesName);
         }
     }
 
@@ -247,6 +249,70 @@ public class BookAddViewModel(
         AcceptedSeriesId = null;
         AcceptedSeriesName = null;
         AcceptedSeriesOrderLabel = null;
+    }
+
+    /// <summary>Loads the existing-series cache for the manual series typeahead.
+    /// Called once from the page's OnInitializedAsync.</summary>
+    public async Task InitializeAsync()
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        ExistingSeries = await db.Series
+            .OrderBy(s => s.Name)
+            .Select(s => new SeriesOption(s.Id, s.Name))
+            .ToListAsync();
+    }
+
+    public Task<IEnumerable<string>> SearchSeriesAsync(string? query, CancellationToken ct)
+    {
+        var q = (query ?? "").Trim();
+        IEnumerable<string> matches = string.IsNullOrEmpty(q)
+            ? ExistingSeries.Select(s => s.Name)
+            : ExistingSeries
+                .Where(s => s.Name.Contains(q, StringComparison.OrdinalIgnoreCase))
+                .Select(s => s.Name);
+        return Task.FromResult(matches.Take(20));
+    }
+
+    // Typing updates the name but invalidates any previously-resolved id — no DB
+    // work per keystroke (the lesson from the publisher field). The id is
+    // re-resolved on commit (blur).
+    public void OnSeriesNameChanged(string? value)
+    {
+        AcceptedSeriesName = value;
+        AcceptedSeriesId = null;
+    }
+
+    // Commit gesture = the series field losing focus. Resolve the chosen name to
+    // an id: an existing (cached) name attaches with no create round-trip; a
+    // genuinely new name is eager-created (TD-15a) and appended to the cache. A
+    // blank name clears the selection.
+    public async Task CommitSeriesAsync()
+    {
+        var trimmed = AcceptedSeriesName?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) { AcceptedSeriesId = null; return; }
+
+        var cached = ExistingSeries.FirstOrDefault(s => s.Name.Equals(trimmed, StringComparison.OrdinalIgnoreCase));
+        if (cached is not null) { AcceptedSeriesId = cached.Id; return; }
+
+        AcceptedSeriesId = await EagerEnsureSeriesAsync(trimmed);
+        if (AcceptedSeriesId is int newId) ExistingSeries.Add(new SeriesOption(newId, trimmed));
+    }
+
+    // Shared by the suggestion-Accept path and the manual field: eager find-or-
+    // create a series by name → id. Best-effort — a transient fault / accepted
+    // race (TD-15) must not surface; the save's SeriesResolver net still creates
+    // the row, so on failure we log and return null (save resolves by name).
+    private async Task<int?> EagerEnsureSeriesAsync(string name)
+    {
+        try
+        {
+            return await dispatcher.Send(new EnsureSeries(name));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Eager series create failed for {Name}; the save will create it", name);
+            return null;
+        }
     }
 
     // Existing-book detection — set during LookupAsync when the ISBN
@@ -641,13 +707,13 @@ public class BookAddViewModel(
                 };
                 work.AssignAuthorship(authors, contributors);
 
-                // Attach to the accepted series, if any. AcceptedSeriesId points at
-                // an existing local Series row; AcceptedSeriesName (without an Id)
-                // means the upstream API named a series we don't have yet — find-
-                // or-create it by name. Default new series to SeriesType.Series
-                // (numbered) per the Q1/Q2 defaults — user can flip to Collection
-                // on /series/{id} later if wrong.
-                if (SeriesSuggestionAccepted)
+                // Attach to the chosen series, if any — set either by accepting a
+                // lookup suggestion or by the manual series typeahead. AcceptedSeriesId
+                // points at a resolved Series row (existing pick or eager-created on
+                // commit); a name without an Id (eager-create skipped/failed) is
+                // find-or-created by name here as the net. Default new series to
+                // SeriesType.Series — user can flip to Collection on /series/{id} later.
+                if (!string.IsNullOrWhiteSpace(AcceptedSeriesName))
                 {
                     // Derive the (sort int, display) pair from the captured label
                     // at save time — never freeze the int at accept time.
