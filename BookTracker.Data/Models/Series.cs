@@ -28,9 +28,12 @@ public class Series
 
     public string? Description { get; set; }
 
-    // Series membership is a per-Work concept after the Work refactor.
-    // A Christie short-story collection (Book) doesn't belong to the
-    // Poirot series — its constituent Stories (Works) do.
+    // Series membership is moving from Work to Book (a series of short-story
+    // collections is unmanageable at Work grain — see Book.SeriesId). During
+    // the expand/cutover/contract migration BOTH navigations exist: Books is
+    // the new home, Works is the legacy source until the cutover PR flips
+    // every reader/writer and the contract PR drops it.
+    public List<Book> Books { get; set; } = [];
     public List<Work> Works { get; set; } = [];
 
     // --- Aggregate behaviour -------------------------------------------------

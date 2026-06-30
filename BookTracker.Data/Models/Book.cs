@@ -74,6 +74,29 @@ public class Book
 
     public List<Work> Works { get; set; } = [];
 
+    // Series membership lives on the Book — a Book is installment N of a
+    // publication series ("The Last Wish" is Witcher #1), whether it holds a
+    // single Work or a whole short-story collection. The constituent Works
+    // carry no series of their own. (Pre-Work-refactor this lived on Book;
+    // it briefly moved to Work, then came back here once a series of
+    // short-story-collection books proved unmanageable at Work grain.)
+    public int? SeriesId { get; set; }
+    public Series? Series { get; set; }
+
+    /// <summary>Position in a Series (1-based). Defaults to publication order for Collections.</summary>
+    public int? SeriesOrder { get; set; }
+
+    /// <summary>
+    /// Optional human-facing order label that overrides <see cref="SeriesOrder"/>
+    /// in the UI when the position isn't a plain integer — e.g. "4.5" for an
+    /// interquel (<i>Edgedancer</i>) or "1A" for a hierarchical position.
+    /// Null for ordinary integer orders, where <see cref="SeriesOrder"/> renders
+    /// directly. Sorting + gap detection always run off the integer
+    /// <see cref="SeriesOrder"/> (floored from the display value on capture).
+    /// </summary>
+    [MaxLength(50)]
+    public string? SeriesOrderDisplay { get; set; }
+
     // --- Aggregate behaviour -------------------------------------------------
     // Invariant-bearing operations live here so the rules are enforced in one
     // place and are unit-testable without EF. See docs/BACKEND-REFACTOR-DESIGN.md.
@@ -115,6 +138,28 @@ public class Book
         Title = title.Trim();
         Category = category;
         DefaultCoverArtUrl = coverUrl.TrimToNull();
+    }
+
+    public void AssignToSeries(int seriesId, int? order, string? orderDisplay)
+    {
+        SeriesId = seriesId;
+        SetSeriesOrder(order, orderDisplay);
+    }
+
+    public void ClearSeries()
+    {
+        SeriesId = null;
+        SeriesOrder = null;
+        SeriesOrderDisplay = null;
+    }
+
+    /// <summary>Repositions this Book within its current series — the integer sort
+    /// key plus an optional display override ("4.5") — without changing which
+    /// series it belongs to. Used by the manage-series-from-the-series-page flow.</summary>
+    public void SetSeriesOrder(int? order, string? orderDisplay)
+    {
+        SeriesOrder = order;
+        SeriesOrderDisplay = orderDisplay;
     }
 
     /// <summary>Adds a new Edition seeded with its first Copy — an Edition
