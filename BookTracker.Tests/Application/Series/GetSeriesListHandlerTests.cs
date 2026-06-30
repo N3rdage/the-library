@@ -25,13 +25,13 @@ public class GetSeriesListHandlerTests
         var foundation = new Series { Name = "Foundation", Author = "Isaac Asimov", Type = SeriesType.Series, ExpectedCount = 7 };
         db.Series.AddRange(discworld, foundation);
         db.Books.AddRange(
-            new Book { Title = "Mort", Works = [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = discworld, SeriesOrder = 4 }] },
-            new Book { Title = "Reaper Man", Works = [new Work { Title = "Reaper Man", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }], Series = discworld, SeriesOrder = 11 }] });
+            new Book { Title = "Mort", Series = discworld, SeriesOrder = 4, Works = [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }] }] },
+            new Book { Title = "Reaper Man", Series = discworld, SeriesOrder = 11, Works = [new Work { Title = "Reaper Man", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }] }] });
         await db.SaveChangesAsync();
     }
 
     [Fact]
-    public async Task NoFilters_ReturnsAllOrderedByName_WithWorkCount()
+    public async Task NoFilters_ReturnsAllOrderedByName_WithBookCount()
     {
         await SeedAsync();
 
@@ -40,8 +40,8 @@ public class GetSeriesListHandlerTests
         Assert.Equal(2, items.Count);
         Assert.Equal("Discworld", items[0].Name);   // alphabetical
         Assert.Equal("Foundation", items[1].Name);
-        Assert.Equal(2, items[0].WorkCount);
-        Assert.Equal(0, items[1].WorkCount);
+        Assert.Equal(2, items[0].BookCount);
+        Assert.Equal(0, items[1].BookCount);
     }
 
     [Fact]

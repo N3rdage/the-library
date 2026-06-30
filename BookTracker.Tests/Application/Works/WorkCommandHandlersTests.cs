@@ -139,28 +139,18 @@ public class WorkCommandHandlersTests
     }
 
     [Fact]
-    public async Task UpdateWork_persistsTitleAuthorAndSeries()
+    public async Task UpdateWork_persistsTitleAndAuthor()
     {
         var (_, workId) = await SeedBookWithWorkAsync();
-        int seriesId;
-        await using (var db = _factory.CreateDbContext())
-        {
-            var s = new Series { Name = "Discworld", Type = SeriesType.Series };
-            db.Series.Add(s);
-            await db.SaveChangesAsync();
-            seriesId = s.Id;
-        }
 
         await new UpdateWorkHandler(_factory).HandleAsync(new UpdateWork(
             workId, "Mort (revised)", null, ["Terry Pratchett"], [],
-            null, DatePrecision.Day, [], seriesId, 4, null));
+            null, DatePrecision.Day, []));
 
         await using var verify = _factory.CreateDbContext();
         var work = await verify.Works.Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author).FirstAsync(w => w.Id == workId);
         Assert.Equal("Mort (revised)", work.Title);
         Assert.Equal("Terry Pratchett", work.WorkAuthors.Single().Author.Name);
-        Assert.Equal(seriesId, work.SeriesId);
-        Assert.Equal(4, work.SeriesOrder);
     }
 
     [Fact]
@@ -168,7 +158,7 @@ public class WorkCommandHandlersTests
     {
         await Assert.ThrowsAsync<NotFoundException>(() =>
             new UpdateWorkHandler(_factory).HandleAsync(new UpdateWork(
-                424242, "x", null, ["A"], [], null, DatePrecision.Day, [], null, null, null)));
+                424242, "x", null, ["A"], [], null, DatePrecision.Day, [])));
     }
 
     [Fact]

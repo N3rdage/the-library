@@ -15,8 +15,8 @@ public class SeriesListViewModelTests
 {
     private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
 
-    private static SeriesListItem Item(SeriesType type, int workCount, int? expected) =>
-        new(1, "S", "A", type, workCount, expected);
+    private static SeriesListItem Item(SeriesType type, int bookCount, int? expected) =>
+        new(1, "S", "A", type, bookCount, expected);
 
     [Fact]
     public void CompletionText_SeriesWithExpected_ShowsProgress()
@@ -25,10 +25,10 @@ public class SeriesListViewModelTests
     }
 
     [Fact]
-    public void CompletionText_NoExpectedOrCollection_ShowsWorkCount()
+    public void CompletionText_NoExpectedOrCollection_ShowsBookCount()
     {
-        Assert.Equal("3 works", SeriesListViewModel.CompletionText(Item(SeriesType.Series, 3, null)));
-        Assert.Equal("5 works", SeriesListViewModel.CompletionText(Item(SeriesType.Collection, 5, 9)));
+        Assert.Equal("3 books", SeriesListViewModel.CompletionText(Item(SeriesType.Series, 3, null)));
+        Assert.Equal("5 books", SeriesListViewModel.CompletionText(Item(SeriesType.Collection, 5, 9)));
     }
 
     [Fact]

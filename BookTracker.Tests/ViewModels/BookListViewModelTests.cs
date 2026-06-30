@@ -45,7 +45,8 @@ public class BookListViewModelTests
             new Book
             {
                 Title = "Murder on the Orient Express",
-                Works = [new Work { Title = "Murder on the Orient Express", WorkAuthors = [new WorkAuthor { Author = christie, Order = 0 }], Genres = [mystery], Series = poirot, SeriesOrder = 9 }]
+                Series = poirot, SeriesOrder = 9,
+                Works = [new Work { Title = "Murder on the Orient Express", WorkAuthors = [new WorkAuthor { Author = christie, Order = 0 }], Genres = [mystery] }]
             },
             new Book
             {
@@ -168,9 +169,9 @@ public class BookListViewModelTests
             var dune = new Series { Name = "Dune", Type = SeriesType.Series };
             db.Series.Add(dune);
             db.Books.AddRange(
-                new Book { Title = "Dune Messiah", Works = [new Work { Title = "Dune Messiah", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }], Series = dune, SeriesOrder = 2 }] },
-                new Book { Title = "Dune", Works = [new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }], Series = dune, SeriesOrder = 1 }] },
-                new Book { Title = "Children of Dune", Works = [new Work { Title = "Children of Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }], Series = dune, SeriesOrder = 3 }] });
+                new Book { Title = "Dune Messiah", Series = dune, SeriesOrder = 2, Works = [new Work { Title = "Dune Messiah", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] }] },
+                new Book { Title = "Dune", Series = dune, SeriesOrder = 1, Works = [new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] }] },
+                new Book { Title = "Children of Dune", Series = dune, SeriesOrder = 3, Works = [new Work { Title = "Children of Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] }] });
             await db.SaveChangesAsync();
             seriesId = dune.Id;
         }
@@ -201,8 +202,8 @@ public class BookListViewModelTests
             var herbert = new Author { Name = "Frank Herbert" };
             var dune = new Series { Name = "Dune", Type = SeriesType.Series };
             db.Books.AddRange(
-                new Book { Title = "Dune Messiah", Works = [new Work { Title = "Dune Messiah", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }], Series = dune, SeriesOrder = 2 }] },
-                new Book { Title = "Dune", Works = [new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }], Series = dune, SeriesOrder = 1 }] });
+                new Book { Title = "Dune Messiah", Series = dune, SeriesOrder = 2, Works = [new Work { Title = "Dune Messiah", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] }] },
+                new Book { Title = "Dune", Series = dune, SeriesOrder = 1, Works = [new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] }] });
             await db.SaveChangesAsync();
             seriesId = dune.Id;
         }
@@ -222,11 +223,10 @@ public class BookListViewModelTests
     [Fact]
     public async Task FlatList_SeriesFilter_BookWithTwoWorksInSameSeries_AppearsOnce()
     {
-        // A compendium Book can contain two Works of the same series (an omnibus
-        // of #1 + #2). The series-filtered flat list must show that Book ONCE,
-        // not once per matching Work — the Where(b.Works.Any(...)) shape avoids
-        // a SelectMany fan-out. Guards against a future per-Work join sneaking
-        // duplicates back in (the dedup the retired grouping did via .Distinct).
+        // A compendium Book can contain several Works yet sit in a series as a
+        // single installment (an omnibus of #1 + #2). Series membership is a
+        // per-Book concept, so the series-filtered flat list shows that Book
+        // ONCE regardless of how many Works it holds.
         var factory = new TestDbContextFactory();
         int seriesId;
         using (var db = factory.CreateDbContext())
@@ -236,10 +236,12 @@ public class BookListViewModelTests
             db.Books.Add(new Book
             {
                 Title = "Dune Omnibus",
+                Series = dune,
+                SeriesOrder = 1,
                 Works =
                 [
-                    new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }], Series = dune, SeriesOrder = 1 },
-                    new Work { Title = "Dune Messiah", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }], Series = dune, SeriesOrder = 2 },
+                    new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] },
+                    new Work { Title = "Dune Messiah", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] },
                 ],
             });
             await db.SaveChangesAsync();

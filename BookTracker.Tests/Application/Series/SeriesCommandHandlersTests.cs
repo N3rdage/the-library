@@ -37,6 +37,28 @@ public class SeriesCommandHandlersTests
         return work.Id;
     }
 
+    // Seeds a Book carrying series membership directly (the post-cutover home).
+    private async Task<int> SeedBookAsync(string title, int? seriesId = null, int? order = null, string? orderDisplay = null)
+    {
+        await using var db = _factory.CreateDbContext();
+        var work = new Work
+        {
+            Title = title,
+            WorkAuthors = { new WorkAuthor { Author = new Author { Name = $"Author of {title}" }, Order = 0, Role = AuthorRole.Author } },
+        };
+        var book = new Book
+        {
+            Title = title,
+            Works = { work },
+            SeriesId = seriesId,
+            SeriesOrder = order,
+            SeriesOrderDisplay = orderDisplay,
+        };
+        db.Books.Add(book);
+        await db.SaveChangesAsync();
+        return book.Id;
+    }
+
     // --- CreateSeries --------------------------------------------------------
 
     [Fact]
@@ -156,81 +178,81 @@ public class SeriesCommandHandlersTests
         await new DeleteSeriesHandler(_factory).HandleAsync(new DeleteSeries(999999));
     }
 
-    // --- AddWorkToSeries -----------------------------------------------------
+    // --- AddBookToSeries -----------------------------------------------------
 
     [Fact]
-    public async Task AddWorkToSeries_firstWork_getsOrderOne()
+    public async Task AddBookToSeries_firstBook_getsOrderOne()
     {
         var seriesId = await SeedSeriesAsync();
-        var workId = await SeedWorkAsync("Guards! Guards!");
+        var bookId = await SeedBookAsync("Guards! Guards!");
 
-        await new AddWorkToSeriesHandler(_factory).HandleAsync(new AddWorkToSeries(seriesId, workId));
+        await new AddBookToSeriesHandler(_factory).HandleAsync(new AddBookToSeries(seriesId, bookId));
 
         await using var db = _factory.CreateDbContext();
-        var work = await db.Works.FindAsync(workId);
-        Assert.Equal(seriesId, work!.SeriesId);
-        Assert.Equal(1, work.SeriesOrder);
+        var book = await db.Books.FindAsync(bookId);
+        Assert.Equal(seriesId, book!.SeriesId);
+        Assert.Equal(1, book.SeriesOrder);
     }
 
     [Fact]
-    public async Task AddWorkToSeries_appendsAfterHighestOrder()
+    public async Task AddBookToSeries_appendsAfterHighestOrder()
     {
         var seriesId = await SeedSeriesAsync();
-        await SeedWorkAsync("Colour of Magic", seriesId, order: 1);
-        await SeedWorkAsync("The Light Fantastic", seriesId, order: 2);
-        var newWorkId = await SeedWorkAsync("Equal Rites");
+        await SeedBookAsync("Colour of Magic", seriesId, order: 1);
+        await SeedBookAsync("The Light Fantastic", seriesId, order: 2);
+        var newBookId = await SeedBookAsync("Equal Rites");
 
-        await new AddWorkToSeriesHandler(_factory).HandleAsync(new AddWorkToSeries(seriesId, newWorkId));
+        await new AddBookToSeriesHandler(_factory).HandleAsync(new AddBookToSeries(seriesId, newBookId));
 
         await using var db = _factory.CreateDbContext();
-        Assert.Equal(3, (await db.Works.FindAsync(newWorkId))!.SeriesOrder);
+        Assert.Equal(3, (await db.Books.FindAsync(newBookId))!.SeriesOrder);
     }
 
     [Fact]
-    public async Task AddWorkToSeries_missingWork_isNoOp()
+    public async Task AddBookToSeries_missingBook_isNoOp()
     {
         var seriesId = await SeedSeriesAsync();
-        await new AddWorkToSeriesHandler(_factory).HandleAsync(new AddWorkToSeries(seriesId, 999999));
+        await new AddBookToSeriesHandler(_factory).HandleAsync(new AddBookToSeries(seriesId, 999999));
     }
 
-    // --- RemoveWorkFromSeries ------------------------------------------------
+    // --- RemoveBookFromSeries ------------------------------------------------
 
     [Fact]
-    public async Task RemoveWorkFromSeries_clearsLinkOrderAndDisplay()
+    public async Task RemoveBookFromSeries_clearsLinkOrderAndDisplay()
     {
         var seriesId = await SeedSeriesAsync();
-        var workId = await SeedWorkAsync("Edgedancer", seriesId, order: 4, orderDisplay: "4.5");
+        var bookId = await SeedBookAsync("Edgedancer", seriesId, order: 4, orderDisplay: "4.5");
 
-        await new RemoveWorkFromSeriesHandler(_factory).HandleAsync(new RemoveWorkFromSeries(workId));
+        await new RemoveBookFromSeriesHandler(_factory).HandleAsync(new RemoveBookFromSeries(bookId));
 
         await using var db = _factory.CreateDbContext();
-        var work = await db.Works.FindAsync(workId);
-        Assert.Null(work!.SeriesId);
-        Assert.Null(work.SeriesOrder);
-        Assert.Null(work.SeriesOrderDisplay);   // the consistency fix — no dangling "4.5"
+        var book = await db.Books.FindAsync(bookId);
+        Assert.Null(book!.SeriesId);
+        Assert.Null(book.SeriesOrder);
+        Assert.Null(book.SeriesOrderDisplay);   // the consistency fix — no dangling "4.5"
     }
 
     [Fact]
-    public async Task RemoveWorkFromSeries_missingWork_isNoOp()
+    public async Task RemoveBookFromSeries_missingBook_isNoOp()
     {
-        await new RemoveWorkFromSeriesHandler(_factory).HandleAsync(new RemoveWorkFromSeries(999999));
+        await new RemoveBookFromSeriesHandler(_factory).HandleAsync(new RemoveBookFromSeries(999999));
     }
 
-    // --- SetWorkSeriesOrder --------------------------------------------------
+    // --- SetBookSeriesOrder --------------------------------------------------
 
     [Fact]
-    public async Task SetWorkSeriesOrder_updatesOrder_keepsMembership()
+    public async Task SetBookSeriesOrder_updatesOrder_keepsMembership()
     {
         var seriesId = await SeedSeriesAsync();
-        var workId = await SeedWorkAsync("Words of Radiance", seriesId, order: 2);
+        var bookId = await SeedBookAsync("Words of Radiance", seriesId, order: 2);
 
-        await new SetWorkSeriesOrderHandler(_factory).HandleAsync(
-            new SetWorkSeriesOrder(workId, 4, "4.5"));
+        await new SetBookSeriesOrderHandler(_factory).HandleAsync(
+            new SetBookSeriesOrder(bookId, 4, "4.5"));
 
         await using var db = _factory.CreateDbContext();
-        var work = await db.Works.FindAsync(workId);
-        Assert.Equal(seriesId, work!.SeriesId);   // still in the series
-        Assert.Equal(4, work.SeriesOrder);
-        Assert.Equal("4.5", work.SeriesOrderDisplay);
+        var book = await db.Books.FindAsync(bookId);
+        Assert.Equal(seriesId, book!.SeriesId);   // still in the series
+        Assert.Equal(4, book.SeriesOrder);
+        Assert.Equal("4.5", book.SeriesOrderDisplay);
     }
 }

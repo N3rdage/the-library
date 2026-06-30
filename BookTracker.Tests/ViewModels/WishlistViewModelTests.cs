@@ -564,12 +564,16 @@ public class WishlistViewModelTests
                 var work = new Work
                 {
                     Title = $"Work {display ?? order?.ToString()}",
+                    WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
+                };
+                db.Books.Add(new Book
+                {
+                    Title = $"Book {display ?? order?.ToString()}",
                     Series = series,
                     SeriesOrder = order,
                     SeriesOrderDisplay = display,
-                    WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
-                };
-                db.Books.Add(new Book { Title = $"Book {display ?? order?.ToString()}", Works = [work] });
+                    Works = [work],
+                });
             }
             db.Series.Add(series);
             await db.SaveChangesAsync();
@@ -582,6 +586,51 @@ public class WishlistViewModelTests
         var gap = vm.SeriesGaps.Single(g => g.SeriesId == seriesId);
         Assert.Contains(4, gap.MissingPositions);   // real #4 still flagged missing
         Assert.Equal(4, gap.OwnedCount);            // 1,2,3,5 counted; interquel not
+    }
+
+    [Fact]
+    public async Task LoadSeriesGapsAsync_MultiWorkCollectionBook_CountsAsOneOwnedInstallment()
+    {
+        // The keystone case for the Work→Book series move: a series of
+        // short-story-collection books. Installment #1 is a 3-Work collection;
+        // #3 is a single-Work novel. Series membership is on the Book, so #1
+        // counts once (not once per story) and #2 is the only gap.
+        int seriesId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var author = new Author { Name = "Andrzej Sapkowski" };
+            var witcher = new Series { Name = "The Witcher", Author = "Andrzej Sapkowski", Type = SeriesType.Series, ExpectedCount = 3 };
+            db.Series.Add(witcher);
+            await db.SaveChangesAsync();
+            seriesId = witcher.Id;
+
+            db.Books.Add(new Book
+            {
+                Title = "The Last Wish",
+                SeriesId = witcher.Id,
+                SeriesOrder = 1,
+                Works =
+                [
+                    new Work { Title = "The Witcher", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] },
+                    new Work { Title = "A Grain of Truth", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] },
+                ],
+            });
+            db.Books.Add(new Book
+            {
+                Title = "Blood of Elves",
+                SeriesId = witcher.Id,
+                SeriesOrder = 3,
+                Works = [new Work { Title = "Blood of Elves", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var vm = CreateVm();
+        await vm.LoadSeriesGapsAsync();
+
+        var gap = vm.SeriesGaps.Single(g => g.SeriesId == seriesId);
+        Assert.Equal(2, gap.OwnedCount);             // #1 (the collection) + #3 — counted as BOOKS
+        Assert.Equal(new[] { 2 }, gap.MissingPositions); // exactly #2 missing, not 3 story-slots
     }
 
     [Fact]
@@ -599,11 +648,11 @@ public class WishlistViewModelTests
             var book = new Book
             {
                 Title = "Mort",
+                SeriesId = discworld.Id,
+                SeriesOrder = 4,
                 Works = [new Work
                 {
                     Title = "Mort",
-                    SeriesId = discworld.Id,
-                    SeriesOrder = 4,
                     WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
                 }],
             };

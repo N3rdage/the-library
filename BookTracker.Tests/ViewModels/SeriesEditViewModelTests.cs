@@ -8,7 +8,8 @@ namespace BookTracker.Tests.ViewModels;
 // First coverage for SeriesEditViewModel — added alongside the PR3b adoption
 // (the VM now dispatches the Series command handlers instead of touching EF
 // directly). These guard the page contract: signatures unchanged, the in-memory
-// Works list stays in sync, and the new friendly duplicate-name error surfaces.
+// Books list stays in sync, and the new friendly duplicate-name error surfaces.
+// Series membership lives on the Book after the Work→Book cutover.
 [Trait("Category", TestCategories.Integration)]
 public class SeriesEditViewModelTests
 {
@@ -25,20 +26,26 @@ public class SeriesEditViewModelTests
         return s.Id;
     }
 
-    private async Task<int> SeedWorkAsync(string title, int? seriesId = null, int? order = null, string? orderDisplay = null)
+    // Seeds a Book carrying series membership directly (the post-cutover home).
+    private async Task<int> SeedBookAsync(string title, int? seriesId = null, int? order = null, string? orderDisplay = null)
     {
         await using var db = _factory.CreateDbContext();
         var work = new Work
         {
             Title = title,
             WorkAuthors = { new WorkAuthor { Author = new Author { Name = $"Author of {title}" }, Order = 0, Role = AuthorRole.Author } },
+        };
+        var book = new Book
+        {
+            Title = title,
+            Works = { work },
             SeriesId = seriesId,
             SeriesOrder = order,
             SeriesOrderDisplay = orderDisplay,
         };
-        db.Books.Add(new Book { Title = title, Works = { work } });
+        db.Books.Add(book);
         await db.SaveChangesAsync();
-        return work.Id;
+        return book.Id;
     }
 
     // --- Initialize ----------------------------------------------------------
@@ -63,20 +70,20 @@ public class SeriesEditViewModelTests
     }
 
     [Fact]
-    public async Task InitializeAsync_loadsDetails_andWorksInOrder()
+    public async Task InitializeAsync_loadsDetails_andBooksInOrder()
     {
         var seriesId = await SeedSeriesAsync("Foundation");
-        await SeedWorkAsync("Second Foundation", seriesId, order: 2);
-        await SeedWorkAsync("Foundation", seriesId, order: 1);
+        await SeedBookAsync("Second Foundation", seriesId, order: 2);
+        await SeedBookAsync("Foundation", seriesId, order: 1);
 
         var vm = NewVm();
         await vm.InitializeAsync(seriesId);
 
         Assert.False(vm.NotFound);
         Assert.Equal("Foundation", vm.Input!.Name);
-        Assert.Equal(2, vm.Works.Count);
-        Assert.Equal("Foundation", vm.Works[0].Title);       // order 1 first
-        Assert.Equal("Second Foundation", vm.Works[1].Title);
+        Assert.Equal(2, vm.Books.Count);
+        Assert.Equal("Foundation", vm.Books[0].Title);       // order 1 first
+        Assert.Equal("Second Foundation", vm.Books[1].Title);
     }
 
     // --- SaveAsync (create) --------------------------------------------------
@@ -162,10 +169,10 @@ public class SeriesEditViewModelTests
     // --- Delete --------------------------------------------------------------
 
     [Fact]
-    public async Task DeleteSeriesAsync_removesSeries_andSetNullsWorks()
+    public async Task DeleteSeriesAsync_removesSeries_andSetNullsBooks()
     {
         var seriesId = await SeedSeriesAsync();
-        var workId = await SeedWorkAsync("Mort", seriesId, order: 1);
+        var bookId = await SeedBookAsync("Mort", seriesId, order: 1);
 
         var vm = NewVm();
         var ok = await vm.DeleteSeriesAsync(seriesId);
@@ -173,63 +180,63 @@ public class SeriesEditViewModelTests
         Assert.True(ok);
         await using var db = _factory.CreateDbContext();
         Assert.Null(await db.Series.FindAsync(seriesId));
-        Assert.Null((await db.Works.FindAsync(workId))!.SeriesId); // detached, survives
+        Assert.Null((await db.Books.FindAsync(bookId))!.SeriesId); // detached, survives
     }
 
-    // --- Work membership -----------------------------------------------------
+    // --- Book membership -----------------------------------------------------
 
     [Fact]
-    public async Task AddWorkToSeriesAsync_attaches_andAppendsRowWithOrder()
+    public async Task AddBookToSeriesAsync_attaches_andAppendsRowWithOrder()
     {
         var seriesId = await SeedSeriesAsync();
-        await SeedWorkAsync("Colour of Magic", seriesId, order: 1);
-        var newWorkId = await SeedWorkAsync("The Light Fantastic");
+        await SeedBookAsync("Colour of Magic", seriesId, order: 1);
+        var newBookId = await SeedBookAsync("The Light Fantastic");
 
         var vm = NewVm();
         await vm.InitializeAsync(seriesId);
-        await vm.AddWorkToSeriesAsync(seriesId, newWorkId);
+        await vm.AddBookToSeriesAsync(seriesId, newBookId);
 
-        Assert.Equal(2, vm.Works.Count);
-        var added = vm.Works.Single(w => w.Id == newWorkId);
+        Assert.Equal(2, vm.Books.Count);
+        var added = vm.Books.Single(b => b.Id == newBookId);
         Assert.Equal(2, added.SeriesOrder);          // appended after order 1
         await using var db = _factory.CreateDbContext();
-        Assert.Equal(seriesId, (await db.Works.FindAsync(newWorkId))!.SeriesId);
+        Assert.Equal(seriesId, (await db.Books.FindAsync(newBookId))!.SeriesId);
     }
 
     [Fact]
-    public async Task RemoveWorkFromSeriesAsync_clearsWork_andDropsRow()
+    public async Task RemoveBookFromSeriesAsync_clearsBook_andDropsRow()
     {
         var seriesId = await SeedSeriesAsync();
-        var workId = await SeedWorkAsync("Edgedancer", seriesId, order: 4, orderDisplay: "4.5");
+        var bookId = await SeedBookAsync("Edgedancer", seriesId, order: 4, orderDisplay: "4.5");
 
         var vm = NewVm();
         await vm.InitializeAsync(seriesId);
-        await vm.RemoveWorkFromSeriesAsync(workId);
+        await vm.RemoveBookFromSeriesAsync(bookId);
 
-        Assert.Empty(vm.Works);
+        Assert.Empty(vm.Books);
         await using var db = _factory.CreateDbContext();
-        var work = await db.Works.FindAsync(workId);
-        Assert.Null(work!.SeriesId);
-        Assert.Null(work.SeriesOrderDisplay); // dangling "4.5" cleared (the consistency fix)
+        var book = await db.Books.FindAsync(bookId);
+        Assert.Null(book!.SeriesId);
+        Assert.Null(book.SeriesOrderDisplay); // dangling "4.5" cleared (the consistency fix)
     }
 
     [Fact]
-    public async Task UpdateWorkOrderAsync_parsesPersists_andUpdatesRow()
+    public async Task UpdateBookOrderAsync_parsesPersists_andUpdatesRow()
     {
         var seriesId = await SeedSeriesAsync();
-        var workId = await SeedWorkAsync("Words of Radiance", seriesId, order: 2);
+        var bookId = await SeedBookAsync("Words of Radiance", seriesId, order: 2);
 
         var vm = NewVm();
         await vm.InitializeAsync(seriesId);
-        await vm.UpdateWorkOrderAsync(workId, "4.5"); // interquel
+        await vm.UpdateBookOrderAsync(bookId, "4.5"); // interquel
 
-        var row = vm.Works.Single(w => w.Id == workId);
+        var row = vm.Books.Single(b => b.Id == bookId);
         Assert.Equal(4, row.SeriesOrder);
         Assert.Equal("4.5", row.SeriesOrderDisplay);
         await using var db = _factory.CreateDbContext();
-        var work = await db.Works.FindAsync(workId);
-        Assert.Equal(4, work!.SeriesOrder);
-        Assert.Equal("4.5", work.SeriesOrderDisplay);
+        var book = await db.Books.FindAsync(bookId);
+        Assert.Equal(4, book!.SeriesOrder);
+        Assert.Equal("4.5", book.SeriesOrderDisplay);
     }
 
     [Fact]
@@ -253,17 +260,17 @@ public class SeriesEditViewModelTests
     }
 
     [Fact]
-    public async Task AddWorkToSeriesAsync_calledTwiceForSameWork_addsOneRow()
+    public async Task AddBookToSeriesAsync_calledTwiceForSameBook_addsOneRow()
     {
         var seriesId = await SeedSeriesAsync();
-        var workId = await SeedWorkAsync("Sourcery");
+        var bookId = await SeedBookAsync("Sourcery");
 
         var vm = NewVm();
         await vm.InitializeAsync(seriesId);
-        await vm.AddWorkToSeriesAsync(seriesId, workId);
-        await vm.AddWorkToSeriesAsync(seriesId, workId);  // double-fire (e.g. double-click)
+        await vm.AddBookToSeriesAsync(seriesId, bookId);
+        await vm.AddBookToSeriesAsync(seriesId, bookId);  // double-fire (e.g. double-click)
 
-        Assert.Single(vm.Works);
-        Assert.Equal(workId, vm.Works[0].Id);
+        Assert.Single(vm.Books);
+        Assert.Equal(bookId, vm.Books[0].Id);
     }
 }

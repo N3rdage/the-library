@@ -697,31 +697,6 @@ public class BookAddViewModel(
                 };
                 work.AssignAuthorship(authors, contributors);
 
-                // Attach to the chosen series, if any — set either by accepting a
-                // lookup suggestion or by the manual series typeahead. AcceptedSeriesId
-                // points at a resolved Series row (existing pick or eager-created on
-                // commit); a name without an Id (eager-create skipped/failed) is
-                // find-or-created by name here as the net. Default new series to
-                // SeriesType.Series — user can flip to Collection on /series/{id} later.
-                if (!string.IsNullOrWhiteSpace(AcceptedSeriesName))
-                {
-                    // Derive the (sort int, display) pair from the captured label
-                    // at save time — never freeze the int at accept time.
-                    var (acceptedOrder, acceptedOrderDisplay) = SeriesOrderParser.Parse(AcceptedSeriesOrderLabel);
-                    if (AcceptedSeriesId is int existingId)
-                    {
-                        work.SeriesId = existingId;
-                        work.SeriesOrder = acceptedOrder;
-                        work.SeriesOrderDisplay = acceptedOrderDisplay;
-                    }
-                    else if (!string.IsNullOrWhiteSpace(AcceptedSeriesName))
-                    {
-                        work.Series = await SeriesResolver.ResolveAsync(db, AcceptedSeriesName);
-                        work.SeriesOrder = acceptedOrder;
-                        work.SeriesOrderDisplay = acceptedOrderDisplay;
-                    }
-                }
-
                 works = [work];
             }
 
@@ -750,6 +725,33 @@ public class BookAddViewModel(
                     }
                 ]
             };
+
+            // Attach the book to the chosen series, if any — set either by accepting
+            // a lookup suggestion or by the manual series typeahead. Series membership
+            // is a per-Book concept (the book is installment N), so it lands on the
+            // Book regardless of whether it holds one Work or a whole collection.
+            // AcceptedSeriesId points at a resolved Series row (existing pick or
+            // eager-created on commit); a name without an Id (eager-create
+            // skipped/failed) is find-or-created by name here as the net. New series
+            // default to SeriesType.Series — flip to Collection on /series/{id} later.
+            if (!string.IsNullOrWhiteSpace(AcceptedSeriesName))
+            {
+                // Derive the (sort int, display) pair from the captured label
+                // at save time — never freeze the int at accept time.
+                var (acceptedOrder, acceptedOrderDisplay) = SeriesOrderParser.Parse(AcceptedSeriesOrderLabel);
+                if (AcceptedSeriesId is int existingId)
+                {
+                    book.SeriesId = existingId;
+                    book.SeriesOrder = acceptedOrder;
+                    book.SeriesOrderDisplay = acceptedOrderDisplay;
+                }
+                else
+                {
+                    book.Series = await SeriesResolver.ResolveAsync(db, AcceptedSeriesName);
+                    book.SeriesOrder = acceptedOrder;
+                    book.SeriesOrderDisplay = acceptedOrderDisplay;
+                }
+            }
 
             db.Books.Add(book);
             await db.SaveChangesAsync();

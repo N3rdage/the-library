@@ -35,9 +35,9 @@ internal static class LibraryBookQuery
             query = query.Where(b => !b.Works.Any(w => w.Genres.Any()));
 
         if (f.SeriesId > 0)
-            query = query.Where(b => b.Works.Any(w => w.SeriesId == f.SeriesId));
+            query = query.Where(b => b.SeriesId == f.SeriesId);
         else if (f.SeriesId == -1)
-            query = query.Where(b => !b.Works.Any(w => w.SeriesId.HasValue));
+            query = query.Where(b => b.SeriesId == null);
 
         if (f.TagId > 0)
             query = query.Where(b => b.Tags.Any(t => t.Id == f.TagId));

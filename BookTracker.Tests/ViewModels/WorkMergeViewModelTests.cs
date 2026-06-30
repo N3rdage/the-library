@@ -13,7 +13,7 @@ public class WorkMergeViewModelTests
     private WorkMergeViewModel CreateVm() => new(_dispatcher);
 
     private static WorkMergeDetail Detail(int id, string title) =>
-        new(id, title, null, "A", null, null, null, [], 0, [], null);
+        new(id, title, null, "A", null, [], 0, [], null);
 
     [Fact]
     public async Task LoadAsync_populates_details_and_shared_book_count()

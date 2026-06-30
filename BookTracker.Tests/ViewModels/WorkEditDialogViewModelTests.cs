@@ -49,9 +49,6 @@ public class WorkEditDialogViewModelTests
         Assert.Equal("A Discworld Novel", vm.Subtitle);
         Assert.Equal(new[] { "Terry Pratchett" }, vm.AuthorNames);
         Assert.Equal("12 Nov 1987", vm.FirstPublishedDate);
-        Assert.NotNull(vm.SelectedSeriesId);
-        Assert.Equal("4", vm.SeriesOrderInput);
-        Assert.Single(vm.AvailableSeries);
     }
 
     [Fact]
@@ -136,37 +133,6 @@ public class WorkEditDialogViewModelTests
 
         using var db2 = factory.CreateDbContext();
         Assert.Contains(db2.Authors.ToList(), a => a.Name == "Brand New Author");
-    }
-
-    [Fact]
-    public async Task SaveAsync_ClearingSeriesAlsoClearsOrder()
-    {
-        var factory = new TestDbContextFactory();
-        int workId;
-        using (var db = factory.CreateDbContext())
-        {
-            var series = new Series { Name = "S", Type = SeriesType.Series };
-            var work = new Work
-            {
-                Title = "w",
-                WorkAuthors = [new WorkAuthor { Author = new Author { Name = "a" }, Order = 0 }],
-                Series = series,
-                SeriesOrder = 3,
-            };
-            db.Books.Add(new Book { Title = "B", Works = [work] });
-            await db.SaveChangesAsync();
-            workId = work.Id;
-        }
-
-        var vm = new WorkEditDialogViewModel(factory, TestDispatcher.For(factory));
-        await vm.InitializeAsync(workId);
-        vm.SelectedSeriesId = null;
-        await vm.SaveAsync();
-
-        using var db2 = factory.CreateDbContext();
-        var saved = db2.Works.Single(w => w.Id == workId);
-        Assert.Null(saved.SeriesId);
-        Assert.Null(saved.SeriesOrder);
     }
 
     [Fact]

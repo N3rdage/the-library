@@ -7,9 +7,9 @@ namespace BookTracker.Application.Works;
 /// <summary>Merges the loser Work into the winner (both must credit the same
 /// author set): reassigns the loser's Book memberships (dedup against Books that
 /// already hold the winner), auto-fills empty winner fields (subtitle,
-/// first-published date+precision, series+order) and unions genres, then deletes
-/// the loser Work. Lifted verbatim from the old WorkMergeService write path
-/// (PR5, back-end refactor).</summary>
+/// first-published date+precision) and unions genres, then deletes the loser
+/// Work. Series is no longer a Work concept (it lives on the Book), so it isn't
+/// carried across the merge.</summary>
 public sealed record MergeWorks(int WinnerId, int LoserId) : ICommand<WorkMergeResult>;
 
 public record WorkMergeResult(
@@ -67,8 +67,8 @@ public sealed class MergeWorksHandler(IDbContextFactory<BookTrackerDbContext> db
 
         // ─── Auto-fill empty winner fields from loser ──────────────────
         // Only fills gaps — never overwrites a value winner already has.
-        // Paired fields move together (date+precision, series+order) so the
-        // two halves stay consistent.
+        // Paired fields move together (date+precision) so both halves stay
+        // consistent.
         var fieldsAutoFilled = 0;
 
         if (string.IsNullOrWhiteSpace(winner.Subtitle) && !string.IsNullOrWhiteSpace(loser.Subtitle))
@@ -81,14 +81,6 @@ public sealed class MergeWorksHandler(IDbContextFactory<BookTrackerDbContext> db
         {
             winner.FirstPublishedDate = loser.FirstPublishedDate;
             winner.FirstPublishedDatePrecision = loser.FirstPublishedDatePrecision;
-            fieldsAutoFilled++;
-        }
-
-        if (winner.SeriesId is null && loser.SeriesId is not null)
-        {
-            winner.SeriesId = loser.SeriesId;
-            winner.SeriesOrder = loser.SeriesOrder;
-            winner.SeriesOrderDisplay = loser.SeriesOrderDisplay;
             fieldsAutoFilled++;
         }
 

@@ -356,9 +356,9 @@ public class BulkAddViewModelTests
         Assert.Equal("The Stormlight Archive", series.Name);
         Assert.Equal(SeriesType.Series, series.Type);
 
-        var work = db.Works.Include(w => w.Series).Single();
-        Assert.Equal(series.Id, work.SeriesId);
-        Assert.Equal(1, work.SeriesOrder);
+        var book = db.Books.Include(b => b.Series).Single();
+        Assert.Equal(series.Id, book.SeriesId);
+        Assert.Equal(1, book.SeriesOrder);
     }
 
     [Fact]
@@ -395,9 +395,9 @@ public class BulkAddViewModelTests
         await vm.AcceptRowAsync(row);
 
         using var db2 = _factory.CreateDbContext();
-        var work = db2.Works.Include(w => w.Series).Single();
-        Assert.Equal(seededSeriesId, work.SeriesId);
-        Assert.Equal(5, work.SeriesOrder);
+        var book = db2.Books.Include(b => b.Series).Single();
+        Assert.Equal(seededSeriesId, book.SeriesId);
+        Assert.Equal(5, book.SeriesOrder);
         // No new Series row created — attached to the seeded one.
         Assert.Equal(1, db2.Series.Count());
     }
@@ -437,8 +437,8 @@ public class BulkAddViewModelTests
         await vm.AcceptRowAsync(row);
 
         using var db2 = _factory.CreateDbContext();
-        var work = db2.Works.Single();
-        Assert.Equal(2, work.SeriesOrder);             // floored sort key
-        Assert.Equal("2.5", work.SeriesOrderDisplay);  // raw display override
+        var book = db2.Books.Single();
+        Assert.Equal(2, book.SeriesOrder);             // floored sort key
+        Assert.Equal("2.5", book.SeriesOrderDisplay);  // raw display override
     }
 }

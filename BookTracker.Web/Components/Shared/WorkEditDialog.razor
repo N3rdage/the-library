@@ -43,27 +43,6 @@
                               Variant="Variant.Outlined"
                               Margin="Margin.Dense"
                               HelperText="Year, 'Month Year', or full date (e.g. 1973, Oct 1973, 1973-10-12)." />
-                <MudSelect T="int?"
-                           @bind-Value="VM.SelectedSeriesId"
-                           Label="Series / Collection"
-                           Variant="Variant.Outlined"
-                           Margin="Margin.Dense"
-                           Clearable="true">
-                    <MudSelectItem T="int?" Value="@((int?)null)">None</MudSelectItem>
-                    @foreach (var s in VM.AvailableSeries)
-                    {
-                        <MudSelectItem T="int?" Value="@((int?)s.Id)">@s.Name (@s.Type)</MudSelectItem>
-                    }
-                </MudSelect>
-                @if (VM.SelectedSeriesId.HasValue)
-                {
-                    <MudTextField T="string"
-                                  @bind-Value="VM.SeriesOrderInput"
-                                  Label="Order / position"
-                                  Variant="Variant.Outlined"
-                                  Margin="Margin.Dense"
-                                  HelperText="Whole number, or '4.5' for an interquel." />
-                }
 
                 <div>
                     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Genres</MudText>

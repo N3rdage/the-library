@@ -6,13 +6,14 @@ namespace BookTracker.Application.Series;
 
 // Read-model for the /series list page. Relocated from SeriesListViewModel's
 // inline DbContext read in PR6b. Optional name/author substring + type filters;
-// ordered by name. WorkCount is the series' Works.Count nav aggregate.
+// ordered by name. BookCount is the series' Books.Count nav aggregate (series
+// membership is a per-Book concept — the Book is installment N).
 public sealed record GetSeriesList(string? Search, SeriesType? Type)
     : IQuery<IReadOnlyList<SeriesListItem>>;
 
 public record SeriesListItem(
     int Id, string Name, string? Author, SeriesType Type,
-    int WorkCount, int? ExpectedCount);
+    int BookCount, int? ExpectedCount);
 
 public sealed class GetSeriesListHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
     : IQueryHandler<GetSeriesList, IReadOnlyList<SeriesListItem>>
@@ -41,7 +42,7 @@ public sealed class GetSeriesListHandler(IDbContextFactory<BookTrackerDbContext>
                 s.Name,
                 s.Author,
                 s.Type,
-                s.Works.Count,
+                s.Books.Count,
                 s.ExpectedCount))
             .ToListAsync(ct);
     }

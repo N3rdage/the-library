@@ -89,7 +89,7 @@ public class BookDetailViewModelTests
     }
 
     [Fact]
-    public async Task InitializeAsync_MultiWorkBook_FlagsCompendiumAndOrdersBySeries()
+    public async Task InitializeAsync_MultiWorkBook_FlagsCompendiumAndOrdersByTitle()
     {
         var factory = new TestDbContextFactory();
 
@@ -97,16 +97,19 @@ public class BookDetailViewModelTests
         using (var db = factory.CreateDbContext())
         {
             var author = new Author { Name = "William Shakespeare" };
+            // Series membership is a per-Book concept — the compendium sits in the
+            // collection as one installment; its Works carry no series of their own.
             var series = new Series { Name = "Shakespeare's Plays", Type = SeriesType.Collection };
             var book = new Book
             {
                 Title = "Complete Works",
+                Series = series,
                 Works =
                 [
-                    // Intentionally out of order — VM should sort by SeriesOrder.
-                    new Work { Title = "Macbeth", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Series = series, SeriesOrder = 3 },
-                    new Work { Title = "Hamlet", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Series = series, SeriesOrder = 1 },
-                    new Work { Title = "Othello", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Series = series, SeriesOrder = 2 },
+                    // Intentionally out of order — VM sorts the inner Works by Title.
+                    new Work { Title = "Macbeth", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] },
+                    new Work { Title = "Hamlet", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] },
+                    new Work { Title = "Othello", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] },
                 ],
             };
             db.Books.Add(book);
@@ -120,8 +123,8 @@ public class BookDetailViewModelTests
         Assert.False(vm.IsSingleWork);
         Assert.Equal(3, vm.Book!.Works.Count);
         Assert.Equal("Hamlet", vm.Book.Works[0].Title);
-        Assert.Equal("Othello", vm.Book.Works[1].Title);
-        Assert.Equal("Macbeth", vm.Book.Works[2].Title);
+        Assert.Equal("Macbeth", vm.Book.Works[1].Title);
+        Assert.Equal("Othello", vm.Book.Works[2].Title);
     }
 
     [Fact]

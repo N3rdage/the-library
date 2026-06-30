@@ -24,8 +24,8 @@ public record SeriesGap(
 
 public record OwnedSeriesBook(int Id, string Title, string? SeriesOrderLabel);
 
-// Series with no ExpectedCount where the user owns at least one Work.
-// HighestOwnedOrder seeds the "Add next N missing" flow (0 when no Works carry
+// Series with no ExpectedCount where the user owns at least one Book.
+// HighestOwnedOrder seeds the "Add next N missing" flow (0 when no Books carry
 // a SeriesOrder yet). OwnedOrders is the full owned set so the suggestion can
 // skip already-owned slots when computing the next-N range.
 public record OpenSeries(
@@ -43,10 +43,12 @@ public sealed class GetSeriesGapsHandler(IDbContextFactory<BookTrackerDbContext>
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
-        // Structured series with a known expected count where we're missing works.
-        // Series → Works → Books gives us the parent book(s) to link to.
+        // Structured series with a known expected count where we're missing books.
+        // Series membership is a per-Book concept — the Book is installment N.
+        // The Books navigation is filtered by the global soft-delete query
+        // filter, so tombstoned books don't count as owned.
         var incompleteSeries = await db.Series
-            .Include(s => s.Works).ThenInclude(w => w.Books)
+            .Include(s => s.Books)
             .Where(s => s.Type == SeriesType.Series && s.ExpectedCount != null)
             .ToListAsync(ct);
 
@@ -57,9 +59,9 @@ public sealed class GetSeriesGapsHandler(IDbContextFactory<BookTrackerDbContext>
                 // SeriesSlots.OccupiesNumberedSlot). A floored interquel ("4.5",
                 // SeriesOrderDisplay set) must not count as owning slot #4, or
                 // the real #4 gap is silently hidden.
-                var ownedPositions = s.Works
-                    .Where(w => SeriesSlots.OccupiesNumberedSlot(w.SeriesOrder, w.SeriesOrderDisplay))
-                    .Select(w => w.SeriesOrder!.Value)
+                var ownedPositions = s.Books
+                    .Where(b => SeriesSlots.OccupiesNumberedSlot(b.SeriesOrder, b.SeriesOrderDisplay))
+                    .Select(b => b.SeriesOrder!.Value)
                     .Where(o => o <= s.ExpectedCount!.Value)
                     .ToHashSet();
 
@@ -77,11 +79,11 @@ public sealed class GetSeriesGapsHandler(IDbContextFactory<BookTrackerDbContext>
                     ownedPositions.Count,
                     s.ExpectedCount.Value,
                     missing,
-                    s.Works.OrderBy(w => w.SeriesOrder ?? int.MaxValue)
-                        .Select(w => new OwnedSeriesBook(
-                            w.Books.FirstOrDefault()?.Id ?? 0,
-                            w.Title,
-                            SeriesOrderParser.Format(w.SeriesOrder, w.SeriesOrderDisplay)))
+                    s.Books.OrderBy(b => b.SeriesOrder ?? int.MaxValue)
+                        .Select(b => new OwnedSeriesBook(
+                            b.Id,
+                            b.Title,
+                            SeriesOrderParser.Format(b.SeriesOrder, b.SeriesOrderDisplay)))
                         .ToList());
             })
             .Where(g => g.MissingPositions.Count > 0)
@@ -92,24 +94,24 @@ public sealed class GetSeriesGapsHandler(IDbContextFactory<BookTrackerDbContext>
         // numbered book. Highest-owned-order seeds the suggestion; series with
         // all-null SeriesOrder still surface (HighestOwnedOrder=0).
         var openSeries = await db.Series
-            .Include(s => s.Works)
-            .Where(s => s.Type == SeriesType.Series && s.ExpectedCount == null && s.Works.Any())
+            .Include(s => s.Books)
+            .Where(s => s.Type == SeriesType.Series && s.ExpectedCount == null && s.Books.Any())
             .ToListAsync(ct);
 
         var open = openSeries
             .OrderBy(s => s.Name)
             .Select(s =>
             {
-                var orders = s.Works
-                    .Where(w => w.SeriesOrder.HasValue)
-                    .Select(w => w.SeriesOrder!.Value)
+                var orders = s.Books
+                    .Where(b => b.SeriesOrder.HasValue)
+                    .Select(b => b.SeriesOrder!.Value)
                     .OrderBy(n => n)
                     .ToList();
                 return new OpenSeries(
                     s.Id,
                     s.Name,
                     s.Author,
-                    s.Works.Count,
+                    s.Books.Count,
                     orders.Count == 0 ? 0 : orders.Max(),
                     orders);
             })

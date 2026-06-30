@@ -6,10 +6,9 @@ using Microsoft.EntityFrameworkCore;
 namespace BookTracker.Application.Works;
 
 /// <summary>Updates an existing Work's fields (the Work-edit dialog): title,
-/// subtitle, authorship, first-published date, series membership + order, and
-/// genres. Dates and the series-order label arrive already parsed (the VM owns
-/// the free-text parsing). Series membership targets an existing Series by id —
-/// Series entity ops live in the Series feature.</summary>
+/// subtitle, authorship, first-published date, and genres. Dates arrive already
+/// parsed (the VM owns the free-text parsing). Series membership is no longer a
+/// Work concept — it lives on the Book (edited via the Book-edit dialog).</summary>
 public sealed record UpdateWork(
     int WorkId,
     string Title,
@@ -18,10 +17,7 @@ public sealed record UpdateWork(
     IReadOnlyList<ContributorInput> Contributors,
     DateOnly? FirstPublished,
     DatePrecision Precision,
-    IReadOnlyList<int> GenreIds,
-    int? SeriesId,
-    int? SeriesOrder,
-    string? SeriesOrderDisplay) : ICommand;
+    IReadOnlyList<int> GenreIds) : ICommand;
 
 public sealed class UpdateWorkHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
     : ICommandHandler<UpdateWork>
@@ -46,10 +42,6 @@ public sealed class UpdateWorkHandler(IDbContextFactory<BookTrackerDbContext> db
         work.UpdateDetails(command.Title, command.Subtitle);
         work.AssignAuthorship(authors, contributors);
         work.SetFirstPublished(command.FirstPublished, command.Precision);
-        if (command.SeriesId is int seriesId)
-            work.AssignToSeries(seriesId, command.SeriesOrder, command.SeriesOrderDisplay);
-        else
-            work.ClearSeries();
         work.SetGenres(await CreateWorkOnBookHandler.ResolveGenresAsync(db, command.GenreIds, ct));
 
         await db.SaveChangesAsync(ct);
