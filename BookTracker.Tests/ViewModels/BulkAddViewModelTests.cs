@@ -336,6 +336,19 @@ public class BulkAddViewModelTests
         await vm.AcceptSeriesSuggestion(row);
         Assert.True(row.SeriesSuggestionAccepted);
 
+        // Eager-create guard (TD-15a): Accept must find-or-create the Series row
+        // and pin its id *now*, not defer to the save-time net. Without this the
+        // post-save assertions below would still pass via SeriesResolver, leaving
+        // the eager path false-green — a silent revert to save-time-only creation
+        // would go uncaught.
+        Assert.NotNull(row.AcceptedSeriesId);
+        using (var preSaveDb = _factory.CreateDbContext())
+        {
+            var eager = Assert.Single(preSaveDb.Series);
+            Assert.Equal("The Stormlight Archive", eager.Name);
+            Assert.Equal(row.AcceptedSeriesId, eager.Id);
+        }
+
         await vm.AcceptRowAsync(row);
 
         using var db = _factory.CreateDbContext();

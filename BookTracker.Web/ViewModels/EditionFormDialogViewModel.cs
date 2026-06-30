@@ -4,6 +4,7 @@ using BookTracker.Application.Formatting;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
+using BookTracker.Web.Components.Shared;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
@@ -90,16 +91,9 @@ public class EditionFormDialogViewModel(
 
     public Task<IEnumerable<string>> SearchPublishersAsync(string query, CancellationToken ct)
     {
-        // Filters the cached ExistingPublishers in-memory (loaded once on
-        // init) rather than hitting the DB per keystroke. Case-insensitive
-        // Contains; the cache is already name-ordered.
-        var q = (query ?? "").Trim();
-        IEnumerable<string> matches = string.IsNullOrEmpty(q)
-            ? ExistingPublishers.Select(p => p.Name)
-            : ExistingPublishers
-                .Where(p => p.Name.Contains(q, StringComparison.OrdinalIgnoreCase))
-                .Select(p => p.Name);
-        return Task.FromResult(matches.Take(20));
+        // Filters the cached ExistingPublishers in-memory (loaded once on init)
+        // rather than hitting the DB per keystroke. Shared trim/Contains/cap rule.
+        return Task.FromResult(LookupSearch.Filter(ExistingPublishers.Select(p => p.Name), query));
     }
 
     public async Task LookupAsync()
