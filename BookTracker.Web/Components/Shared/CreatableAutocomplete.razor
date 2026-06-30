@@ -1,0 +1,106 @@
+@* Single-select lookup typeahead with an EXPLICIT create gesture.
+
+   Pick an existing name from the dropdown, OR — when what you've typed
+   matches nothing — select the "Add \"…\"" row to commit a brand-new name.
+   `CoerceValue="false"` means free text never commits on its own: only an
+   explicit selection (click / Enter on a dropdown row) sets the value, so a
+   pause to think or a half-typed name is never a save point. This is the
+   single-select sibling of MudAuthorPicker's chip-on-Enter gesture — the same
+   "no magic, the user takes the action" philosophy, for fields that hold one
+   value rather than a chip set.
+
+   The parent owns id-resolution: ValueChanged fires with the committed *name*
+   (the existing pick, or the typed new name when the Add row is chosen, or null
+   when cleared). The parent maps that name to an id / dispatches the create. *@
+
+@using MudBlazor
+
+<MudAutocomplete @ref="acRef"
+                 T="string"
+                 Value="@Value"
+                 ValueChanged="OnSelectedAsync"
+                 SearchFunc="SearchAsync"
+                 ToStringFunc="@DisplayName"
+                 Label="@Label"
+                 Placeholder="@Placeholder"
+                 HelperText="@HelperText"
+                 Disabled="@Disabled"
+                 Class="@Class"
+                 Variant="Variant.Outlined"
+                 Margin="Margin.Dense"
+                 CoerceValue="false"
+                 CoerceText="true"
+                 Strict="false"
+                 ResetValueOnEmptyText="false"
+                 MinCharacters="0"
+                 Clearable="true"
+                 ShowProgressIndicator="true">
+    <ItemTemplate Context="item">
+        @if (item == AddMarker)
+        {
+            <div class="d-flex align-center">
+                <MudIcon Icon="@Icons.Material.Filled.AddCircleOutline" Size="Size.Small" Class="me-2" />
+                <span>Add &quot;@_pendingQuery&quot;</span>
+            </div>
+        }
+        else
+        {
+            @item
+        }
+    </ItemTemplate>
+</MudAutocomplete>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    /// <summary>Returns existing names matching the query. The component appends
+    /// the synthetic "Add …" row itself — this should return only real rows.</summary>
+    [Parameter, EditorRequired]
+    public Func<string?, CancellationToken, Task<IEnumerable<string>>> SearchExisting { get; set; } = default!;
+
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public string? HelperText { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private MudAutocomplete<string>? acRef;
+
+    // Fixed, improbable sentinel for the synthetic "create new" row. The typed
+    // name it would create is held separately in _pendingQuery (set as the user
+    // types) rather than encoded into the row value — so the marker is a constant
+    // and nothing has to be parsed back out of a name-bearing string.
+    // internal so the bUnit test can assert the Add-row contract.
+    internal const string AddMarker = "::creatable-autocomplete::add-new::";
+
+    private string? _pendingQuery;
+
+    // Textbox display: the marker shows as the name it would create; everything
+    // else is its own name.
+    private string DisplayName(string? item) => item == AddMarker ? (_pendingQuery ?? string.Empty) : (item ?? string.Empty);
+
+    internal async Task<IEnumerable<string>> SearchAsync(string? query, CancellationToken ct)
+    {
+        _pendingQuery = query?.Trim();
+        var existing = (await SearchExisting(query, ct)).ToList();
+        // Offer an explicit create row only when the typed query is non-empty and
+        // isn't already an exact (case-insensitive) match to an existing name.
+        if (!string.IsNullOrEmpty(_pendingQuery)
+            && !existing.Any(n => n.Equals(_pendingQuery, StringComparison.OrdinalIgnoreCase)))
+        {
+            existing.Add(AddMarker);
+        }
+        return existing;
+    }
+
+    internal async Task OnSelectedAsync(string? value)
+    {
+        // CoerceValue="false" → this only fires on an explicit selection, or on the
+        // Clearable X (value == null). The Add row commits the typed name; an
+        // existing pick passes straight through.
+        var committed = value == AddMarker ? _pendingQuery : value;
+        Value = committed;
+        await ValueChanged.InvokeAsync(committed);
+    }
+}

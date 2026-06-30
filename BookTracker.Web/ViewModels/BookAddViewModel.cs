@@ -194,22 +194,18 @@ public class BookAddViewModel(
     public SeriesMatch? SeriesSuggestion { get; private set; }
     public bool SeriesSuggestionDismissed { get; set; }
 
-    // Acceptance state for the series suggestion banner. When the user clicks
-    // Accept, we capture the suggestion's identity (existing SeriesId, or a
-    // proposed name to find-or-create on save) plus the suggested order. The
-    // save path reads these and attaches the Work to the right Series row.
-    // Cleared on Reset() and on a fresh successful lookup so accept-state
-    // can't bleed across captures.
-    public bool SeriesSuggestionAccepted { get; private set; }
+    // The chosen series — one source of truth for BOTH the ISBN-suggestion
+    // "Use this" path and the manual CreatableAutocomplete typeahead. Written
+    // only via AcceptSeriesSuggestion / OnSeriesChosenAsync / ClearSeriesSelection,
+    // so the name, the resolved id, and the order can't drift apart (the bug the
+    // old shared-mutable-state + separate accepted-flag design kept producing).
+    // The save reads these to attach the Work to the right Series row; "chosen vs
+    // not" is simply AcceptedSeriesName being non-blank — there is no separate flag.
     public int? AcceptedSeriesId { get; private set; }
-    // Settable: the manual series typeahead on single Add Book binds to these so
-    // the user can pick an existing series or type a new one even when the lookup
-    // surfaced no suggestion. The suggestion-Accept path writes the same fields,
-    // so the save sees one "chosen series" source of truth either way.
-    public string? AcceptedSeriesName { get; set; }
-    // Single round-trippable order label captured at accept time ("5" or
-    // "4.5"); re-parsed into (SeriesOrder, SeriesOrderDisplay) at save so the
-    // stored int can't skew from the parser. Null when no order.
+    public string? AcceptedSeriesName { get; private set; }
+    // Single round-trippable order label ("5" or "4.5"); re-parsed into
+    // (SeriesOrder, SeriesOrderDisplay) at save so the stored int can't skew from
+    // the parser. Null when no order. Bound by the order field for manual edits.
     public string? AcceptedSeriesOrderLabel { get; set; }
 
     // Existing series cached client-side (loaded on init) for the manual
@@ -228,12 +224,15 @@ public class BookAddViewModel(
         {
             return;
         }
+        // "Use this" fills the single chosen-series state (name + order); the
+        // typeahead reflects it via its bound Value. Once filled, the suggestion
+        // prompt hides (it's gated on AcceptedSeriesName being blank), so there's
+        // no separate green/accepted flag to drift out of sync with the field.
         AcceptedSeriesId = SeriesSuggestion.SeriesId;
         AcceptedSeriesName = SeriesSuggestion.SeriesName;
         AcceptedSeriesOrderLabel = SeriesOrderParser.Format(SeriesSuggestion.SuggestedOrder, SeriesSuggestion.SuggestedOrderDisplay);
-        SeriesSuggestionAccepted = true;
 
-        // Accept is the commit gesture (a discrete button click), so eager-create
+        // "Use this" is the commit gesture (a discrete button click), so eager-create
         // a genuinely-new series right now (TD-15a) and pin its id — the save then
         // attaches by id instead of find-or-creating. Best-effort: on failure the
         // id stays null and the save's SeriesResolver net still creates it by name.
@@ -243,9 +242,11 @@ public class BookAddViewModel(
         }
     }
 
-    public void UndoSeriesSuggestionAccept()
+    // Clears the chosen-series selection — used on a fresh lookup and Reset so a
+    // prior choice can't bleed across captures, and reached from the UI via the
+    // typeahead's Clearable X (OnSeriesChosenAsync(null)).
+    private void ClearSeriesSelection()
     {
-        SeriesSuggestionAccepted = false;
         AcceptedSeriesId = null;
         AcceptedSeriesName = null;
         AcceptedSeriesOrderLabel = null;
@@ -273,29 +274,35 @@ public class BookAddViewModel(
         return Task.FromResult(matches.Take(20));
     }
 
-    // Typing updates the name but invalidates any previously-resolved id — no DB
-    // work per keystroke (the lesson from the publisher field). The id is
-    // re-resolved on commit (blur).
-    public void OnSeriesNameChanged(string? value)
+    // The ONLY commit point for the manual series typeahead: an explicit
+    // selection (an existing pick, the "Add …" row, or the Clearable X → null).
+    // CoerceValue="false" on the CreatableAutocomplete means typing alone never
+    // reaches here — no per-keystroke work, no blur guessing at "is the user
+    // finished". Resolve the chosen name to an id: an existing cached name
+    // attaches with no create round-trip; a genuinely new name is eager-created
+    // (TD-15a) and cached. Choosing a DIFFERENT series drops the order (it
+    // belonged to the old one — it must not bleed onto the new series); a blank
+    // selection clears the whole choice.
+    public async Task OnSeriesChosenAsync(string? name)
     {
-        AcceptedSeriesName = value;
-        AcceptedSeriesId = null;
-    }
+        var trimmed = name?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) { ClearSeriesSelection(); return; }
 
-    // Commit gesture = the series field losing focus. Resolve the chosen name to
-    // an id: an existing (cached) name attaches with no create round-trip; a
-    // genuinely new name is eager-created (TD-15a) and appended to the cache. A
-    // blank name clears the selection.
-    public async Task CommitSeriesAsync()
-    {
-        var trimmed = AcceptedSeriesName?.Trim();
-        if (string.IsNullOrEmpty(trimmed)) { AcceptedSeriesId = null; return; }
+        var changedSeries = !string.Equals(trimmed, AcceptedSeriesName, StringComparison.OrdinalIgnoreCase);
+        AcceptedSeriesName = trimmed;
 
         var cached = ExistingSeries.FirstOrDefault(s => s.Name.Equals(trimmed, StringComparison.OrdinalIgnoreCase));
-        if (cached is not null) { AcceptedSeriesId = cached.Id; return; }
+        if (cached is not null)
+        {
+            AcceptedSeriesId = cached.Id;
+        }
+        else
+        {
+            AcceptedSeriesId = await EagerEnsureSeriesAsync(trimmed);
+            if (AcceptedSeriesId is int newId) ExistingSeries.Add(new SeriesOption(newId, trimmed));
+        }
 
-        AcceptedSeriesId = await EagerEnsureSeriesAsync(trimmed);
-        if (AcceptedSeriesId is int newId) ExistingSeries.Add(new SeriesOption(newId, trimmed));
+        if (changedSeries) AcceptedSeriesOrderLabel = null;
     }
 
     // Shared by the suggestion-Accept path and the manual field: eager find-or-
@@ -414,14 +421,14 @@ public class BookAddViewModel(
                 // ISBN attempt in this session (e.g. user typed wrong ISBN,
                 // accepted a Discworld suggestion, then corrected to a non-series
                 // book — the prior accept must not silently apply).
-                UndoSeriesSuggestionAccept();
+                ClearSeriesSelection();
             }
             else
             {
                 LookupCandidates = [];
                 SeriesSuggestion = null;
                 SeriesSuggestionDismissed = false;
-                UndoSeriesSuggestionAccept();
+                ClearSeriesSelection();
             }
 
             LookupMessage = $"Prefilled from {result.Source}. Edit anything before saving.";
@@ -474,7 +481,7 @@ public class BookAddViewModel(
         ExistingBook = null;
         SeriesSuggestion = null;
         SeriesSuggestionDismissed = false;
-        UndoSeriesSuggestionAccept();
+        ClearSeriesSelection();
         SearchTitle = null;
         SearchAuthor = null;
         SearchCandidates = [];
@@ -546,7 +553,7 @@ public class BookAddViewModel(
 
         SeriesSuggestion = await seriesMatch.FindMatchAsync(candidate.Title, candidate.Author);
         SeriesSuggestionDismissed = false;
-        UndoSeriesSuggestionAccept();
+        ClearSeriesSelection();
 
         // No genre auto-pick for the no-ISBN flow — search results don't
         // carry subjects. User selects genres manually via the picker.
