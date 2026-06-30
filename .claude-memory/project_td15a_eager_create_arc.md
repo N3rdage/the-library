@@ -1,11 +1,13 @@
 ---
 name: project_td15a_eager_create_arc
-description: "TD-15a eager-create-at-picker arc — progress, Option B design, PR1 done + review residue, PR2/3/4 remaining."
+description: "TD-15a eager-create-at-picker arc — DONE (4 PRs). Option B; author/publisher/series eager at the picker + manual series typeahead on Add; TD-15 Resolved. Retro: retro_td15a_eager_create_arc."
 metadata: 
   node_type: memory
   type: project
   originSessionId: 5ec4e745-b284-4a27-9c36-ddd8c1565e28
 ---
+
+**STATUS: DONE (2026-06-30).** All 4 PRs merged: #392 author/contributor, #395 publisher, #396 series + manual-series-on-Add, + close-out (author-pick tidy, TD-15→Resolved, docs). `docs/TECH-DEBT.md` TD-15 moved to Resolved (Bulk Add + system find-or-create race accepted as single-user residual). Retro with durable lessons: [[retro_td15a_eager_create_arc]]. **One optional step left for Drew to trigger:** the arc-end high-effort review ([[feedback_review_at_arc_end]]) over the un-reviewed code (#396 + manual-series + close-out; PR1/PR2 were reviewed at the time).
 
 TD-15a (the remaining strand of TD-15 in `docs/TECH-DEBT.md`): make lookup creation **eager at the picker** so the aggregate save doesn't own lookup inserts, and the (near-impossible, single-user) check-then-insert race moves to small dedicated `CreateX` commands. Planned + approved 2026-06-28; full arc, sequential PRs.
 
