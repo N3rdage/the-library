@@ -11,13 +11,14 @@ using Xunit;
 namespace BookTracker.Tests.Components;
 
 /// <summary>
-/// bUnit tests for EditionCopyForm's publisher eager-create (TD-15a). The
-/// commit gesture is the field losing focus (OnBlur) — NOT per-keystroke
-/// ValueChanged, which fired on every character and created a publisher row
-/// for each partial string. On blur, a name not already in the cached list is
-/// eager-created via <see cref="CreatePublisher"/> (best-effort); an existing
-/// name or blank is a no-op (no wire call). @bind-Value handles the field value
-/// itself, so these tests drive the eager-create method directly.
+/// bUnit tests for EditionCopyForm's publisher field wiring (TD-15a). The commit
+/// gesture is now an explicit selection on the CreatableAutocomplete (an existing
+/// pick or the "Add …" row) — not commit-on-blur. OnPublisherChosenAsync stores
+/// the committed name on EditionInput.Publisher (the save resolves it via the
+/// PublisherResolver net) and delegates the skip-existing / dispatch-new /
+/// swallow-fault branch to the shared PublisherEagerCreate helper (covered
+/// exhaustively in <see cref="PublisherEagerCreateTests"/>); a new name is also
+/// appended to the cache. These cover the component-side wiring.
 ///
 /// Integration-flavoured: EditionCopyForm.OnInitializedAsync loads existing
 /// publishers from the DB, so it needs a real <see cref="TestDbContextFactory"/>
@@ -48,21 +49,26 @@ public class EditionCopyFormTests : ComponentTestBase
             .Add(c => c.CopyInput, copy));
 
     [Fact]
-    public async Task PublisherBlur_NewName_EagerCreates()
+    public async Task PublisherChosen_NewName_StoresValueEagerCreatesAndCaches()
     {
+        _dispatcher.Send(Arg.Any<CreatePublisher>(), Arg.Any<CancellationToken>()).Returns((int?)42);
         var (edition, copy) = Inputs();
         var cut = RenderForm(edition, copy);
 
-        await cut.InvokeAsync(() => cut.Instance.EagerCreatePublisherIfNewAsync("Gollancz"));
+        await cut.InvokeAsync(() => cut.Instance.OnPublisherChosenAsync("Gollancz"));
 
+        Assert.Equal("Gollancz", edition.Publisher); // stored for the save
         await _dispatcher.Received(1).Send(
             Arg.Is<CreatePublisher>(c => c.Name == "Gollancz"), Arg.Any<CancellationToken>());
+        // Appended to the cache so a re-pick is a no-op and it shows in search.
+        var vm = Services.GetRequiredService<EditionFormViewModel>();
+        Assert.Contains(vm.ExistingPublishers, p => p.Name == "Gollancz");
     }
 
     [Fact]
-    public async Task PublisherBlur_ExistingName_DoesNotEagerCreate()
+    public async Task PublisherChosen_ExistingName_StoresValueWithNoDispatch()
     {
-        // Seed an existing publisher; OnInitializedAsync caches it. Committing it
+        // Seed an existing publisher; OnInitializedAsync caches it. Picking it
         // (even with a case clash) is a pure pick — no CreatePublisher round-trip.
         await using (var db = _factory.CreateDbContext())
         {
@@ -72,38 +78,39 @@ public class EditionCopyFormTests : ComponentTestBase
         var (edition, copy) = Inputs();
         var cut = RenderForm(edition, copy);
 
-        await cut.InvokeAsync(() => cut.Instance.EagerCreatePublisherIfNewAsync("penguin books"));
+        await cut.InvokeAsync(() => cut.Instance.OnPublisherChosenAsync("penguin books"));
 
-        await _dispatcher.DidNotReceive().Send(
-            Arg.Any<CreatePublisher>(), Arg.Any<CancellationToken>());
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    public async Task PublisherBlur_Blank_DoesNotEagerCreate(string? value)
-    {
-        var (edition, copy) = Inputs();
-        var cut = RenderForm(edition, copy);
-
-        await cut.InvokeAsync(() => cut.Instance.EagerCreatePublisherIfNewAsync(value));
-
+        Assert.Equal("penguin books", edition.Publisher);
         await _dispatcher.DidNotReceive().Send(
             Arg.Any<CreatePublisher>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task PublisherBlur_EagerCreateThrows_DoesNotSurface()
+    public async Task PublisherChosen_Cleared_ClearsValueWithNoDispatch()
     {
-        // Best-effort: a faulting dispatch must not throw out of the blur handler
-        // — the save's PublisherResolver net guarantees the row.
+        var (edition, copy) = Inputs();
+        edition.Publisher = "Gollancz";
+        var cut = RenderForm(edition, copy);
+
+        await cut.InvokeAsync(() => cut.Instance.OnPublisherChosenAsync(null));
+
+        Assert.Null(edition.Publisher);
+        await _dispatcher.DidNotReceive().Send(
+            Arg.Any<CreatePublisher>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PublisherChosen_EagerCreateThrows_DoesNotSurface()
+    {
+        // Best-effort: a faulting dispatch must not throw out of the handler — the
+        // save's PublisherResolver net guarantees the row. The value is still stored.
         _dispatcher.Send(Arg.Any<CreatePublisher>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException<int?>(new InvalidOperationException("transient")));
         var (edition, copy) = Inputs();
         var cut = RenderForm(edition, copy);
 
-        // Should complete without throwing.
-        await cut.InvokeAsync(() => cut.Instance.EagerCreatePublisherIfNewAsync("Gollancz"));
+        await cut.InvokeAsync(() => cut.Instance.OnPublisherChosenAsync("Gollancz"));
+
+        Assert.Equal("Gollancz", edition.Publisher);
     }
 }

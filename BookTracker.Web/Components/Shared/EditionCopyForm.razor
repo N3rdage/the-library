@@ -75,23 +75,15 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="6">
-                @* Free-text-with-suggestions: MudAutocomplete on the Publisher
-                   name. CoerceText="false" + Strict="false" means the typed
-                   string survives even when no match is highlighted, so save-
-                   time find-or-create works the same as the previous datalist
-                   shape (user can either pick or type-new). *@
-                <MudAutocomplete T="string"
-                                 @bind-Value="EditionInput.Publisher"
-                                 OnBlur="OnPublisherBlurAsync"
-                                 SearchFunc="@SearchPublishers"
-                                 Label="Publisher"
-                                 Placeholder="Penguin Books"
-                                 Variant="Variant.Outlined"
-                                 Margin="Margin.Dense"
-                                 CoerceText="false"
-                                 CoerceValue="true"
-                                 Strict="false"
-                                 ResetValueOnEmptyText="false" />
+                @* Pick an existing publisher, or choose the "Add …" row to create
+                   a new one. Creation is an explicit selection (no commit-on-blur
+                   guessing) — the same gesture as the series field. *@
+                <CreatableAutocomplete Value="@EditionInput.Publisher"
+                                       ValueChanged="OnPublisherChosenAsync"
+                                       SearchExisting="SearchPublishers"
+                                       Label="Publisher"
+                                       Placeholder="Penguin Books"
+                                       HelperText="Pick an existing publisher, or choose the “Add …” row to create a new one." />
             </MudItem>
             <MudItem xs="12" md="6">
                 <MudTextField T="string"
@@ -121,39 +113,22 @@
         await EditionVM.InitializeAsync();
     }
 
-    // Commit gesture = the field losing focus. @bind-Value keeps the value
-    // updated as the user types (no side effect — a pause to think or fix a
-    // typo is NOT a save point); only on blur do we eagerly find-or-create a
-    // genuinely new publisher (TD-15a). Reading the now-settled bound value.
-    private Task OnPublisherBlurAsync() => EagerCreatePublisherIfNewAsync(EditionInput.Publisher);
-
-    // internal (not private) so the bUnit test can invoke it directly —
-    // BookTracker.Web exposes internals to BookTracker.Tests.
-    internal async Task EagerCreatePublisherIfNewAsync(string? value)
+    // The only commit point for the publisher field: an explicit selection (an
+    // existing pick, the "Add …" row, or the Clearable X → null). CoerceValue="false"
+    // means typing alone never reaches here. Store the committed name (the save
+    // resolves it via PublisherResolver — the net); a genuinely-new name is
+    // eager-created now and cached, an existing pick is just stored (no round-trip).
+    // The skip-existing / dispatch / swallow-fault logic is the shared
+    // PublisherEagerCreate helper (one copy, one unit test, shared with the dialog).
+    // internal so the bUnit test can invoke it directly.
+    internal async Task OnPublisherChosenAsync(string? value)
     {
-        // Existing (cached) name → no create round-trip; blank → skip. Only a
-        // genuinely new name dispatches CreatePublisher, and the created row is
-        // appended to the cache so it's known to later commits + shows in
-        // suggestions.
-        //
-        // Best-effort: a transient DB fault or the accepted check-then-insert
-        // race (TD-15) must not surface as an error — the save's
-        // PublisherResolver net (Option B) still guarantees the row, so on
-        // failure we just log.
-        var trimmed = value?.Trim();
-        if (string.IsNullOrEmpty(trimmed)) return;
-        if (EditionVM.ExistingPublishers.Any(p => p.Name.Equals(trimmed, StringComparison.OrdinalIgnoreCase))) return;
-        try
+        EditionInput.Publisher = value?.Trim();
+        var created = await PublisherEagerCreate.CreateIfNewAsync(
+            EditionInput.Publisher, EditionVM.ExistingPublishers.Select(p => p.Name), Dispatcher, Logger);
+        if (created is (int id, string name))
         {
-            var id = await Dispatcher.Send(new CreatePublisher(trimmed));
-            if (id is int newId)
-            {
-                EditionVM.ExistingPublishers.Add(new EditionFormViewModel.PublisherOption(newId, trimmed));
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Eager publisher create failed for {Name}; the save will create it", trimmed);
+            EditionVM.ExistingPublishers.Add(new EditionFormViewModel.PublisherOption(id, name));
         }
     }
 
