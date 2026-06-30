@@ -2,6 +2,7 @@ using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace BookTracker.Tests.ViewModels;
@@ -13,7 +14,7 @@ public class BookAddViewModelTests
     private readonly IBookLookupService _lookup = Substitute.For<IBookLookupService>();
 
     private BookAddViewModel CreateVm() =>
-        new(_factory, _lookup, new SeriesMatchService(_factory), new WorkSearchService(_factory));
+        new(_factory, _lookup, new SeriesMatchService(_factory), new WorkSearchService(_factory), TestDispatcher.For(_factory), NullLogger<BookAddViewModel>.Instance);
 
     [Fact]
     public void AddCollectionWorkRow_StartsEmpty_RegardlessOfPreviousRowAuthors()
@@ -733,7 +734,7 @@ public class BookAddViewModelTests
         Assert.NotNull(vm.SeriesSuggestion);
         Assert.Equal(MatchReason.ApiMatchExisting, vm.SeriesSuggestion!.Reason);
 
-        vm.AcceptSeriesSuggestion();
+        await vm.AcceptSeriesSuggestion();
         Assert.True(vm.SeriesSuggestionAccepted);
 
         await vm.SaveAsync(new List<int>());
@@ -744,6 +745,35 @@ public class BookAddViewModelTests
         Assert.Equal(5, work.SeriesOrder);
         // No new Series row created — attached to the existing one.
         Assert.Equal(1, db2.Series.Count());
+    }
+
+    [Fact]
+    public async Task AcceptSeriesSuggestion_NewSeries_EagerCreatesRowAndPinsId()
+    {
+        // TD-15a: accepting a "new series" suggestion creates the Series row at
+        // the accept gesture (not deferred to save) and pins its id, so the save
+        // attaches by id rather than find-or-creating.
+        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: "9780765326355", Title: "The Way of Kings", Subtitle: null,
+                Author: "Brandon Sanderson", Publisher: null,
+                GenreCandidates: [], DatePrinted: null, CoverUrl: null,
+                Source: "Open Library",
+                Series: "The Stormlight Archive", SeriesNumber: 1, SeriesNumberRaw: "1"));
+
+        var vm = CreateVm();
+        vm.LookupIsbn = "9780765326355";
+        await vm.LookupAsync();
+        Assert.Equal(MatchReason.ApiMatchNewSeries, vm.SeriesSuggestion!.Reason);
+        Assert.Null(vm.AcceptedSeriesId); // nothing created yet
+
+        await vm.AcceptSeriesSuggestion();
+
+        Assert.NotNull(vm.AcceptedSeriesId); // pinned by the eager create
+        using var db = _factory.CreateDbContext();
+        var series = Assert.Single(db.Series); // the row exists BEFORE any save
+        Assert.Equal("The Stormlight Archive", series.Name);
+        Assert.Equal(vm.AcceptedSeriesId, series.Id);
     }
 
     [Fact]
@@ -763,7 +793,7 @@ public class BookAddViewModelTests
         await vm.LookupAsync();
 
         Assert.Equal(MatchReason.ApiMatchNewSeries, vm.SeriesSuggestion!.Reason);
-        vm.AcceptSeriesSuggestion();
+        await vm.AcceptSeriesSuggestion();
 
         // SaveAsync needs the form filled enough to construct the Work.
         // LookupAsync prefills WorkInput from the result, so we just save.
@@ -828,7 +858,7 @@ public class BookAddViewModelTests
             existingId = existing.Id;
         }
 
-        var vm = new BookAddViewModel(factory, _lookup, new SeriesMatchService(factory), new WorkSearchService(factory));
+        var vm = new BookAddViewModel(factory, _lookup, new SeriesMatchService(factory), new WorkSearchService(factory), TestDispatcher.For(factory), NullLogger<BookAddViewModel>.Instance);
         vm.BookInput.Title = "Mixed Anthology";
         vm.EditionInput.Format = BookFormat.TradePaperback;
         vm.IsCollection = true;
@@ -877,7 +907,7 @@ public class BookAddViewModelTests
             existingId = existing.Id;
         }
 
-        var vm = new BookAddViewModel(factory, _lookup, new SeriesMatchService(factory), new WorkSearchService(factory));
+        var vm = new BookAddViewModel(factory, _lookup, new SeriesMatchService(factory), new WorkSearchService(factory), TestDispatcher.For(factory), NullLogger<BookAddViewModel>.Instance);
         vm.BookInput.Title = "Attach-only book";
         vm.EditionInput.Format = BookFormat.TradePaperback;
         vm.IsCollection = true;
@@ -1110,7 +1140,7 @@ public class BookAddViewModelTests
 
         Assert.Equal(MatchReason.AuthorHasMultipleBooks, vm.SeriesSuggestion!.Reason);
 
-        vm.AcceptSeriesSuggestion();
+        await vm.AcceptSeriesSuggestion();
         // Accept call is a no-op — SeriesSuggestionAccepted stays false.
         Assert.False(vm.SeriesSuggestionAccepted);
         Assert.Null(vm.AcceptedSeriesId);

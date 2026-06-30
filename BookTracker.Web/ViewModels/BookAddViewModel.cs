@@ -1,3 +1,4 @@
+using BookTracker.Application;
 using BookTracker.Application.Authors;
 using BookTracker.Application.Books;
 using BookTracker.Application.Series;
@@ -5,6 +6,7 @@ using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using BookTracker.Application.Formatting;
 
 namespace BookTracker.Web.ViewModels;
@@ -13,7 +15,9 @@ public class BookAddViewModel(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
     IBookLookupService lookup,
     SeriesMatchService seriesMatch,
-    IWorkSearchService workSearch)
+    IWorkSearchService workSearch,
+    IDispatcher dispatcher,
+    ILogger<BookAddViewModel> logger)
 {
     /// <summary>Search existing Works for the collection-row autocomplete.
     /// Returns matches as the user types so they can attach an already-
@@ -205,7 +209,7 @@ public class BookAddViewModel(
     // no order.
     public string? AcceptedSeriesOrderLabel { get; private set; }
 
-    public void AcceptSeriesSuggestion()
+    public async Task AcceptSeriesSuggestion()
     {
         if (SeriesSuggestion is null) return;
         // Only API-sourced suggestions (Existing or NewSeries) are actionable —
@@ -219,6 +223,22 @@ public class BookAddViewModel(
         AcceptedSeriesName = SeriesSuggestion.SeriesName;
         AcceptedSeriesOrderLabel = SeriesOrderParser.Format(SeriesSuggestion.SuggestedOrder, SeriesSuggestion.SuggestedOrderDisplay);
         SeriesSuggestionAccepted = true;
+
+        // Accept is the commit gesture (a discrete button click), so eager-create
+        // a genuinely-new series right now (TD-15a) and pin its id — the save then
+        // attaches by id instead of find-or-creating. Best-effort: on failure the
+        // id stays null and the save's SeriesResolver net still creates it by name.
+        if (AcceptedSeriesId is null && !string.IsNullOrWhiteSpace(AcceptedSeriesName))
+        {
+            try
+            {
+                AcceptedSeriesId = await dispatcher.Send(new EnsureSeries(AcceptedSeriesName));
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Eager series create failed for {Name}; the save will create it", AcceptedSeriesName);
+            }
+        }
     }
 
     public void UndoSeriesSuggestionAccept()

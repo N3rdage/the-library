@@ -1,3 +1,4 @@
+using BookTracker.Application;
 using BookTracker.Application.Authors;
 using BookTracker.Application.Books;
 using BookTracker.Application.Series;
@@ -14,7 +15,8 @@ public class BulkAddViewModel(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
     IBookLookupService lookup,
     SeriesMatchService seriesMatch,
-    ILogger<BulkAddViewModel> logger)
+    ILogger<BulkAddViewModel> logger,
+    IDispatcher dispatcher)
 {
     /// <summary>
     /// Callback for the component to marshal state changes back to the UI thread.
@@ -332,7 +334,7 @@ public class BulkAddViewModel(
         public string? AcceptedSeriesOrderLabel { get; set; }
     }
 
-    public void AcceptSeriesSuggestion(DiscoveryRow row)
+    public async Task AcceptSeriesSuggestion(DiscoveryRow row)
     {
         if (row.SeriesSuggestion is null) return;
         // Only API-sourced suggestions (Existing / NewSeries) are actionable —
@@ -345,6 +347,23 @@ public class BulkAddViewModel(
         row.AcceptedSeriesName = row.SeriesSuggestion.SeriesName;
         row.AcceptedSeriesOrderLabel = SeriesOrderParser.Format(row.SeriesSuggestion.SuggestedOrder, row.SeriesSuggestion.SuggestedOrderDisplay);
         row.SeriesSuggestionAccepted = true;
+
+        // Accept is the commit gesture (a discrete per-row button click), so
+        // eager-create a genuinely-new series now (TD-15a) and pin its id — the
+        // save then attaches by id instead of find-or-creating. Best-effort: on
+        // failure the id stays null and the save's SeriesResolver net still
+        // creates it by name.
+        if (row.AcceptedSeriesId is null && !string.IsNullOrWhiteSpace(row.AcceptedSeriesName))
+        {
+            try
+            {
+                row.AcceptedSeriesId = await dispatcher.Send(new EnsureSeries(row.AcceptedSeriesName));
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Eager series create failed for {Name}; the save will create it", row.AcceptedSeriesName);
+            }
+        }
     }
 
     public void UndoSeriesSuggestionAccept(DiscoveryRow row)
