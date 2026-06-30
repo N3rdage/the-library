@@ -162,8 +162,19 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .HasMany(w => w.Genres)
             .WithMany(g => g.Works);
 
+        // Book belongs to at most one Series. Series.Books is the inverse
+        // navigation — the Book is installment N of a publication series.
+        // This is the new home for series membership; the Work mapping below
+        // is the legacy source kept live through the cutover.
+        modelBuilder.Entity<Book>()
+            .HasOne(b => b.Series)
+            .WithMany(s => s.Books)
+            .HasForeignKey(b => b.SeriesId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         // Work belongs to at most one Series. Series.Works is the inverse
         // navigation — a Series exposes its constituent Works directly.
+        // LEGACY: being migrated to Book (above); dropped in the contract PR.
         modelBuilder.Entity<Work>()
             .HasOne(w => w.Series)
             .WithMany(s => s.Works)
