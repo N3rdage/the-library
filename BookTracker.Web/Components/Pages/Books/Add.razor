@@ -267,6 +267,53 @@
                     </MudCardContent>
                 </MudCard>
             </MudItem>
+
+            <MudItem xs="12">
+                <MudCard Elevation="0" Outlined="true">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Series / collection</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @* Optional manual series entry — type to find an existing
+                           series or enter a new one (created when you leave the
+                           field). The ISBN-lookup suggestion above fills this same
+                           field. Applies to the work above. *@
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-2">Optional — applies to the work above. Type to find an existing series or enter a new one.</MudText>
+                        <MudGrid Spacing="3">
+                            <MudItem xs="12" md="8">
+                                <MudAutocomplete T="string"
+                                                 Value="VM.AcceptedSeriesName"
+                                                 ValueChanged="VM.OnSeriesNameChanged"
+                                                 OnBlur="VM.CommitSeriesAsync"
+                                                 SearchFunc="VM.SearchSeriesAsync"
+                                                 Label="Series"
+                                                 Placeholder="e.g. The Stormlight Archive"
+                                                 Variant="Variant.Outlined"
+                                                 Margin="Margin.Dense"
+                                                 CoerceText="false"
+                                                 CoerceValue="true"
+                                                 Strict="false"
+                                                 ResetValueOnEmptyText="false"
+                                                 Clearable="true" />
+                            </MudItem>
+                            @if (!string.IsNullOrWhiteSpace(VM.AcceptedSeriesName))
+                            {
+                                <MudItem xs="12" md="4">
+                                    <MudTextField T="string"
+                                                  @bind-Value="VM.AcceptedSeriesOrderLabel"
+                                                  Label="Order / position"
+                                                  Placeholder="3"
+                                                  HelperText="Whole number, or '4.5' for an interquel."
+                                                  Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense" />
+                                </MudItem>
+                            }
+                        </MudGrid>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
         }
         else
         {
@@ -397,6 +444,12 @@
     // focus next" path). Disposed on circuit teardown so the listener
     // can't call a dead managed object.
     private DotNetObjectReference<Add>? _pageRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load the existing-series cache for the manual series typeahead.
+        await VM.InitializeAsync();
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
