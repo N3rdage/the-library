@@ -24,10 +24,10 @@ public enum BookCategory
 
 // A Book is a physical-object grouping — what you hold and own. It carries
 // the per-physical-book reading state (Status, Rating, Notes, Tags), the
-// cover art, and one or more Editions / Copies. Authorship, subtitle,
-// genres, and series membership belong to the contained Works (PR 2 of
-// the Work refactor moved these). For single-Work books (the common
-// case) Book.Title mirrors the sole Work's title.
+// cover art, series membership (the book is installment N of a publication
+// series — TODO #56 moved this Work→Book), and one or more Editions / Copies.
+// Authorship, subtitle, and genres belong to the contained Works. For
+// single-Work books (the common case) Book.Title mirrors the sole Work's title.
 public class Book
 {
     public int Id { get; set; }
