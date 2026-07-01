@@ -39,10 +39,13 @@ public sealed class AttachWorksToBookHandler(IDbContextFactory<BookTrackerDbCont
                 "Add at least one work — type a title for a new work, or pick an existing one from the dropdown.");
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var book = await db.Books.Include(b => b.Works).FirstOrDefaultAsync(b => b.Id == command.BookId, ct);
+        // Include BookWorks (not the order-less Works skip-nav) so each attach —
+        // new via Work.Create, existing via AppearsIn — appends to the end of the
+        // book's current work order. Rows attach in dialog order (capture order).
+        var book = await db.Books.Include(b => b.BookWorks).FirstOrDefaultAsync(b => b.Id == command.BookId, ct);
         if (book is null) return 0;
 
-        var alreadyAttachedIds = book.Works.Select(w => w.Id).ToHashSet();
+        var alreadyAttachedIds = book.BookWorks.Select(bw => bw.WorkId).ToHashSet();
         var newRows = orderedRows.Where(r => r.AttachedWorkId is null).ToList();
         var attachIds = orderedRows
             .Where(r => r.AttachedWorkId is int)

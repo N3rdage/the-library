@@ -41,7 +41,14 @@ public class Work
     // Series membership is NOT a Work concept — it lives on the Book (the book
     // is installment N of a publication series). See Book.SeriesId.
 
+    /// <summary>Skip-navigation over the Book↔Work join — "which books contain
+    /// this work" semantics. Does NOT carry per-book display order.</summary>
     public List<Book> Books { get; set; } = [];
+
+    /// <summary>Explicit join rows (the per-book <see cref="BookWork.Order"/>
+    /// lives here). Mostly read from the Book side; present for symmetry and so
+    /// <see cref="Book.AttachWork"/> can keep both ends of the graph consistent.</summary>
+    public List<BookWork> BookWorks { get; set; } = [];
 
     // --- Aggregate behaviour -------------------------------------------------
     // A Work is the durable creative unit; it OWNS its Book↔Work membership and
@@ -68,7 +75,11 @@ public class Work
         work.UpdateDetails(title, subtitle);
         work.SetFirstPublished(firstPublished, firstPublishedPrecision);
         work.AssignAuthorship(authors, contributors);
-        work.Books.Add(firstBook);
+        // Route through the Book so the new work appends to the book's work
+        // order (Order = max + 1) rather than landing at a default 0. The book
+        // must have its BookWorks loaded for the max to be correct — a freshly
+        // created book has none, which is correct (first work → Order 0).
+        firstBook.AttachWork(work);
         return work;
     }
 
@@ -87,21 +98,25 @@ public class Work
     }
 
     /// <summary>Associates this Work with another Book it also appears in. No-op
-    /// if already associated. Returns true when newly attached.</summary>
-    public bool AppearsIn(Book book)
-    {
-        if (Books.Any(b => b.Id == book.Id)) return false;
-        Books.Add(book);
-        return true;
-    }
+    /// if already associated. Returns true when newly attached. Delegates to
+    /// <see cref="Book.AttachWork"/> so the work appends to the book's work order
+    /// (the book must have its BookWorks loaded).</summary>
+    public bool AppearsIn(Book book) => book.AttachWork(this);
 
     /// <summary>Removes this Work from a Book. Returns true when the Work now
-    /// appears in no books (orphaned) and the caller should delete it.</summary>
+    /// appears in no books (orphaned) and the caller should delete it. Operates
+    /// on the explicit <see cref="BookWorks"/> join — the canonical membership
+    /// collection since the per-book Order moved there — so callers load
+    /// <c>Include(w =&gt; w.BookWorks)</c> (and the book's, for the shared-book case).</summary>
     public bool RemoveFrom(Book book)
     {
-        var existing = Books.FirstOrDefault(b => b.Id == book.Id);
-        if (existing is not null) Books.Remove(existing);
-        return Books.Count == 0;
+        var link = BookWorks.FirstOrDefault(bw => bw.Book == book || (book.Id != 0 && bw.BookId == book.Id));
+        if (link is not null)
+        {
+            BookWorks.Remove(link);
+            book.BookWorks.Remove(link);
+        }
+        return BookWorks.Count == 0;
     }
 
     public void SetGenres(IReadOnlyList<Genre> genres)

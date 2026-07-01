@@ -18,9 +18,11 @@ public sealed class RemoveWorkFromBookHandler(IDbContextFactory<BookTrackerDbCon
         var book = await db.Books.FindAsync([command.BookId], ct);
         if (book is null) return null;
 
-        var work = await db.Works.Include(w => w.Books).FirstOrDefaultAsync(w => w.Id == command.WorkId, ct);
+        // BookWorks is the canonical membership (carries per-book Order); the
+        // ref-count orphan check runs off it.
+        var work = await db.Works.Include(w => w.BookWorks).FirstOrDefaultAsync(w => w.Id == command.WorkId, ct);
         if (work is null) return null;
-        if (!work.Books.Any(b => b.Id == command.BookId)) return null; // not on this book
+        if (!work.BookWorks.Any(bw => bw.BookId == command.BookId)) return null; // not on this book
 
         var title = work.Title;
         if (work.RemoveFrom(book))      // last book removed → orphaned

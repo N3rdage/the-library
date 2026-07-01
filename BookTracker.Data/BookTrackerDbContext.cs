@@ -152,10 +152,36 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .HasIndex(m => m.Name)
             .IsUnique();
 
-        // Work ↔ Book is many-to-many; conventional join table BookWork.
+        // Work ↔ Book is many-to-many through the explicit BookWork join entity,
+        // which carries BookWork.Order — each Work's display position WITHIN a
+        // given Book (a Work in several books orders independently per book).
+        // Both skip-navigations (Work.Books, Book.Works) and the explicit join
+        // collections (Work.BookWorks, Book.BookWorks) are kept — skip-nav for
+        // "which books contain this work" semantics, explicit join for ordered
+        // display + reorder via BookWork.Order. Cascade both directions: the
+        // join row exists only while both endpoints do.
+        //
+        // The FK columns keep their original skip-nav convention names
+        // (BooksId / WorksId) so promoting the implicit join to this explicit
+        // entity is an add-the-Order-column migration with no data-moving rename.
         modelBuilder.Entity<Work>()
             .HasMany(w => w.Books)
-            .WithMany(b => b.Works);
+            .WithMany(b => b.Works)
+            .UsingEntity<BookWork>(
+                j => j.HasOne(bw => bw.Book)
+                      .WithMany(b => b.BookWorks)
+                      .HasForeignKey(bw => bw.BookId)
+                      .OnDelete(DeleteBehavior.Cascade),
+                j => j.HasOne(bw => bw.Work)
+                      .WithMany(w => w.BookWorks)
+                      .HasForeignKey(bw => bw.WorkId)
+                      .OnDelete(DeleteBehavior.Cascade),
+                j =>
+                {
+                    j.HasKey(bw => new { bw.BookId, bw.WorkId });
+                    j.Property(bw => bw.BookId).HasColumnName("BooksId");
+                    j.Property(bw => bw.WorkId).HasColumnName("WorksId");
+                });
 
         // Work ↔ Genre is many-to-many; conventional join table GenreWork.
         modelBuilder.Entity<Work>()

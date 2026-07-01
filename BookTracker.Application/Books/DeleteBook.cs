@@ -21,7 +21,9 @@ public sealed class DeleteBookHandler(IDbContextFactory<BookTrackerDbContext> db
         var book = await db.Books
             .Include(b => b.Editions)
             .Include(b => b.Tags)
-            .Include(b => b.Works).ThenInclude(w => w.Books)   // Work ref counts
+            // BookWorks is the canonical membership; ThenInclude each Work's own
+            // BookWorks so RemoveFrom can ref-count it across its other books.
+            .Include(b => b.BookWorks).ThenInclude(bw => bw.Work).ThenInclude(w => w.BookWorks)
             .FirstOrDefaultAsync(b => b.Id == command.BookId, ct)
             ?? throw new NotFoundException($"Book {command.BookId} not found.");
 
@@ -29,7 +31,7 @@ public sealed class DeleteBookHandler(IDbContextFactory<BookTrackerDbContext> db
         // orphaned and deleted — the same lifecycle RemoveWorkFromBook uses, so
         // deleting a book takes its exclusive Works with it but leaves shared ones.
         var orphaned = new List<Work>();
-        foreach (var work in book.Works.ToList())
+        foreach (var work in book.BookWorks.Select(bw => bw.Work).ToList())
             if (work.RemoveFrom(book)) orphaned.Add(work);
         if (orphaned.Count > 0) db.Works.RemoveRange(orphaned);
 

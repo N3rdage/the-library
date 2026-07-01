@@ -9,7 +9,7 @@ namespace BookTracker.Data.Interceptors;
 /// EF Core SaveChangesInterceptor that bumps <see cref="Book.UpdatedAt"/>
 /// whenever any entity in the Book aggregate is added, modified, or
 /// deleted. Aggregate = Book itself + Edition + Copy + Work + WorkAuthor
-/// + the BookTag join.
+/// + the BookWork join (with its Order) + the BookTag join.
 ///
 /// Drives the <c>GET /api/catalog-snapshot?since=&lt;token&gt;</c> delta
 /// query so Bookshelf refreshes can ship only changed Books instead of
@@ -26,6 +26,9 @@ namespace BookTracker.Data.Interceptors;
 ///   bump every Book the Work is attached to.
 /// - <see cref="WorkAuthor"/> change → bump every Book of the parent
 ///   Work (author rename / reorder propagates to all owning Books).
+/// - <see cref="BookWork"/> change (attach / detach / reorder of a Work
+///   within a Book) → bump that Book. A reorder touches only BookWork.Order
+///   with no membership change, so this case is what carries reorders through.
 /// - <see cref="Tag"/> rename → bump every Book carrying the Tag.
 ///
 /// Idempotent and re-entrant: assigning UpdatedAt on a Book that's
@@ -101,6 +104,9 @@ public class BookUpdatedAtInterceptor : SaveChangesInterceptor
                     break;
                 case WorkAuthor workAuthor:
                     AddOwningBooksForWorkAuthor(context, workAuthor, booksToBump);
+                    break;
+                case BookWork bookWork:
+                    AddOwningBookForBookWork(context, bookWork, booksToBump);
                     break;
                 case Tag tag:
                     AddOwningBooksForTag(context, tag, booksToBump);
@@ -195,6 +201,20 @@ public class BookUpdatedAtInterceptor : SaveChangesInterceptor
         if (work is null) return;
 
         AddOwningBooksForWork(context, work, sink);
+    }
+
+    private static void AddOwningBookForBookWork(
+        DbContext context, BookWork bookWork, HashSet<Book> sink)
+    {
+        // BookWork → Book directly. Prefer the loaded nav; fall back to the FK
+        // (for Deleted rows the nav may already be cleared, so BookId wins).
+        var book = bookWork.Book;
+        if (book is null && bookWork.BookId != 0)
+        {
+            book = context.Set<Book>().Local.FirstOrDefault(b => b.Id == bookWork.BookId)
+                ?? context.Set<Book>().Find(bookWork.BookId);
+        }
+        if (book is not null) sink.Add(book);
     }
 
     private static void AddOwningBooksForTag(DbContext context, Tag tag, HashSet<Book> sink)

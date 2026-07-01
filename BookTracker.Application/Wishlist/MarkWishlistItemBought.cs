@@ -32,7 +32,7 @@ public sealed class MarkWishlistItemBoughtHandler(IDbContextFactory<BookTrackerD
         var book = new Book { Title = item.Title, Tags = [followUpTag] };
         var work = Work.Create(book, item.Title, null, null, DatePrecision.Day, [author]);
         db.Books.Add(book);
-        db.Works.Add(work); // work.Books holds the link; book.Works isn't populated by the factory
+        db.Works.Add(work); // the BookWork link (via Work.Create → AttachWork) carries the association; add explicitly for clarity
 
         // Route the Edition through the aggregate factory so it owns its first
         // Copy and the ISBN is normalised — same seam every other add path uses.

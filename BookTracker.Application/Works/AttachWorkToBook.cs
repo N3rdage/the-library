@@ -15,10 +15,14 @@ public sealed class AttachWorkToBookHandler(IDbContextFactory<BookTrackerDbConte
     public async Task<string?> HandleAsync(AttachWorkToBook command, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var book = await db.Books.FindAsync([command.BookId], ct);
+        // Include BookWorks so AppearsIn → Book.AttachWork appends the work to
+        // the end of the book's existing order rather than defaulting to Order 0.
+        var book = await db.Books
+            .Include(b => b.BookWorks)
+            .FirstOrDefaultAsync(b => b.Id == command.BookId, ct);
         if (book is null) return null;
 
-        var work = await db.Works.Include(w => w.Books).FirstOrDefaultAsync(w => w.Id == command.WorkId, ct);
+        var work = await db.Works.FirstOrDefaultAsync(w => w.Id == command.WorkId, ct);
         if (work is null) return null;
 
         if (!work.AppearsIn(book)) return null; // already on this book

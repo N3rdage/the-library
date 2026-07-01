@@ -88,21 +88,25 @@ public sealed class GetBookDetailHandler(IDbContextFactory<BookTrackerDbContext>
                 SeriesId = b.SeriesId,
                 SeriesName = b.Series == null ? null : b.Series.Name,
                 SeriesType = b.Series == null ? (SeriesType?)null : b.Series.Type,
-                Works = b.Works.Select(w => new
+                // Project from BookWorks (not the order-less Works skip-nav) so
+                // each work carries its per-book display Order — the works render
+                // in capture / user-reordered order, not alphabetically.
+                Works = b.BookWorks.Select(bw => new
                 {
-                    w.Id,
-                    w.Title,
-                    w.Subtitle,
-                    w.FirstPublishedDate,
-                    w.FirstPublishedDatePrecision,
-                    Contributors = w.WorkAuthors.Select(wa => new
+                    bw.Order,
+                    bw.Work.Id,
+                    bw.Work.Title,
+                    bw.Work.Subtitle,
+                    bw.Work.FirstPublishedDate,
+                    bw.Work.FirstPublishedDatePrecision,
+                    Contributors = bw.Work.WorkAuthors.Select(wa => new
                     {
                         wa.AuthorId,
                         wa.Author.Name,
                         wa.Role,
                         wa.Order,
                     }).ToList(),
-                    Genres = w.Genres.Select(g => g.Name).ToList(),
+                    Genres = bw.Work.Genres.Select(g => g.Name).ToList(),
                 }).ToList(),
                 Editions = b.Editions.Select(e => new
                 {
@@ -130,7 +134,8 @@ public sealed class GetBookDetailHandler(IDbContextFactory<BookTrackerDbContext>
         if (book is null) return null;
 
         var works = book.Works
-            .OrderBy(w => w.Title)
+            .OrderBy(w => w.Order)   // per-book capture / user-reordered order
+            .ThenBy(w => w.Id)       // stable tiebreaker (only matters for legacy 0-tie rows)
             .Select(w => new WorkDetail(
                 w.Id,
                 w.Title,
