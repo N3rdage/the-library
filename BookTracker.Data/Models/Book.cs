@@ -72,7 +72,21 @@ public class Book
 
     public List<Tag> Tags { get; set; } = [];
 
+    /// <summary>Skip-navigation over the Book↔Work join — convenient for "does
+    /// this book contain work X" / search / aggregation queries. Does NOT carry
+    /// the per-book display order; read <see cref="BookWorks"/> when order matters.
+    /// <para><b>Read-only in practice — do NOT write to this.</b> Adding here
+    /// (<c>book.Works.Add(work)</c> or a <c>Works = [...]</c> initializer) inserts
+    /// a <see cref="BookWork"/> with Order defaulting to 0, colliding with the
+    /// existing Order-0 row and corrupting display order. Route every attach
+    /// through <see cref="AttachWork"/> so the work appends (Order = max + 1).
+    /// (Setter stays public pending the C7 encapsulation lock-down.)</para></summary>
     public List<Work> Works { get; set; } = [];
+
+    /// <summary>Explicit join rows carrying each Work's per-book display
+    /// <see cref="BookWork.Order"/>. The canonical source for ordered display and
+    /// the write path for appends (see <see cref="AttachWork"/>).</summary>
+    public List<BookWork> BookWorks { get; set; } = [];
 
     // Series membership lives on the Book — a Book is installment N of a
     // publication series ("The Last Wish" is Witcher #1), whether it holds a
@@ -160,6 +174,30 @@ public class Book
     {
         SeriesOrder = order;
         SeriesOrderDisplay = orderDisplay;
+    }
+
+    /// <summary>Attaches <paramref name="work"/> to this Book, appending it to
+    /// the end of the current work order (Order = max + 1, or 0 for the first).
+    /// No-op returning false if the Work is already on this Book. This is the one
+    /// write path that assigns <see cref="BookWork.Order"/> — every ordered
+    /// append (create-work, attach-existing, merge) routes through here rather
+    /// than the order-less Book.Works skip-navigation.
+    ///
+    /// Requires <see cref="BookWorks"/> to be loaded so the max is computed over
+    /// the real set — callers Include(b =&gt; b.BookWorks). A new Book starts with
+    /// an empty collection, which is correct (first work gets Order 0).</summary>
+    public bool AttachWork(Work work)
+    {
+        // Dedup by id for saved works; by reference for a brand-new (Id 0) work
+        // that can't already be attached but wouldn't match on id.
+        if (BookWorks.Any(bw => bw.Work == work || (work.Id != 0 && bw.WorkId == work.Id)))
+            return false;
+
+        var next = BookWorks.Count == 0 ? 0 : BookWorks.Max(bw => bw.Order) + 1;
+        var link = new BookWork { Book = this, Work = work, Order = next };
+        BookWorks.Add(link);
+        work.BookWorks.Add(link);
+        return true;
     }
 
     /// <summary>Adds a new Edition seeded with its first Copy — an Edition

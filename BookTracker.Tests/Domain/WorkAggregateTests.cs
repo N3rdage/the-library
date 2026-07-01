@@ -24,8 +24,9 @@ public class WorkAggregateTests
         Assert.Null(work.Subtitle); // blank → null
         Assert.Equal(new DateOnly(1968, 1, 1), work.FirstPublishedDate);
         Assert.Equal(DatePrecision.Year, work.FirstPublishedDatePrecision);
-        Assert.Single(work.Books);
-        Assert.Same(book, work.Books[0]);          // ref count starts at 1
+        var link = Assert.Single(work.BookWorks);  // ref count starts at 1
+        Assert.Same(book, link.Book);
+        Assert.Equal(0, link.Order);               // first work in the book
         var wa = Assert.Single(work.WorkAuthors);
         Assert.Equal(AuthorRole.Author, wa.Role);
         Assert.Same(author, wa.Author);
@@ -55,9 +56,11 @@ public class WorkAggregateTests
         var work = Work.Create(b1, "T", null, null, DatePrecision.Day, [new Author { Name = "A" }]);
 
         Assert.True(work.AppearsIn(b2));
-        Assert.Equal(2, work.Books.Count);
+        Assert.Equal(2, work.BookWorks.Count);
+        // Order is per-book, so the work is position 0 in each of its books.
+        Assert.Contains(work.BookWorks, bw => bw.Book == b2 && bw.Order == 0);
         Assert.False(work.AppearsIn(b2)); // already there → no-op
-        Assert.Equal(2, work.Books.Count);
+        Assert.Equal(2, work.BookWorks.Count);
     }
 
     [Fact]
@@ -69,7 +72,7 @@ public class WorkAggregateTests
         var orphaned = work.RemoveFrom(b1);
 
         Assert.True(orphaned);          // ref count hit 0
-        Assert.Empty(work.Books);
+        Assert.Empty(work.BookWorks);
     }
 
     [Fact]
@@ -83,8 +86,8 @@ public class WorkAggregateTests
         var orphaned = work.RemoveFrom(b1);
 
         Assert.False(orphaned);
-        Assert.Single(work.Books);
-        Assert.Equal(2, work.Books[0].Id);
+        var remaining = Assert.Single(work.BookWorks);
+        Assert.Same(b2, remaining.Book);        // b1's link removed, b2's stays
     }
 
     // --- Field methods -------------------------------------------------------

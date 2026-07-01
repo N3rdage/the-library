@@ -24,7 +24,11 @@ public sealed class CreateWorkOnBookHandler(IDbContextFactory<BookTrackerDbConte
     public async Task<int?> HandleAsync(CreateWorkOnBook command, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var book = await db.Books.FindAsync([command.BookId], ct);
+        // Include BookWorks so Work.Create → Book.AttachWork appends the new work
+        // to the end of the existing order rather than defaulting to Order 0.
+        var book = await db.Books
+            .Include(b => b.BookWorks)
+            .FirstOrDefaultAsync(b => b.Id == command.BookId, ct);
         if (book is null) return null;
 
         var authors = await AuthorResolver.FindOrCreateAllAsync(command.AuthorNames, db, ct);

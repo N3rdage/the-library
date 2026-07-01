@@ -42,7 +42,7 @@ public sealed class MergeWorksHandler(IDbContextFactory<BookTrackerDbContext> db
             .Include(w => w.WorkAuthors)
             .FirstOrDefaultAsync(w => w.Id == command.WinnerId, ct);
         var loser = await db.Works
-            .Include(w => w.Books)
+            .Include(w => w.Books).ThenInclude(b => b.BookWorks)  // AttachWork appends per book
             .Include(w => w.Genres)
             .Include(w => w.WorkAuthors)
             .FirstOrDefaultAsync(w => w.Id == command.LoserId, ct);
@@ -109,7 +109,7 @@ public sealed class MergeWorksHandler(IDbContextFactory<BookTrackerDbContext> db
             }
             else
             {
-                book.Works.Add(winner);
+                book.AttachWork(winner);   // append winner after the book's existing works
                 winnerBookIds.Add(book.Id);
                 booksReassigned++;
             }

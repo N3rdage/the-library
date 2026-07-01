@@ -44,6 +44,7 @@ public sealed class MergeBooksHandler(IDbContextFactory<BookTrackerDbContext> db
         var winner = await db.Books
             .Include(b => b.Editions)
             .Include(b => b.Works)
+            .Include(b => b.BookWorks)   // for AttachWork's append-order
             .Include(b => b.Tags)
             .FirstOrDefaultAsync(b => b.Id == command.WinnerId, ct);
         var loser = await db.Books
@@ -99,7 +100,7 @@ public sealed class MergeBooksHandler(IDbContextFactory<BookTrackerDbContext> db
         var worksUnioned = 0;
         foreach (var work in loser.Works.Where(w => !winnerWorkIds.Contains(w.Id)).ToList())
         {
-            winner.Works.Add(work);
+            winner.AttachWork(work);   // append after winner's existing works
             winnerWorkIds.Add(work.Id);
             worksUnioned++;
         }

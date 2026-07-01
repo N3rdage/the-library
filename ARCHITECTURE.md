@@ -44,7 +44,9 @@ Book                                                ← physical-object grouping
   ├── Series (many-to-1, optional) + SeriesOrder (int sort key)
   │     + SeriesOrderDisplay (optional label, e.g. "4.5" interquel)
   │           ← the book is installment N of a publication series
-  ├── Works (many-to-many)                          ← what's actually inside the book
+  ├── Works (many-to-many via BookWork join)         ← what's actually inside the book
+  │     BookWork.Order = per-book display position (0-based, appends on add,
+  │       user-reorderable); works render in this order, not alphabetically
   │     Title, Subtitle, FirstPublishedDate
   │     ├── Author (many-to-1 → Author)
   │     └── Genres (many-to-many → Genre)

@@ -18,6 +18,36 @@ public class BookAggregateTests
         Assert.Equal(4, book.Rating);
     }
 
+    [Fact]
+    public void AttachWork_appendsWithIncreasingOrder()
+    {
+        var book = new Book { Title = "Anthology" };
+        var first = new Work { Title = "First" };
+        var second = new Work { Title = "Second" };
+        var third = new Work { Title = "Third" };
+
+        Assert.True(book.AttachWork(first));
+        Assert.True(book.AttachWork(second));
+        Assert.True(book.AttachWork(third));
+
+        Assert.Equal([0, 1, 2], book.BookWorks.Select(bw => bw.Order).ToArray());
+        Assert.Equal(["First", "Second", "Third"], book.BookWorks.OrderBy(bw => bw.Order).Select(bw => bw.Work.Title).ToArray());
+        // Both ends of the graph are wired so the aggregate stays consistent in-memory.
+        Assert.Same(book, first.BookWorks.Single().Book);
+    }
+
+    [Fact]
+    public void AttachWork_alreadyAttached_isNoOp()
+    {
+        var book = new Book { Title = "Anthology" };
+        var work = new Work { Title = "Only" };
+
+        Assert.True(book.AttachWork(work));
+        Assert.False(book.AttachWork(work));      // second attach → no-op
+        Assert.Single(book.BookWorks);
+        Assert.Equal(0, book.BookWorks.Single().Order);
+    }
+
     [Theory]
     [InlineData(-1)]
     [InlineData(6)]

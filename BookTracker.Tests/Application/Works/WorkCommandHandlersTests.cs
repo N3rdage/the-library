@@ -1,4 +1,5 @@
 using BookTracker.Application;
+using BookTracker.Application.Books;
 using BookTracker.Application.Works;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -182,6 +183,51 @@ public class WorkCommandHandlersTests
         Assert.Equal(2, book.Works.Count);
         Assert.Contains(book.Works, w => w.Id == existingWorkId);
         Assert.Contains(book.Works, w => w.Title == "The Library Policeman");
+    }
+
+    [Fact]
+    public async Task CreateWorkOnBook_appendsAfterExistingWorks_inCaptureOrderNotAlphabetical()
+    {
+        // Seed a work whose title sorts LAST alphabetically, so "capture order"
+        // and "alphabetical" disagree — the read must honour capture order.
+        var (bookId, _) = await SeedBookWithWorkAsync("Zebra");
+
+        await new CreateWorkOnBookHandler(_factory).HandleAsync(new CreateWorkOnBook(
+            bookId, "Apple", null, ["Some Author"], [], null, DatePrecision.Day, []));
+
+        var detail = await new GetBookDetailHandler(_factory).HandleAsync(new GetBookDetail(bookId));
+        // Zebra was captured first → stays first, even though "Apple" < "Zebra".
+        Assert.Equal(["Zebra", "Apple"], detail!.Works.Select(w => w.Title).ToArray());
+
+        // And the join carries an explicit 0,1 sequence (the reorder key).
+        await using var db = _factory.CreateDbContext();
+        var orders = await db.Set<BookWork>()
+            .Where(bw => bw.BookId == bookId)
+            .OrderBy(bw => bw.Order)
+            .Select(bw => new { bw.Work.Title, bw.Order })
+            .ToListAsync();
+        Assert.Equal(0, orders.Single(o => o.Title == "Zebra").Order);
+        Assert.Equal(1, orders.Single(o => o.Title == "Apple").Order);
+    }
+
+    [Fact]
+    public async Task AttachWorksToBook_preservesDialogRowOrder()
+    {
+        var bookId = await SeedBareBookAsync("Anthology");
+
+        // Rows given in a deliberately non-alphabetical order.
+        var rows = new List<WorkRow>
+        {
+            new(null, "Charlie", null, null, DatePrecision.Day, ["A"], [], []),
+            new(null, "Alpha", null, null, DatePrecision.Day, ["A"], [], []),
+            new(null, "Bravo", null, null, DatePrecision.Day, ["A"], [], []),
+        };
+
+        await new AttachWorksToBookHandler(_factory).HandleAsync(
+            new AttachWorksToBook(bookId, rows, SingleAuthor: false, SingleGenre: false, SharedAuthors: [], SharedGenreIds: []));
+
+        var detail = await new GetBookDetailHandler(_factory).HandleAsync(new GetBookDetail(bookId));
+        Assert.Equal(["Charlie", "Alpha", "Bravo"], detail!.Works.Select(w => w.Title).ToArray());
     }
 
     [Fact]

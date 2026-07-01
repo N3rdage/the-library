@@ -709,7 +709,6 @@ public class BookAddViewModel(
                 Status = BookInput.Status,
                 Rating = BookInput.Rating,
                 DefaultCoverArtUrl = string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl) ? null : BookInput.DefaultCoverArtUrl.Trim(),
-                Works = works,
                 Editions =
                 [
                     new Edition
@@ -725,6 +724,12 @@ public class BookAddViewModel(
                     }
                 ]
             };
+
+            // Append the works in dialog order so the book's work order mirrors
+            // capture order (a new book starts empty, so Order runs 0,1,2…).
+            // Routed through AttachWork rather than the order-less Works skip-nav.
+            foreach (var w in works)
+                book.AttachWork(w);
 
             // Attach the book to the chosen series, if any — set either by accepting
             // a lookup suggestion or by the manual series typeahead. Series membership
