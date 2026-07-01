@@ -125,7 +125,14 @@ public record WorkSnapshot(
     // positional WorkSnapshot constructions; new consumers should treat
     // null as "no enrichment from this server version" and fall back
     // to PrimaryAuthor alone.
-    IReadOnlyList<AuthorContribution>? Contributors = null);
+    IReadOnlyList<AuthorContribution>? Contributors = null,
+    // This Work's display position WITHIN its Book (BookWork.Order) — the
+    // capture / user-reordered order from the web reorder feature. Trailing
+    // with a 0 default so older servers (and every existing positional
+    // construction / test) stay valid; an older server that omits it sends 0
+    // for every Work, and the client's Order-then-WorkId sort then falls back
+    // to the previous WorkId ordering. New 2026-07-01.
+    int Order = 0);
 
 // One credited person on a Work, with the role they played. The Role
 // field is the AuthorRole enum's string name (Author / Editor /

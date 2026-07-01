@@ -205,6 +205,7 @@ public class CatalogCache : ICatalogCache
                         Title = work.Title ?? "",
                         PrimaryAuthor = work.PrimaryAuthor ?? "",
                         ContributorsJson = JsonSerializer.Serialize(work.Contributors ?? []),
+                        Order = work.Order,
                     });
                 }
             }
@@ -349,6 +350,7 @@ public class CatalogCache : ICatalogCache
                         Title = work.Title ?? "",
                         PrimaryAuthor = work.PrimaryAuthor ?? "",
                         ContributorsJson = JsonSerializer.Serialize(work.Contributors ?? []),
+                        Order = work.Order,
                     });
                 }
             }
@@ -617,17 +619,18 @@ public class CatalogCache : ICatalogCache
             .Select(e => new EditionSnapshot(e.EditionId, e.Isbn, e.Format, e.CoverUrl, e.EditionNumber))
             .ToList();
         var works = workRows
-            // Server projects in OrderBy(w => w.Id) — preserve that
-            // client-side because that's how the PrimaryAuthor
-            // convention picks the "first Work" for series + author
-            // rollups elsewhere. Order by WorkId (the server-side Id),
-            // not RowId (the local surrogate, insertion-order).
-            .OrderBy(w => w.WorkId)
+            // Per-book display order (the web reorder feature). WorkId is the
+            // tiebreaker so legacy rows that predate the Order column (all 0
+            // after the ALTER) fall back to the previous WorkId ordering until
+            // their book next re-syncs with real Order values.
+            .OrderBy(w => w.Order)
+            .ThenBy(w => w.WorkId)
             .Select(w => new WorkSnapshot(
                 w.WorkId,
                 w.Title,
                 w.PrimaryAuthor,
-                Contributors: JsonSerializer.Deserialize<List<AuthorContribution>>(w.ContributorsJson) ?? []))
+                Contributors: JsonSerializer.Deserialize<List<AuthorContribution>>(w.ContributorsJson) ?? [],
+                Order: w.Order))
             .ToList();
 
         return new BookEnrichedDetail(editions, works);

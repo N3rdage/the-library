@@ -106,6 +106,12 @@ internal class CachedBookWork
     public int WorkId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string PrimaryAuthor { get; set; } = string.Empty;
+    /// <summary>This Work's display position within its Book (server's
+    /// BookWork.Order). Read back OrderBy(Order).ThenBy(WorkId) so legacy rows
+    /// that predate the column (all 0 after the ALTER) fall back to WorkId order
+    /// — no InitAsync backfill needed. Reordered books re-sync with real values
+    /// via the delta (a reorder bumps Book.UpdatedAt).</summary>
+    public int Order { get; set; }
     /// <summary>JSON-encoded list of every credited contributor on the
     /// Work with their Role (Author / Editor / Translator / Illustrator
     /// / etc.). Mirrors CachedBook.AllAuthorsJson but scoped per-Work

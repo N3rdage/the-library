@@ -237,7 +237,6 @@ public class BulkAddViewModel(
         {
             Title = bookTitle,
             DefaultCoverArtUrl = row.CoverUrl,
-            Works = [work],
             Editions =
             [
                 new Edition
@@ -251,6 +250,11 @@ public class BulkAddViewModel(
                 }
             ]
         };
+        // Attach through the aggregate seam (assigns BookWork.Order) rather than
+        // the order-less Works initializer — bulk-add is one Work per Book so
+        // this is Order 0 either way, but it keeps the "never write Book.Works
+        // directly" invariant (Book.cs) true everywhere.
+        newBook.AttachWork(work);
 
         // Series attachment if the user accepted the suggestion on this row.
         // Series membership is a per-Book concept (the book is installment N);

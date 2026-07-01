@@ -982,6 +982,57 @@ public class CatalogCacheTests
     }
 
     [Fact]
+    public async Task GetBookEnrichedDetailAsync_ReturnsWorksInBookWorkOrder()
+    {
+        // The reordered-anthology case: the work with the higher WorkId is
+        // captured/ordered first (Order 0), so it must come back first — Order
+        // wins over WorkId.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Anthology", "A", ["A"], "Read", 5, [],
+                    null, null, null,
+                    Editions: [],
+                    Works:
+                    [
+                        new WorkSnapshot(202, "Ordered first", "A", Order: 0),
+                        new WorkSnapshot(201, "Ordered second", "A", Order: 1),
+                    ]),
+            ]));
+
+        var detail = await cache.GetBookEnrichedDetailAsync(1);
+        Assert.NotNull(detail);
+        Assert.Equal(["Ordered first", "Ordered second"], detail!.Works.Select(w => w.Title).ToArray());
+        Assert.Equal(0, detail.Works[0].Order);
+        Assert.Equal(1, detail.Works[1].Order);
+    }
+
+    [Fact]
+    public async Task GetBookEnrichedDetailAsync_LegacyZeroOrder_FallsBackToWorkId()
+    {
+        // Older server (or rows that predate the Order column) ship every Work
+        // with Order 0; the WorkId tiebreaker keeps the previous ordering rather
+        // than randomising on the tie.
+        var cache = await NewCacheAsync();
+        await cache.PopulateAsync(SampleSnapshot(
+            books:
+            [
+                new(1, "Anthology", "A", ["A"], "Read", 5, [],
+                    null, null, null,
+                    Editions: [],
+                    Works:
+                    [
+                        new WorkSnapshot(202, "Higher id", "A"),   // Order defaults to 0
+                        new WorkSnapshot(201, "Lower id", "A"),
+                    ]),
+            ]));
+
+        var detail = await cache.GetBookEnrichedDetailAsync(1);
+        Assert.Equal(["Lower id", "Higher id"], detail!.Works.Select(w => w.Title).ToArray());
+    }
+
+    [Fact]
     public async Task GetBookEnrichedDetailAsync_ContributorsEmptyList_WhenServerOmitsField()
     {
         // Back-compat: older server that ships WorkSnapshot without

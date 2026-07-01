@@ -94,16 +94,21 @@ public sealed class GetCatalogSnapshotHandler(IDbContextFactory<BookTrackerDbCon
                 // shows each story's true attribution. Single-Work
                 // books still ship a one-element list; the client
                 // hides the section when Count <= 1.
-                Works = b.Works
-                    .OrderBy(w => w.Id)
-                    .Select(w => new
+                // Source from BookWorks so each Work carries its per-book
+                // display Order (the web reorder feature). Emit in that order
+                // too — the client re-sorts by Order anyway, but shipping it
+                // ordered keeps the wire readable.
+                Works = b.BookWorks
+                    .OrderBy(bw => bw.Order)
+                    .Select(bw => new
                     {
-                        w.Id,
-                        w.Title,
+                        bw.Work.Id,
+                        bw.Work.Title,
+                        bw.Order,
                         // Every contributor on this Work with their role.
                         // Server emits the full list; per-Work PrimaryAuthor
                         // is computed downstream by filtering Role=Author.
-                        WorkContributors = w.WorkAuthors
+                        WorkContributors = bw.Work.WorkAuthors
                             .OrderBy(wa => wa.Role == AuthorRole.Author ? 0 : 1)
                             .ThenBy(wa => (int)wa.Role)
                             .ThenBy(wa => wa.Order)
@@ -181,7 +186,8 @@ public sealed class GetCatalogSnapshotHandler(IDbContextFactory<BookTrackerDbCon
                         // Full contributor list with role per entry.
                         Contributors: w.WorkContributors
                             .Select(c => new AuthorContribution(c.Name, c.Role.ToString()))
-                            .ToList()))
+                            .ToList(),
+                        Order: w.Order))
                     .ToList(),
                 SeriesOrderDisplay: b.SeriesOrderDisplay))
             .OrderBy(b => b.Title)
