@@ -567,12 +567,14 @@ public class BookAddViewModel(
                 //     from the row fields (title, authors, subtitle,
                 //     first-published, per-row or shared genres).
                 //
-                // Series suggestions stay deferred to per-work editing on
-                // /books/{id} (the lookup flow can't pick per-work, and
-                // applying to all would be wrong). Author source depends on
-                // SingleAuthor mode; genre source on SingleGenre — both
-                // apply only to new-work rows (existing Works bring their
-                // own).
+                // Book-level series (AcceptedSeries*) is attached below via
+                // AttachToBookAsync just as in single-work mode — a collection
+                // is still installment N of a publication series. What stays
+                // deferred to per-work editing on /books/{id} is any *per-Work*
+                // series notion (the lookup flow can't pick per-work, and
+                // applying one to all would be wrong). Author source depends on
+                // SingleAuthor mode; genre source on SingleGenre — both apply
+                // only to new-work rows (existing Works bring their own).
                 List<string> AuthorsFor(WorkFormViewModel.WorkFormInput row) =>
                     SingleAuthor ? SharedAuthors : row.Authors;
                 List<int> GenresFor(WorkFormViewModel.WorkFormInput row) =>

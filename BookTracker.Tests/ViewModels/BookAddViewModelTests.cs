@@ -279,6 +279,41 @@ public class BookAddViewModelTests
     }
 
     [Fact]
+    public async Task SaveAsync_Collection_AttachesBookLevelSeries()
+    {
+        // Series membership is a per-Book concept (the book is installment N
+        // of a publication series), so a collection can belong to a series
+        // just like a single-work book. The Add page now renders the series
+        // picker in both modes; this guards that the collection save path
+        // actually persists the chosen series onto the Book.
+        var vm = CreateVm();
+        vm.BookInput.Title = "The Sandman: Season of Mists";
+        vm.EditionInput.Format = BookFormat.TradePaperback;
+        vm.IsCollection = true;
+        vm.SingleAuthor = true;
+        vm.SharedAuthors = new List<string> { "Neil Gaiman" };
+        vm.CollectionWorks =
+        [
+            new() { Title = "Chapter 1" },
+            new() { Title = "Chapter 2" },
+        ];
+        await vm.OnSeriesChosenAsync("The Sandman");
+        vm.AcceptedSeriesOrderLabel = "4";
+
+        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+
+        Assert.NotNull(bookId);
+        await using var db = _factory.CreateDbContext();
+        var saved = await db.Books
+            .Include(b => b.Series)
+            .FirstAsync(b => b.Id == bookId);
+
+        Assert.NotNull(saved.Series);
+        Assert.Equal("The Sandman", saved.Series!.Name);
+        Assert.Equal(4, saved.SeriesOrder);
+    }
+
+    [Fact]
     public async Task SaveAsync_SingleAuthorMode_NoSharedAuthors_Throws()
     {
         // Save in Single-Author mode with no shared authors set should

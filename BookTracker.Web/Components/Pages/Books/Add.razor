@@ -252,45 +252,6 @@
                     </MudCardContent>
                 </MudCard>
             </MudItem>
-
-            <MudItem xs="12">
-                <MudCard Elevation="0" Outlined="true">
-                    <MudCardHeader>
-                        <CardHeaderContent>
-                            <MudText Typo="Typo.h6">Series / collection</MudText>
-                        </CardHeaderContent>
-                    </MudCardHeader>
-                    <MudCardContent>
-                        @* Optional manual series entry — pick an existing series,
-                           or choose the "Add …" row to create a new one. Creation
-                           is an explicit selection (no commit-on-blur guessing).
-                           The ISBN-lookup suggestion above fills this same field. *@
-                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-2">Optional — applies to this book. Pick an existing series, or choose the “Add …” row to create a new one.</MudText>
-                        <MudGrid Spacing="3">
-                            <MudItem xs="12" md="8">
-                                <CreatableAutocomplete Value="@VM.AcceptedSeriesName"
-                                                       ValueChanged="VM.OnSeriesChosenAsync"
-                                                       SearchExisting="VM.SearchSeriesAsync"
-                                                       Label="Series"
-                                                       Placeholder="e.g. The Stormlight Archive"
-                                                       HelperText="Pick an existing series, or choose the “Add …” row to create a new one." />
-                            </MudItem>
-                            @if (!string.IsNullOrWhiteSpace(VM.AcceptedSeriesName))
-                            {
-                                <MudItem xs="12" md="4">
-                                    <MudTextField T="string"
-                                                  @bind-Value="VM.AcceptedSeriesOrderLabel"
-                                                  Label="Order / position"
-                                                  Placeholder="3"
-                                                  HelperText="Whole number, or '4.5' for an interquel."
-                                                  Variant="Variant.Outlined"
-                                                  Margin="Margin.Dense" />
-                                </MudItem>
-                            }
-                        </MudGrid>
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
         }
         else
         {
@@ -364,6 +325,48 @@
                 </MudCard>
             </MudItem>
         }
+
+        @* Series membership is a per-Book concept (the book is installment N),
+           so the picker renders for single-work books and collections alike —
+           the VM attaches it to the Book at save regardless of work count. *@
+        <MudItem xs="12">
+            <MudCard Elevation="0" Outlined="true">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Series / collection</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    @* Optional manual series entry — pick an existing series,
+                       or choose the "Add …" row to create a new one. Creation
+                       is an explicit selection (no commit-on-blur guessing).
+                       The ISBN-lookup suggestion above fills this same field. *@
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-2">Optional — applies to this book. Pick an existing series, or choose the “Add …” row to create a new one.</MudText>
+                    <MudGrid Spacing="3">
+                        <MudItem xs="12" md="8">
+                            <CreatableAutocomplete Value="@VM.AcceptedSeriesName"
+                                                   ValueChanged="VM.OnSeriesChosenAsync"
+                                                   SearchExisting="VM.SearchSeriesAsync"
+                                                   Label="Series"
+                                                   Placeholder="e.g. The Stormlight Archive"
+                                                   HelperText="Pick an existing series, or choose the “Add …” row to create a new one." />
+                        </MudItem>
+                        @if (!string.IsNullOrWhiteSpace(VM.AcceptedSeriesName))
+                        {
+                            <MudItem xs="12" md="4">
+                                <MudTextField T="string"
+                                              @bind-Value="VM.AcceptedSeriesOrderLabel"
+                                              Label="Order / position"
+                                              Placeholder="3"
+                                              HelperText="Whole number, or '4.5' for an interquel."
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense" />
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
 
         <MudItem xs="12">
             <EditionCopyForm EditionInput="VM.EditionInput" CopyInput="VM.CopyInput" Title="First edition & copy" />
