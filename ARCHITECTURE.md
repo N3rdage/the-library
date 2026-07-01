@@ -207,7 +207,7 @@ Lightweight JSON surface consumed by Bookshelf (MAUI) and `/bookshop` (PWA). Eac
 
 ### GetCatalogSnapshot (was CatalogSnapshotService)
 *Now `BookTracker.Application/Catalog/GetCatalogSnapshot.cs` (query handler).*
-Projects the catalog into the slim wire-format `CatalogSnapshot` consumed by Bookshelf (MAUI) and `/bookshop` (PWA). Carries Books (with nested Editions + Works for the enhanced ScanPage view), Authors (with canonical/alias rollup counts), Series (always full-listed regardless of `since`), and the `LatestUpdatedAt` watermark + `DeletedIds[]` tombstones for delta-sync. The `?since=` filter is a B-tree seek on `IX_Books_UpdatedAt`; tombstones come from `IgnoreQueryFilters().Where(DeletedAt > since)` since the soft-delete filter would otherwise hide them.
+Projects the catalog into the slim wire-format `CatalogSnapshot` consumed by Bookshelf (MAUI) and `/bookshop` (PWA). Carries Books (with nested Editions + Works for the enhanced ScanPage view — each `WorkSnapshot` carries its per-book `Order` so an anthology's works render in the same capture / user-reordered order as the web; the mobile cache sorts `Order` then `WorkId` so legacy rows without an order fall back to the old ordering), Authors (with canonical/alias rollup counts), Series (always full-listed regardless of `since`), and the `LatestUpdatedAt` watermark + `DeletedIds[]` tombstones for delta-sync. The `?since=` filter is a B-tree seek on `IX_Books_UpdatedAt`; tombstones come from `IgnoreQueryFilters().Where(DeletedAt > since)` since the soft-delete filter would otherwise hide them.
 
 ### GetWishlistSnapshot (was WishlistSnapshotService)
 *Now `BookTracker.Application/Catalog/GetWishlistSnapshot.cs` (query handler).*
