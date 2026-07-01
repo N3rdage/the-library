@@ -74,7 +74,13 @@ public class Book
 
     /// <summary>Skip-navigation over the Book↔Work join — convenient for "does
     /// this book contain work X" / search / aggregation queries. Does NOT carry
-    /// the per-book display order; read <see cref="BookWorks"/> when order matters.</summary>
+    /// the per-book display order; read <see cref="BookWorks"/> when order matters.
+    /// <para><b>Read-only in practice — do NOT write to this.</b> Adding here
+    /// (<c>book.Works.Add(work)</c> or a <c>Works = [...]</c> initializer) inserts
+    /// a <see cref="BookWork"/> with Order defaulting to 0, colliding with the
+    /// existing Order-0 row and corrupting display order. Route every attach
+    /// through <see cref="AttachWork"/> so the work appends (Order = max + 1).
+    /// (Setter stays public pending the C7 encapsulation lock-down.)</para></summary>
     public List<Work> Works { get; set; } = [];
 
     /// <summary>Explicit join rows carrying each Work's per-book display
