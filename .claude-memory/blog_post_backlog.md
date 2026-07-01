@@ -4,9 +4,9 @@ description: One-time mine of all retros + patterns.md as of 2026-04-28. Each en
 type: project
 originSessionId: 21e97fa1-cba4-4b67-9d43-dc109098d6b2
 ---
-## Status as of 2026-06-27
+## Status as of 2026-07-01
 
-- **16 posts shipped** (covered). #13–16 shipped 2026-06-22 → 2026-06-27, all session-driven (not catch-up corpus): two from the back-end DDD/CQRS arc (another-agent's-brief, agent-reached-for-CRUD), the close-out mega-blog (refactor-that-wasnt-broken), and the TD-11 warnings-as-errors post (the-advisory-said-no-fix).
+- **17 posts shipped** (covered). #13–16 shipped 2026-06-22 → 2026-06-27, all session-driven (not catch-up corpus): two from the back-end DDD/CQRS arc (another-agent's-brief, agent-reached-for-CRUD), the close-out mega-blog (refactor-that-wasnt-broken), and the TD-11 warnings-as-errors post (the-advisory-said-no-fix). #17 (2026-07-01) is the series-on-Book arc — the bug that never said its name (implicit-handler blast radius + the four-nets review-altitude angle).
 - **~14 strong candidates** — *building from another agent's brief* shipped (now #13) and *the advisory said there was no fix* shipped (now #16); the rest remain, plus arc spares (DRY-would-be-a-bug, the-EF-wall, risk-tracks-write-boundary).
 - **6 possible catch-up candidates** (could be a post or could fold into another — TBD when picked up).
 - **15+ retros with no obvious blog hook on their own** (specific, dated, or already covered — listed at the bottom for the definitive count).
@@ -31,6 +31,7 @@ originSessionId: 21e97fa1-cba4-4b67-9d43-dc109098d6b2
 | 14 | 2026-06-22 | [The agent reached for CRUD. The human caught the altitude.](../../blog/2026-06-22-02-the-agent-reached-for-crud.md) | DDD/CQRS command altitude from the back-end pilot: pointed at a data model, an AI hands you one-command-per-field CRUD with good posture; the human supplies intent ("mark read" is one atomic gesture, not SetStatus + RateBook + UpdateNotes). Anchor: [[retro_backend_ddd_pilot]]. |
 | 15 | 2026-06-27 | [I refactored a back-end that wasn't broken. It kept finding bugs anyway.](../../blog/2026-06-27-01-refactor-that-wasnt-broken.md) | Back-end DDD/CQRS arc close-out mega-blog: a behaviour-preserving (verbatim-relocation) refactor as a bug-finding tool — every reachable bug was pre-existing latent; DRY-would-be-a-bug; review the code you wrote not the code you moved; risk tracks the write boundary, not diff size. Anchor: [[retro_backend_refactor_arc]]. |
 | 16 | 2026-06-27 | [The advisory said there was no fix. There was.](../../blog/2026-06-27-02-the-advisory-said-no-fix.md) | TD-11 warnings-as-errors: flipping TWAE surfaced a live CVE; the advisory's "no patched version" was stale (the native package renumbered 2.1.11 → 3.50.x, hiding the fix); trust the package feed over the summary; `PrivateAssets` to stop a pin leaking cross-platform; per-advisory (`NuGetAuditSuppress`) not per-severity. Human-in-the-loop hook (Drew's "can't we pin a later version?"). Anchor: [[feedback_warnings_as_errors_nuget_audit]]. |
+| 17 | 2026-07-01 | [The bug that never said its name](../../blog/2026-07-01-01-the-bug-that-never-said-its-name.md) | Series-on-Book arc (TODO #56, #401 expand / #402 cutover / #403 contract). Headline: a concept-move (series Work→Book) breaks code that handled the concept **implicitly and never named it** — `MergeBooks` preserved series for free by unioning Works, so a grep (no "Series" in the file) and a per-PR diff review (file untouched) were both structurally blind; only the whole-arc arc-end review found it. Hybridised with the layered-nets angle (#3): four safety nets at four altitudes — compiler-on-contract-drop, grep-as-checklist, per-PR review, arc-end whole-diff review — each catching a different failure class. Anchor: [[retro_series_on_book_arc]] + [[feedback_review_at_arc_end]] + [[feedback_grep_list_is_a_checklist]]. |
 
 ## Strong catch-up candidates
 
