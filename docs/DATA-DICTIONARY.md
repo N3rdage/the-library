@@ -17,7 +17,7 @@ The model deliberately separates four concepts that other catalogues tend to con
 | **Edition** | A specific printing of the Book. ISBN-keyed. | The 1985 Putnam hardcover *Skeleton Crew*, ISBN 0-399-13039-9 |
 | **Copy** | The physical item you own. Condition-graded. | Drew's own slightly-foxed copy, acquired 2023-08, "Good" condition |
 
-The same Work can appear inside multiple Books (a Christie short story reprinted across compendiums). Genres / authorship / series / first-publish-date live on the **Work**, not the Book — *Skeleton Crew* the volume is "horror" only because each contained story is. Reading state (Status, Rating, Notes, Tags) lives on the **Book**, not the Work — you finished the volume, not the abstract concept of every story it contains.
+The same Work can appear inside multiple Books (a Christie short story reprinted across compendiums). Genres / authorship / first-publish-date live on the **Work**, not the Book — *Skeleton Crew* the volume is "horror" only because each contained story is. Reading state (Status, Rating, Notes, Tags) **and series membership** live on the **Book**, not the Work — you finished the volume, not the abstract concept of every story it contains, and it's the *book* that's installment N of a series.
 
 Single-Work books (a novel, the common case) get a 1:1 Book↔Work created automatically by the Add page.
 
