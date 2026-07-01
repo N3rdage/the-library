@@ -373,11 +373,11 @@ public class GetCatalogSnapshotHandlerTests
             db.Books.Add(new Book
             {
                 Title = "Foundation",
+                SeriesId = foundation.Id,
+                SeriesOrder = 1,
                 Works = [new Work
                 {
                     Title = "Foundation",
-                    SeriesId = foundation.Id,
-                    SeriesOrder = 1,
                     WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }],
                 }],
             });

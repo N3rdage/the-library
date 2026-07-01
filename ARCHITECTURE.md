@@ -41,12 +41,13 @@ Book                                                ← physical-object grouping
   Notes, DateAdded, DefaultCoverArtUrl,
   UpdatedAt (DATETIME2, default GETUTCDATE(), indexed),
   DeletedAt (nullable, filtered index, soft-delete tombstone)
+  ├── Series (many-to-1, optional) + SeriesOrder (int sort key)
+  │     + SeriesOrderDisplay (optional label, e.g. "4.5" interquel)
+  │           ← the book is installment N of a publication series
   ├── Works (many-to-many)                          ← what's actually inside the book
   │     Title, Subtitle, FirstPublishedDate
   │     ├── Author (many-to-1 → Author)
-  │     ├── Genres (many-to-many → Genre)
-  │     └── Series (many-to-1, optional) + SeriesOrder (int sort key)
-  │           + SeriesOrderDisplay (optional label, e.g. "4.5" interquel)
+  │     └── Genres (many-to-many → Genre)
   ├── Editions (1-to-many)
   │     ISBN (filtered unique, nullable for pre-ISBN books),
   │     Format, EditionNumber (nullable — "3rd ed."),
@@ -60,7 +61,7 @@ Series
   Name (unique), Author (string, optional, display-only),
   Type (Series/Collection),
   ExpectedCount (for numbered series), Description
-  └── Works (1-to-many)
+  └── Books (1-to-many)
 
 Author
   Name (unique)
@@ -99,7 +100,7 @@ Key design decisions:
 - **Author entity with self-referential pen names**: each `Work` points at a specific `Author` row. Pen names (Richard Bachman) get their own Author row with `CanonicalAuthorId` pointing at the canonical (Stephen King). A Bachman novel is *displayed* as "by Richard Bachman" (the Work's `AuthorId` points at Bachman) but aggregations group by `CanonicalAuthorId ?? Id` so King's tally includes the Bachman titles. Lookups are find-or-created **eagerly at the picker** (typing a fresh name and committing it — chip Enter/comma, dropdown-pick, or field blur — creates the row immediately; TD-15a), with find-or-create on save kept as a net for ISBN-prefilled names that bypass the picker. Merging duplicates and managing aliases happens on `/authors`.
 - **Single-Work books are the common case** — the Add page auto-creates one Work alongside the Book and mirrors the title between them. Compendium support (multiple Works per Book) lives on the Edit page's "Other works" section.
 - **Edition.ISBN is unique** (filtered — pre-1974 books with no ISBN coexist as nullable rows).
-- **Series.Type**: `Series` = numbered with known order; `Collection` = loose grouping. Series membership is per-Work — a short story republished in three compendiums shows once in the series with three book references.
+- **Series.Type**: `Series` = numbered with known order; `Collection` = loose grouping. Series membership is **per-Book** — the book is installment N of a publication series. A single-Work novel and a multi-Work short-story collection both sit in the series as one installment; the constituent Works carry no series of their own.
 - **Genre hierarchy**: top-level genres with sub-genres. Selecting a sub-genre auto-selects its parent.
 - **Book.UpdatedAt** is auto-stamped on aggregate change via `BookUpdatedAtInterceptor` (a `SaveChangesInterceptor`) — any change to the Book itself OR to its Edition / Copy / Work / WorkAuthor / Tag membership bumps the Book row's timestamp. Backs the delta-sync `?since=` filter on `/api/catalog-snapshot`. Save sites don't need to set it explicitly. A value converter pins `Kind=Utc` on read so cross-timezone clients round-trip the watermark correctly.
 - **Book.DeletedAt** drives a soft-delete shape: a global EF `HasQueryFilter(b => b.DeletedAt == null)` hides tombstoned rows from every normal query (Library / View / search / merge). The husk row survives only so the catalog snapshot can emit it in `deletedIds[]` for Bookshelf clients to drop locally. Aggregate children (Editions + Copies + joins) are hard-removed at delete time — the husk has no aggregate. `BookDetailViewModel.DeleteBookAsync` and `BookMergeService` (loser-side) are the two soft-delete callsites.

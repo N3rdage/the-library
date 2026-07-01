@@ -57,6 +57,19 @@ public class BookEditDialogViewModel(
             .ToListAsync();
     }
 
+    // The series dropdown routes through here (Value/ValueChanged, not two-way
+    // @bind) so switching series RESETS the order: the order belonged to the
+    // previous series and must not ride into the newly-picked one — a Witcher #5
+    // book switched to "Dune" without touching the order field would otherwise
+    // save as Dune #5 and claim a phantom slot. Re-picking the same value is a
+    // no-op (leaves the loaded order intact).
+    public void OnSeriesChanged(int? newSeriesId)
+    {
+        if (newSeriesId == SelectedSeriesId) return;
+        SelectedSeriesId = newSeriesId;
+        SeriesOrderInput = null;
+    }
+
     public async Task SaveAsync()
     {
         if (NotFound || string.IsNullOrWhiteSpace(Title)) return;

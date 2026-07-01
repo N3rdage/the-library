@@ -28,21 +28,18 @@ public class Series
 
     public string? Description { get; set; }
 
-    // Series membership is moving from Work to Book (a series of short-story
-    // collections is unmanageable at Work grain — see Book.SeriesId). During
-    // the expand/cutover/contract migration BOTH navigations exist: Books is
-    // the new home, Works is the legacy source until the cutover PR flips
-    // every reader/writer and the contract PR drops it.
+    // Series membership lives on the Book — the Book is installment N of a
+    // publication series (a series of short-story collections is unmanageable at
+    // Work grain). Books is the inverse navigation; Work carries no series.
     public List<Book> Books { get; set; } = [];
-    public List<Work> Works { get; set; } = [];
 
     // --- Aggregate behaviour -------------------------------------------------
-    // Series is a thin aggregate: no shared m2m, no ref-count lifecycle (Work
-    // owns the Work↔Series link via Work.AssignToSeries/ClearSeries). Its one
+    // Series is a thin aggregate: no shared m2m, no ref-count lifecycle (Book
+    // owns the Book↔Series link via Book.AssignToSeries/ClearSeries). Its one
     // invariant is the ExpectedCount/Type pairing below — a target count only
     // means anything for an ordered Series, never a loose Collection. Cross-row
     // rules the entity can't see (name uniqueness) live in the handlers.
-    // Deletion is FK-driven (Work.SeriesId is ON DELETE SET NULL), so there's no
+    // Deletion is FK-driven (Book.SeriesId is ON DELETE SET NULL), so there's no
     // delete method here. See docs/BACKEND-REFACTOR-DESIGN.md.
 
     /// <summary>Creates a Series with its details applied (and the

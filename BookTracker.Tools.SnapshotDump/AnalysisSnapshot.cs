@@ -40,6 +40,9 @@ public sealed record BookAnalysis(
     DateTime DateAdded,
     DateTime UpdatedAt,
     string? DefaultCoverArtUrl,
+    int? SeriesId,
+    int? SeriesOrder,
+    string? SeriesOrderDisplay,
     IReadOnlyList<EditionAnalysis> Editions,
     IReadOnlyList<int> WorkIds,
     IReadOnlyList<string> TagNames);
@@ -69,8 +72,6 @@ public sealed record WorkAnalysis(
     DatePrecision FirstPublishedDatePrecision,
     IReadOnlyList<WorkAuthorRef> Authors,
     IReadOnlyList<string> GenreNames,
-    int? SeriesId,
-    int? SeriesOrder,
     IReadOnlyList<int> BookIds);
 
 public sealed record WorkAuthorRef(int AuthorId, string Name, int Order);

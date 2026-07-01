@@ -21,22 +21,6 @@ public class SeriesCommandHandlersTests
         return s.Id;
     }
 
-    private async Task<int> SeedWorkAsync(string title, int? seriesId = null, int? order = null, string? orderDisplay = null)
-    {
-        await using var db = _factory.CreateDbContext();
-        var work = new Work
-        {
-            Title = title,
-            WorkAuthors = { new WorkAuthor { Author = new Author { Name = $"Author of {title}" }, Order = 0, Role = AuthorRole.Author } },
-            SeriesId = seriesId,
-            SeriesOrder = order,
-            SeriesOrderDisplay = orderDisplay,
-        };
-        db.Books.Add(new Book { Title = title, Works = { work } });
-        await db.SaveChangesAsync();
-        return work.Id;
-    }
-
     // Seeds a Book carrying series membership directly (the post-cutover home).
     private async Task<int> SeedBookAsync(string title, int? seriesId = null, int? order = null, string? orderDisplay = null)
     {
@@ -157,18 +141,18 @@ public class SeriesCommandHandlersTests
     // --- DeleteSeries --------------------------------------------------------
 
     [Fact]
-    public async Task DeleteSeries_removesSeries_andSetNullsMemberWorks()
+    public async Task DeleteSeries_removesSeries_andSetNullsMemberBooks()
     {
         var seriesId = await SeedSeriesAsync();
-        var workId = await SeedWorkAsync("Mort", seriesId, order: 4);
+        var bookId = await SeedBookAsync("Mort", seriesId, order: 4);
 
         await new DeleteSeriesHandler(_factory).HandleAsync(new DeleteSeries(seriesId));
 
         await using var db = _factory.CreateDbContext();
         Assert.Null(await db.Series.FindAsync(seriesId));   // gone
-        var work = await db.Works.FindAsync(workId);
-        Assert.NotNull(work);                                // work survives
-        Assert.Null(work!.SeriesId);                         // link cleared by FK SetNull
+        var book = await db.Books.FindAsync(bookId);
+        Assert.NotNull(book);                                // book survives
+        Assert.Null(book!.SeriesId);                         // link cleared by FK SetNull
     }
 
     [Fact]

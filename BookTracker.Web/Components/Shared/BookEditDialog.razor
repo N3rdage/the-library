@@ -36,7 +36,8 @@
                               Margin="Margin.Dense"
                               HelperText="Optional. Shown on the Library list and View page header." />
                 <MudSelect T="int?"
-                           @bind-Value="VM.SelectedSeriesId"
+                           Value="VM.SelectedSeriesId"
+                           ValueChanged="VM.OnSeriesChanged"
                            Label="Series / Collection"
                            Variant="Variant.Outlined"
                            Margin="Margin.Dense"

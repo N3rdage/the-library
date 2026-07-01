@@ -212,12 +212,12 @@ public record SeriesMatch(
     /// "Discworld -- 5" → 5; non-integer "4.5" floors to 4). Null only for
     /// non-numeric labels and the local-only suggestion paths which have no
     /// order signal. Used by the Accept-suggestion flow to pre-fill
-    /// `Work.SeriesOrder` on save.
+    /// `Book.SeriesOrder` on save.
     /// </summary>
     int? SuggestedOrder = null,
     /// <summary>
     /// Display override for non-integer orders ("4.5", "1A") — pre-fills
-    /// `Work.SeriesOrderDisplay` on Accept. Null for clean integer orders.
+    /// `Book.SeriesOrderDisplay` on Accept. Null for clean integer orders.
     /// </summary>
     string? SuggestedOrderDisplay = null);
 

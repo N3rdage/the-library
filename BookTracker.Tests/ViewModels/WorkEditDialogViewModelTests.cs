@@ -25,7 +25,6 @@ public class WorkEditDialogViewModelTests
         int workId;
         using (var db = factory.CreateDbContext())
         {
-            var series = new Series { Name = "Discworld", Type = SeriesType.Collection };
             var work = new Work
             {
                 Title = "Mort",
@@ -33,8 +32,6 @@ public class WorkEditDialogViewModelTests
                 WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Terry Pratchett" }, Order = 0 }],
                 FirstPublishedDate = new DateOnly(1987, 11, 12),
                 FirstPublishedDatePrecision = DatePrecision.Day,
-                Series = series,
-                SeriesOrder = 4,
             };
             db.Books.Add(new Book { Title = "Mort", Works = [work] });
             await db.SaveChangesAsync();

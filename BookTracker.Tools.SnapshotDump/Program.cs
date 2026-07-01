@@ -127,6 +127,9 @@ var books = bookEntities.Select(b => new BookAnalysis(
     b.DateAdded,
     b.UpdatedAt,
     b.DefaultCoverArtUrl,
+    b.SeriesId,
+    b.SeriesOrder,
+    b.SeriesOrderDisplay,
     b.Editions
         .OrderBy(e => e.Id)
         .Select(e => new EditionAnalysis(
@@ -157,8 +160,6 @@ var works = workEntities.Select(w => new WorkAnalysis(
         .Select(wa => new WorkAuthorRef(wa.AuthorId, wa.Author.Name, wa.Order))
         .ToList(),
     w.Genres.Select(g => g.Name).OrderBy(n => n).ToList(),
-    w.SeriesId,
-    w.SeriesOrder,
     w.Books.Select(b => b.Id).OrderBy(id => id).ToList())).ToList();
 
 var authors = authorEntities.Select(a => new AuthorAnalysis(
