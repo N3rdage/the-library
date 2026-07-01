@@ -25,7 +25,7 @@ Single-Work books (a novel, the common case) get a 1:1 Book↔Work created autom
 
 ## Book
 
-The physical-object grouping. Carries reading state + cover art + Editions + Copies + Tags.
+The physical-object grouping. Carries reading state + cover art + series membership + Editions + Copies + Tags.
 
 | Field | Type | Notes |
 |-------|------|-------|
@@ -39,6 +39,9 @@ The physical-object grouping. Carries reading state + cover art + Editions + Cop
 | `UpdatedAt` | DateTime (UTC, indexed, default `GETUTCDATE()`) | Auto-bumped by `BookUpdatedAtInterceptor` on **any** change to this Book OR any aggregate child (Edition, Copy, Work, WorkAuthor, Tag join). Drives delta-sync to Bookshelf. Value converter pins `Kind=Utc` on read. |
 | `DeletedAt` | DateTime? (UTC, filtered index) | Soft-delete tombstone. Non-null = hidden from every normal query via a global EF `HasQueryFilter`. Husk survives only so the catalog snapshot emits the Id in `deletedIds[]` for Bookshelf to drop locally. Aggregate children (Editions / Copies / joins) are *hard*-removed at delete time. The JSON snapshot **excludes** soft-deleted rows. |
 | `DefaultCoverArtUrl` | string? (≤500) | Falls back to the first Edition's `CoverUrl` for display when not set. |
+| `SeriesId` | int? (FK) | Optional link to a `Series` — the book is installment N of a publication series. Null = standalone. Set-null on Series delete. Series membership is a **per-Book** concept (moved Work→Book in TODO #56). |
+| `SeriesOrder` | int? | Position in the Series (1-based). Floored from a non-integer display order for sort + gap detection. |
+| `SeriesOrderDisplay` | string? (≤50) | Human-facing order label overriding `SeriesOrder` when the position isn't a plain integer ("4.5" interquel *Edgedancer*, "1A" hierarchical). Null for ordinary integer orders. |
 | `Editions` | List | 1-to-many. Most books have one Edition. |
 | `Works` | List | M:N via join table `BookWork`. |
 | `Tags` | List | M:N via join table `BookTag`. |
@@ -58,7 +61,7 @@ BookCategory  = { Fiction, NonFiction }                ← default: Fiction
 
 ## Work
 
-The abstract creative unit. Authorship + subtitle + genres + series live here.
+The abstract creative unit. Authorship + subtitle + genres live here. (Series membership does **not** — it's a per-Book concept; see the Book table above.)
 
 | Field | Type | Notes |
 |-------|------|-------|
@@ -70,8 +73,6 @@ The abstract creative unit. Authorship + subtitle + genres + series live here.
 | `WorkAuthors` | List | M:N via explicit `WorkAuthor` join with `Order` field — canonical read source for ordered display ("Preston & Child"). |
 | `Authors` | List (skip-nav) | M:N convenience navigation through `WorkAuthor`. **Does not preserve Order** — use `WorkAuthors` for display, this for set-membership semantics. |
 | `Genres` | List | M:N via `GenreWork`. |
-| `SeriesId` | int? | Optional FK. Null = standalone. |
-| `SeriesOrder` | int? | Position in the Series (1-based). Currently `int` only — non-integer interquels (Stormlight #4.5 *Edgedancer*) sink to the bottom of the sort. See TODO #3 / #14. |
 | `Books` | List | M:N via `BookWork`. |
 
 ### Multi-author works
@@ -161,7 +162,7 @@ BookCondition = { AsNew, Fine, VeryGood, Good, Fair, Poor }  ← default: Good
 
 ## Series
 
-A named grouping that Works belong to. Two flavours.
+A named grouping that Books belong to. Two flavours.
 
 | Field | Type | Notes |
 |-------|------|-------|
@@ -171,11 +172,11 @@ A named grouping that Works belong to. Two flavours.
 | `Type` | enum `SeriesType` | `Series` = numbered (Ender's Game, Stormlight); `Collection` = loose grouping (Discworld, Hercule Poirot). |
 | `ExpectedCount` | int? | For numbered series — the total volumes. Null for Collections / unknown / open-ended. Drives series-gaps detection ("you have 1, 2, 3, 5 — missing 4"). |
 | `Description` | string? | Free text. |
-| `Works` | List | 1-to-many. Inverse of `Work.SeriesId`. |
+| `Books` | List | 1-to-many. Inverse of `Book.SeriesId`. |
 
-### Series membership is per-Work
+### Series membership is per-Book
 
-A Christie short-story compendium (Book) doesn't itself belong to the Poirot series — its constituent Stories (Works) do. This matters for analysis: counting "books in series X" by joining `Book → Work → Series` may double-count compendiums.
+The Book is installment N of a publication series — whether it holds a single Work or a whole short-story collection. A single-Work novel and a multi-Work compendium both sit in the series as **one** installment; the constituent Works carry no series of their own. (Historically this lived on the Work; it moved to the Book in TODO #56 once a series of short-story-collection books proved unmanageable at Work grain.) The corner case: a Christie Poirot story that also appears in a Christie *collection* — the story is a Work inside two Books, and it's each **Book** that's the series member, not the Work. A richer "series of books vs series of works/stories" model (they answer different reader questions) is the multi-series rework, TODO #13.
 
 ---
 
@@ -337,8 +338,7 @@ These exist as conventional EF M:N joins — no extra fields. The JSON snapshot 
 Tracked in [`TODO.md`](../TODO.md):
 
 - **#51 — Reference book capture nuances:** editor role on `WorkAuthor`, `EditionNumber` on `Edition`, `BookStatus.Reference` value, multi-volume sets as a first-class concept, corporate-author handling.
-- **#3 / #14 — Non-integer `SeriesOrder`:** Stormlight #4.5 *Edgedancer* and other interquels can't be expressed; today they sink to the bottom of the cluster.
-- **#13 — Multi-series membership:** a Discworld novel can't currently belong to both "Discworld" and "Discworld: City Watch" sub-series.
+- **#13 — Multi-series membership + the series-of-books-vs-works remodel:** a Book can't currently belong to more than one series/collection (a Discworld book in both "Discworld" and "Discworld: City Watch"), and a series is modelled only as a set of *books* — not the separate "set of works/stories regardless of print" question. Needs a design session, not just a schema bump.
 - **#47 — eBook format:** `BookFormat` is physical-only; digital titles aren't modelled.
 
 When proposing data changes during analysis, flag if the change would benefit from one of these schema gaps being closed first.
