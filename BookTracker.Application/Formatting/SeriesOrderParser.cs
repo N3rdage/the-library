@@ -5,13 +5,13 @@ namespace BookTracker.Application.Formatting;
 
 /// <summary>
 /// Splits a free-text series-order string into the integer sort key stored in
-/// <c>Work.SeriesOrder</c> (used for ordering + gap detection) and the optional
-/// display override stored in <c>Work.SeriesOrderDisplay</c>.
+/// <c>Book.SeriesOrder</c> (used for ordering + gap detection) and the optional
+/// display override stored in <c>Book.SeriesOrderDisplay</c>.
 ///
 /// Clean integers ("4") need no display override — the int renders fine and the
 /// display column stays null. Non-integer orders ("4.5" interquels like
 /// <i>Edgedancer</i>, "1A" hierarchical positions) keep the raw string for
-/// display and floor to the leading integer so the work still sorts next to its
+/// display and floor to the leading integer so the book still sorts next to its
 /// neighbours instead of sinking to the bottom via the <c>int.MaxValue</c>
 /// null-fallback.
 ///

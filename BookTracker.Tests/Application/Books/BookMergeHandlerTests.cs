@@ -138,6 +138,35 @@ public class BookMergeHandlerTests
     }
 
     [Fact]
+    public async Task Merge_carries_loser_series_to_unseriesed_winner()
+    {
+        // Regression for the Work→Book series move (TODO #56): series is a Book
+        // field now, so a book merge must carry it explicitly — pre-move it rode
+        // along on the unioned Works. A series-less winner takes the loser's series.
+        using var db = _factory.CreateDbContext();
+        var author = new Author { Name = "A" };
+        var series = new Series { Name = "Dune Chronicles", Type = SeriesType.Series };
+        db.Series.Add(series);
+        var winner = new Book { Title = "Dune", Works = [new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }] };
+        var loser = new Book
+        {
+            Title = "Dune",
+            Series = series, SeriesOrder = 1,
+            Works = [new Work { Title = "Dune (dup)", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+        };
+        db.Books.AddRange(winner, loser);
+        await db.SaveChangesAsync();
+
+        var result = await Merge(winner.Id, loser.Id);
+
+        Assert.True(result.Success);
+        using var verify = _factory.CreateDbContext();
+        var reloaded = verify.Books.First(b => b.Id == winner.Id);
+        Assert.Equal(series.Id, reloaded.SeriesId);   // winner now in the series (was series-less)
+        Assert.Equal(1, reloaded.SeriesOrder);
+    }
+
+    [Fact]
     public async Task Merge_preserves_populated_winner_fields()
     {
         using var db = _factory.CreateDbContext();

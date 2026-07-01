@@ -5,9 +5,11 @@ namespace BookTracker.Application.Series;
 
 /// <summary>Hard-deletes a Series. Its member Books (and any WishlistItems that
 /// referenced it) are detached by the database — both FKs are configured
-/// <c>ON DELETE SET NULL</c>, so the rows survive with their series link (and,
-/// for Books, the order) cleared. Idempotent: a no-op if the Series is already
-/// gone, matching the old ViewModel.</summary>
+/// <c>ON DELETE SET NULL</c>, so the rows survive with their series LINK cleared
+/// (only <c>Book.SeriesId</c> is nulled; the plain <c>SeriesOrder</c>/
+/// <c>SeriesOrderDisplay</c> columns are left dangling, which is harmless — every
+/// reader gates membership on <c>SeriesId</c>). Idempotent: a no-op if the Series
+/// is already gone, matching the old ViewModel.</summary>
 public sealed record DeleteSeries(int SeriesId) : ICommand;
 
 public sealed class DeleteSeriesHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)

@@ -110,11 +110,17 @@ public sealed class GetAuthorDetailHandler(IDbContextFactory<BookTrackerDbContex
                 w.Subtitle,
                 w.FirstPublishedDate,
                 w.FirstPublishedDatePrecision,
-                // Series lives on the Book now — derive a work's series from the
-                // book(s) it appears in (lowest SeriesOrder wins for a work that
-                // spans more than one book/series; 1:1 for ordinary books).
+                // Series is a per-Book concept ("series are about books"). On this
+                // work-centric page a work shows a series ONLY when it's the sole
+                // work in a series-bearing book (book == work — e.g. Poirot →
+                // "Murder on the Orient Express"). A story inside a multi-work
+                // collection does NOT inherit the collection's series — the *book*
+                // is the series member, not the story. (A richer "series of works
+                // vs series of books" model is deferred to the multi-series rework,
+                // TODO #13.) Lowest SeriesOrder wins if a work is the sole work in
+                // more than one series-bearing book.
                 BookSeries = w.Books
-                    .Where(b => b.SeriesId != null)
+                    .Where(b => b.SeriesId != null && b.Works.Count == 1)
                     .OrderBy(b => b.SeriesOrder ?? int.MaxValue)
                     .Select(b => new
                     {

@@ -6,10 +6,11 @@ namespace BookTracker.Application.Books;
 
 /// <summary>Merges the loser Book into the winner: reassigns the loser's
 /// Editions (with their Copies), unions its Works and Tags, auto-fills empty
-/// winner fields (notes, cover, rating-if-unrated) from the loser, then
-/// soft-deletes the loser as a tombstone for the catalog snapshot's
-/// deletedIds[]. Already transactional + aggregate-shaped — lifted verbatim
-/// from the old BookMergeService write path (PR5, back-end refactor).</summary>
+/// winner fields (notes, cover, rating-if-unrated, series membership) from the
+/// loser, then soft-deletes the loser as a tombstone for the catalog snapshot's
+/// deletedIds[]. Already transactional + aggregate-shaped — lifted from the old
+/// BookMergeService write path (PR5), with series-carry added when series moved
+/// Work→Book (TODO #56).</summary>
 public sealed record MergeBooks(int WinnerId, int LoserId) : ICommand<BookMergeResult>;
 
 public record BookMergeResult(
@@ -78,6 +79,18 @@ public sealed class MergeBooksHandler(IDbContextFactory<BookTrackerDbContext> db
         if (winner.Rating == 0 && loser.Rating > 0)
         {
             winner.Rating = loser.Rating;
+            fieldsAutoFilled++;
+        }
+
+        // Series membership is a Book field now (it moved Work→Book, TODO #56).
+        // Pre-move it rode along on the loser's Works that get unioned below;
+        // now it must be carried explicitly, else merging a series-less winner
+        // with a series-bearing loser silently drops the book out of its series.
+        if (winner.SeriesId is null && loser.SeriesId is not null)
+        {
+            winner.SeriesId = loser.SeriesId;
+            winner.SeriesOrder = loser.SeriesOrder;
+            winner.SeriesOrderDisplay = loser.SeriesOrderDisplay;
             fieldsAutoFilled++;
         }
 

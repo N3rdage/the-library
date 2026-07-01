@@ -10,6 +10,37 @@ namespace BookTracker.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // Re-assert the Work→Book back-fill before dropping the source columns.
+            // PR1's expand back-fill was a one-time snapshot; a series written to
+            // Work-only in the window between the PR1 (expand) and PR2 (cutover)
+            // deploys would leave Book.SeriesId null and then be lost when the Work
+            // columns drop below. Fill only the stragglers (Book.SeriesId IS NULL) so
+            // a correctly-set Book series is never clobbered. Same deterministic
+            // tie-break as PR1 (lowest SeriesOrder, then Work Id).
+            migrationBuilder.Sql(@"
+WITH ranked AS (
+    SELECT  bw.BooksId,
+            w.SeriesId,
+            w.SeriesOrder,
+            w.SeriesOrderDisplay,
+            ROW_NUMBER() OVER (
+                PARTITION BY bw.BooksId
+                ORDER BY CASE WHEN w.SeriesOrder IS NULL THEN 1 ELSE 0 END,
+                         w.SeriesOrder,
+                         w.Id
+            ) AS rn
+    FROM    BookWork bw
+    JOIN    Works    w ON w.Id = bw.WorksId
+    WHERE   w.SeriesId IS NOT NULL
+)
+UPDATE  b
+SET     b.SeriesId           = r.SeriesId,
+        b.SeriesOrder        = r.SeriesOrder,
+        b.SeriesOrderDisplay = r.SeriesOrderDisplay
+FROM    Books  b
+JOIN    ranked r ON r.BooksId = b.Id AND r.rn = 1
+WHERE   b.SeriesId IS NULL;");
+
             migrationBuilder.DropForeignKey(
                 name: "FK_Works_Series_SeriesId",
                 table: "Works");
