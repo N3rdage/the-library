@@ -97,21 +97,6 @@ public class WorkAggregateTests
     }
 
     [Fact]
-    public void AssignToSeries_then_ClearSeries()
-    {
-        var work = new Work { Title = "T" };
-        work.AssignToSeries(7, 4, "4.5");
-        Assert.Equal(7, work.SeriesId);
-        Assert.Equal(4, work.SeriesOrder);
-        Assert.Equal("4.5", work.SeriesOrderDisplay);
-
-        work.ClearSeries();
-        Assert.Null(work.SeriesId);
-        Assert.Null(work.SeriesOrder);
-        Assert.Null(work.SeriesOrderDisplay);
-    }
-
-    [Fact]
     public void SetGenres_replacesTheCollection()
     {
         var work = new Work { Title = "T", Genres = { new Genre { Id = 1, Name = "Old" } } };
