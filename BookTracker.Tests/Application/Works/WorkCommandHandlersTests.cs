@@ -230,6 +230,56 @@ public class WorkCommandHandlersTests
         Assert.Equal(["Charlie", "Alpha", "Bravo"], detail!.Works.Select(w => w.Title).ToArray());
     }
 
+    private async Task<(int bookId, List<int> workIds)> SeedMultiWorkBookAsync(params string[] titles)
+    {
+        await using var db = _factory.CreateDbContext();
+        var author = new Author { Name = "Seed Author" };
+        var book = new Book { Title = "Anthology" };
+        foreach (var t in titles)
+        {
+            var w = new Work { Title = t, WorkAuthors = { new WorkAuthor { Author = author, Order = 0, Role = AuthorRole.Author } } };
+            book.AttachWork(w);   // appends 0,1,2… in title order
+        }
+        db.Books.Add(book);
+        await db.SaveChangesAsync();
+        return (book.Id, book.BookWorks.OrderBy(bw => bw.Order).Select(bw => bw.Work.Id).ToList());
+    }
+
+    [Fact]
+    public async Task ReorderWorks_persistsNewOrder()
+    {
+        var (bookId, ids) = await SeedMultiWorkBookAsync("A", "B", "C");
+
+        var ok = await new ReorderWorksHandler(_factory).HandleAsync(
+            new ReorderWorks(bookId, [ids[2], ids[0], ids[1]]));   // C, A, B
+
+        Assert.True(ok);
+        var detail = await new GetBookDetailHandler(_factory).HandleAsync(new GetBookDetail(bookId));
+        Assert.Equal(["C", "A", "B"], detail!.Works.Select(w => w.Title).ToArray());
+    }
+
+    [Fact]
+    public async Task ReorderWorks_staleListMissingAWork_appendsItPreservingOrder()
+    {
+        var (bookId, ids) = await SeedMultiWorkBookAsync("A", "B", "C");
+
+        // The client raced a concurrent add/remove and only sends C, A (B missing).
+        // B must survive — appended after the listed works, keeping its old spot.
+        var ok = await new ReorderWorksHandler(_factory).HandleAsync(
+            new ReorderWorks(bookId, [ids[2], ids[0]]));
+
+        Assert.True(ok);
+        var detail = await new GetBookDetailHandler(_factory).HandleAsync(new GetBookDetail(bookId));
+        Assert.Equal(["C", "A", "B"], detail!.Works.Select(w => w.Title).ToArray());
+    }
+
+    [Fact]
+    public async Task ReorderWorks_bookMissing_returnsFalse()
+    {
+        var ok = await new ReorderWorksHandler(_factory).HandleAsync(new ReorderWorks(424242, [1, 2]));
+        Assert.False(ok);
+    }
+
     [Fact]
     public async Task AttachWorksToBook_allBlankRows_throwsUserFacing()
     {

@@ -32,7 +32,10 @@ public class AIAssistantViewModel(
 
         // Genre suggestions operate on the book's primary work — single-work
         // books are the common case. Compendium support (per-work AI suggestions)
-        // is tracked in TODO.md.
+        // is tracked in TODO.md. The "first Work" here is a best-effort
+        // representative for that heuristic, so it stays on the plain Works
+        // skip-nav rather than the ordered BookWorks projection the reorder
+        // feature added — order is immaterial to a single-work-focused prompt.
         BooksNeedingGenres = await db.Books
             .Include(b => b.Works).ThenInclude(w => w.Genres)
             .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
