@@ -332,6 +332,18 @@ public class BookDetailViewModel(
         return title;
     }
 
+    /// <summary>Persist a new display order for this Book's Works.
+    /// <paramref name="orderedWorkIds"/> is the full sequence the user arranged
+    /// (drag or type-a-position — both collapse to "the new order"). Refreshes
+    /// the snapshot so the Works list re-renders in the saved order.</summary>
+    public async Task ReorderWorksAsync(IReadOnlyList<int> orderedWorkIds)
+    {
+        if (Book is null) return;
+        ArgumentNullException.ThrowIfNull(orderedWorkIds);
+        await dispatcher.Send(new ReorderWorks(Book.Id, orderedWorkIds));
+        await InitializeAsync(Book.Id);
+    }
+
     /// <summary>Delete this Book. Soft-delete: the Book row is kept as
     /// a tombstone (DeletedAt = UtcNow, hidden from every normal query
     /// by the global HasQueryFilter) so the catalog snapshot delta path

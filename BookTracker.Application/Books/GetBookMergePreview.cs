@@ -48,6 +48,7 @@ public sealed class GetBookMergePreviewHandler(IDbContextFactory<BookTrackerDbCo
             .AsNoTracking()
             .Include(b => b.Editions)
             .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
+            .Include(b => b.BookWorks)   // for the per-book Order (headline pick)
             .Include(b => b.Tags)
             .FirstOrDefaultAsync(b => b.Id == id, ct);
         if (book is null) return null;
@@ -60,10 +61,12 @@ public sealed class GetBookMergePreviewHandler(IDbContextFactory<BookTrackerDbCo
             ? book.DefaultCoverArtUrl
             : book.Editions.Select(e => e.CoverUrl).FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
 
-        // First Work's authorship for the merge dialog headline. Multi-Work
-        // books show the first Work's display string; the user can drill into
-        // BookDetail for the full picture.
-        var primaryWork = book.Works.FirstOrDefault();
+        // Primary Work's authorship for the merge dialog headline — the Work the
+        // user ordered first (BookWork.Order 0), matching the BookDetail headline
+        // after a reorder. BookWorks carries only the ordering key; pick the work
+        // itself from the already-loaded (authorship-hydrated) Works list.
+        var primaryWorkId = book.BookWorks.OrderBy(bw => bw.Order).Select(bw => bw.WorkId).FirstOrDefault();
+        var primaryWork = book.Works.FirstOrDefault(w => w.Id == primaryWorkId) ?? book.Works.FirstOrDefault();
         var firstAuthor = primaryWork is null ? null : WorkAuthorshipFormatter.Display(primaryWork);
 
         return new BookMergeDetail(

@@ -1,0 +1,126 @@
+@* Reorder the Works in a multi-Work book. Three gestures, all mutating the same
+   local list and persisted together on Save:
+     - drag a row (MudDropContainer) to a new slot,
+     - type a target position in the number box (the "#12 of 50" jump — enter 2
+       and the row moves to slot 2, everything from there shifting down),
+     - up / down arrows for single-step nudges (the always-reliable fallback).
+   Save sends the full new order to VM.ReorderWorksAsync (one write); Cancel
+   discards. The page snapshot refreshes on Save so the Works list re-renders in
+   the saved order. VM is the page's instance (Transient trap — memory:
+   feedback_dialog_vm_lifetime). *@
+
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="2" Style="min-width: 340px;">
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Drag a work, type its position, or use the arrows. Nothing is saved until you press Save.
+            </MudText>
+
+            <MudDropContainer T="Row" @ref="_dropContainer" Items="_rows"
+                              ItemsSelector="@((_, _) => true)"
+                              ItemDropped="OnDrop">
+                <ChildContent>
+                    <MudDropZone T="Row" Class="d-flex flex-column" Style="gap: 8px;" />
+                </ChildContent>
+                <ItemRenderer>
+                    <MudPaper Elevation="1" Class="d-flex align-center pa-2" Style="gap: 8px;">
+                        <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Size="Size.Small"
+                                 Color="Color.Secondary" Style="cursor: grab;" />
+                        <MudNumericField T="int" Value="Position(context)"
+                                         ValueChanged="@(v => MoveToPosition(context, v))"
+                                         Min="1" Max="_rows.Count" Margin="Margin.Dense"
+                                         Variant="Variant.Outlined" HideSpinButtons="true"
+                                         Style="width: 64px;" />
+                        <MudStack Spacing="0" Class="flex-grow-1" Style="min-width: 0;">
+                            <MudText Typo="Typo.body2" Style="word-break: break-word;">@context.Title</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Author</MudText>
+                        </MudStack>
+                        <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small"
+                                       Disabled="@(Position(context) == 1)"
+                                       OnClick="@(() => Nudge(context, -1))" aria-label="Move up" />
+                        <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small"
+                                       Disabled="@(Position(context) == _rows.Count)"
+                                       OnClick="@(() => Nudge(context, 1))" aria-label="Move down" />
+                    </MudPaper>
+                </ItemRenderer>
+            </MudDropContainer>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="@saving">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   Disabled="@saving" OnClick="SaveAsync">
+            @(saving ? "Saving..." : "Save order")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public BookDetailViewModel VM { get; set; } = default!;
+
+    // Mutable working copy of the order — the source of truth the three gestures
+    // rewrite. Seeded from the page's current (already Order-sorted) Works.
+    private sealed class Row
+    {
+        public int Id { get; init; }
+        public string Title { get; init; } = "";
+        public string Author { get; init; } = "";
+    }
+
+    private readonly List<Row> _rows = [];
+    private MudDropContainer<Row>? _dropContainer;
+    private bool saving;
+
+    protected override void OnInitialized()
+    {
+        if (VM.Book is null) return;
+        foreach (var w in VM.Book.Works)
+            _rows.Add(new Row { Id = w.Id, Title = w.Title, Author = w.AuthorName });
+    }
+
+    // 1-based position of a row in the current working order.
+    private int Position(Row row) => _rows.IndexOf(row) + 1;
+
+    private void OnDrop(MudItemDropInfo<Row> info)
+    {
+        if (info.Item is not { } item) return;
+        _rows.Remove(item);
+        _rows.Insert(Math.Clamp(info.IndexInZone, 0, _rows.Count), item);
+        _dropContainer?.Refresh();
+    }
+
+    // Move a row to an explicit 1-based slot (the number-box jump); everything
+    // between the old and new slot shifts to fill the gap.
+    private void MoveToPosition(Row row, int oneBased)
+    {
+        var target = Math.Clamp(oneBased - 1, 0, _rows.Count - 1);
+        if (_rows.IndexOf(row) == target) return;
+        _rows.Remove(row);
+        _rows.Insert(target, row);
+        _dropContainer?.Refresh();
+    }
+
+    private void Nudge(Row row, int delta) => MoveToPosition(row, Position(row) + delta);
+
+    private async Task SaveAsync()
+    {
+        saving = true;
+        try
+        {
+            await VM.ReorderWorksAsync(_rows.Select(r => r.Id).ToList());
+            Snackbar.Add("Order saved.", Severity.Success);
+            MudDialog.Close();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Couldn't save the order: {ex.Message}", Severity.Error);
+            saving = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}
