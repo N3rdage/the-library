@@ -573,6 +573,35 @@ public class GetCatalogSnapshotHandlerTests
     }
 
     [Fact]
+    public async Task GetSnapshotAsync_Works_CarryBookWorkOrder_NotWorkId()
+    {
+        int firstId, secondId, bookId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var a = new Author { Name = "A" };
+            var book = new Book { Title = "Anthology" };
+            var first = new Work { Title = "First captured", WorkAuthors = [new WorkAuthor { Author = a, Order = 0 }] };
+            var second = new Work { Title = "Second captured", WorkAuthors = [new WorkAuthor { Author = a, Order = 0 }] };
+            book.AttachWork(first);   // Order 0, lower WorkId
+            book.AttachWork(second);  // Order 1, higher WorkId
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            firstId = first.Id; secondId = second.Id; bookId = book.Id;
+        }
+
+        // Reorder so display Order is the reverse of WorkId — the snapshot must
+        // follow Order, proving it's threaded through (not the old WorkId sort).
+        await new BookTracker.Application.Works.ReorderWorksHandler(_factory)
+            .HandleAsync(new BookTracker.Application.Works.ReorderWorks(bookId, [secondId, firstId]));
+
+        var snapshot = await GetSnapshot();
+        var book2 = Assert.Single(snapshot.Books);
+        Assert.Equal(["Second captured", "First captured"], book2.Works!.Select(w => w.Title).ToArray());
+        Assert.Equal(0, book2.Works!.Single(w => w.Title == "Second captured").Order);
+        Assert.Equal(1, book2.Works!.Single(w => w.Title == "First captured").Order);
+    }
+
+    [Fact]
     public async Task GetSnapshotAsync_EditorOnlyWork_PrimaryAuthor_FallsBackToEditorWithRoleSuffix()
     {
         // Dictionary / Oxford Companion case — Work has an editor but no
