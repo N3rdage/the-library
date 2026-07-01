@@ -19,10 +19,14 @@
             </MudText>
 
             <MudDropContainer T="Row" @ref="_dropContainer" Items="_rows"
-                              ItemsSelector="@((_, _) => true)"
+                              ItemsSelector="@((item, zone) => item.Selector == zone)"
                               ItemDropped="OnDrop">
                 <ChildContent>
-                    <MudDropZone T="Row" Class="d-flex flex-column" Style="gap: 8px;" />
+                    @* AllowReorder is what makes the zone compute a positional
+                       drop index (IndexInZone) for sorting — without it the drop
+                       index is meaningless and reordering misbehaves. *@
+                    <MudDropZone T="Row" Identifier="@ZoneId" AllowReorder="true"
+                                 Class="d-flex flex-column" Style="gap: 8px;" />
                 </ChildContent>
                 <ItemRenderer>
                     <MudPaper Elevation="1" Class="d-flex align-center pa-2" Style="gap: 8px;">
@@ -64,11 +68,16 @@
 
     // Mutable working copy of the order — the source of truth the three gestures
     // rewrite. Seeded from the page's current (already Order-sorted) Works.
+    private const string ZoneId = "works";
+
     private sealed class Row
     {
         public int Id { get; init; }
         public string Title { get; init; } = "";
         public string Author { get; init; } = "";
+        // MudDropContainer's ItemsSelector matches this against the zone id; a
+        // single zone, so every row carries the one id.
+        public string Selector { get; set; } = ZoneId;
         // Scratch field MudBlazor's SortingAssistant.UpdateOrder writes during a
         // drop; synced to the list index right before each drop, so it's only
         // ever transiently meaningful. The list order is the real source of truth.
@@ -92,6 +101,7 @@
     private void OnDrop(MudItemDropInfo<Row> info)
     {
         if (info.Item is null) return;
+        info.Item.Selector = info.DropzoneIdentifier;   // stays "works" (single zone)
         // Let MudBlazor's helper compute the new order — it handles dragging both
         // up and down (the manual remove/insert-by-IndexInZone math got downward
         // moves wrong). Sync each row's Order to its current index first so the
