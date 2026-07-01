@@ -69,6 +69,10 @@
         public int Id { get; init; }
         public string Title { get; init; } = "";
         public string Author { get; init; } = "";
+        // Scratch field MudBlazor's SortingAssistant.UpdateOrder writes during a
+        // drop; synced to the list index right before each drop, so it's only
+        // ever transiently meaningful. The list order is the real source of truth.
+        public int Order { get; set; }
     }
 
     private readonly List<Row> _rows = [];
@@ -87,9 +91,14 @@
 
     private void OnDrop(MudItemDropInfo<Row> info)
     {
-        if (info.Item is not { } item) return;
-        _rows.Remove(item);
-        _rows.Insert(Math.Clamp(info.IndexInZone, 0, _rows.Count), item);
+        if (info.Item is null) return;
+        // Let MudBlazor's helper compute the new order — it handles dragging both
+        // up and down (the manual remove/insert-by-IndexInZone math got downward
+        // moves wrong). Sync each row's Order to its current index first so the
+        // helper has correct starting positions, then re-sort the list to match.
+        for (var i = 0; i < _rows.Count; i++) _rows[i].Order = i;
+        MudBlazor.Utilities.SortingAssistant.UpdateOrder(_rows, info, r => r.Order, 0);
+        _rows.Sort((a, b) => a.Order.CompareTo(b.Order));
         _dropContainer?.Refresh();
     }
 
