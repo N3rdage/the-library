@@ -23,7 +23,7 @@
          directly here because the Cache project's copy is PrivateAssets="all"
          and so doesn't flow across the ProjectReference (sqlite-net-pcl's
          transitive 2.1.2 still would). See BookTracker.Mobile.Cache.csproj. -->
-    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
   </ItemGroup>
 
   <ItemGroup>

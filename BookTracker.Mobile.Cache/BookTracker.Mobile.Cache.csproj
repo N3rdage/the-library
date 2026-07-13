@@ -45,7 +45,7 @@
          an Android .so, which would collide with the .android AAR (XA4301 dup).
          Android keeps its own native (.android 2.1.2) until upstream ships a
          3.50.x .android — see BookTracker.Mobile's targeted NoWarn. -->
-    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" PrivateAssets="all" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" PrivateAssets="all" />
     <!-- SkiaSharp: cross-platform image decode + resize. Pulls native
          assets for Android (via transitive SkiaSharp.NativeAssets.*)
          and for the test runner OS automatically. Used by
