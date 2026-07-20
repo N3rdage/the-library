@@ -57,7 +57,7 @@
          with 16KB pages enabled (the XA0141 build warning). 4.x keeps
          the SKSamplingOptions Resize API (replacing 2.x's SKFilterQuality)
          and stays 16KB-aligned; verify on-device after this bump (TD-10). -->
-    <PackageReference Include="SkiaSharp" Version="4.148.0" />
+    <PackageReference Include="SkiaSharp" Version="4.150.1" />
   </ItemGroup>
 
   <ItemGroup>
