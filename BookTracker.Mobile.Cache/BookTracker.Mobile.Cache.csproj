@@ -28,11 +28,11 @@
          diagnostics). Abstractions-only — concrete provider is wired
          up on the Bookshelf side (MauiProgram.AddDebug + platform
          logcat sink); tests use NullLogger. -->
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
     <!-- sqlite-net-pcl: ORM-lite over SQLite. Bundles a managed +
          native SQLite via SQLitePCLRaw; works on Android, iOS, and
          desktop with no manual native-library hookup. -->
-    <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
+    <PackageReference Include="sqlite-net-pcl" Version="1.11.285" />
     <!-- Pin the native SQLite binary ahead of what sqlite-net-pcl drags in
          transitively (SQLitePCLRaw.lib.e_sqlite3 2.1.2). 2.1.2 is flagged by
          NU1903 / CVE-2025-6965 (SQLite < 3.50.2 aggregate-terms memory
@@ -45,7 +45,7 @@
          an Android .so, which would collide with the .android AAR (XA4301 dup).
          Android keeps its own native (.android 2.1.2) until upstream ships a
          3.50.x .android — see BookTracker.Mobile's targeted NoWarn. -->
-    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" PrivateAssets="all" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" PrivateAssets="all" />
     <!-- SkiaSharp: cross-platform image decode + resize. Pulls native
          assets for Android (via transitive SkiaSharp.NativeAssets.*)
          and for the test runner OS automatically. Used by
@@ -57,7 +57,7 @@
          with 16KB pages enabled (the XA0141 build warning). 4.x keeps
          the SKSamplingOptions Resize API (replacing 2.x's SKFilterQuality)
          and stays 16KB-aligned; verify on-device after this bump (TD-10). -->
-    <PackageReference Include="SkiaSharp" Version="4.148.0" />
+    <PackageReference Include="SkiaSharp" Version="4.150.1" />
   </ItemGroup>
 
   <ItemGroup>

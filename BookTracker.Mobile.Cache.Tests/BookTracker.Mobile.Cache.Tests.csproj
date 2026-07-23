@@ -16,14 +16,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
     <!-- Same NU1903 native-SQLite override as the Cache project, pinned
          directly here because the Cache project's copy is PrivateAssets="all"
          and so doesn't flow across the ProjectReference (sqlite-net-pcl's
          transitive 2.1.2 still would). See BookTracker.Mobile.Cache.csproj. -->
-    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
   </ItemGroup>
 
   <ItemGroup>
@@ -34,9 +34,9 @@
          explicitly — Linux for CI ubuntu runners, Win32 for local
          Windows dev, macOS for completeness. The runtime picks the
          one matching its RID and ignores the others. -->
-    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.148.0" />
-    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="4.148.0" />
-    <PackageReference Include="SkiaSharp.NativeAssets.macOS" Version="4.148.0" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.150.1" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="4.150.1" />
+    <PackageReference Include="SkiaSharp.NativeAssets.macOS" Version="4.150.1" />
   </ItemGroup>
 
   <ItemGroup>
