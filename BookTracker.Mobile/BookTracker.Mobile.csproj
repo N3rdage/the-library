@@ -53,8 +53,8 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
-		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
-		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.10" />
 		<!-- MSAL.NET — AAD interactive sign-in via Chrome Custom Tabs, token
 		     cached in SecureStorage (Keystore-backed). -->
 		<PackageReference Include="Microsoft.Identity.Client" Version="4.66.2" />
