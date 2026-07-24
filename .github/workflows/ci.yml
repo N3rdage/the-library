@@ -10,14 +10,46 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # `build` is a REQUIRED status check on main, so this job must run and
+      # report on every PR — a skipped required check blocks the merge. But a
+      # doc/config-only PR (markdown, docs/, blog/, .claude-memory/, .claude/)
+      # doesn't need a build or test. paths-filter sets `code`; the dotnet
+      # steps below are gated on it, so a doc-only PR reports green in seconds
+      # without building. Anything that isn't clearly a doc — any .cs / .csproj
+      # / .razor / .json, workflow or infra files — leaves code=true and the
+      # full build runs. Fail-safe: the steps run unless code is *explicitly*
+      # 'false', so a paths-filter hiccup errs toward building, not skipping.
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - '**'
+              - '!**/*.md'
+              - '!docs/**'
+              - '!blog/**'
+              - '!.claude-memory/**'
+              - '!.claude/**'
+              - '!LICENSE'
+
+      - name: Doc-only change — skip build + test
+        if: steps.filter.outputs.code == 'false'
+        run: echo "Docs/config-only change — no build or test needed; reporting green for the required check."
+
       - uses: actions/setup-dotnet@v4
+        if: steps.filter.outputs.code != 'false'
         with:
           dotnet-version: '10.0.x'
       - run: dotnet restore BookTracker.slnx
+        if: steps.filter.outputs.code != 'false'
       - run: dotnet build BookTracker.slnx --configuration Release --no-restore
+        if: steps.filter.outputs.code != 'false'
       # Whitelist of test categories the PR job runs. E2E (Playwright) is
       # deliberately excluded — it'll get its own job once the Playwright
       # POC lands. Adding a new category is opt-in: append it here when
       # CI should run it. See BookTracker.Tests/README.md for the
       # category contract.
-      - run: dotnet test BookTracker.slnx --configuration Release --no-build --verbosity normal --filter "Category=Unit|Category=Component|Category=Integration"
+      - name: Test (Unit | Component | Integration)
+        if: steps.filter.outputs.code != 'false'
+        run: dotnet test BookTracker.slnx --configuration Release --no-build --verbosity normal --filter "Category=Unit|Category=Component|Category=Integration"
