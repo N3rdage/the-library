@@ -110,6 +110,8 @@ CI runs `dotnet test` on all PRs to main. The full suite must stay green before 
 
 ## Session memory
 
-Durable cross-session memory — feedback rules, arc retros, runbooks, project context — lives in the git-tracked **`.claude-memory\`** directory, indexed by `.claude-memory\MEMORY.md`. Claude Code's auto-memory loads that index at the start of every session and reads individual topic files on demand, so it is deliberately **not** `@import`-ed into this file (an import would load the same 16 KB index a second time).
+Durable cross-session memory — feedback rules, arc retros, runbooks, project context — lives in the git-tracked **`.claude-memory\`** directory, indexed by `.claude-memory\MEMORY.md`. Claude Code's auto-memory loads that index at the start of every session and reads individual topic files on demand.
+
+**Do NOT add an `@.claude-memory/MEMORY.md` import (or any `@` import of the index) to this file.** Auto-memory already loads the index every session via the symlink below, so an import double-loads the ~16 KB file. The import *looks* missing only because the symlink does its work invisibly — a 2026-07 external review proposed adding exactly this before catching the duplication. Full story: `retros/retro_config_memory_cleanup.md`.
 
 The load works because auto-memory's per-project directory (`~\.claude\projects\<repo-slug>\memory`) is a symlink to the in-repo `.claude-memory\`. On a fresh machine, recreate that link once with `scripts\link-claude-memory.ps1`; without it, auto-memory reads/writes a machine-local directory and the committed memory neither loads nor captures new notes into the repo.
