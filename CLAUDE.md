@@ -108,6 +108,18 @@ Two xUnit projects:
 
 CI runs `dotnet test` on all PRs to main. The full suite must stay green before merge.
 
+## Blog
+
+Posts in `blog/` follow the shared syndication contract: [`drew-blog/docs/BLOG_POST_CONTRACT.md`](https://github.com/N3rdage/drew-blog/blob/main/docs/BLOG_POST_CONTRACT.md) (maintained there — link it, don't copy it). They syndicate to `silly.ninja` under `/library/{slug}/`, and the aggregator's sync **validates and decorates — it never repairs**, so a non-compliant post fails the sync loudly. Load-bearing rules:
+
+- **Filenames + slugs are frozen after publish** — `YYYY-MM-DD-NN-slug.md`; site URLs and inbound cross-links hang off them. Never rename a post or change a slug.
+- **Frontmatter requires** `title`, `description`, `date`, `author`, `reviewed_by`, `slug`, `tags`. `date` == filename date; `slug` == filename remainder after `YYYY-MM-DD-NN-`; `tags` is a flat lowercase list. `description` is 1–2 plain-text sentences (no markdown) feeding listings, RSS, and OG cards.
+- **No H1 in the body** — the site layout renders the frontmatter title; body headings start at `##`.
+- **Sibling-post links are relative** — `[text](./YYYY-MM-DD-NN-slug.md)`, so they work on GitHub *and* get rewritten to `/library/{slug}/` by the sync. Links to non-post targets (repo root, code files, external sites, the `blog/` directory itself) stay absolute.
+- **Images** are relative (`./images/…` or `images/…`) with alt text; the sync copies them.
+
+`blog/sources/` (retros, backlogs, raw material) is ignored by the sync — it's mining input for posts, not published content. A push to `main` touching `blog/**` fires `.github/workflows/notify-drew-blog.yml`, which pings drew-blog to re-sync (no-ops safely until the `DREW_BLOG_DISPATCH_TOKEN` secret exists).
+
 ## Session memory
 
 Durable cross-session memory — feedback rules, arc retros, runbooks, project context — lives in the git-tracked **`.claude-memory\`** directory, indexed by `.claude-memory\MEMORY.md`. Claude Code's auto-memory loads that index at the start of every session and reads individual topic files on demand.
