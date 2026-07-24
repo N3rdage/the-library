@@ -8,7 +8,7 @@ metadata:
 
 # TD-15a eager-create arc retro
 
-Closed the last strand of TD-15: move lookup creation **eager to the picker** so the aggregate save stops owning the insert and the (single-user, near-impossible) check-then-insert race dissolves on the interactive paths. 4 PRs, 2026-06-28 → 06-30. PRs: #392 author/contributor, #395 publisher, #396 series + manual-series-on-Add, + close-out. State: [[project_td15a_eager_create_arc]]; resolution recorded in `docs/TECH-DEBT.md` TD-15 → Resolved.
+Closed the last strand of TD-15: move lookup creation **eager to the picker** so the aggregate save stops owning the insert and the (single-user, near-impossible) check-then-insert race dissolves on the interactive paths. 4 PRs, 2026-06-28 → 06-30. PRs: #392 author/contributor, #395 publisher, #396 series + manual-series-on-Add, + close-out. Resolution recorded in `docs/TECH-DEBT.md` TD-15 → Resolved.
 
 **Design = Option B (Drew's call).** Pickers eager-create on commit; the save **keeps `*Resolver.ResolveAsync` as a net** (covers ISBN-prefill names that bypass the picker). No names→ids contract change → far less churn than a load-only save, and the PRs stay independent (saves untouched, no convergence on `BookAddViewModel.SaveAsync`).
 

@@ -39,7 +39,7 @@ Audience: other developers using or interested in using Claude / Claude Code on 
 
 ## Post backlog
 
-The corpus-derived candidate list (one-time mine of all retros + `patterns.md` as of 2026-04-28) lives in [`blog_post_backlog.md`](blog_post_backlog.md). Each entry has a one-line angle and the source retro it anchors on. When picking the next post, start there — it's the definitive count of what's mineable from existing retros.
+The corpus-derived candidate list (one-time mine of all retros + `patterns.md` as of 2026-04-28) lives in [`blog_post_backlog.md`](../blog/sources/blog_post_backlog.md). Each entry has a one-line angle and the source retro it anchors on. When picking the next post, start there — it's the definitive count of what's mineable from existing retros.
 
 Going forward, new retros add their own candidate entry to the backlog at write time, and shipped posts move from "candidates" to "shipped" in the same file.
 

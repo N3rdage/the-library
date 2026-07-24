@@ -12,9 +12,9 @@ When Drew says "sync TODO items" (or similar), scan:
 1. Memory for any TODO-type entries
 2. Code for `// TODO` comments (grep for `TODO`)
 3. `TODO.md` for the current list
-4. **Each Open row's named artefacts against the actual codebase** — for every Open row that mentions specific files / functions / properties (e.g. "add `SearchBooksByTitleAsync`", "layer four BoxView rectangles in `ScanPage.xaml`"), grep the named bits. If they already exist, the row is stale: move it to Shipped with the PR number from `git log --all -- <file> | grep -i 'TODO #N'`.
+4. **Each Open row's named artefacts against the actual codebase** — for every Open row that mentions specific files / functions / properties (e.g. "add `SearchBooksByTitleAsync`", "layer four BoxView rectangles in `ScanPage.xaml`"), grep the named bits. If they already exist, the row is stale: move it to `docs/SHIPPED.md` with the PR number from `git log --all -- <file> | grep -i 'TODO #N'`. (Shipped history lives in `docs/SHIPPED.md`, archived out of TODO.md in the 2026-07-23 config cleanup; TODO.md keeps only the Open table.)
 
-Reconcile all four — add anything missing to `TODO.md`, move shipped-but-stale rows to Shipped, flag any rows that look completed but can't be confirmed.
+Reconcile all four — add anything missing to `TODO.md`, move shipped-but-stale rows to `docs/SHIPPED.md`, flag any rows that look completed but can't be confirmed.
 
 **Why:** TODOs were scattered across memory, code comments, and README files. A single `TODO.md` is visible to both Drew and Claude, versioned in git, and has no size limits. The Open-vs-reality probe (step 4) was added after the 2026-05-13 Bookshelf arc sync session found four Open rows (#30, #31, #32, #35a) that had genuinely shipped weeks earlier on dedicated PRs (#218, #229, #230, #233) — `feedback_close_todos_in_same_pr` post-dated those PRs so the move was missed, and the earlier sync only checked code `// TODO` comments vs TODO.md, not "is the feature actually shipped" against Open rows. Cost a wasted "go ship #30" branch before I noticed the overlay was already in `ScanPage.xaml`.
 
