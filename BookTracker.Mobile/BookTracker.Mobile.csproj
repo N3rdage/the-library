@@ -17,15 +17,6 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 
-		<!-- TD-11: TreatWarningsAsErrors stays ON (inherited) so real warnings in
-		     OUR code still gate. XA0141 (16KB-page alignment) is exempted: ZXing.Net
-		     .MAUI 0.4.0 (latest) ships an unaligned androidx.camera.camera-core and
-		     SQLitePCLRaw's .android .so is unaligned at 2.1.2 — both upstream-bound,
-		     and not a current break (devices still run 4KB pages). XA0141 has no
-		     per-package scope, so it's a blanket NoWarn; revisit when upstream
-		     aligns. The NU1903 SQLite vuln is handled per-advisory below. -->
-		<WarningsNotAsErrors>XA0141</WarningsNotAsErrors>
-
 		<MauiXamlInflator>SourceGen</MauiXamlInflator>
 
 		<ApplicationTitle>Bookshelf</ApplicationTitle>
