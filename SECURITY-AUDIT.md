@@ -2,7 +2,7 @@
 
 Living security posture review. Per-area verdicts: **Pass** / **Concern** / **Action required**. Fixes applied in the same PR are listed at the bottom; deferred items link to `TODO.md`. Monthly scan + review is automated via `.github/workflows/security-scan.yml`.
 
-**Last reviewed:** 2026-05-05 (monthly cycle; per-run report in `audits/security-2026-05-05.md`).
+**Last reviewed:** 2026-07-24 via the `security-audit` skill (per-run report in `audits/security-2026-07-24.md`) — 0 critical / 0 high / 0 medium; 1 low (SEC-004 `Permissions-Policy` absent, **fixed this cycle**), rest info/clean, no drift from this doc. Prior review: 2026-05-05.
 
 ---
 
@@ -68,6 +68,7 @@ Living security posture review. Per-area verdicts: **Pass** / **Concern** / **Ac
   - `X-Frame-Options: DENY` (middleware in `Program.cs`) — clickjacking protection.
   - `X-Content-Type-Options: nosniff` — MIME sniffing protection.
   - `Referrer-Policy: strict-origin-when-cross-origin` — limit referrer leakage.
+  - `Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=()` (middleware in `ProgramSetup.cs`, added 2026-07-24) — deny powerful browser features by default; camera allowed same-origin only for the `/bookshop` barcode scanner (`getUserMedia`). Closes **SEC-004** from the 2026-07-24 audit run.
 - **Follow-up:** the `unsafe-inline` + `unsafe-eval` directives leave a real XSS surface. Moving to a nonce-based CSP with a script-nonce middleware is tracked as a new TODO row.
 
 ---
