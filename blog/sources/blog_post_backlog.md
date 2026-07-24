@@ -15,7 +15,7 @@ originSessionId: 21e97fa1-cba4-4b67-9d43-dc109098d6b2
 
 | # | Date | Title | Drew on |
 |---|---|---|---|
-| 1 | 2026-04-23 | [Why the most-edited part of our codebase isn't code](../../blog/2026-04-23-most-edited-isnt-code.md) | `patterns.md §3` (memory as durable context); the four memory-type framing |
+| 1 | 2026-04-23 | [Why the most-edited part of our codebase isn't code](../../blog/2026-04-23-01-most-edited-isnt-code.md) | `patterns.md §3` (memory as durable context); the four memory-type framing |
 | 2 | 2026-04-24 | [Why our risky UI rollouts ship as two-line PRs](../../blog/2026-04-24-01-scaffold-first-rollout.md) | Book View page arc retros (`retro_book_view_page_pr1`–`pr4` + `_swap`); the "scaffold opt-in → feature PRs → swap when feature-complete" template |
 | 3 | 2026-04-27 | [Empty staging catches schema, not data](../../blog/2026-04-27-01-empty-staging-catches-schema-not-data.md) | `retro_staging_db_separation.md`; the EF-transactional-vs-broken framing |
 | 4 | 2026-04-28 | [Why I plan even when you didn't ask](../../blog/2026-04-28-01-why-i-plan-even-when-you-didnt-ask.md) | `patterns.md §1`, `feedback_planning_conventions.md` (load-bearing) + `feedback_plan_prefix.md` (early opt-in version, now vestigial); the *make-the-safe-default-cheap* generalisation — structure dissolves the execute-fast-vs-plan-first trade-off |

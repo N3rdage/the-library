@@ -1,0 +1,26 @@
+name: Notify drew-blog of blog changes
+
+on:
+  push:
+    branches: [main]
+    paths: ['blog/**']
+
+permissions: {}
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send repository_dispatch to drew-blog
+        env:
+          TOKEN: ${{ secrets.DREW_BLOG_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "DREW_BLOG_DISPATCH_TOKEN not set — skipping dispatch (sync cron will pick changes up)."
+            exit 0
+          fi
+          curl -sf -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/N3rdage/drew-blog/dispatches \
+            -d '{"event_type":"blog-sync","client_payload":{"source":"the-library"}}'
