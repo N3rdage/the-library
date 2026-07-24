@@ -71,6 +71,16 @@ EF Core migrations are run from `BookTracker.Data` with `BookTracker.Web` as the
 dotnet ef database update --project .\BookTracker.Data --startup-project .\BookTracker.Web
 ```
 
+### 6. (Optional) Wire Claude memory into the repo
+
+The project's durable Claude memory is committed under `.claude-memory\`. To make Claude Code's auto-memory read and write that in-repo directory (instead of a machine-local one), symlink it once — needs Developer Mode or an elevated shell:
+
+```powershell
+pwsh -File .\scripts\link-claude-memory.ps1
+```
+
+Idempotent; skip this if you're not using Claude Code. See the **Session memory** section of `CLAUDE.md` for the rationale.
+
 ## Daily workflow
 
 ```powershell
