@@ -93,7 +93,7 @@ public class EditionMergeViewModelTests
         Assert.NotNull(result);
         Assert.True(result!.Success);
         await _dispatcher.Received(1).Send(
-            Arg.Is<MergeEditions>(c => c.WinnerId == 1 && c.LoserId == 2),
+            Arg.Is<MergeEditions>(c => c!.WinnerId == 1 && c.LoserId == 2),
             Arg.Any<CancellationToken>());
     }
 }

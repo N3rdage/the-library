@@ -51,7 +51,7 @@ public class SeriesListViewModelTests
         Assert.False(vm.Loading);
         Assert.Single(vm.AllSeries);
         await _dispatcher.Received().Query(
-            Arg.Is<GetSeriesList>(q => q.Search == "foo" && q.Type == SeriesType.Collection),
+            Arg.Is<GetSeriesList>(q => q!.Search == "foo" && q.Type == SeriesType.Collection),
             Arg.Any<CancellationToken>());
     }
 
@@ -65,7 +65,7 @@ public class SeriesListViewModelTests
         await vm.InitializeAsync();
 
         await _dispatcher.Received().Query(
-            Arg.Is<GetSeriesList>(q => q.Type == null),
+            Arg.Is<GetSeriesList>(q => q!.Type == null),
             Arg.Any<CancellationToken>());
     }
 }

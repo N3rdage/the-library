@@ -96,7 +96,7 @@ public class MudAuthorPickerTests : ComponentTestBase
         await cut.InvokeAsync(() => cut.Instance.OnCommitKey("Preston"));
 
         await _dispatcher.Received(1).Send(
-            Arg.Is<CreateAuthor>(c => c.Name == "Preston"), Arg.Any<CancellationToken>());
+            Arg.Is<CreateAuthor>(c => c!.Name == "Preston"), Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -98,7 +98,7 @@ public class BookMergeViewModelTests
         Assert.NotNull(result);
         Assert.True(result!.Success);
         await _dispatcher.Received(1).Send(
-            Arg.Is<MergeBooks>(c => c.WinnerId == 1 && c.LoserId == 2),
+            Arg.Is<MergeBooks>(c => c!.WinnerId == 1 && c.LoserId == 2),
             Arg.Any<CancellationToken>());
     }
 }

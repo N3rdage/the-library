@@ -103,7 +103,7 @@ public class PublisherListViewModelTests
         Assert.False(vm.DetailByPublisherId.ContainsKey(1));
         Assert.False(vm.DetailByPublisherId.ContainsKey(2));
         await _dispatcher.Received(1).Send(
-            Arg.Is<MergePublishers>(c => c.SourceId == 1 && c.TargetId == 2),
+            Arg.Is<MergePublishers>(c => c!.SourceId == 1 && c.TargetId == 2),
             Arg.Any<CancellationToken>());
     }
 }

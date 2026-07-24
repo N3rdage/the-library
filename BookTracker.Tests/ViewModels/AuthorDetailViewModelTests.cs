@@ -18,7 +18,7 @@ public class AuthorDetailViewModelTests
         new(new AuthorHeader(id, name, canonicalId, canonicalName), AuthorDetail.Empty, []);
 
     private void StubDetail(int id, AuthorDetailResult? result) =>
-        _dispatcher.Query(Arg.Is<GetAuthorDetail>(q => q.AuthorId == id), Arg.Any<CancellationToken>())
+        _dispatcher.Query(Arg.Is<GetAuthorDetail>(q => q!.AuthorId == id), Arg.Any<CancellationToken>())
             .Returns(result);
 
     [Fact]
@@ -58,7 +58,7 @@ public class AuthorDetailViewModelTests
 
         Assert.Equal("Renamed to \"New\".", vm.SuccessMessage);
         // Reload = a second GetAuthorDetail dispatch for the same id.
-        await _dispatcher.Received(2).Query(Arg.Is<GetAuthorDetail>(q => q.AuthorId == 1), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(2).Query(Arg.Is<GetAuthorDetail>(q => q!.AuthorId == 1), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public class AuthorDetailViewModelTests
 
         Assert.NotNull(vm.ErrorMessage);
         // No reload — still only the initial load dispatch.
-        await _dispatcher.Received(1).Query(Arg.Is<GetAuthorDetail>(q => q.AuthorId == 1), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).Query(Arg.Is<GetAuthorDetail>(q => q!.AuthorId == 1), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -134,7 +134,7 @@ public class AuthorDetailViewModelTests
         await vm.MarkAsAliasOfAsync(1);
 
         await _dispatcher.Received(1).Send(
-            Arg.Is<MarkAuthorAsAliasOf>(c => c.AliasId == 2 && c.CanonicalId == 1),
+            Arg.Is<MarkAuthorAsAliasOf>(c => c!.AliasId == 2 && c.CanonicalId == 1),
             Arg.Any<CancellationToken>());
     }
 
@@ -162,7 +162,7 @@ public class AuthorDetailViewModelTests
         await vm.PromoteToCanonicalAsync();
 
         await _dispatcher.Received(1).Send(
-            Arg.Is<PromoteAuthorToCanonical>(c => c.AuthorId == 2),
+            Arg.Is<PromoteAuthorToCanonical>(c => c!.AuthorId == 2),
             Arg.Any<CancellationToken>());
     }
 }

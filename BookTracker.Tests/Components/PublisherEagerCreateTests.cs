@@ -32,7 +32,7 @@ public class PublisherEagerCreateTests
         Assert.Equal(42, result.Value.Id);
         Assert.Equal("Gollancz", result.Value.Name);
         await _dispatcher.Received(1).Send(
-            Arg.Is<CreatePublisher>(c => c.Name == "Gollancz"), Arg.Any<CancellationToken>());
+            Arg.Is<CreatePublisher>(c => c!.Name == "Gollancz"), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public class PublisherEagerCreateTests
         Assert.NotNull(result);
         Assert.Equal("Gollancz", result.Value.Name);
         await _dispatcher.Received(1).Send(
-            Arg.Is<CreatePublisher>(c => c.Name == "Gollancz"), Arg.Any<CancellationToken>());
+            Arg.Is<CreatePublisher>(c => c!.Name == "Gollancz"), Arg.Any<CancellationToken>());
     }
 
     [Fact]
