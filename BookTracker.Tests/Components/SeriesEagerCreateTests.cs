@@ -25,7 +25,7 @@ public class SeriesEagerCreateTests
 
         Assert.Equal(42, id);
         await _dispatcher.Received(1).Send(
-            Arg.Is<EnsureSeries>(c => c.Name == "Mistborn"), Arg.Any<CancellationToken>());
+            Arg.Is<EnsureSeries>(c => c!.Name == "Mistborn"), Arg.Any<CancellationToken>());
     }
 
     [Fact]

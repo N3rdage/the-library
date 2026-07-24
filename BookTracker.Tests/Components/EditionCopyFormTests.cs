@@ -59,7 +59,7 @@ public class EditionCopyFormTests : ComponentTestBase
 
         Assert.Equal("Gollancz", edition.Publisher); // stored for the save
         await _dispatcher.Received(1).Send(
-            Arg.Is<CreatePublisher>(c => c.Name == "Gollancz"), Arg.Any<CancellationToken>());
+            Arg.Is<CreatePublisher>(c => c!.Name == "Gollancz"), Arg.Any<CancellationToken>());
         // Appended to the cache so a re-pick is a no-op and it shows in search.
         var vm = Services.GetRequiredService<EditionFormViewModel>();
         Assert.Contains(vm.ExistingPublishers, p => p.Name == "Gollancz");
