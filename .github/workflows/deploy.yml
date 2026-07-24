@@ -3,6 +3,18 @@ name: Deploy to staging slot
 on:
   push:
     branches: [main]
+    # Doc/config-only merges don't change the deployed bits, so skip the
+    # staging push. GitHub skips the run only when EVERY changed path matches,
+    # so a mixed doc+code merge still deploys. Keep this list in sync with the
+    # paths-filter in ci.yml. (Deploy isn't a required status check, so a
+    # skipped run can't block anything.)
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'blog/**'
+      - '.claude-memory/**'
+      - '.claude/**'
+      - 'LICENSE'
   workflow_dispatch:
 
 concurrency:
