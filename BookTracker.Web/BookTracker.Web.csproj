@@ -20,9 +20,9 @@
          because the cover pipeline is headless decode/resize/encode — no fonts, so
          we don't need fontconfig in the App Service container. Win32 asset covers
          local Windows dev + the BookTracker.Tests run. Same 4.150.1 as Mobile. -->
-    <PackageReference Include="SkiaSharp" Version="4.150.1" />
-    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.150.1" />
-    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="4.150.1" />
+    <PackageReference Include="SkiaSharp" Version="4.151.0" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.151.0" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="4.151.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
