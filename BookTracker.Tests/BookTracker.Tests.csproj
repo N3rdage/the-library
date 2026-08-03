@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="bunit" Version="2.7.2" />
+    <PackageReference Include="bunit" Version="2.8.6" />
     <!-- Security pin: bUnit 2.7.2 pulls AngleSharp 1.4.0 transitively, which has
          a moderate mXSS sanitizer-bypass advisory (GHSA-pgww-w46g-26qg,
          CVE-2026-54570, patched in 1.5.0). We only use AngleSharp via bUnit to
