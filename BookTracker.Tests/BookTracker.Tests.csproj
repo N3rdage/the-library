@@ -16,7 +16,7 @@
          sanitizer — but TWAE promotes the NU1902 audit warning to an error.
          Pin the patched version directly; PrivateAssets so it stays test-local.
          Remove once bUnit's own AngleSharp floor reaches >= 1.5.0. -->
-    <PackageReference Include="AngleSharp" Version="1.5.2" PrivateAssets="all" />
+    <PackageReference Include="AngleSharp" Version="1.7.0" PrivateAssets="all" />
     <!-- SkiaSharp for the CoverImageProcessor tests (make/decode sample images).
          Native assets explicit so the test host decodes on Windows (local) +
          Linux (CI). Linux.NoDependencies (not the full .Linux) because these
