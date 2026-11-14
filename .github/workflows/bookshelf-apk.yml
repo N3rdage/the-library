@@ -34,12 +34,13 @@ name: Bookshelf APK (on demand)
 #
 # Where the APK goes: the project's existing storage account (the covers
 # account, `booktrackercovers<hash>`), a private container `bookshelf-builds`
-# (no anonymous access), and a read-only SAS link that expires after 24 hours,
-# written to the job summary only. The identity is the same GitHub OIDC
+# (no anonymous access). This is a public repo, so the run's log, summary and
+# artifacts are readable by others: the workflow therefore publishes NO link
+# and NO artifact. Drew fetches the APK with his own Azure login (portal >
+# the storage account > Containers > bookshelf-builds > the blob > Download);
+# the summary names the blob. The upload identity is the same GitHub OIDC
 # service principal the deploy workflow uses (Contributor on the resource
-# group, which is enough to upload with the account key and mint the SAS).
-# The APK is also kept as a workflow artifact for 7 days as a fallback that
-# needs a GitHub sign-in to fetch.
+# group, enough to upload with the account key).
 
 on:
   workflow_dispatch:
@@ -145,13 +146,6 @@ jobs:
           echo "name=$name" >> "$GITHUB_OUTPUT"
           ls -l "$name"
 
-      - name: Keep the APK as a workflow artifact (fallback, 7 days)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.apk.outputs.name }}
-          path: ${{ steps.apk.outputs.path }}
-          retention-days: 7
-
       - name: Azure login (OIDC)
         uses: azure/login@v2
         with:
@@ -159,8 +153,8 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Upload to the private container and mint a 24-hour link
-        id: link
+      - name: Upload to the private container
+        id: upload
         env:
           AZURE_RG: ${{ vars.AZURE_RG }}
           APK: ${{ steps.apk.outputs.path }}
@@ -177,12 +171,7 @@ jobs:
           az storage blob upload --account-name "$account" --container-name "$container" \
             --name "$NAME" --file "$APK" --content-type application/vnd.android.package-archive \
             --overwrite --auth-mode key --output none
-          expiry=$(date -u -d '+24 hours' '+%Y-%m-%dT%H:%MZ')
-          sas=$(az storage blob generate-sas --account-name "$account" --container-name "$container" \
-            --name "$NAME" --permissions r --expiry "$expiry" --https-only --auth-mode key -o tsv)
-          url="https://${account}.blob.core.windows.net/${container}/${NAME}?${sas}"
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-          echo "expiry=$expiry" >> "$GITHUB_OUTPUT"
+          echo "account=$account" >> "$GITHUB_OUTPUT"
           # Keep old builds from piling up: anything older than 14 days goes.
           cutoff=$(date -u -d '-14 days' '+%Y-%m-%dT%H:%MZ')
           az storage blob delete-batch --account-name "$account" --source "$container" \
@@ -190,8 +179,7 @@ jobs:
 
       - name: Summary
         env:
-          URL: ${{ steps.link.outputs.url }}
-          EXPIRY: ${{ steps.link.outputs.expiry }}
+          ACCOUNT: ${{ steps.upload.outputs.account }}
           KEYSTORE: ${{ steps.keystore.outputs.status }}
           APPCONFIG: ${{ steps.appconfig.outputs.status }}
           NAME: ${{ steps.apk.outputs.name }}
@@ -211,7 +199,7 @@ jobs:
             fi
             [ -n "$NOTE" ] && echo "- Note: $NOTE"
             echo
-            echo "**Download (link expires $EXPIRY UTC):** $URL"
+            echo "**Where it is:** storage account \`$ACCOUNT\`, private container \`bookshelf-builds\`, blob \`$NAME\`."
             echo
-            echo "On the phone: open the link in the browser, open the download, allow installs from the browser if asked. The workflow artifact above is the 7-day fallback (needs a GitHub sign-in)."
+            echo "No link is published (public repo). On the phone: portal.azure.com, sign in, open the storage account, Containers, bookshelf-builds, tap the blob, Download, then open the download and allow installs from the browser if asked. Builds older than 14 days are pruned."
           } >> "$GITHUB_STEP_SUMMARY"
