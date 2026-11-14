@@ -28,7 +28,7 @@ jobs:
       # Everything Bookshelf compiles against: its own project, the two
       # projects it references, the repo-wide build props, and this workflow.
       # Fail-safe: steps run unless `mobile` is *explicitly* 'false'.
-      - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           filters: |
