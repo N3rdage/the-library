@@ -1,0 +1,12 @@
+# Code owners. With "Require review from Code Owners" switched on in the `main` ruleset, a pull
+# request that touches a path listed here cannot merge without an approval from its owner,
+# whatever other approvals it has. Everything not listed keeps merging on the normal rules.
+#
+# Why these paths (security audit 2026-11-14): `.github/` decides what CI runs, which secrets and
+# which Azure identity a job can reach, and how dependencies arrive; `infra/` is the production
+# Azure footprint and the scripts that grant access to it. A change to either is Drew's to
+# approve, not the autonomous reviewer's. This file is listed too (it lives under `.github/`),
+# so the list cannot be shortened without him.
+
+/.github/ @N3rdage
+/infra/   @N3rdage
