@@ -22,8 +22,8 @@ param prodContainerName string = 'book-covers'
 param stagingContainerName string = 'book-covers-staging'
 
 // Private container for Bookshelf APKs built on demand by
-// .github/workflows/bookshelf-apk.yml. No anonymous access: the workflow
-// hands Drew a read-only SAS link that expires in 24 hours. The workflow also
+// .github/workflows/bookshelf-apk.yml. No anonymous access and no published
+// link: Drew downloads a build with his own Azure login. The workflow also
 // creates the container if it is missing, so it works before this is deployed.
 param bookshelfBuildsContainerName string = 'bookshelf-builds'
 
