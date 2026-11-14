@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Environment
 
-**Windows only.** All commands in this file and any you suggest must target a Windows shell (PowerShell 7 / Windows PowerShell / `cmd.exe`). Do not use Unix-isms like `/dev/null`, forward-slash-only paths, `export VAR=...`, `&&` chaining habits from bash scripts, or POSIX tools (`grep`, `sed`, `cat`) in instructions. Use `;` to chain in PowerShell, `$env:VAR = "..."` to set env vars, backslashes or quoted forward-slash paths, and `Select-String` / `Get-Content` when a shell tool is needed. The repo path contains a space (`C:\Users\Drew.Work\code\The Library`) — always quote it.
+**Windows only** for sessions with Drew. All commands in this file and any you suggest must target a Windows shell (PowerShell 7 / Windows PowerShell / `cmd.exe`). Do not use Unix-isms like `/dev/null`, forward-slash-only paths, `export VAR=...`, `&&` chaining habits from bash scripts, or POSIX tools (`grep`, `sed`, `cat`) in instructions. Use `;` to chain in PowerShell, `$env:VAR = "..."` to set env vars, backslashes or quoted forward-slash paths, and `Select-String` / `Get-Content` when a shell tool is needed. The repo path contains a space (`C:\Users\Drew.Work\code\The Library`) — always quote it.
+
+**The one exception: headless orchestrator runs.** Since November 2026 an autonomous controlling agent also works in this repo (one PR per backlog issue, independently reviewed and merged by a second GitHub App; its rules live in the private `N3rdage/agentic-gaming` repo, ADR-003). It runs in a Linux container with bash, so the `dotnet`, `git` and `gh` commands here are the same but the shell idioms above do not apply to it, and it never edits this file to say so. Its branches are `agent/<issue>-<slug>`; it cannot run the Integration test category (Testcontainers needs Docker, which its container lacks), so for its PRs the CI job is the integration gate; it never runs the deploy, swap or rotation workflows, and a major Bookshelf change waits for Drew's yes after review (see Mobile considerations). Drew's veto on any of its PRs is the `needs-drew` label, a changes-requested review, or the word `hold` in a comment.
 
 ## Project
 
@@ -40,7 +42,7 @@ Config convention: connection string name is **`DefaultConnection`**. Dev value 
 
 ## Branching
 
-**Never commit or push to `main`.** All changes go through a feature branch + PR. Branch-name prefixes: `feat/`, `fix/`, `chore/`, `docs/`, `refactor/`. Large features may use sub-branches (`feat/parent/sub-branch`) that PR into the parent feature branch before the parent PRs into `main`. Squash-merge into `main`. See `CONTRIBUTING.md` for full details.
+**Never commit or push to `main`.** All changes go through a feature branch + PR. Branch-name prefixes: `feat/`, `fix/`, `chore/`, `docs/`, `refactor/` (and `agent/<issue>-<slug>` for the orchestrator's branches). Large features may use sub-branches (`feat/parent/sub-branch`) that PR into the parent feature branch before the parent PRs into `main`. Squash-merge into `main`. See `CONTRIBUTING.md` for full details.
 
 Before starting new work:
 
@@ -81,6 +83,8 @@ Two distinct mobile surfaces:
 
 When planning new features, always clarify which surface(s) it touches: **Bookcase web only**, **Bookcase web + PWA mobile**, **Bookshelf only**, or **both apps**. The decision drives where the work lands (Razor + JS, MAUI XAML + cache, or DTO + both consumers). Key mobile workflows: in-bookshop ISBN scan, author/title lookup, series gaps (do I need #6 of Foundation while I'm here?).
 
+**Building and installing Bookshelf.** `BookTracker.Mobile` is outside `BookTracker.slnx` on purpose (see the comment in the solution file), so the main CI job never compiles it; `.github/workflows/mobile-build.yml` does, as the required `mobile-build` check, whenever a PR touches `BookTracker.Mobile/`, `BookTracker.Mobile.Cache/`, `BookTracker.Shared/` or `Directory.Build.props`. Drew's own install path is still `dotnet build -t:Run -f net10.0-android` over USB. For a review install without the laptop, run `.github/workflows/bookshelf-apk.yml` from the Actions tab on the branch in question: it builds a Debug APK signed with Drew's debug keystore (restored from the `BOOKSHELF_DEBUG_KEYSTORE_B64` secret, so it installs over the USB build and the AAD redirect hash still matches), uploads it to the private `bookshelf-builds` container and prints a 24-hour link in the job summary. The orchestrator asks for that only for a *major* Bookshelf change (a new page or tab, navigation, the sync or cache schema, auth): it labels the PR `needs-drew` after review and waits for a yes; minor changes merge without it.
+
 ## AI integration
 
 Three AI providers supported in code, selectable at runtime via toggle on the AI Assistant and Bulk Add pages:
@@ -106,7 +110,7 @@ Two xUnit projects:
 - **`BookTracker.Tests\`** — Bookcase tests. xUnit + NSubstitute against a **real SQL Server via MSSQL Testcontainer** (one container per process, Respawn-based wipe + reseed per `TestDbContextFactory`). EF InMemory was the original choice; the pivot off it caught real bugs InMemory's lax SQL translation had let through. Playwright E2E lives in `E2E/` (gated by `Category=E2E`) — requires `ms-playwright` browsers locally.
 - **`BookTracker.Mobile.Cache.Tests\`** — Bookshelf cache tests. Pure xUnit + real SQLite files (GUID-named temp files, one per test). No MAUI runtime needed.
 
-CI runs `dotnet test` on all PRs to main. The full suite must stay green before merge.
+CI runs `dotnet test` on all PRs to main. The full suite must stay green before merge. The Integration category needs Docker for Testcontainers, so a headless orchestrator run (above) covers Unit and Component locally and relies on the CI job for Integration; the gate report on its PRs says so.
 
 ## Blog
 

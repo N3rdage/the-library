@@ -1,0 +1,76 @@
+name: Mobile build
+
+# Compiles Bookshelf (BookTracker.Mobile, net10.0-android), which is deliberately
+# outside BookTracker.slnx so the main CI job stays workload-free. Until this
+# workflow existed nothing in CI compiled the MAUI project at all: a Bookshelf
+# change was only ever built on Drew's laptop over USB. Now it is a required
+# check (`mobile-build`), so the job must run and report on every PR. A PR that
+# touches nothing Bookshelf depends on reports green in seconds without the
+# workload install; the paths-filter decides, same shape as ci.yml.
+#
+# The APK handed to Drew for a review install is a different workflow
+# (bookshelf-apk.yml, on demand); this one only proves the project builds.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Everything Bookshelf compiles against: its own project, the two
+      # projects it references, the repo-wide build props, and this workflow.
+      # Fail-safe: steps run unless `mobile` is *explicitly* 'false'.
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            mobile:
+              - 'BookTracker.Mobile/**'
+              - 'BookTracker.Mobile.Cache/**'
+              - 'BookTracker.Shared/**'
+              - 'Directory.Build.props'
+              - '.github/workflows/mobile-build.yml'
+
+      - name: No Bookshelf change — skip the Android build
+        if: steps.filter.outputs.mobile == 'false'
+        run: echo "Nothing Bookshelf depends on changed; reporting green for the required check."
+
+      - uses: actions/setup-dotnet@v4
+        if: steps.filter.outputs.mobile != 'false'
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/setup-java@v4
+        if: steps.filter.outputs.mobile != 'false'
+        with:
+          distribution: 'microsoft'
+          java-version: '17'
+
+      - name: Install the MAUI Android workload
+        if: steps.filter.outputs.mobile != 'false'
+        run: dotnet workload install maui-android
+
+      - name: Install the Android SDK components the workload wants
+        # The hosted runner ships an Android SDK; this target adds whatever
+        # platform / build-tools level the installed MAUI version targets.
+        if: steps.filter.outputs.mobile != 'false'
+        run: >
+          dotnet build BookTracker.Mobile/BookTracker.Mobile.csproj
+          -f net10.0-android -t:InstallAndroidDependencies
+          -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=True
+
+      - name: Build Bookshelf (Release, warnings as errors)
+        if: steps.filter.outputs.mobile != 'false'
+        run: >
+          dotnet build BookTracker.Mobile/BookTracker.Mobile.csproj
+          --configuration Release -f net10.0-android
+          -p:AndroidSdkDirectory="$ANDROID_HOME"
+          /p:SourceRevisionId=${{ github.sha }}

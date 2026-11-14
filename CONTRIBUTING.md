@@ -11,6 +11,7 @@
 - `chore/<short-name>` — tooling, build, dependency bumps
 - `docs/<short-name>` — documentation-only changes
 - `refactor/<short-name>` — non-behavioral code changes
+- `agent/<issue>-<short-name>` — branches opened by the autonomous orchestrator (one per backlog issue in the private `agentic-gaming` repo)
 
 ### Sub-branches
 
@@ -41,4 +42,4 @@ Delete the branch after the PR is merged.
 
 - Keep PRs focused — one concern per PR.
 - Squash-merge into `main` to keep history linear.
-- A PR cannot be merged without an approving review and passing required status checks (enforced by branch protection).
+- A PR cannot be merged without an approving review and passing required status checks (enforced by branch protection). The required checks are `build` (CI), `mobile-build` (compiles Bookshelf when a PR touches what it depends on; reports green in seconds otherwise) and the Gitleaks secret scan.

@@ -21,6 +21,12 @@ param keyVaultName string
 param prodContainerName string = 'book-covers'
 param stagingContainerName string = 'book-covers-staging'
 
+// Private container for Bookshelf APKs built on demand by
+// .github/workflows/bookshelf-apk.yml. No anonymous access: the workflow
+// hands Drew a read-only SAS link that expires in 24 hours. The workflow also
+// creates the container if it is missing, so it works before this is deployed.
+param bookshelfBuildsContainerName string = 'bookshelf-builds'
+
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageAccountName
   location: location
@@ -73,6 +79,14 @@ resource stagingContainer 'Microsoft.Storage/storageAccounts/blobServices/contai
   }
 }
 
+resource bookshelfBuildsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: bookshelfBuildsContainerName
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
 // Build the connection string from the account's primary key and write it
 // to KV. Pattern matches ai-services.bicep — secrets that derive from
 // resources we provision here stay out of deployment params.
@@ -95,5 +109,6 @@ output storageAccountName string = storageAccount.name
 output blobEndpoint string = storageAccount.properties.primaryEndpoints.blob
 output prodContainerName string = prodContainerName
 output stagingContainerName string = stagingContainerName
+output bookshelfBuildsContainerName string = bookshelfBuildsContainerName
 output prodPublicContainerUrl string = '${storageAccount.properties.primaryEndpoints.blob}${prodContainerName}'
 output stagingPublicContainerUrl string = '${storageAccount.properties.primaryEndpoints.blob}${stagingContainerName}'
