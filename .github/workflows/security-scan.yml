@@ -17,9 +17,10 @@ on:
     - cron: '0 6 1 * *'  # monthly 1st of month 06:00 UTC — opens the review issue
   workflow_dispatch:
 
+# Read-only by default; only the monthly-review job may write issues, so the
+# job that runs on pull requests holds no write permission at all.
 permissions:
   contents: read
-  issues: write
 
 jobs:
   gitleaks:
@@ -30,12 +31,12 @@ jobs:
     if: github.event_name != 'schedule' || github.event.schedule != '0 6 1 * *'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0  # full history so gitleaks can scan everything
 
       - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # GITLEAKS_LICENSE is only required for organisations — personal
@@ -46,8 +47,11 @@ jobs:
     # Only run on the 1st-of-month cron (and manual dispatch for testing).
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 6 1 * *'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const now = new Date();

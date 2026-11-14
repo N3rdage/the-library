@@ -5,11 +5,16 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Least privilege: read the code, and let paths-filter list the PR's changed files.
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # `build` is a REQUIRED status check on main, so this job must run and
       # report on every PR — a skipped required check blocks the merge. But a
@@ -20,7 +25,7 @@ jobs:
       # / .razor / .json, workflow or infra files — leaves code=true and the
       # full build runs. Fail-safe: the steps run unless code is *explicitly*
       # 'false', so a paths-filter hiccup errs toward building, not skipping.
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3
         id: filter
         with:
           filters: |
@@ -37,7 +42,7 @@ jobs:
         if: steps.filter.outputs.code == 'false'
         run: echo "Docs/config-only change — no build or test needed; reporting green for the required check."
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         if: steps.filter.outputs.code != 'false'
         with:
           dotnet-version: '10.0.x'
