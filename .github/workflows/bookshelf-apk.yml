@@ -21,11 +21,14 @@ name: Bookshelf APK (on demand)
 # Android defaults (android / androiddebugkey); nothing else is needed.
 #
 # AppConfig.cs is gitignored (see AppConfig.cs.example): the tenant id, the mobile client id
-# and the API scope come from three repository *variables* (they are public AAD facts, not
-# secrets, as the example file says), so the APK can sign in:
+# and the API scope come from three repository *secrets*, so the APK can sign in:
 #
 #   BOOKSHELF_TENANT_ID, BOOKSHELF_MOBILE_CLIENT_ID, BOOKSHELF_API_SCOPE
 #
+# They are AAD public-client facts rather than credentials (the example file says so, and
+# they are compiled into any APK), but this is a public repo: a repository *variable* is
+# printed unmasked in the step's `env:` block of a log anyone can read, while a secret is
+# masked. Secrets keep them off the public record, matching the gitignored-file pattern.
 # Without them the build uses the example's placeholders and the summary says the APK
 # cannot sign in.
 #
@@ -69,12 +72,12 @@ jobs:
           distribution: 'microsoft'
           java-version: '17'
 
-      - name: Write AppConfig.cs from the repository variables
+      - name: Write AppConfig.cs from the repository secrets
         id: appconfig
         env:
-          TENANT_ID: ${{ vars.BOOKSHELF_TENANT_ID }}
-          CLIENT_ID: ${{ vars.BOOKSHELF_MOBILE_CLIENT_ID }}
-          API_SCOPE: ${{ vars.BOOKSHELF_API_SCOPE }}
+          TENANT_ID: ${{ secrets.BOOKSHELF_TENANT_ID }}
+          CLIENT_ID: ${{ secrets.BOOKSHELF_MOBILE_CLIENT_ID }}
+          API_SCOPE: ${{ secrets.BOOKSHELF_API_SCOPE }}
         run: |
           set -euo pipefail
           cp BookTracker.Mobile/AppConfig.cs.example BookTracker.Mobile/AppConfig.cs
@@ -87,7 +90,7 @@ jobs:
             echo "status=real" >> "$GITHUB_OUTPUT"
           else
             echo "status=placeholders" >> "$GITHUB_OUTPUT"
-            echo "::warning::BOOKSHELF_TENANT_ID / BOOKSHELF_MOBILE_CLIENT_ID / BOOKSHELF_API_SCOPE are not all set; the APK is built with placeholder AAD values and cannot sign in."
+            echo "::warning::Secrets BOOKSHELF_TENANT_ID / BOOKSHELF_MOBILE_CLIENT_ID / BOOKSHELF_API_SCOPE are not all set; the APK is built with placeholder AAD values and cannot sign in."
           fi
           grep -c REPLACE_WITH BookTracker.Mobile/AppConfig.cs || true
 
@@ -204,7 +207,7 @@ jobs:
               echo "- **Signed with a throwaway key** (secret \`BOOKSHELF_DEBUG_KEYSTORE_B64\` missing): uninstall the USB build first, and sign-in will not complete."
             fi
             if [ "$APPCONFIG" != "real" ]; then
-              echo "- **AAD values are placeholders** (repository variables \`BOOKSHELF_TENANT_ID\`, \`BOOKSHELF_MOBILE_CLIENT_ID\`, \`BOOKSHELF_API_SCOPE\` missing): the app cannot sign in."
+              echo "- **AAD values are placeholders** (repository secrets \`BOOKSHELF_TENANT_ID\`, \`BOOKSHELF_MOBILE_CLIENT_ID\`, \`BOOKSHELF_API_SCOPE\` missing): the app cannot sign in."
             fi
             [ -n "$NOTE" ] && echo "- Note: $NOTE"
             echo
