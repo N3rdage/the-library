@@ -1,0 +1,214 @@
+name: Bookshelf APK (on demand)
+
+# Builds a Debug APK of Bookshelf from the chosen branch and hands it to Drew as
+# a private, short-lived link, so a review install needs no laptop and no USB.
+# Run it from the Actions tab (pick the branch) when a PR's Bookshelf change is
+# major enough to want in hand before merge, or on `main` for the current build.
+#
+# Why Debug, signed with Drew's own debug keystore: the app's AAD redirect URI
+# (msauth://com.thelibrary.mobile/<signature hash>, see infra/README.md) is
+# derived from the keystore that signs the APK, and Android only installs an
+# update over an app signed with the same key. A fresh CI keystore would mean
+# an uninstall first and a sign-in that cannot complete. So the workflow
+# restores the laptop's debug.keystore from a repository secret:
+#
+#   BOOKSHELF_DEBUG_KEYSTORE_B64   base64 of %LOCALAPPDATA%\Xamarin\Mono for Android\debug.keystore
+#
+# (PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes("$env:LOCALAPPDATA\Xamarin\Mono for Android\debug.keystore")) | Set-Clipboard)
+# Without the secret the build still runs with a throwaway debug key and the
+# summary says so: that APK installs only after uninstalling the USB build and
+# its sign-in will fail. The debug keystore's password and alias are the
+# Android defaults (android / androiddebugkey); nothing else is needed.
+#
+# AppConfig.cs is gitignored (see AppConfig.cs.example): the tenant id, the mobile client id
+# and the API scope come from three repository *variables* (they are public AAD facts, not
+# secrets, as the example file says), so the APK can sign in:
+#
+#   BOOKSHELF_TENANT_ID, BOOKSHELF_MOBILE_CLIENT_ID, BOOKSHELF_API_SCOPE
+#
+# Without them the build uses the example's placeholders and the summary says the APK
+# cannot sign in.
+#
+# Where the APK goes: the project's existing storage account (the covers
+# account, `booktrackercovers<hash>`), a private container `bookshelf-builds`
+# (no anonymous access), and a read-only SAS link that expires after 24 hours,
+# written to the job summary only. The identity is the same GitHub OIDC
+# service principal the deploy workflow uses (Contributor on the resource
+# group, which is enough to upload with the account key and mint the SAS).
+# The APK is also kept as a workflow artifact for 7 days as a fallback that
+# needs a GitHub sign-in to fetch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      note:
+        description: 'Optional note for the summary (what to look at)'
+        required: false
+        default: ''
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: bookshelf-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'microsoft'
+          java-version: '17'
+
+      - name: Write AppConfig.cs from the repository variables
+        id: appconfig
+        env:
+          TENANT_ID: ${{ vars.BOOKSHELF_TENANT_ID }}
+          CLIENT_ID: ${{ vars.BOOKSHELF_MOBILE_CLIENT_ID }}
+          API_SCOPE: ${{ vars.BOOKSHELF_API_SCOPE }}
+        run: |
+          set -euo pipefail
+          cp BookTracker.Mobile/AppConfig.cs.example BookTracker.Mobile/AppConfig.cs
+          if [ -n "$TENANT_ID" ] && [ -n "$CLIENT_ID" ] && [ -n "$API_SCOPE" ]; then
+            sed -i \
+              -e "s|REPLACE_WITH_TENANT_ID|$TENANT_ID|" \
+              -e "s|REPLACE_WITH_MOBILE_CLIENT_ID|$CLIENT_ID|" \
+              -e "s|api://REPLACE_WITH_AUTH_CLIENT_ID/access_as_user|$API_SCOPE|" \
+              BookTracker.Mobile/AppConfig.cs
+            echo "status=real" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=placeholders" >> "$GITHUB_OUTPUT"
+            echo "::warning::BOOKSHELF_TENANT_ID / BOOKSHELF_MOBILE_CLIENT_ID / BOOKSHELF_API_SCOPE are not all set; the APK is built with placeholder AAD values and cannot sign in."
+          fi
+          grep -c REPLACE_WITH BookTracker.Mobile/AppConfig.cs || true
+
+      - name: Install the MAUI Android workload
+        run: dotnet workload install maui-android
+
+      - name: Install the Android SDK components the workload wants
+        run: >
+          dotnet build BookTracker.Mobile/BookTracker.Mobile.csproj
+          -f net10.0-android -t:InstallAndroidDependencies
+          -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=True
+
+      - name: Restore Drew's debug keystore
+        id: keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.BOOKSHELF_DEBUG_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          # The Android SDK's default debug keystore location on Linux for the .NET Android build.
+          dir="$HOME/.local/share/Xamarin/Mono for Android"
+          mkdir -p "$dir"
+          if [ -n "$KEYSTORE_B64" ]; then
+            printf '%s' "$KEYSTORE_B64" | base64 -d > "$dir/debug.keystore"
+            echo "status=drew" >> "$GITHUB_OUTPUT"
+            echo "Using the laptop's debug keystore from the secret."
+          else
+            echo "status=throwaway" >> "$GITHUB_OUTPUT"
+            echo "::warning::BOOKSHELF_DEBUG_KEYSTORE_B64 is not set; the APK will be signed with a throwaway key (uninstall the USB build first; sign-in will not work)."
+          fi
+
+      - name: Build the Debug APK
+        # EmbedAssembliesIntoApk: a plain Debug build relies on fast deployment over adb and the
+        # APK alone would not run. Debug (not Release) so the debug keystore signs it.
+        run: >
+          dotnet build BookTracker.Mobile/BookTracker.Mobile.csproj
+          --configuration Debug -f net10.0-android
+          -p:AndroidSdkDirectory="$ANDROID_HOME"
+          -p:EmbedAssembliesIntoApk=true
+          -p:AndroidPackageFormat=apk
+          /p:SourceRevisionId=${{ github.sha }}
+
+      - name: Locate the signed APK
+        id: apk
+        run: |
+          set -euo pipefail
+          apk=$(find BookTracker.Mobile/bin/Debug/net10.0-android -name '*-Signed.apk' | head -n 1)
+          if [ -z "$apk" ]; then echo "::error::No *-Signed.apk produced"; exit 1; fi
+          branch="${GITHUB_REF_NAME//\//-}"
+          name="bookshelf-${branch}-${GITHUB_SHA::7}.apk"
+          cp "$apk" "$name"
+          echo "path=$name" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          ls -l "$name"
+
+      - name: Keep the APK as a workflow artifact (fallback, 7 days)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.apk.outputs.name }}
+          path: ${{ steps.apk.outputs.path }}
+          retention-days: 7
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Upload to the private container and mint a 24-hour link
+        id: link
+        env:
+          AZURE_RG: ${{ vars.AZURE_RG }}
+          APK: ${{ steps.apk.outputs.path }}
+          NAME: ${{ steps.apk.outputs.name }}
+        run: |
+          set -euo pipefail
+          account=$(az storage account list --resource-group "$AZURE_RG" \
+            --query "[?starts_with(name, 'booktrackercovers')].name | [0]" -o tsv)
+          if [ -z "$account" ]; then echo "::error::No storage account matching booktrackercovers* in $AZURE_RG"; exit 1; fi
+          container=bookshelf-builds
+          # Idempotent; infra/modules/cover-storage.bicep also declares it (no anonymous access).
+          az storage container create --account-name "$account" --name "$container" \
+            --public-access off --auth-mode key --output none
+          az storage blob upload --account-name "$account" --container-name "$container" \
+            --name "$NAME" --file "$APK" --content-type application/vnd.android.package-archive \
+            --overwrite --auth-mode key --output none
+          expiry=$(date -u -d '+24 hours' '+%Y-%m-%dT%H:%MZ')
+          sas=$(az storage blob generate-sas --account-name "$account" --container-name "$container" \
+            --name "$NAME" --permissions r --expiry "$expiry" --https-only --auth-mode key -o tsv)
+          url="https://${account}.blob.core.windows.net/${container}/${NAME}?${sas}"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "expiry=$expiry" >> "$GITHUB_OUTPUT"
+          # Keep old builds from piling up: anything older than 14 days goes.
+          cutoff=$(date -u -d '-14 days' '+%Y-%m-%dT%H:%MZ')
+          az storage blob delete-batch --account-name "$account" --source "$container" \
+            --if-unmodified-since "$cutoff" --auth-mode key --output none || true
+
+      - name: Summary
+        env:
+          URL: ${{ steps.link.outputs.url }}
+          EXPIRY: ${{ steps.link.outputs.expiry }}
+          KEYSTORE: ${{ steps.keystore.outputs.status }}
+          APPCONFIG: ${{ steps.appconfig.outputs.status }}
+          NAME: ${{ steps.apk.outputs.name }}
+          NOTE: ${{ inputs.note }}
+        run: |
+          {
+            echo "## Bookshelf APK: \`$NAME\`"
+            echo
+            echo "- Branch \`$GITHUB_REF_NAME\` at \`${GITHUB_SHA::7}\`"
+            if [ "$KEYSTORE" = "drew" ]; then
+              echo "- Signed with the laptop's debug keystore: installs over the USB build, sign-in works."
+            else
+              echo "- **Signed with a throwaway key** (secret \`BOOKSHELF_DEBUG_KEYSTORE_B64\` missing): uninstall the USB build first, and sign-in will not complete."
+            fi
+            if [ "$APPCONFIG" != "real" ]; then
+              echo "- **AAD values are placeholders** (repository variables \`BOOKSHELF_TENANT_ID\`, \`BOOKSHELF_MOBILE_CLIENT_ID\`, \`BOOKSHELF_API_SCOPE\` missing): the app cannot sign in."
+            fi
+            [ -n "$NOTE" ] && echo "- Note: $NOTE"
+            echo
+            echo "**Download (link expires $EXPIRY UTC):** $URL"
+            echo
+            echo "On the phone: open the link in the browser, open the download, allow installs from the browser if asked. The workflow artifact above is the 7-day fallback (needs a GitHub sign-in)."
+          } >> "$GITHUB_STEP_SUMMARY"

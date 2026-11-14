@@ -155,7 +155,7 @@ Sized for the work, not the calendar. Ship-as-you-go.
 ### PR 8 — Polish + packaging
 - Stale-cache warnings, offline indicator, refresh UX, settings screen (sign out, force refresh).
 - App icon, splash screen.
-- **Optional**: GH Actions workflow that builds an unsigned debug APK on push and uploads as a workflow artifact. Useful only when Drew can't or doesn't want to build locally — the `dotnet build -t:Run` dev loop from PR 3 covers normal use. Defer until the friction surfaces.
+- **Optional**: GH Actions workflow that builds an unsigned debug APK on push and uploads as a workflow artifact. Useful only when Drew can't or doesn't want to build locally — the `dotnet build -t:Run` dev loop from PR 3 covers normal use. Defer until the friction surfaces. *(Surfaced 2026-11-14 when the autonomous orchestrator started working here: `.github/workflows/mobile-build.yml` compiles Bookshelf on PRs and `bookshelf-apk.yml` builds an APK on demand, signed with Drew's debug keystore so it installs over the USB build, delivered as a private 24-hour link.)*
 - Size: M (S without the GH Actions workflow).
 
 **Total: 8 PRs, sized M heavy.** Real calendar effort probably 10-15 sessions for a v1 the user can install and use daily.

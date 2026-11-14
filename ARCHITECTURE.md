@@ -358,7 +358,7 @@ Dev config templates: `appsettings.Example.json`, `appsettings.Development.Examp
 ## Infrastructure
 
 - Docker Compose for local SQL Server 2022 Developer + Azurite (cover-storage blob emulator)
-- GitHub Actions CI (build + test on PR), deploy-to-staging-slot, manual swap workflow, secret rotation
+- GitHub Actions CI (build + test on PR), a Bookshelf compile check on PRs that touch it (`mobile-build.yml`), an on-demand Bookshelf APK build handed over as a 24-hour private link (`bookshelf-apk.yml`), deploy-to-staging-slot, manual swap workflow, secret rotation
 - Dependabot for NuGet (EF Core grouped) and npm (html5-qrcode)
 - Azure Bicep templates under `infra/`. SQL, Key Vault, Azure OpenAI, and the cover-storage Blob account are reachable only via Private Endpoints; the App Service uses VNet integration + a peered eastus2 VNet to reach OpenAI. See `infra/README.md` for the full topology.
 - **Slot-swap warmup** — `WEBSITE_SWAP_WARMUP_PING_PATH=/warmup` (set in `app-config.bicep`) makes Azure ping the dedicated `/warmup` endpoint during a slot swap, so the SQL pool + AAD token cold-start happens before promotion. Without the dedicated endpoint Azure would ping `/` which Easy Auth blocks (302 to login) and warm nothing.
