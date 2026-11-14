@@ -1,6 +1,15 @@
 version: 2
 
 updates:
+  # GitHub Actions. Workflows pin actions to commit SHAs (a tag can be moved to other code,
+  # and the deploy and rotation jobs run it while signed in to Azure); Dependabot proposes
+  # the SHA bumps and keeps the `# vN` comment beside each one current.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+
   # NuGet packages (C#)
   - package-ecosystem: "nuget"
     directory: "/"

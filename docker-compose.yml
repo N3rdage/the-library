@@ -6,8 +6,10 @@ services:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:-BookTracker!Dev1}"
       MSSQL_PID: "Developer"
+    # Loopback only: the sa password below is a committed default and, after
+    # infra/refresh-local-db.ps1, this container holds a copy of production data.
     ports:
-      - "1433:1433"
+      - "127.0.0.1:1433:1433"
     volumes:
       - booktracker-db-data:/var/opt/mssql
     healthcheck:
@@ -32,7 +34,7 @@ services:
     container_name: booktracker-azurite
     command: "azurite-blob --blobHost 0.0.0.0 --location /data --cert /certs/localhost.pem --key /certs/localhost-key.pem --skipApiVersionCheck"
     ports:
-      - "10000:10000"
+      - "127.0.0.1:10000:10000"
     volumes:
       - ./azurite-data:/data
       - ./azurite-certs:/certs:ro

@@ -58,7 +58,7 @@ if (-not $sp) {
 # A FIC binds a GitHub workflow run (subject) to this app registration. The
 # OIDC subject claim shape differs by trigger:
 #   - branch push:    repo:<org>/<repo>:ref:refs/heads/<branch>
-#   - pull request:   repo:<org>/<repo>:pull_request
+#   - pull request:   repo:<org>/<repo>:pull_request   (deliberately NOT granted, see below)
 #   - environment:    repo:<org>/<repo>:environment:<env-name>
 # Workflows that opt into a GitHub Environment (e.g. swap.yml uses
 # `environment: production` for the wait-timer + branch-restriction guards)
@@ -71,11 +71,6 @@ $desiredFics = @(
         Name = 'github-main-branch'
         Subject = "repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/${MainBranch}"
         Description = "$GitHubOrg/$GitHubRepo @ refs/heads/$MainBranch"
-    },
-    @{
-        Name = 'github-pull-request'
-        Subject = "repo:${GitHubOrg}/${GitHubRepo}:pull_request"
-        Description = "$GitHubOrg/$GitHubRepo pull_request"
     },
     @{
         Name = 'github-environment-production'
@@ -96,6 +91,18 @@ foreach ($f in $desiredFics) {
         description = $f.Description
     } | Out-Null
     Write-Host "  Added FIC '$($f.Name)' for $($f.Subject)"
+}
+
+# No pull_request credential, and remove one left by an earlier version of this script
+# (security audit 2026-11-14). A pull request runs the workflow files on its own branch,
+# so with that credential anyone able to push a branch could add an Azure login to a
+# workflow and act as this identity (Contributor on the resource group, Key Vault Secrets
+# Officer, DDL on both databases) before any review. No workflow needs it: CI never signs
+# in to Azure, deploy runs on main, swap runs in the production environment.
+$stalePrFic = $existingFics | Where-Object { $_.Name -eq 'github-pull-request' -or $_.Subject -like '*:pull_request' }
+foreach ($f in $stalePrFic) {
+    Remove-MgApplicationFederatedIdentityCredential -ApplicationId $app.Id -FederatedIdentityCredentialId $f.Id
+    Write-Host "  Removed FIC '$($f.Name)' ($($f.Subject)): pull requests must not sign in to Azure"
 }
 
 # ---- Role assignment --------------------------------------------------------
