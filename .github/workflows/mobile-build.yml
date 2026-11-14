@@ -54,6 +54,13 @@ jobs:
           distribution: 'microsoft'
           java-version: '17'
 
+      - name: Provide AppConfig.cs
+        # BookTracker.Mobile/AppConfig.cs is gitignored (tenant and client ids live in the
+        # developer's copy); the committed AppConfig.cs.example has placeholder values, which
+        # is all a compile check needs. The on-demand APK workflow fills in real values instead.
+        if: steps.filter.outputs.mobile != 'false'
+        run: cp BookTracker.Mobile/AppConfig.cs.example BookTracker.Mobile/AppConfig.cs
+
       - name: Install the MAUI Android workload
         if: steps.filter.outputs.mobile != 'false'
         run: dotnet workload install maui-android

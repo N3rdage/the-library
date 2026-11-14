@@ -20,6 +20,15 @@ name: Bookshelf APK (on demand)
 # its sign-in will fail. The debug keystore's password and alias are the
 # Android defaults (android / androiddebugkey); nothing else is needed.
 #
+# AppConfig.cs is gitignored (see AppConfig.cs.example): the tenant id, the mobile client id
+# and the API scope come from three repository *variables* (they are public AAD facts, not
+# secrets, as the example file says), so the APK can sign in:
+#
+#   BOOKSHELF_TENANT_ID, BOOKSHELF_MOBILE_CLIENT_ID, BOOKSHELF_API_SCOPE
+#
+# Without them the build uses the example's placeholders and the summary says the APK
+# cannot sign in.
+#
 # Where the APK goes: the project's existing storage account (the covers
 # account, `booktrackercovers<hash>`), a private container `bookshelf-builds`
 # (no anonymous access), and a read-only SAS link that expires after 24 hours,
@@ -59,6 +68,28 @@ jobs:
         with:
           distribution: 'microsoft'
           java-version: '17'
+
+      - name: Write AppConfig.cs from the repository variables
+        id: appconfig
+        env:
+          TENANT_ID: ${{ vars.BOOKSHELF_TENANT_ID }}
+          CLIENT_ID: ${{ vars.BOOKSHELF_MOBILE_CLIENT_ID }}
+          API_SCOPE: ${{ vars.BOOKSHELF_API_SCOPE }}
+        run: |
+          set -euo pipefail
+          cp BookTracker.Mobile/AppConfig.cs.example BookTracker.Mobile/AppConfig.cs
+          if [ -n "$TENANT_ID" ] && [ -n "$CLIENT_ID" ] && [ -n "$API_SCOPE" ]; then
+            sed -i \
+              -e "s|REPLACE_WITH_TENANT_ID|$TENANT_ID|" \
+              -e "s|REPLACE_WITH_MOBILE_CLIENT_ID|$CLIENT_ID|" \
+              -e "s|api://REPLACE_WITH_AUTH_CLIENT_ID/access_as_user|$API_SCOPE|" \
+              BookTracker.Mobile/AppConfig.cs
+            echo "status=real" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=placeholders" >> "$GITHUB_OUTPUT"
+            echo "::warning::BOOKSHELF_TENANT_ID / BOOKSHELF_MOBILE_CLIENT_ID / BOOKSHELF_API_SCOPE are not all set; the APK is built with placeholder AAD values and cannot sign in."
+          fi
+          grep -c REPLACE_WITH BookTracker.Mobile/AppConfig.cs || true
 
       - name: Install the MAUI Android workload
         run: dotnet workload install maui-android
@@ -159,6 +190,7 @@ jobs:
           URL: ${{ steps.link.outputs.url }}
           EXPIRY: ${{ steps.link.outputs.expiry }}
           KEYSTORE: ${{ steps.keystore.outputs.status }}
+          APPCONFIG: ${{ steps.appconfig.outputs.status }}
           NAME: ${{ steps.apk.outputs.name }}
           NOTE: ${{ inputs.note }}
         run: |
@@ -170,6 +202,9 @@ jobs:
               echo "- Signed with the laptop's debug keystore: installs over the USB build, sign-in works."
             else
               echo "- **Signed with a throwaway key** (secret \`BOOKSHELF_DEBUG_KEYSTORE_B64\` missing): uninstall the USB build first, and sign-in will not complete."
+            fi
+            if [ "$APPCONFIG" != "real" ]; then
+              echo "- **AAD values are placeholders** (repository variables \`BOOKSHELF_TENANT_ID\`, \`BOOKSHELF_MOBILE_CLIENT_ID\`, \`BOOKSHELF_API_SCOPE\` missing): the app cannot sign in."
             fi
             [ -n "$NOTE" ] && echo "- Note: $NOTE"
             echo
