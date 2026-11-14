@@ -32,7 +32,9 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageReference Include="NSubstitute" Version="6.0.0" />
     <PackageReference Include="Respawn" Version="7.0.0" />
-    <PackageReference Include="Testcontainers.MsSql" Version="4.13.0" />
+    <!-- 4.16.0 depends on SSH.NET 2026.0.0, the first version clear of GHSA-mggc-4xg6-vcxf and
+         GHSA-q939-rpr3-3284 (both High), which NuGet audit otherwise fails the restore on. -->
+    <PackageReference Include="Testcontainers.MsSql" Version="4.16.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
   </ItemGroup>
