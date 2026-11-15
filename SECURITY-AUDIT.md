@@ -2,7 +2,7 @@
 
 Living security posture review. Per-area verdicts: **Pass** / **Concern** / **Action required**. Fixes applied in the same PR are listed at the bottom; deferred items link to `TODO.md` or to a private backlog id (`LIB-nnn`). Monthly scan + review is automated via `.github/workflows/security-scan.yml`.
 
-**Last reviewed:** 2026-11-14, two ways: Drew's `security-audit` skill run on his laptop (per-run report local, `audits/security-2026-11-14.md`), plus a by-hand re-application of this document and `audit-rules/security.md` in the autonomous agent's container, which cannot load the skill. Totals from Drew's run: 0 critical / 1 high / 2 medium / 6 low / 3 info. The High, both Mediums and two Lows were fixed in [#465](https://github.com/N3rdage/the-library/pull/465) and [#471](https://github.com/N3rdage/the-library/pull/471) before this refresh. The hand sweep added further Low/Info items. Every open item is tracked in the private backlog as `LIB-nnn`; this public doc names the area, the verdict and the id only. Prior review: 2026-07-24 (before that, 2026-05-05).
+**Last reviewed:** 2026-11-14, two ways: Drew's `security-audit` skill run on his laptop (per-run report local, `audits/security-2026-11-14.md`), plus a by-hand re-application of this document and `audit-rules/security.md` in the autonomous agent's container, which cannot load the skill. Totals from Drew's run: 0 critical / 1 high / 2 medium / 6 low / 3 info. The High, both Mediums and two Lows were fixed in [#465](https://github.com/N3rdage/the-library/pull/465) and [#471](https://github.com/N3rdage/the-library/pull/471) before this refresh. The hand sweep added further items; of its three Mediums, LIB-016 was fixed in [#481](https://github.com/N3rdage/the-library/pull/481) and LIB-026 in [#485](https://github.com/N3rdage/the-library/pull/485). Every open item is tracked in the private backlog as `LIB-nnn`; this public doc names the area, the verdict and the id only. Prior review: 2026-07-24 (before that, 2026-05-05).
 
 **Tooling caveat.** The skill's default and template rules (22, inferred from Drew's 25 minus BOOK-001..003; the repo does not state the number) live user-global on Drew's machine, not in this repo (see `docs/audit-skills.md`). What a headless agent can apply is `audit-rules/security.md` plus this document, so a hand sweep cannot reproduce the skill's "N of 25 rules clean" count. Drew's run: 19 of 25 rules clean.
 
@@ -43,7 +43,7 @@ Living security posture review. Per-area verdicts: **Pass** / **Concern** / **Ac
 - Easy Auth v2 `excludedPaths` uses **exact** matching, not prefix (noted in the Bicep comment). So an accidental future Blazor route at `/icons/something.png` would still require its full path to be added to the list before being publicly accessible. The exact-match claim is not testable from the repo; a live probe is Drew's.
 - Cross-checked against all Blazor `@page` routes — none collide with any excluded path.
 - The six PWA paths serve non-sensitive static content (app name, theme colour, public icons, client-side caching logic).
-- `/warmup` is the slot-swap warm-up probe added with deploy-time migrations. It returns a constant and opens a trivial DB query per anonymous request. Low (LIB-013).
+- `/warmup` is the slot-swap warm-up probe added with deploy-time migrations. Its anonymous behaviour: Low (LIB-013).
 
 ---
 
@@ -100,12 +100,12 @@ The pull-request federated credential on `booktracker-ci` was removed from `infr
 
 ## 6. Dependency vulnerabilities
 
-**Verdict:** **Pass, with a concern.**
+**Verdict:** **Pass.**
 
 `dotnet list package --vulnerable --include-transitive` on 2026-11-14 across all nine projects (the eight in `BookTracker.slnx` plus `BookTracker.Mobile`, which is outside the solution on purpose): zero vulnerable packages. Dependabot remains the forward-facing watchdog for CVEs landing after this date.
 
 - The two direct pins from #462 (`System.Security.Cryptography.Pkcs` 10.0.13 in Data and Web) are still present; revisit them with the EF Core 10.0.15 bump.
-- **Concern:** Dependabot's `nuget` entry is rooted at `/`, but `BookTracker.Mobile` sits outside `BookTracker.slnx`, so the updater never reaches it and the Android app's packages (MSAL, ZXing) get no update PRs; none of the Dependabot commits in the history touch its project file (LIB-026, fix PR open).
+- Dependabot's `nuget` entry is rooted at `/`, but `BookTracker.Mobile` sits outside `BookTracker.slnx`, so until 2026-11-15 the updater never reached it and none of the Dependabot commits in the history touched its project file. Fixed in #485 (LIB-026): the entry now lists `/BookTracker.Mobile` as a second directory, so the Android app's packages (MSAL, ZXing) get update PRs from the next weekly run.
 
 ---
 
@@ -189,7 +189,7 @@ Public containers `book-covers` / `book-covers-staging` are `publicAccess: Blob`
 - `BookTracker.Web/ProgramSetup.cs:201` — `app.UseHsts()` in non-Development environments.
 - `BookTracker.Web/ProgramSetup.cs:210` — `app.UseHttpsRedirection()` unconditionally.
 - Custom domain bound with App Service managed certificate (auto-renewing). `httpsOnly: true` and TLS 1.2 minimum in `infra/modules/appservice.bicep` hold.
-- HSTS policy: **Concern** against BOOK-007 (LIB-004, fix PR open).
+- HSTS policy: **Concern** against BOOK-007 (LIB-004, #487).
 
 ---
 
@@ -197,7 +197,7 @@ Public containers `book-covers` / `book-covers-staging` are `publicAccess: Blob`
 
 **Verdict:** **Concern.**
 
-- Cover mirror (`BookTracker.Web/Services/Covers/`) fetch handling: **Concern** (LIB-006, fix PR open; LIB-017, chained after it). See BOOK-008.
+- Cover mirror (`BookTracker.Web/Services/Covers/`) fetch handling: **Concern** (LIB-006, #486; LIB-017, chained after it). See BOOK-008.
 - Lookup providers receive only escaped, length-checked input.
 - Lookup provider credential handling: **Concern** (LIB-018).
 - Timeouts: the lookup `HttpClient` has 25 s, the cover client 30 s.
@@ -214,7 +214,8 @@ Public containers `book-covers` / `book-covers-staging` are `publicAccess: Blob`
 - No `pull_request_target`; no untrusted event text in `run:` scripts. No cloud credential in pull-request workflows (BOOK-004).
 - The APK build runs in an approval-gated environment with its own upload-only identity (#471).
 - The orchestrator GitHub App has no Workflows permission, so workflow edits are the operator session's.
-- **Open items:** deploy workflow job layout (LIB-016), module pinning in the rotation job (LIB-008), step ordering in the APK job (LIB-021).
+- `deploy.yml` is two jobs (#481): a `package` job that builds with no `id-token`, and a `deploy` job that signs in to Azure and compiles nothing. Pass (closed LIB-016).
+- **Open items:** module pinning in the rotation job (LIB-008), step ordering in the APK job (LIB-021).
 
 ---
 
@@ -227,8 +228,8 @@ Public containers `book-covers` / `book-covers-staging` are `publicAccess: Blob`
 - No cleartext config and no `http://` in code; no custom certificate validation in any configuration.
 - Catalog SQLite and covers live under app-private storage and hold no identity data.
 - **Concerns:**
-  - Manifest application attributes (LIB-014, fix PR open, needs Drew's yes).
-  - Comments and `docs/mobile-app-design.md` describe the token cache as Keystore-backed SecureStorage, but the code uses MSAL's default cache (LIB-023, `ready`).
+  - Manifest application attributes (LIB-014, #489, needs Drew's yes).
+  - Token-cache documentation versus implementation (LIB-023).
   - Installed builds are Debug (LIB-024, decision).
 
 ---
@@ -245,6 +246,8 @@ Public containers `book-covers` / `book-covers-staging` are `publicAccess: Blob`
 - **#465** — actions pinned to SHAs; local compose ports bound to loopback; shared concurrency group for deploy and swap; pull-request federated credential removed from the OIDC setup script; `permissions:` blocks on every workflow.
 - **#471** — APK workflow runs in the approval-gated `bookshelf-apk` environment with its own upload-only Azure identity.
 - **#477** — CODEOWNERS gives `.github/` and `infra/` to Drew.
+- **#481** — deploy workflow split into a `package` job with no Azure rights and a `deploy` job that compiles nothing (LIB-016).
+- **#485** — Dependabot's `nuget` entry also covers `BookTracker.Mobile` (LIB-026).
 
 ## Deferred items
 
