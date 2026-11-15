@@ -79,6 +79,113 @@ The security audit skill should treat `SECURITY-AUDIT.md` as cross-reference mat
 
 ---
 
+> BOOK-004..BOOK-009 codify six findings from the 2026-11-14 run that sat outside the rule set. The id-to-finding mapping is the autonomous agent's best reading of Drew's report; Drew to confirm or correct.
+
+## BOOK-004 — Pull-request workflows hold no cloud credential
+
+**Category:** ci-cd
+**Severity:** high
+
+**What to check:**
+- `infra/setup-github-oidc.ps1` creates no federated credential with a `pull_request` subject.
+- No workflow triggered by `pull_request` grants `id-token: write`.
+- `azure/login` appears only in workflows triggered by `push`, `workflow_dispatch` or `schedule`.
+
+**How to verify pass:** List each workflow with its triggers and whether it requests `id-token: write` or runs `azure/login`; confirm none is PR-triggered. Confirm the OIDC script's credential subjects.
+
+**Fix guidance:** Drop the `pull_request` subject from the OIDC script (and from the Entra app registration), and move any Azure step out of PR-triggered jobs.
+
+**References:** `SECURITY-AUDIT.md` §5, §13; the-library #465.
+
+---
+
+## BOOK-005 — Actions pinned to commit SHAs
+
+**Category:** ci-cd
+**Severity:** medium
+
+**What to check:**
+- Every `uses:` in `.github/workflows/*.yml` references a 40-hex commit SHA, followed by a `# vN` comment naming the version.
+- `.github/dependabot.yml` has a `github-actions` ecosystem entry, so pins keep moving.
+
+**How to verify pass:** Grep `uses:` across the workflows; report any line not matching `@[0-9a-f]{40}`. Confirm the Dependabot entry.
+
+**Fix guidance:** Replace the tag with the SHA it resolves to and keep the tag as a trailing comment.
+
+**References:** `SECURITY-AUDIT.md` §13; the-library #465.
+
+---
+
+## BOOK-006 — Local compose binds loopback only
+
+**Category:** infra
+**Severity:** medium
+
+**What to check:**
+- Every `ports:` entry in `docker-compose.yml` has the form `127.0.0.1:<host>:<container>`.
+- Reason: `infra/refresh-local-db.ps1` restores a copy of prod into the local SQL container, so that container holds real data.
+
+**How to verify pass:** List each service's `ports:` entries and confirm the loopback prefix on all of them.
+
+**Fix guidance:** Prefix the mapping with `127.0.0.1:`.
+
+**References:** the-library #465.
+
+---
+
+## BOOK-007 — HSTS at least six months with includeSubDomains
+
+**Category:** web
+**Severity:** low
+
+**What to check:**
+- `AddHsts` is configured with `MaxAge` of at least 180 days and `IncludeSubDomains = true`.
+- `UseHsts` runs outside Development only.
+
+**How to verify pass:** Quote the `AddHsts` options and the `UseHsts` call site in `BookTracker.Web/ProgramSetup.cs`.
+
+**Fix guidance:** Add `services.AddHsts(o => { o.MaxAge = TimeSpan.FromDays(365); o.IncludeSubDomains = true; });`.
+
+**References:** `SECURITY-AUDIT.md` §11; LIB-004.
+
+---
+
+## BOOK-008 — Fetched remote content has a type allowlist and a size cap
+
+**Category:** web
+**Severity:** low (medium if the app gains more users)
+
+**What to check:** any code that downloads a URL stored in the database or supplied by a provider (the cover mirror, any future image fetch):
+- checks `Content-Type` against a raster-image allowlist before reading the body;
+- caps the bytes read from the stream;
+- never stores non-raster content;
+- validates the URL (https only, no private or loopback addresses).
+
+**How to verify pass:** List each fetch site and confirm all four checks.
+
+**Fix guidance:** Read headers first (`HttpCompletionOption.ResponseHeadersRead`), reject on type or `Content-Length`, read through a bounded stream, drop anything that fails to decode, and validate the URL before the request.
+
+**References:** `SECURITY-AUDIT.md` §12; LIB-006, LIB-017.
+
+---
+
+## BOOK-009 — Workflows that share a mutable cloud resource share a concurrency group
+
+**Category:** ci-cd
+**Severity:** low
+
+**What to check:**
+- `deploy.yml` and `swap.yml` both toggle the SQL server's public access, so they declare the same `concurrency.group`.
+- Any new workflow that touches the same resource joins that group.
+
+**How to verify pass:** Quote the `concurrency:` block of each workflow that touches the SQL server's network settings.
+
+**Fix guidance:** Add the shared `concurrency.group` (currently `sql-firewall-window`) with `cancel-in-progress: false`.
+
+**References:** `SECURITY-AUDIT.md` §13; the-library #465.
+
+---
+
 ## Notes for the audit run
 
 - Cross-reference `SECURITY-AUDIT.md` (the living doc) for areas already documented as clean. Finding drift between the new audit and that doc is a useful signal — either `SECURITY-AUDIT.md` needs updating, or the new finding is real.
