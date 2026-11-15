@@ -1,3 +1,4 @@
+using System.Net;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Microsoft.Extensions.Options;
@@ -64,6 +65,13 @@ public class BlobBookCoverStorage : IBookCoverStorage
         if (!IsEnabled || string.IsNullOrWhiteSpace(sourceUrl)) return sourceUrl;
         if (IsManagedUrl(sourceUrl)) return sourceUrl;
 
+        var refusal = CoverFetchPolicy.Validate(sourceUrl);
+        if (refusal is not null)
+        {
+            _logger.LogWarning("Cover mirror skipped — {Url} refused: {Reason}.", sourceUrl, refusal);
+            return sourceUrl;
+        }
+
         // ResponseHeadersRead means HttpClient.Timeout covers only the status
         // line and headers; the body read has to be bounded separately or a
         // slow-drip upstream stalls the sequential mirror loop. The linked
@@ -74,7 +82,8 @@ public class BlobBookCoverStorage : IBookCoverStorage
 
         try
         {
-            using var response = await _http.GetAsync(sourceUrl, HttpCompletionOption.ResponseHeadersRead, downloadTimeout.Token);
+            using var response = await GetFollowingRedirectsAsync(sourceUrl, downloadTimeout.Token);
+            if (response is null) return sourceUrl;
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Cover mirror skipped — upstream returned {Status} for {Url}", (int)response.StatusCode, sourceUrl);
@@ -177,6 +186,45 @@ public class BlobBookCoverStorage : IBookCoverStorage
         var stamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         return $"{BuildPublicUrl(blobName)}?v={stamp}";
     }
+
+    // The handler does not follow redirects, so they are followed here: at most
+    // CoverFetchPolicy.MaxRedirects hops, each target re-checked by the policy.
+    // Returns the first non-redirect response (a redirect without a Location
+    // header counts as one), or null after logging when a hop is refused or the
+    // chain is too long.
+    private async Task<HttpResponseMessage?> GetFollowingRedirectsAsync(string sourceUrl, CancellationToken ct)
+    {
+        var currentUri = new Uri(sourceUrl);
+        for (var redirects = 0; ; redirects++)
+        {
+            var response = await _http.GetAsync(currentUri, HttpCompletionOption.ResponseHeadersRead, ct);
+            var location = response.Headers.Location;
+            if (!IsRedirect(response.StatusCode) || location is null) return response;
+            response.Dispose();
+
+            if (redirects == CoverFetchPolicy.MaxRedirects)
+            {
+                _logger.LogWarning("Cover mirror skipped — {Url} redirected more than {MaxRedirects} times.",
+                    sourceUrl, CoverFetchPolicy.MaxRedirects);
+                return null;
+            }
+
+            var nextUri = new Uri(currentUri, location);
+            var refusal = CoverFetchPolicy.Validate(nextUri.AbsoluteUri);
+            if (refusal is not null)
+            {
+                _logger.LogWarning("Cover mirror skipped — {Url} redirected to {Target}, refused: {Reason}.",
+                    sourceUrl, nextUri.AbsoluteUri, refusal);
+                return null;
+            }
+
+            currentUri = nextUri;
+        }
+    }
+
+    private static bool IsRedirect(HttpStatusCode status) => status is
+        HttpStatusCode.MovedPermanently or HttpStatusCode.Found or HttpStatusCode.SeeOther
+        or HttpStatusCode.TemporaryRedirect or HttpStatusCode.PermanentRedirect;
 
     // Reads at most MaxDownloadBytes from the body; returns null as soon as the
     // stream goes past the cap. Content-Length can be absent or wrong, so the
