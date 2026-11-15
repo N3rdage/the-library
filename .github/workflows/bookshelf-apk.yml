@@ -1,24 +1,39 @@
 name: Bookshelf APK (on demand)
 
-# Builds a Debug APK of Bookshelf from the chosen branch and hands it to Drew as
-# a private, short-lived link, so a review install needs no laptop and no USB.
-# Run it from the Actions tab (pick the branch) when a PR's Bookshelf change is
-# major enough to want in hand before merge, or on `main` for the current build.
+# Builds a Release APK of Bookshelf from the chosen branch and puts it where only
+# Drew can fetch it, so a review install needs no laptop and no USB. Run it from
+# the Actions tab (pick the branch) when a PR's Bookshelf change is major enough
+# to want in hand before merge, or on `main` for the current build.
 #
-# Why Debug, signed with Drew's own debug keystore: the app's AAD redirect URI
-# (msauth://com.thelibrary.mobile/<signature hash>, see infra/README.md) is
-# derived from the keystore that signs the APK, and Android only installs an
-# update over an app signed with the same key. A fresh CI keystore would mean
-# an uninstall first and a sign-in that cannot complete. So the workflow
-# restores the laptop's debug.keystore from a repository secret:
+# Release, not Debug: a Debug build is marked debuggable, which lets anyone with
+# the phone and a cable read the app's private data. The job fails if the APK it
+# produced is debuggable.
+#
+# Signed with Drew's own debug keystore, in a step of its own after the build:
+# the app's AAD redirect URI (msauth://com.thelibrary.mobile/<signature hash>,
+# see infra/README.md) is derived from the key that signs the APK, and Android
+# only installs an update over an app signed with the same key. A fresh CI key
+# would mean an uninstall first and a sign-in that cannot complete. So the
+# keystore comes from a secret:
 #
 #   BOOKSHELF_DEBUG_KEYSTORE_B64   base64 of %LOCALAPPDATA%\Xamarin\Mono for Android\debug.keystore
 #
 # (PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes("$env:LOCALAPPDATA\Xamarin\Mono for Android\debug.keystore")) | Set-Clipboard)
-# Without the secret the build still runs with a throwaway debug key and the
-# summary says so: that APK installs only after uninstalling the USB build and
-# its sign-in will fail. The debug keystore's password and alias are the
-# Android defaults (android / androiddebugkey); nothing else is needed.
+#
+# Order matters. The build runs the branch's own code (project files, MSBuild
+# targets, package scripts), so the keystore is NOT on disk while it runs: the
+# build signs with the throwaway key the SDK generates, and only afterwards is
+# the real keystore restored, used by `apksigner` (an SDK tool, no project code)
+# to replace that signature, and deleted. Do not move the keystore step above
+# the build, and do not add a step that runs project code after it. Limits of
+# this: it is still one job on one machine, so it relies on the environment's
+# approval for a branch whose build would deliberately lie in wait; a second job
+# would close that at the cost of a second approval.
+#
+# Without the secret the APK keeps the throwaway signature and the summary says
+# so: it installs only after uninstalling the USB build and its sign-in will
+# fail. The debug keystore's password and alias are the Android defaults
+# (android / androiddebugkey); nothing else is needed.
 #
 # AppConfig.cs is gitignored (see AppConfig.cs.example): the tenant id, the mobile client id
 # and the API scope come from three repository *secrets*, so the APK can sign in:
@@ -119,47 +134,69 @@ jobs:
           -f net10.0-android -t:InstallAndroidDependencies
           -p:AndroidSdkDirectory="$ANDROID_HOME" -p:AcceptAndroidSDKLicenses=True
 
-      - name: Restore Drew's debug keystore
-        id: keystore
-        env:
-          KEYSTORE_B64: ${{ secrets.BOOKSHELF_DEBUG_KEYSTORE_B64 }}
-        run: |
-          set -euo pipefail
-          # The Android SDK's default debug keystore location on Linux for the .NET Android build.
-          dir="$HOME/.local/share/Xamarin/Mono for Android"
-          mkdir -p "$dir"
-          if [ -n "$KEYSTORE_B64" ]; then
-            printf '%s' "$KEYSTORE_B64" | base64 -d > "$dir/debug.keystore"
-            echo "status=drew" >> "$GITHUB_OUTPUT"
-            echo "Using the laptop's debug keystore from the secret."
-          else
-            echo "status=throwaway" >> "$GITHUB_OUTPUT"
-            echo "::warning::BOOKSHELF_DEBUG_KEYSTORE_B64 is not set; the APK will be signed with a throwaway key (uninstall the USB build first; sign-in will not work)."
-          fi
-
-      - name: Build the Debug APK
-        # EmbedAssembliesIntoApk: a plain Debug build relies on fast deployment over adb and the
-        # APK alone would not run. Debug (not Release) so the debug keystore signs it.
+      - name: Build the Release APK (no real key on disk yet)
+        # Runs the branch's code. The SDK signs the result with a throwaway debug key it
+        # generates; the next steps replace that signature. Release so the app is not debuggable.
         run: >
           dotnet build BookTracker.Mobile/BookTracker.Mobile.csproj
-          --configuration Debug -f net10.0-android
+          --configuration Release -f net10.0-android
           -p:AndroidSdkDirectory="$ANDROID_HOME"
-          -p:EmbedAssembliesIntoApk=true
           -p:AndroidPackageFormat=apk
           /p:SourceRevisionId=${{ github.sha }}
 
-      - name: Locate the signed APK
+      - name: Locate the built APK
         id: apk
         run: |
           set -euo pipefail
-          apk=$(find BookTracker.Mobile/bin/Debug/net10.0-android -name '*-Signed.apk' | head -n 1)
+          apk=$(find BookTracker.Mobile/bin/Release/net10.0-android -name '*-Signed.apk' | head -n 1)
           if [ -z "$apk" ]; then echo "::error::No *-Signed.apk produced"; exit 1; fi
           branch="${GITHUB_REF_NAME//\//-}"
           name="bookshelf-${branch}-${GITHUB_SHA::7}.apk"
-          cp "$apk" "$name"
-          echo "path=$name" >> "$GITHUB_OUTPUT"
+          # Out of the checkout, so nothing the build left behind sits beside it.
+          mkdir -p "$RUNNER_TEMP/apk"
+          cp "$apk" "$RUNNER_TEMP/apk/built.apk"
+          echo "built=$RUNNER_TEMP/apk/built.apk" >> "$GITHUB_OUTPUT"
+          echo "path=$RUNNER_TEMP/apk/$name" >> "$GITHUB_OUTPUT"
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          ls -l "$name"
+
+      - name: Sign with Drew's keystore (SDK tools only, no project code)
+        id: keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.BOOKSHELF_DEBUG_KEYSTORE_B64 }}
+          BUILT: ${{ steps.apk.outputs.built }}
+          FINAL: ${{ steps.apk.outputs.path }}
+        run: |
+          set -euo pipefail
+          tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+          if [ ! -x "$tools/apksigner" ]; then echo "::error::apksigner not found under $ANDROID_HOME/build-tools"; exit 1; fi
+
+          # A Release build must not be debuggable; stop here if it is.
+          # Captured first: piping straight into `grep -q` under pipefail can report a match as a failure.
+          badging=$("$tools/aapt2" dump badging "$BUILT")
+          if grep -q 'application-debuggable' <<<"$badging"; then
+            echo "::error::The built APK is debuggable; refusing to sign it."
+            exit 1
+          fi
+
+          if [ -n "$KEYSTORE_B64" ]; then
+            ks="$RUNNER_TEMP/apk/signing.keystore"
+            trap 'rm -f "$ks"' EXIT
+            printf '%s' "$KEYSTORE_B64" | base64 -d > "$ks"
+            # Replaces the throwaway signature the build applied. The password and alias are
+            # the Android debug defaults, the same on every machine; they are not secrets.
+            "$tools/apksigner" sign --ks "$ks" --ks-key-alias androiddebugkey \
+              --ks-pass pass:android --key-pass pass:android --out "$FINAL" "$BUILT"
+            echo "status=drew" >> "$GITHUB_OUTPUT"
+            echo "Signed with the laptop's debug keystore from the secret."
+          else
+            cp "$BUILT" "$FINAL"
+            echo "status=throwaway" >> "$GITHUB_OUTPUT"
+            echo "::warning::BOOKSHELF_DEBUG_KEYSTORE_B64 is not set; the APK keeps the throwaway signature (uninstall the USB build first; sign-in will not work)."
+          fi
+          # Checks the signature is valid; prints no certificate details (public log).
+          "$tools/apksigner" verify "$FINAL"
+          rm -f "$BUILT"
+          ls -l "$FINAL"
 
       - name: Azure login (OIDC)
         uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
@@ -203,7 +240,7 @@ jobs:
             echo
             echo "- Branch \`$GITHUB_REF_NAME\` at \`${GITHUB_SHA::7}\`"
             if [ "$KEYSTORE" = "drew" ]; then
-              echo "- Signed with the laptop's debug keystore: installs over the USB build, sign-in works."
+              echo "- Release build, not debuggable, signed with the laptop's debug keystore: installs over the USB build, sign-in works."
             else
               echo "- **Signed with a throwaway key** (secret \`BOOKSHELF_DEBUG_KEYSTORE_B64\` missing): uninstall the USB build first, and sign-in will not complete."
             fi
