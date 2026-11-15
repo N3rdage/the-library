@@ -17,6 +17,9 @@ public class BlobBookCoverStorage : IBookCoverStorage
 {
     private const string CacheControlHeader = "public, max-age=31536000";
 
+    /// <summary>Largest upstream cover body accepted for mirroring (10 MiB).</summary>
+    public const long MaxDownloadBytes = 10 * 1024 * 1024;
+
     private readonly CoverStorageOptions _options;
     private readonly HttpClient _http;
     private readonly ILogger<BlobBookCoverStorage> _logger;
@@ -31,6 +34,20 @@ public class BlobBookCoverStorage : IBookCoverStorage
         _http = http;
         _logger = logger;
         _containerClient = new Lazy<Task<BlobContainerClient?>>(InitContainerAsync);
+    }
+
+    // Test seam: supplies the blob container directly instead of building it
+    // from the connection string.
+    internal BlobBookCoverStorage(
+        IOptions<CoverStorageOptions> options,
+        HttpClient http,
+        ILogger<BlobBookCoverStorage> logger,
+        BlobContainerClient container)
+    {
+        _options = options.Value;
+        _http = http;
+        _logger = logger;
+        _containerClient = new Lazy<Task<BlobContainerClient?>>(() => Task.FromResult<BlobContainerClient?>(container));
     }
 
     public bool IsEnabled => _options.IsEnabled;
@@ -49,16 +66,38 @@ public class BlobBookCoverStorage : IBookCoverStorage
 
         try
         {
-            using var response = await _http.GetAsync(sourceUrl, ct);
+            using var response = await _http.GetAsync(sourceUrl, HttpCompletionOption.ResponseHeadersRead, ct);
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Cover mirror skipped — upstream returned {Status} for {Url}", (int)response.StatusCode, sourceUrl);
                 return sourceUrl;
             }
 
-            var bytes = await response.Content.ReadAsByteArrayAsync(ct);
-            var contentType = response.Content.Headers.ContentType?.MediaType;
-            return await UploadAsync(bytes, contentType ?? "application/octet-stream", blobKey, ct);
+            var declaredType = response.Content.Headers.ContentType?.MediaType;
+            var mediaType = CoverImageProcessor.AllowedMediaType(declaredType);
+            if (mediaType is null)
+            {
+                _logger.LogWarning("Cover mirror skipped — {Url} returned content type {MediaType}, not an allowed raster image type.",
+                    sourceUrl, declaredType ?? "(none)");
+                return sourceUrl;
+            }
+
+            if (response.Content.Headers.ContentLength > MaxDownloadBytes)
+            {
+                _logger.LogWarning("Cover mirror skipped — {Url} declares {ByteCount} bytes, over the {MaxBytes}-byte cap.",
+                    sourceUrl, response.Content.Headers.ContentLength, MaxDownloadBytes);
+                return sourceUrl;
+            }
+
+            var bytes = await ReadCappedAsync(response.Content, ct);
+            if (bytes is null)
+            {
+                _logger.LogWarning("Cover mirror skipped — {Url} body exceeded the {MaxBytes}-byte cap while reading.",
+                    sourceUrl, MaxDownloadBytes);
+                return sourceUrl;
+            }
+
+            return await UploadAsync(bytes, mediaType, blobKey, ct);
         }
         catch (Exception ex)
         {
@@ -76,6 +115,13 @@ public class BlobBookCoverStorage : IBookCoverStorage
         }
 
         var processed = CoverImageProcessor.Process(bytes, contentType);
+        if (processed is null)
+        {
+            _logger.LogWarning("Cover upload refused for blobKey {BlobKey} — content type {ContentType} is not an allowed raster image type.",
+                blobKey, contentType);
+            throw new InvalidOperationException("Cover content type is not an allowed image type.");
+        }
+
         if (!processed.WasNormalised)
         {
             _logger.LogWarning("Cover normalisation failed for blobKey {BlobKey} (content-type {ContentType}, {ByteCount} bytes) — storing raw payload.",
@@ -110,6 +156,23 @@ public class BlobBookCoverStorage : IBookCoverStorage
         // BuildPublicUrl is still used there.
         var stamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         return $"{BuildPublicUrl(blobName)}?v={stamp}";
+    }
+
+    // Reads at most MaxDownloadBytes from the body; returns null as soon as the
+    // stream goes past the cap. Content-Length can be absent or wrong, so the
+    // cap is enforced on the bytes actually read.
+    private static async Task<byte[]?> ReadCappedAsync(HttpContent content, CancellationToken ct)
+    {
+        await using var stream = await content.ReadAsStreamAsync(ct);
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        int read;
+        while ((read = await stream.ReadAsync(chunk, ct)) > 0)
+        {
+            if (buffer.Length + read > MaxDownloadBytes) return null;
+            buffer.Write(chunk, 0, read);
+        }
+        return buffer.ToArray();
     }
 
     private async Task<BlobContainerClient?> InitContainerAsync()
