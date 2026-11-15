@@ -237,7 +237,7 @@ public class BookLookupServiceTests
     }
 
     [Fact]
-    public async Task LookupByIsbnAsync_DropsCoverUrlWithIpLiteralHost_AndKeepsTheRestOfTheResult()
+    public async Task LookupByIsbnAsync_IpLiteralOpenLibraryCovers_FallThroughToTheIsbnCover_AndKeepTheRestOfTheResult()
     {
         var handler = new FakeHandler
         {
@@ -247,7 +247,10 @@ public class BookLookupServiceTests
                     "title": "Sourcery",
                     "authors": [ { "name": "Terry Pratchett" } ],
                     "publishers": [ { "name": "Corgi" } ],
-                    "cover": { "large": "https://169.254.169.254/latest/meta-data/x.jpg" }
+                    "cover": {
+                      "large": "https://169.254.169.254/latest/meta-data/x.jpg",
+                      "medium": "https://10.0.0.5/x-M.jpg"
+                    }
                   }
                 }
                 """)
@@ -257,11 +260,53 @@ public class BookLookupServiceTests
         var result = await svc.LookupByIsbnAsync(Isbn, CancellationToken.None);
 
         Assert.NotNull(result);
-        Assert.Null(result!.CoverUrl);
+        Assert.Equal($"https://covers.openlibrary.org/b/isbn/{Isbn}-L.jpg", result!.CoverUrl);
         Assert.Equal("Open Library", result.Source);
         Assert.Equal("Sourcery", result.Title);
         Assert.Equal("Terry Pratchett", result.Author);
         Assert.Equal("Corgi", result.Publisher);
+    }
+
+    [Fact]
+    public async Task LookupByIsbnAsync_IpLiteralLargeCover_FallsThroughToTheMediumCover()
+    {
+        var handler = new FakeHandler
+        {
+            ["jscmd=data"] = OkJson($$"""
+                {
+                  "ISBN:{{Isbn}}": {
+                    "title": "Sourcery",
+                    "cover": {
+                      "large": "https://169.254.169.254/latest/meta-data/x.jpg",
+                      "medium": "https://covers.openlibrary.org/b/id/1-M.jpg"
+                    }
+                  }
+                }
+                """)
+        };
+
+        var svc = CreateService(handler, troveKey: "present");
+        var result = await svc.LookupByIsbnAsync(Isbn, CancellationToken.None);
+
+        Assert.Equal("https://covers.openlibrary.org/b/id/1-M.jpg", result?.CoverUrl);
+    }
+
+    [Fact]
+    public void FirstAcceptableCoverUrl_EveryCandidateRefused_ReturnsNull()
+    {
+        var svc = CreateService(new FakeHandler(), troveKey: "");
+
+        Assert.Null(svc.FirstAcceptableCoverUrl("Open Library", Isbn,
+            "https://169.254.169.254/x.jpg", null, "http://covers.openlibrary.org/x.jpg", "  "));
+    }
+
+    [Fact]
+    public void FirstAcceptableCoverUrl_ReturnsTheFirstAcceptableCandidateTrimmed()
+    {
+        var svc = CreateService(new FakeHandler(), troveKey: "");
+
+        Assert.Equal("https://covers.openlibrary.org/b/id/2-M.jpg", svc.FirstAcceptableCoverUrl("Open Library", Isbn,
+            "https://user:pw@covers.openlibrary.org/x.jpg", "  https://covers.openlibrary.org/b/id/2-M.jpg  ", "https://covers.openlibrary.org/b/id/3-M.jpg"));
     }
 
     [Fact]

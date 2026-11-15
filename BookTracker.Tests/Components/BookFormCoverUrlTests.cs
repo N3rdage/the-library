@@ -8,9 +8,12 @@ using Microsoft.AspNetCore.Components.Forms;
 namespace BookTracker.Tests.Components;
 
 /// <summary>
-/// bUnit tests for the cover URL field on BookForm: inside an EditForm with a
-/// DataAnnotationsValidator (the Add page's shape), a URL the cover mirror would
-/// refuse shows the field message and the form does not submit.
+/// bUnit tests for the cover URL field on BookForm. The test renders the form
+/// inside its own EditForm over the input model, with a DataAnnotationsValidator,
+/// to exercise the <c>[CoverUrl]</c> attribute: a URL the cover mirror would refuse
+/// shows the field message and the form does not submit. This is not the Add
+/// page's exact shape (its EditForm model is the page itself, and its view model
+/// enforces the rule at save).
 /// </summary>
 [Trait("Category", TestCategories.Component)]
 public class BookFormCoverUrlTests : ComponentTestBase

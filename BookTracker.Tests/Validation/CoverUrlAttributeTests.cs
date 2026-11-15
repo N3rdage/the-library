@@ -51,13 +51,4 @@ public class CoverUrlAttributeTests
         Assert.Contains(Validate(book), r => r.MemberNames.Contains(nameof(book.DefaultCoverArtUrl)));
         Assert.Contains(Validate(edition), r => r.MemberNames.Contains(nameof(edition.CoverUrl)));
     }
-
-    [Theory]
-    [InlineData(null, null)]
-    [InlineData("https://covers.openlibrary.org/x.jpg", null)]
-    [InlineData("http://covers.openlibrary.org/x.jpg", CoverUrlAttribute.Message)]
-    public void ErrorFor_MatchesThePredicate(string? url, string? expected)
-    {
-        Assert.Equal(expected, CoverUrlAttribute.ErrorFor(url));
-    }
 }

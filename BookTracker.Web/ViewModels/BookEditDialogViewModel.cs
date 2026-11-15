@@ -4,6 +4,7 @@ using BookTracker.Application.Formatting;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services.Covers;
+using BookTracker.Web.Validation;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
@@ -25,8 +26,26 @@ public class BookEditDialogViewModel(
     public BookCategory Category { get; set; }
     public string? CoverUrl { get; set; }
 
-    // Blank or a URL the cover mirror can fetch; Save stays disabled otherwise.
-    public bool CoverUrlAcceptable => CoverFetchPolicy.IsAcceptableCoverUrl(CoverUrl);
+    // The cover URL as loaded. A stored URL (an Azurite blob URL in local dev, a
+    // row that predates the rule) stays saveable while unchanged; only an edited
+    // URL has to be one the cover mirror can fetch.
+    private string? _loadedCoverUrl;
+
+    // Save stays disabled while this is false.
+    public bool CoverUrlAcceptable => IsCoverUrlAcceptable(CoverUrl);
+
+    public bool IsCoverUrlAcceptable(string? url) =>
+        string.Equals(url?.Trim(), _loadedCoverUrl?.Trim(), StringComparison.Ordinal)
+        || CoverFetchPolicy.IsAcceptableCoverUrl(url);
+
+    // The cover URL field's Validation func: the field message, or null when acceptable.
+    public string? CoverUrlError(string? url) => IsCoverUrlAcceptable(url) ? null : CoverUrlAttribute.Message;
+
+    internal void LoadCoverUrl(string? url)
+    {
+        CoverUrl = url;
+        _loadedCoverUrl = url;
+    }
 
     public int? SelectedSeriesId { get; set; }
     // Free-text so the user can enter "4.5" interquels / "1A" hierarchical
@@ -45,7 +64,7 @@ public class BookEditDialogViewModel(
 
         Title = book.Title;
         Category = book.Category;
-        CoverUrl = book.DefaultCoverArtUrl;
+        LoadCoverUrl(book.DefaultCoverArtUrl);
         SelectedSeriesId = book.SeriesId;
         // Only surface an order when the book is actually in a series. A series
         // delete SET NULLs SeriesId but leaves SeriesOrder behind, so a stale
@@ -86,7 +105,7 @@ public class BookEditDialogViewModel(
         try
         {
             await dispatcher.Send(new UpdateBookDetails(
-                BookId, Title, Category, CoverUrl,
+                BookId, Title, Category, string.IsNullOrWhiteSpace(CoverUrl) ? null : CoverUrl.Trim(),
                 SelectedSeriesId, seriesOrder, seriesOrderDisplay));
         }
         catch (NotFoundException)

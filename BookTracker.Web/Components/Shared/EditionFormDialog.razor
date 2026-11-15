@@ -4,7 +4,6 @@
 
 @using BookTracker.Application
 @using BookTracker.Application.Books
-@using BookTracker.Web.Validation
 @using Microsoft.Extensions.Logging
 @inject EditionFormDialogViewModel VM
 @inject ISnackbar Snackbar
@@ -83,7 +82,7 @@
                               Label="Cover image URL"
                               Variant="Variant.Outlined"
                               Margin="Margin.Dense"
-                              Validation="@(new Func<string?, string?>(CoverUrlAttribute.ErrorFor))" />
+                              Validation="@(new Func<string?, string?>(VM.CoverUrlError))" />
 
                 @if (VM.IsNew)
                 {

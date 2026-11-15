@@ -16,13 +16,6 @@ public sealed class CoverUrlAttribute : ValidationAttribute
     {
     }
 
-    /// <summary>
-    /// <see cref="Message"/> when <paramref name="url"/> is not an acceptable cover
-    /// URL, otherwise null; the shape of a MudBlazor field <c>Validation</c> func.
-    /// </summary>
-    public static string? ErrorFor(string? url) =>
-        CoverFetchPolicy.IsAcceptableCoverUrl(url) ? null : Message;
-
     public override bool IsValid(object? value) =>
         value is null || (value is string url && CoverFetchPolicy.IsAcceptableCoverUrl(url));
 }

@@ -5,6 +5,7 @@ using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.Services.Covers;
+using BookTracker.Web.Validation;
 using BookTracker.Web.Components.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -38,8 +39,26 @@ public class EditionFormDialogViewModel(
     public string FirstPublishedOrPrintedDate { get; set; } = "";
     public string? CoverUrl { get; set; }
 
-    // Blank or a URL the cover mirror can fetch; Save stays disabled otherwise.
-    public bool CoverUrlAcceptable => CoverFetchPolicy.IsAcceptableCoverUrl(CoverUrl);
+    // The cover URL as loaded (null on Add). A stored URL (an Azurite blob URL in
+    // local dev, a row that predates the rule) stays saveable while unchanged;
+    // only an edited URL has to be one the cover mirror can fetch.
+    private string? _loadedCoverUrl;
+
+    // Save stays disabled while this is false.
+    public bool CoverUrlAcceptable => IsCoverUrlAcceptable(CoverUrl);
+
+    public bool IsCoverUrlAcceptable(string? url) =>
+        string.Equals(url?.Trim(), _loadedCoverUrl?.Trim(), StringComparison.Ordinal)
+        || CoverFetchPolicy.IsAcceptableCoverUrl(url);
+
+    // The cover URL field's Validation func: the field message, or null when acceptable.
+    public string? CoverUrlError(string? url) => IsCoverUrlAcceptable(url) ? null : CoverUrlAttribute.Message;
+
+    internal void LoadCoverUrl(string? url)
+    {
+        CoverUrl = url;
+        _loadedCoverUrl = url;
+    }
 
     // Add-only: the first Copy that ships with a new Edition. Every
     // Edition needs at least one Copy, so the Add flow captures it here.
@@ -83,7 +102,7 @@ public class EditionFormDialogViewModel(
         Format = edition.Format;
         Publisher = edition.Publisher?.Name;
         FirstPublishedOrPrintedDate = PartialDateParser.Format(edition.DatePrinted, edition.DatePrintedPrecision);
-        CoverUrl = edition.CoverUrl;
+        LoadCoverUrl(edition.CoverUrl);
         ExistingPublishers = await LoadPublishersAsync(db);
     }
 
@@ -145,18 +164,19 @@ public class EditionFormDialogViewModel(
         if (NotFound || !CoverUrlAcceptable) return null;
 
         var datePrinted = PartialDateParser.TryParse(FirstPublishedOrPrintedDate) ?? PartialDate.Empty;
+        var coverUrl = string.IsNullOrWhiteSpace(CoverUrl) ? null : CoverUrl.Trim();
         try
         {
             if (IsNew)
             {
                 return await dispatcher.Send(new AddEditionToBook(
                     BookId, Isbn, Format, datePrinted.Date, datePrinted.Precision,
-                    Publisher, CoverUrl, FirstCopyCondition));
+                    Publisher, coverUrl, FirstCopyCondition));
             }
 
             if (EditionId is not int id) return null;
             await dispatcher.Send(new UpdateEdition(
-                id, Isbn, Format, datePrinted.Date, datePrinted.Precision, Publisher, CoverUrl));
+                id, Isbn, Format, datePrinted.Date, datePrinted.Precision, Publisher, coverUrl));
             return id;
         }
         catch (NotFoundException)
