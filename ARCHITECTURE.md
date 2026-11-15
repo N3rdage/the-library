@@ -359,7 +359,7 @@ Dev config templates: `appsettings.Example.json`, `appsettings.Development.Examp
 - Azure Bicep templates under `infra/`. SQL, Key Vault, Azure OpenAI, and the cover-storage Blob account are reachable only via Private Endpoints; the App Service uses VNet integration + a peered eastus2 VNet to reach OpenAI. See `infra/README.md` for the full topology.
 - **Slot-swap warmup** — `WEBSITE_SWAP_WARMUP_PING_PATH=/warmup` (set in `app-config.bicep`) makes Azure ping the dedicated `/warmup` endpoint during a slot swap, so the SQL pool + AAD token cold-start happens before promotion. Without the dedicated endpoint Azure would ping `/` which Easy Auth blocks (302 to login) and warm nothing.
 - **Container start time limit** — `WEBSITES_CONTAINER_START_TIME_LIMIT=600` (Linux App Service default is 230s, too tight under cold AAD + CA-cert update). See the in-bicep comment for the timing breakdown.
-- Auto-migration on startup (a deploy-time migration bundle is needed before going multi-instance)
+- Migrations run at deploy time: `deploy.yml` builds an EF migration bundle and applies it to the staging database before the slot deploy, and `swap.yml` does the same for production before the swap. Migrate-on-startup is a Development-only convenience (`Program.cs` gates it on `IsDevelopment`), so a multi-instance deployment never races on the schema.
 
 ## Progressive Web App (PWA)
 

@@ -61,6 +61,7 @@ Comfortably within service-worker pre-cache range. A single network call. Indexe
 ### What's NOT in the snapshot (deliberate)
 
 - **Notes, copy details.** Edit-flow data. Bookshop mode is read-only-lookup; full detail is reachable via the "Open in app" deep-link.
+- **Tags and genres.** `CatalogSnapshot` carries neither; they are browsing facets for the full app, not lookup data.
 - **Dismissal state for duplicates.** Edit-flow domain.
 
 ## Sync model
