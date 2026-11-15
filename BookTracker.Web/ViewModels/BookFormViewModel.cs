@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using BookTracker.Data.Models;
+using BookTracker.Web.Validation;
 
 namespace BookTracker.Web.ViewModels;
 
@@ -29,6 +30,7 @@ public class BookFormViewModel
         public string? Notes { get; set; }
 
         [StringLength(500)]
+        [CoverUrl]
         public string? DefaultCoverArtUrl { get; set; }
     }
 }

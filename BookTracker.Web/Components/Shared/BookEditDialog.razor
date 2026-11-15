@@ -34,6 +34,7 @@
                               Label="Cover image URL"
                               Variant="Variant.Outlined"
                               Margin="Margin.Dense"
+                              Validation="@(new Func<string?, string?>(VM.CoverUrlError))"
                               HelperText="Optional. Shown on the Library list and View page header." />
                 <MudSelect T="int?"
                            Value="VM.SelectedSeriesId"
@@ -64,7 +65,7 @@
         <MudButton OnClick="Cancel">Cancel</MudButton>
         <MudButton Color="Color.Primary"
                    Variant="Variant.Filled"
-                   Disabled="@(VM.NotFound || string.IsNullOrWhiteSpace(VM.Title) || saving)"
+                   Disabled="@(VM.NotFound || string.IsNullOrWhiteSpace(VM.Title) || !VM.CoverUrlAcceptable || saving)"
                    OnClick="SaveAsync">
             @(saving ? "Saving..." : "Save")
         </MudButton>
@@ -81,6 +82,7 @@
 
     private async Task SaveAsync()
     {
+        if (!VM.CoverUrlAcceptable) return;
         saving = true;
         try
         {

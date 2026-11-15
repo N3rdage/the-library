@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using BookTracker.Application.Formatting;
 using BookTracker.Data.Models;
+using BookTracker.Web.Services.Covers;
 using Microsoft.Extensions.Options;
 
 namespace BookTracker.Web.Services;
@@ -148,7 +149,9 @@ public partial class BookLookupService(
                 Publisher: book.Publishers?.FirstOrDefault()?.Name,
                 GenreCandidates: genres,
                 DatePrinted: olDate,
-                CoverUrl: book.Cover?.Large ?? book.Cover?.Medium ?? $"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg",
+                CoverUrl: FirstAcceptableCoverUrl(
+                    "Open Library", isbn,
+                    book.Cover?.Large, book.Cover?.Medium, $"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg"),
                 Source: "Open Library",
                 Format: BookFormatNormalizer.Normalize(book.PhysicalFormat, book.PhysicalDimensions),
                 DatePrintedPrecision: olPrecision,
@@ -216,7 +219,7 @@ public partial class BookLookupService(
                 Publisher: item.Publisher,
                 GenreCandidates: genres,
                 DatePrinted: gbDate,
-                CoverUrl: cover,
+                CoverUrl: FirstAcceptableCoverUrl("Google Books", isbn, cover),
                 Source: "Google Books",
                 DatePrintedPrecision: gbPrecision);
         }
@@ -306,6 +309,24 @@ public partial class BookLookupService(
     }
 
     private static string? CleanGenre(string raw) => GenreCandidateCleaner.Clean(raw);
+
+    // Returns the first provider cover URL the cover mirror would fetch, trimmed,
+    // or null when none qualifies; each refused candidate is dropped with a Debug
+    // log, so the lookup never prefills a cover field with a URL the form would
+    // not save. internal so the all-refused case is unit-testable.
+    internal string? FirstAcceptableCoverUrl(string provider, string isbn, params string?[] candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate)) continue;
+            var trimmed = candidate.Trim();
+            var refusal = CoverFetchPolicy.Validate(trimmed);
+            if (refusal is null) return trimmed;
+
+            logger.LogDebug("Dropped cover URL from {Provider} for ISBN {Isbn}: {Reason}", provider, isbn, refusal);
+        }
+        return null;
+    }
 
     /// <summary>
     /// Parses Open Library's free-text `series` field into a name, integer

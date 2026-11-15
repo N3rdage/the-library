@@ -31,6 +31,26 @@ public static class CoverFetchPolicy
     }
 
     /// <summary>
+    /// The predicate the cover URL fields and the ISBN lookup share: true when
+    /// <paramref name="url"/> is blank (the field is optional) or passes
+    /// <see cref="Validate"/> once trimmed, so a saved cover URL is one the mirror
+    /// can fetch.
+    /// </summary>
+    public static bool IsAcceptableCoverUrl(string? url) =>
+        string.IsNullOrWhiteSpace(url) || Validate(url.Trim()) is null;
+
+    /// <summary>
+    /// <paramref name="url"/> with any user info removed, for log messages, so a
+    /// URL carrying a credential does not write it to the log. Returns the input
+    /// unchanged when it carries no user info or does not parse as an absolute URL.
+    /// </summary>
+    public static string ForLogging(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || string.IsNullOrEmpty(uri.UserInfo)) return url;
+        return new UriBuilder(uri) { UserName = "", Password = "" }.Uri.AbsoluteUri;
+    }
+
+    /// <summary>
     /// True when <paramref name="address"/> is a public unicast address. False for
     /// loopback, unspecified, private (10/8, 172.16/12, 192.168/16, fc00::/7,
     /// site-local), link-local (169.254/16, fe80::/10), shared address space

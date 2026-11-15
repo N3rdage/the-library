@@ -34,6 +34,58 @@ public class CoverFetchPolicyTests
     }
 
     [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("https://covers.openlibrary.org/b/isbn/x-L.jpg")]
+    [InlineData("  https://covers.openlibrary.org/b/isbn/x-L.jpg  ")]
+    public void IsAcceptableCoverUrl_BlankOrFetchableHttps_IsTrue(string? url)
+    {
+        Assert.True(CoverFetchPolicy.IsAcceptableCoverUrl(url));
+    }
+
+    [Theory]
+    [InlineData("http://covers.openlibrary.org/b/isbn/x-L.jpg")]
+    [InlineData("ftp://covers.openlibrary.org/x.jpg")]
+    [InlineData("https://93.184.216.34/x.jpg")]
+    [InlineData("https://[2606:2800:220:1:248:1893:25c8:1946]/x.jpg")]
+    [InlineData("https://user:pw@covers.openlibrary.org/x.jpg")]
+    [InlineData("https://covers.openlibrary.org:8443/x.jpg")]
+    [InlineData("covers/x.jpg")]
+    [InlineData("/covers/x.jpg")]
+    public void IsAcceptableCoverUrl_UnfetchableUrl_IsFalse(string url)
+    {
+        Assert.False(CoverFetchPolicy.IsAcceptableCoverUrl(url));
+    }
+
+    [Fact]
+    public void ForLogging_UrlWithUserInfo_StripsIt()
+    {
+        var logged = CoverFetchPolicy.ForLogging("https://user:secret@covers.example.org/b/x.jpg?v=1");
+
+        Assert.Equal("https://covers.example.org/b/x.jpg?v=1", logged);
+        Assert.DoesNotContain("secret", logged);
+        Assert.DoesNotContain("user", logged);
+    }
+
+    [Theory]
+    [InlineData("https://covers.openlibrary.org/b/isbn/x-L.jpg")]
+    [InlineData("http://cdn.example.org:8080/x.png")]
+    public void ForLogging_UrlWithoutUserInfo_IsUnchanged(string url)
+    {
+        Assert.Equal(url, CoverFetchPolicy.ForLogging(url));
+    }
+
+    [Theory]
+    [InlineData("not a url at all")]
+    [InlineData("covers/x.jpg")]
+    [InlineData("")]
+    public void ForLogging_UnparsableInput_IsReturnedAsIs(string input)
+    {
+        Assert.Equal(input, CoverFetchPolicy.ForLogging(input));
+    }
+
+    [Theory]
     [InlineData("127.0.0.1")]
     [InlineData("127.255.0.9")]
     [InlineData("0.0.0.0")]
