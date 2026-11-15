@@ -2,9 +2,9 @@
 
 Living security posture review. Per-area verdicts: **Pass** / **Concern** / **Action required**. Fixes applied in the same PR are listed at the bottom; deferred items link to `TODO.md` or to a private backlog id (`LIB-nnn`). Monthly scan + review is automated via `.github/workflows/security-scan.yml`.
 
-**Last reviewed:** 2026-11-14, two ways: Drew's `security-audit` skill run on his laptop (per-run report local, `audits/security-2026-11-14.md`), plus a by-hand re-application of this document and `audit-rules/security.md` in the autonomous agent's container, which cannot load the skill. Totals from Drew's run: 0 critical / 1 high / 2 medium / 6 low / 3 info. The High, both Mediums and two Lows were fixed in [#465](https://github.com/N3rdage/the-library/pull/465) (operator session) and [#471](https://github.com/N3rdage/the-library/pull/471) (Drew) before this refresh. The hand sweep added further Low/Info items. Every open item is tracked in the private backlog as `LIB-nnn`; this public doc names the area, the verdict and the id only. Prior review: 2026-07-24 (before that, 2026-05-05).
+**Last reviewed:** 2026-11-14, two ways: Drew's `security-audit` skill run on his laptop (per-run report local, `audits/security-2026-11-14.md`), plus a by-hand re-application of this document and `audit-rules/security.md` in the autonomous agent's container, which cannot load the skill. Totals from Drew's run: 0 critical / 1 high / 2 medium / 6 low / 3 info. The High, both Mediums and two Lows were fixed in [#465](https://github.com/N3rdage/the-library/pull/465) and [#471](https://github.com/N3rdage/the-library/pull/471) before this refresh. The hand sweep added further Low/Info items. Every open item is tracked in the private backlog as `LIB-nnn`; this public doc names the area, the verdict and the id only. Prior review: 2026-07-24 (before that, 2026-05-05).
 
-**Tooling caveat.** The skill's 22 default rules live user-global on Drew's machine, not in this repo (see `docs/audit-skills.md`). What a headless agent can apply is `audit-rules/security.md` plus this document, so a hand sweep cannot reproduce the skill's "N of 25 rules clean" count. Drew's run: 19 of 25 rules clean.
+**Tooling caveat.** The skill's default and template rules (22, inferred from Drew's 25 minus BOOK-001..003; the repo does not state the number) live user-global on Drew's machine, not in this repo (see `docs/audit-skills.md`). What a headless agent can apply is `audit-rules/security.md` plus this document, so a hand sweep cannot reproduce the skill's "N of 25 rules clean" count. Drew's run: 19 of 25 rules clean.
 
 ---
 
@@ -94,7 +94,7 @@ No `Key Vault Administrator` or `Contributor` at the vault scope for any managed
 
 The pull-request federated credential on `booktracker-ci` was removed from `infra/setup-github-oidc.ps1` in #465; removing it on the Entra side is Drew's (LIB-001).
 
-- **Concern:** no purge protection and a 7-day soft-delete window (`infra/modules/keyvault.bicep:31-32`). Decision pending (LIB-010).
+- **Concern:** vault deletion-protection settings (`infra/modules/keyvault.bicep`). Decision pending (LIB-010).
 
 ---
 
@@ -105,7 +105,7 @@ The pull-request federated credential on `booktracker-ci` was removed from `infr
 `dotnet list package --vulnerable --include-transitive` on 2026-11-14 across all nine projects (the eight in `BookTracker.slnx` plus `BookTracker.Mobile`, which is outside the solution on purpose): zero vulnerable packages. Dependabot remains the forward-facing watchdog for CVEs landing after this date.
 
 - The two direct pins from #462 (`System.Security.Cryptography.Pkcs` 10.0.13 in Data and Web) are still present; revisit them with the EF Core 10.0.15 bump.
-- **Concern:** Dependabot's `nuget` entry covers only the solution directory, so `BookTracker.Mobile` (MSAL, ZXing) never gets update PRs (LIB-026, `ready`).
+- **Concern:** Dependabot's `nuget` entry is rooted at `/`, but `BookTracker.Mobile` sits outside `BookTracker.slnx`, so the updater never reaches it and the Android app's packages (MSAL, ZXing) get no update PRs; none of the Dependabot commits in the history touch its project file (LIB-026, fix PR open).
 
 ---
 
@@ -126,7 +126,7 @@ Grep of `logger.Log*` call sites in `BookTracker.Web`:
 
 No user identifiers, email addresses, tokens, or auth material in any log string. Structured logging uses named parameters correctly (no string-concat SQL-style risks). No reads of `X-MS-CLIENT-PRINCIPAL*` or of request headers anywhere.
 
-`UserTelemetryInitializer.cs:16-19` would stamp `User.Identity.Name` on telemetry, but the app registers no authentication scheme, so `HttpContext.User` is empty on App Service and nothing is sent. Revisit if that changes.
+`UserTelemetryInitializer.cs:16-19` would stamp `User.Identity.Name` on telemetry, but the app registers no authentication scheme, so `HttpContext.User` is expected to be empty on App Service and nothing sent. That is a runtime claim that cannot be verified from the repo; confirm it against Application Insights on the next review, and revisit if an authentication scheme is added.
 
 ---
 
@@ -144,7 +144,7 @@ No user identifiers, email addresses, tokens, or auth material in any log string
 
 **Verdict:** **Pass.**
 
-All 18 `IJSRuntime.Invoke*` call sites use **hardcoded string identifiers** for the JS function names (`"NavbarCollapse.close"`, `"BarcodeScanner.start/stop"`, `"PhotoCapture.start/stop/capture"`, `"chipPicker.suppressEnterAndComma"`, …). The function names are not user-controlled. `ScrollTo.element` no longer has a call site.
+All 17 `IJSRuntime.Invoke*` call sites use **hardcoded string identifiers** for the JS function names (`"NavbarCollapse.close"`, `"BarcodeScanner.start/stop"`, `"PhotoCapture.start/stop/capture"`, `"chipPicker.suppressEnterAndComma"`, …). The function names are not user-controlled. `ScrollTo.element` no longer has a call site.
 
 Arguments passed to JS:
 - `BarcodeScanner.start` — a DOM element id (`"barcode-reader"` or `"shopping-barcode-reader"`, hardcoded) plus a `DotNetObjectReference`. Safe.
@@ -178,7 +178,7 @@ No role assignments at subscription or management-group scope. `booktracker-ci` 
 
 Public containers `book-covers` / `book-covers-staging` are `publicAccess: Blob` (readable, not listable).
 
-- **Concern:** the web app reads the full storage account key (connection string via Key Vault), which also spans the APK container. Decision pending (LIB-020).
+- **Concern:** scope of the storage credential the web app holds. Decision pending (LIB-020).
 
 ---
 
@@ -189,7 +189,7 @@ Public containers `book-covers` / `book-covers-staging` are `publicAccess: Blob`
 - `BookTracker.Web/ProgramSetup.cs:201` — `app.UseHsts()` in non-Development environments.
 - `BookTracker.Web/ProgramSetup.cs:210` — `app.UseHttpsRedirection()` unconditionally.
 - Custom domain bound with App Service managed certificate (auto-renewing). `httpsOnly: true` and TLS 1.2 minimum in `infra/modules/appservice.bicep` hold.
-- `UseHsts()` without `AddHsts` ships the 30-day default without `includeSubDomains`; the rule (BOOK-007) wants at least six months. Fix in flight (LIB-004, `ready`).
+- HSTS policy: **Concern** against BOOK-007 (LIB-004, fix PR open).
 
 ---
 
@@ -197,9 +197,9 @@ Public containers `book-covers` / `book-covers-staging` are `publicAccess: Blob`
 
 **Verdict:** **Concern.**
 
-- The cover mirror (`BookTracker.Web/Services/Covers/`) applies no content-type or size limits to fetched cover URLs and keeps an undecodable response raw (LIB-006, fix in flight). It performs no URL validation (LIB-017, chained after LIB-006). See BOOK-008.
+- Cover mirror (`BookTracker.Web/Services/Covers/`) fetch handling: **Concern** (LIB-006, fix PR open; LIB-017, chained after it). See BOOK-008.
 - Lookup providers receive only escaped, length-checked input.
-- The Trove key is sent as a query parameter and may land in dependency telemetry (LIB-018, `ready`).
+- Lookup provider credential handling: **Concern** (LIB-018).
 - Timeouts: the lookup `HttpClient` has 25 s, the cover client 30 s.
 
 ---
@@ -227,7 +227,7 @@ Public containers `book-covers` / `book-covers-staging` are `publicAccess: Blob`
 - No cleartext config and no `http://` in code; no custom certificate validation in any configuration.
 - Catalog SQLite and covers live under app-private storage and hold no identity data.
 - **Concerns:**
-  - `android:allowBackup="true"` (LIB-014, `ready`, needs Drew's yes).
+  - Manifest application attributes (LIB-014, fix PR open, needs Drew's yes).
   - Comments and `docs/mobile-app-design.md` describe the token cache as Keystore-backed SecureStorage, but the code uses MSAL's default cache (LIB-023, `ready`).
   - Installed builds are Debug (LIB-024, decision).
 
