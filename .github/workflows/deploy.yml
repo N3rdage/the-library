@@ -28,14 +28,14 @@ concurrency:
 permissions:
   contents: read
 
-# Two jobs on purpose (security sweep LIB-016). `build` compiles the merged code, and with it
+# Two jobs on purpose (security sweep LIB-016). `package` compiles the merged code, and with it
 # every MSBuild target, source generator and NuGet build script the solution pulls in; it has no
 # `id-token` permission, so nothing that runs there can sign in to Azure. `deploy` holds the
-# Azure identity and compiles nothing: it downloads what `build` produced and runs only the
+# Azure identity and compiles nothing: it downloads what `package` produced and runs only the
 # migration bundle and the Azure steps. Keep it that way: no `dotnet build`, `restore` or
 # `publish` may be added to `deploy`.
 jobs:
-  build:
+  package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -96,7 +96,7 @@ jobs:
           retention-days: 1
 
   deploy:
-    needs: build
+    needs: package
     runs-on: ubuntu-latest
     permissions:
       id-token: write
