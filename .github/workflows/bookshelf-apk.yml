@@ -68,7 +68,10 @@ name: Bookshelf APK (on demand)
 #     this environment and whose only role is Storage Blob Data Contributor on the
 #     `bookshelf-builds` container. It is not booktracker-ci and cannot touch
 #     anything else in the resource group.
-# Environment variables: BOOKSHELF_APK_CLIENT_ID, BOOKSHELF_STORAGE_ACCOUNT.
+# The upload identity's client id and the storage account's name are read from ENVIRONMENT
+# secrets BOOKSHELF_APK_CLIENT_ID and BOOKSHELF_STORAGE_ACCOUNT when they exist, so the public
+# log shows them masked; the environment variables of the same names are the fallback and are
+# printed in the clear. Once the secrets are set, delete the variables.
 
 on:
   workflow_dispatch:
@@ -142,7 +145,30 @@ jobs:
           --configuration Release -f net10.0-android
           -p:AndroidSdkDirectory="$ANDROID_HOME"
           -p:AndroidPackageFormat=apk
+          -p:UseSharedCompilation=false
+          -nodeReuse:false
           /p:SourceRevisionId=${{ github.sha }}
+
+      - name: Stop the build's helper processes
+        # MSBuild worker nodes and the compiler server normally stay alive after a build (the
+        # first run of this workflow ended with four of them). Nothing started by the branch's
+        # build should still be running when the keystore arrives. The two switches on the build
+        # ask for no long-lived helpers; this step shuts down any that started anyway and then
+        # fails the job if one is still there. It narrows the gap, it does not close it: a build
+        # that hid a process under another name would get past, which is why the environment's
+        # approval is still the control.
+        run: |
+          set -uo pipefail
+          dotnet build-server shutdown || true
+          pkill -f 'MSBuild\.dll|VBCSCompiler|Microsoft\.Build' || true
+          sleep 2
+          left=$(pgrep -af 'MSBuild\.dll|VBCSCompiler|Microsoft\.Build' | grep -v pgrep || true)
+          if [ -n "$left" ]; then
+            echo "::error::Build helper processes are still running; refusing to go on to signing."
+            echo "$left" | cut -c1-200
+            exit 1
+          fi
+          echo "No build helper processes left."
 
       - name: Locate the built APK
         id: apk
@@ -201,7 +227,7 @@ jobs:
       - name: Azure login (OIDC)
         uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
         with:
-          client-id: ${{ vars.BOOKSHELF_APK_CLIENT_ID }}
+          client-id: ${{ secrets.BOOKSHELF_APK_CLIENT_ID || vars.BOOKSHELF_APK_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           # The upload identity holds one data role on one container and no subscription-level role.
           allow-no-subscriptions: true
@@ -209,19 +235,18 @@ jobs:
       - name: Upload to the private container
         id: upload
         env:
-          ACCOUNT: ${{ vars.BOOKSHELF_STORAGE_ACCOUNT }}
+          ACCOUNT: ${{ secrets.BOOKSHELF_STORAGE_ACCOUNT || vars.BOOKSHELF_STORAGE_ACCOUNT }}
           APK: ${{ steps.apk.outputs.path }}
           NAME: ${{ steps.apk.outputs.name }}
         run: |
           set -euo pipefail
-          if [ -z "$ACCOUNT" ]; then echo "::error::Environment variable BOOKSHELF_STORAGE_ACCOUNT is not set"; exit 1; fi
+          if [ -z "$ACCOUNT" ]; then echo "::error::BOOKSHELF_STORAGE_ACCOUNT is not set (environment secret, or the older environment variable)"; exit 1; fi
           container=bookshelf-builds
           # Data-plane calls as the signed-in identity (no account key). The container is
           # declared in infra/modules/cover-storage.bicep; this identity cannot create it.
           az storage blob upload --account-name "$ACCOUNT" --container-name "$container" \
             --name "$NAME" --file "$APK" --content-type application/vnd.android.package-archive \
             --overwrite --auth-mode login --output none
-          echo "account=$ACCOUNT" >> "$GITHUB_OUTPUT"
           # Keep old builds from piling up: anything older than 14 days goes.
           cutoff=$(date -u -d '-14 days' '+%Y-%m-%dT%H:%MZ')
           az storage blob delete-batch --account-name "$ACCOUNT" --source "$container" \
@@ -229,7 +254,6 @@ jobs:
 
       - name: Summary
         env:
-          ACCOUNT: ${{ steps.upload.outputs.account }}
           KEYSTORE: ${{ steps.keystore.outputs.status }}
           APPCONFIG: ${{ steps.appconfig.outputs.status }}
           NAME: ${{ steps.apk.outputs.name }}
@@ -249,7 +273,7 @@ jobs:
             fi
             [ -n "$NOTE" ] && echo "- Note: $NOTE"
             echo
-            echo "**Where it is:** storage account \`$ACCOUNT\`, private container \`bookshelf-builds\`, blob \`$NAME\`."
+            echo "**Where it is:** the covers storage account, private container \`bookshelf-builds\`, blob \`$NAME\`."
             echo
             echo "No link is published (public repo). On the phone: portal.azure.com, sign in, open the storage account, Containers, bookshelf-builds, tap the blob, Download, then open the download and allow installs from the browser if asked. Builds older than 14 days are pruned."
           } >> "$GITHUB_STEP_SUMMARY"
