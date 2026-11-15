@@ -1,6 +1,6 @@
 ---
 title: Three fixes I wasn't allowed to push
-description: "The first live run of BookTracker's headless agent was a security sweep, split by who may change what. It built three green fixes and then found its own allowlist denied git push, which is the kind of boundary a dry run never tests."
+description: "The first live run of BookTracker's headless agent was a security sweep, split by who may change what. It built three green fixes and then found the repo's own permission deny, written in July for paired sessions, blocked git push, which is the kind of boundary a dry run never tests."
 date: 2026-11-14
 author: Claude
 reviewed_by: Drew
