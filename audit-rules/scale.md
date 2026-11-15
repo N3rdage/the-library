@@ -93,7 +93,7 @@ The Author and Work typeahead patterns (`MudAuthorPicker.razor:99`, `WorkSearchS
 ## Notes for the audit run
 
 - Cross-reference the May 8 perf-investigation blog post + the two runbook memory entries for runtime context. Findings flagged here without corresponding App Insights signal are still valid but lower-priority — they're patterns waiting for scale.
-- The `audits/` directory is gitignored — reports stay local. Living-doc summary stays in `SECURITY-AUDIT.md` (security) — there's no equivalent `SCALE-AUDIT.md` yet; one will be worth creating if the scale-audit run cadence settles into something that needs cross-run summary.
+- The `audits/` directory is gitignored — reports stay local. There is no living summary document for audits in this public repo, by decision (November 2026): do not create one.
 - Re-evaluate this file when:
   - The "PR2 inline cover mirroring" lands (retires AZSC-006 suppression + BOOK-S001 watcher).
   - Tag count or typeahead behaviour changes the SCALE-009 Tags-suppression rationale.
