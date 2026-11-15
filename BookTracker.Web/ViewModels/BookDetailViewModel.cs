@@ -171,6 +171,13 @@ public class BookDetailViewModel(
             return UploadCoverResult.Failure("Couldn't read the uploaded file.");
         }
 
+        if (CoverImageProcessor.AllowedMediaType(file.ContentType) is null)
+        {
+            logger.LogWarning("Cover upload refused for Edition {EditionId}: content type {ContentType} is not an allowed raster image type.",
+                editionId, file.ContentType);
+            return UploadCoverResult.Failure("That file type isn't supported. Use a JPEG, PNG, GIF or WebP image.");
+        }
+
         string newUrl;
         try
         {
