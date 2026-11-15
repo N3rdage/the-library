@@ -35,7 +35,7 @@ Three layers, none of which require an active SignalR circuit:
 
 2. **Service worker** — `wwwroot/service-worker.js` applies **route-specific caching strategies**. Cache-first for `/bookshop*` and `/api/catalog-snapshot`; network-first-with-cache-fallback for everything else.
 
-3. **IndexedDB catalog cache** — stores a slim snapshot of the catalog: books (id, title, primary author, all authors, status, rating, ISBNs), authors (id, name, canonical id, book ids). Indexed for ISBN lookup (multi-entry on `isbns`) and primary-author lookup. Module at `wwwroot/js/catalog-cache.js` exposes `init()`, `lookupByIsbn()`, `lookupByAuthor()`, `searchAuthors()`, `refresh()`, `getMeta()`. Stores: `books` (key=id, multiEntry index on `isbns`, index on `primaryAuthorCanonicalId`), `authors` (key=id, index on `canonicalId`), `meta` (key/value for sync timestamp, version).
+3. **IndexedDB catalog cache** — stores a slim snapshot of the catalog: books (id, title, primary author, all authors, status, rating, ISBNs), authors (id, name, canonical id, book ids). Indexed for ISBN lookup (multi-entry on `isbns`) and primary-author lookup. Module at `wwwroot/js/catalog-cache.js` exposes `init()`, `lookupByIsbn()`, `lookupByAuthor()`, `searchAuthors()`, `refresh()`, `getMeta()`. Stores: `books` (key=id, multiEntry index on `isbns`, index on `primaryAuthor`, the author's name), `authors` (key=id, index on `canonicalId`), `meta` (key/value for sync timestamp, version).
 
 The page's JS reads from IndexedDB on `DOMContentLoaded`, wires up event handlers in plain JS, and does not depend on Blazor's circuit being alive. Server-side methods on the Razor page are reachable when online (e.g. for "open in app" links) but not required for the offline lookup paths.
 
