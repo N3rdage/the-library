@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using BookTracker.Application.Formatting;
 using BookTracker.Data.Models;
+using BookTracker.Web.Services.Covers;
 using Microsoft.Extensions.Options;
 
 namespace BookTracker.Web.Services;
@@ -148,7 +149,9 @@ public partial class BookLookupService(
                 Publisher: book.Publishers?.FirstOrDefault()?.Name,
                 GenreCandidates: genres,
                 DatePrinted: olDate,
-                CoverUrl: book.Cover?.Large ?? book.Cover?.Medium ?? $"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg",
+                CoverUrl: AcceptableCoverUrl(
+                    book.Cover?.Large ?? book.Cover?.Medium ?? $"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg",
+                    "Open Library", isbn),
                 Source: "Open Library",
                 Format: BookFormatNormalizer.Normalize(book.PhysicalFormat, book.PhysicalDimensions),
                 DatePrintedPrecision: olPrecision,
@@ -216,7 +219,7 @@ public partial class BookLookupService(
                 Publisher: item.Publisher,
                 GenreCandidates: genres,
                 DatePrinted: gbDate,
-                CoverUrl: cover,
+                CoverUrl: AcceptableCoverUrl(cover, "Google Books", isbn),
                 Source: "Google Books",
                 DatePrintedPrecision: gbPrecision);
         }
@@ -306,6 +309,19 @@ public partial class BookLookupService(
     }
 
     private static string? CleanGenre(string raw) => GenreCandidateCleaner.Clean(raw);
+
+    // A provider cover URL the cover mirror would refuse is dropped here, so the
+    // lookup never prefills a cover field with a URL the form would not save.
+    private string? AcceptableCoverUrl(string? url, string provider, string isbn)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return null;
+        var trimmed = url.Trim();
+        if (CoverFetchPolicy.IsAcceptableCoverUrl(trimmed)) return trimmed;
+
+        logger.LogDebug("Dropped cover URL from {Provider} for ISBN {Isbn}: {Reason}",
+            provider, isbn, CoverFetchPolicy.Validate(trimmed));
+        return null;
+    }
 
     /// <summary>
     /// Parses Open Library's free-text `series` field into a name, integer

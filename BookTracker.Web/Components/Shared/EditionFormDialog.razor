@@ -4,6 +4,7 @@
 
 @using BookTracker.Application
 @using BookTracker.Application.Books
+@using BookTracker.Web.Validation
 @using Microsoft.Extensions.Logging
 @inject EditionFormDialogViewModel VM
 @inject ISnackbar Snackbar
@@ -81,7 +82,8 @@
                               @bind-Value="VM.CoverUrl"
                               Label="Cover image URL"
                               Variant="Variant.Outlined"
-                              Margin="Margin.Dense" />
+                              Margin="Margin.Dense"
+                              Validation="@(new Func<string?, string?>(CoverUrlAttribute.ErrorFor))" />
 
                 @if (VM.IsNew)
                 {
@@ -103,7 +105,7 @@
         <MudButton OnClick="Cancel">Cancel</MudButton>
         <MudButton Color="Color.Primary"
                    Variant="Variant.Filled"
-                   Disabled="@(VM.NotFound || saving)"
+                   Disabled="@(VM.NotFound || !VM.CoverUrlAcceptable || saving)"
                    OnClick="SaveAsync">
             @(saving ? "Saving..." : "Save")
         </MudButton>

@@ -4,6 +4,7 @@ using BookTracker.Application.Formatting;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
+using BookTracker.Web.Services.Covers;
 using BookTracker.Web.Components.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -36,6 +37,9 @@ public class EditionFormDialogViewModel(
     public string? Publisher { get; set; }
     public string FirstPublishedOrPrintedDate { get; set; } = "";
     public string? CoverUrl { get; set; }
+
+    // Blank or a URL the cover mirror can fetch; Save stays disabled otherwise.
+    public bool CoverUrlAcceptable => CoverFetchPolicy.IsAcceptableCoverUrl(CoverUrl);
 
     // Add-only: the first Copy that ships with a new Edition. Every
     // Edition needs at least one Copy, so the Add flow captures it here.
@@ -138,7 +142,7 @@ public class EditionFormDialogViewModel(
     /// (book/edition gone). Publisher find-or-create now lives in the handler.</returns>
     public async Task<int?> SaveAsync()
     {
-        if (NotFound) return null;
+        if (NotFound || !CoverUrlAcceptable) return null;
 
         var datePrinted = PartialDateParser.TryParse(FirstPublishedOrPrintedDate) ?? PartialDate.Empty;
         try

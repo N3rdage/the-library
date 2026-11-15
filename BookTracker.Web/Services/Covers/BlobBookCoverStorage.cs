@@ -68,7 +68,7 @@ public class BlobBookCoverStorage : IBookCoverStorage
         var refusal = CoverFetchPolicy.Validate(sourceUrl);
         if (refusal is not null)
         {
-            _logger.LogWarning("Cover mirror skipped — {Url} refused: {Reason}.", sourceUrl, refusal);
+            _logger.LogWarning("Cover mirror skipped — {Url} refused: {Reason}.", CoverFetchPolicy.ForLogging(sourceUrl), refusal);
             return sourceUrl;
         }
 
@@ -214,7 +214,7 @@ public class BlobBookCoverStorage : IBookCoverStorage
             if (refusal is not null)
             {
                 _logger.LogWarning("Cover mirror skipped — {Url} redirected to {Target}, refused: {Reason}.",
-                    sourceUrl, nextUri.AbsoluteUri, refusal);
+                    CoverFetchPolicy.ForLogging(sourceUrl), CoverFetchPolicy.ForLogging(nextUri.AbsoluteUri), refusal);
                 return null;
             }
 

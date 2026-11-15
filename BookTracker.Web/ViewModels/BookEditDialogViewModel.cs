@@ -3,6 +3,7 @@ using BookTracker.Application.Books;
 using BookTracker.Application.Formatting;
 using BookTracker.Data;
 using BookTracker.Data.Models;
+using BookTracker.Web.Services.Covers;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
@@ -23,6 +24,9 @@ public class BookEditDialogViewModel(
     public string Title { get; set; } = "";
     public BookCategory Category { get; set; }
     public string? CoverUrl { get; set; }
+
+    // Blank or a URL the cover mirror can fetch; Save stays disabled otherwise.
+    public bool CoverUrlAcceptable => CoverFetchPolicy.IsAcceptableCoverUrl(CoverUrl);
 
     public int? SelectedSeriesId { get; set; }
     // Free-text so the user can enter "4.5" interquels / "1A" hierarchical
@@ -72,7 +76,7 @@ public class BookEditDialogViewModel(
 
     public async Task SaveAsync()
     {
-        if (NotFound || string.IsNullOrWhiteSpace(Title)) return;
+        if (NotFound || string.IsNullOrWhiteSpace(Title) || !CoverUrlAcceptable) return;
 
         int? seriesOrder = null;
         string? seriesOrderDisplay = null;

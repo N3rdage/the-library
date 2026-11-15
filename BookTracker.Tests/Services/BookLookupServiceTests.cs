@@ -236,6 +236,61 @@ public class BookLookupServiceTests
         Assert.Null(result.SeriesNumber);
     }
 
+    [Fact]
+    public async Task LookupByIsbnAsync_DropsCoverUrlWithIpLiteralHost_AndKeepsTheRestOfTheResult()
+    {
+        var handler = new FakeHandler
+        {
+            ["jscmd=data"] = OkJson($$"""
+                {
+                  "ISBN:{{Isbn}}": {
+                    "title": "Sourcery",
+                    "authors": [ { "name": "Terry Pratchett" } ],
+                    "publishers": [ { "name": "Corgi" } ],
+                    "cover": { "large": "https://169.254.169.254/latest/meta-data/x.jpg" }
+                  }
+                }
+                """)
+        };
+
+        var svc = CreateService(handler, troveKey: "present");
+        var result = await svc.LookupByIsbnAsync(Isbn, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Null(result!.CoverUrl);
+        Assert.Equal("Open Library", result.Source);
+        Assert.Equal("Sourcery", result.Title);
+        Assert.Equal("Terry Pratchett", result.Author);
+        Assert.Equal("Corgi", result.Publisher);
+    }
+
+    [Fact]
+    public async Task LookupByIsbnAsync_UpgradesGoogleBooksHttpCoverToHttps()
+    {
+        var handler = new FakeHandler
+        {
+            ["openlibrary.org/api/books"] = OkJson("{}"),
+            ["googleapis.com/books/v1/volumes"] = OkJson("""
+                {
+                  "items": [
+                    {
+                      "volumeInfo": {
+                        "title": "Google Title",
+                        "imageLinks": { "thumbnail": "http://books.google.com/books/content?id=abc&printsec=frontcover&img=1&zoom=1" }
+                      }
+                    }
+                  ]
+                }
+                """)
+        };
+
+        var svc = CreateService(handler, troveKey: "");
+        var result = await svc.LookupByIsbnAsync(Isbn, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("https://books.google.com/books/content?id=abc&printsec=frontcover&img=1&zoom=1", result!.CoverUrl);
+    }
+
     [Theory]
     // Plain name, no order.
     [InlineData("Discworld", "Discworld", null, null)]

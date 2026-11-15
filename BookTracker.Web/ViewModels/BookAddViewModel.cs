@@ -5,6 +5,8 @@ using BookTracker.Application.Series;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
+using BookTracker.Web.Services.Covers;
+using BookTracker.Web.Validation;
 using BookTracker.Web.Components.Shared;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -544,6 +546,15 @@ public class BookAddViewModel(
 
     public async Task<int?> SaveAsync(List<int> selectedGenreIds)
     {
+        // The page's EditForm validates its own model on submit, not these nested
+        // inputs, so the cover URL rule is enforced here too and surfaces through
+        // the page's save-error alert.
+        if (!CoverFetchPolicy.IsAcceptableCoverUrl(BookInput.DefaultCoverArtUrl)
+            || !CoverFetchPolicy.IsAcceptableCoverUrl(EditionInput.CoverUrl))
+        {
+            throw new InvalidOperationException(CoverUrlAttribute.Message);
+        }
+
         Saving = true;
         try
         {
