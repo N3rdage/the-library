@@ -40,6 +40,34 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
+# ---- Helper: remove a password, waiting out Entra's write contention ---------
+# Entra answers 409 Directory_ConcurrencyViolation ("concurrent requests being
+# made to the tenant; wait briefly and retry") when an app registration is
+# changed again within a second or two of its last change, which is exactly
+# what this script does: it adds a password, then removes others. So every
+# removal waits and retries on that answer; any other error stops at once.
+function Remove-AppPasswordWithRetry {
+    param(
+        [Parameter(Mandatory)] [string] $ApplicationId,
+        [Parameter(Mandatory)] [string] $KeyId,
+        [int] $MaxAttempts = 6
+    )
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            Remove-MgApplicationPassword -ApplicationId $ApplicationId -KeyId $KeyId
+            return
+        }
+        catch {
+            $text = "$_"
+            $isContention = $text -match 'ConcurrencyViolation' -or $text -match 'concurrent requests' -or $text -match '409'
+            if (-not $isContention -or $attempt -eq $MaxAttempts) { throw }
+            $wait = 5 * $attempt
+            Write-Host "    Entra is still settling (attempt $attempt of $MaxAttempts); waiting $wait s..."
+            Start-Sleep -Seconds $wait
+        }
+    }
+}
+
 # ---- Discover Key Vault name if not supplied --------------------------------
 # Single KV per RG by convention (matches the Bicep). Fail loudly if we find
 # zero or more than one so the caller is forced to disambiguate.
@@ -112,7 +140,7 @@ catch {
     $writeError = $_
     Write-Host "Key Vault write failed; removing the password just added ('$displayName') so nothing is left behind..."
     try {
-        Remove-MgApplicationPassword -ApplicationId $app.Id -KeyId $newPwd.KeyId
+        Remove-AppPasswordWithRetry -ApplicationId $app.Id -KeyId $newPwd.KeyId
         Write-Host "  Removed."
     }
     catch {
@@ -134,7 +162,7 @@ $toDelete = $sorted | Select-Object -Skip $KeepLatest
 
 foreach ($pwd in $toDelete) {
     Write-Host "  Removing '$($pwd.DisplayName)' (start $($pwd.StartDateTime.ToString('yyyy-MM-dd')))"
-    Remove-MgApplicationPassword -ApplicationId $app.Id -KeyId $pwd.KeyId
+    Remove-AppPasswordWithRetry -ApplicationId $app.Id -KeyId $pwd.KeyId
 }
 
 Write-Host ""
