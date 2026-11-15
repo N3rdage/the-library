@@ -25,12 +25,14 @@ public interface IBookCoverStorage
     bool IsManagedUrl(string? url);
 
     /// <summary>
-    /// Fetch <paramref name="sourceUrl"/>, run it through CoverImageProcessor
-    /// (JPEG normalize + resize, fallback to raw bytes when conversion fails),
-    /// upload to <c>covers/{<paramref name="blobKey"/>}.{ext}</c>, return the
-    /// public URL. On failure (network, invalid response, blob upload error)
-    /// returns <paramref name="sourceUrl"/> unchanged so the row keeps its
-    /// upstream URL — the caller's record remains usable.
+    /// Fetch <paramref name="sourceUrl"/> (only an allowed raster content type,
+    /// at most <see cref="BlobBookCoverStorage.MaxDownloadBytes"/>, within the
+    /// client timeout), run it through CoverImageProcessor (JPEG normalize +
+    /// resize; an allowed type that fails to decode is stored raw), upload to
+    /// <c>covers/{<paramref name="blobKey"/>}.{ext}</c>, return the public URL.
+    /// On failure or refusal (network, non-allowed type, over the cap, timeout,
+    /// blob upload error) returns <paramref name="sourceUrl"/> unchanged so the
+    /// row keeps its upstream URL — the caller's record remains usable.
     /// </summary>
     Task<string> MirrorFromUrlAsync(string sourceUrl, string blobKey, CancellationToken ct);
 
