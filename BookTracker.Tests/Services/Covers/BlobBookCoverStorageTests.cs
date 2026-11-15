@@ -141,6 +141,106 @@ public class BlobBookCoverStorageTests
         AssertNothingUploaded();
     }
 
+    [Theory]
+    [InlineData("http://covers.example.org/b/isbn/9780000000000-L.jpg")]
+    [InlineData("https://169.254.169.254/metadata")]
+    public async Task Mirror_RefusedSourceUrl_MakesNoRequest(string sourceUrl)
+    {
+        var handler = new FakeHandler(PngResponse());
+        var storage = CreateStorage(new HttpClient(handler));
+
+        var result = await storage.MirrorFromUrlAsync(sourceUrl, "editions/1", CancellationToken.None);
+
+        Assert.Equal(sourceUrl, result);
+        Assert.Empty(handler.Requests);
+        AssertNothingUploaded();
+    }
+
+    [Fact]
+    public async Task Mirror_RedirectToAllowedHttpsUrl_IsFollowedAndStored()
+    {
+        const string target = "https://cdn.example.org/covers/final.png";
+        var handler = new FakeHandler(new Dictionary<string, HttpResponseMessage>
+        {
+            [SourceUrl] = Redirect(target),
+            [target] = PngResponse(),
+        });
+        var storage = CreateStorage(new HttpClient(handler));
+
+        var result = await storage.MirrorFromUrlAsync(SourceUrl, "editions/1", CancellationToken.None);
+
+        Assert.StartsWith(PublicBase + "/editions/1." + CoverImageProcessor.NormalisedExtension, result);
+        Assert.Equal<Uri>([new Uri(SourceUrl), new Uri(target)], handler.Requests);
+    }
+
+    [Fact]
+    public async Task Mirror_RelativeRedirect_IsResolvedAgainstTheCurrentUrl()
+    {
+        var handler = new FakeHandler(new Dictionary<string, HttpResponseMessage>
+        {
+            [SourceUrl] = Redirect("/moved/cover.png"),
+            ["https://covers.example.org/moved/cover.png"] = PngResponse(),
+        });
+        var storage = CreateStorage(new HttpClient(handler));
+
+        var result = await storage.MirrorFromUrlAsync(SourceUrl, "editions/1", CancellationToken.None);
+
+        Assert.StartsWith(PublicBase + "/editions/1.", result);
+    }
+
+    [Theory]
+    [InlineData("http://cdn.example.org/covers/final.png")]
+    [InlineData("https://10.0.0.5/covers/final.png")]
+    [InlineData("https://169.254.169.254/metadata")]
+    public async Task Mirror_RedirectToRefusedUrl_IsNotFollowed(string target)
+    {
+        var handler = new FakeHandler(new Dictionary<string, HttpResponseMessage>
+        {
+            [SourceUrl] = Redirect(target),
+            [new Uri(target).AbsoluteUri] = PngResponse(),
+        });
+        var storage = CreateStorage(new HttpClient(handler));
+
+        var result = await storage.MirrorFromUrlAsync(SourceUrl, "editions/1", CancellationToken.None);
+
+        Assert.Equal(SourceUrl, result);
+        Assert.Single(handler.Requests);
+        AssertNothingUploaded();
+    }
+
+    [Fact]
+    public async Task Mirror_FourRedirects_IsAbandoned()
+    {
+        var handler = new FakeHandler(new Dictionary<string, HttpResponseMessage>
+        {
+            [SourceUrl] = Redirect("https://hop1.example.org/c.png"),
+            ["https://hop1.example.org/c.png"] = Redirect("https://hop2.example.org/c.png"),
+            ["https://hop2.example.org/c.png"] = Redirect("https://hop3.example.org/c.png"),
+            ["https://hop3.example.org/c.png"] = Redirect("https://hop4.example.org/c.png"),
+            ["https://hop4.example.org/c.png"] = PngResponse(),
+        });
+        var storage = CreateStorage(new HttpClient(handler));
+
+        var result = await storage.MirrorFromUrlAsync(SourceUrl, "editions/1", CancellationToken.None);
+
+        Assert.Equal(SourceUrl, result);
+        Assert.Equal(CoverFetchPolicy.MaxRedirects + 1, handler.Requests.Count);
+        AssertNothingUploaded();
+    }
+
+    [Fact]
+    public async Task Mirror_RedirectWithoutLocation_IsTreatedAsNonSuccess()
+    {
+        var handler = new FakeHandler(new HttpResponseMessage(HttpStatusCode.Found));
+        var storage = CreateStorage(new HttpClient(handler));
+
+        var result = await storage.MirrorFromUrlAsync(SourceUrl, "editions/1", CancellationToken.None);
+
+        Assert.Equal(SourceUrl, result);
+        Assert.Single(handler.Requests);
+        AssertNothingUploaded();
+    }
+
     private async Task<string> MirrorAsync(HttpContent content, string? contentType, HttpStatusCode status = HttpStatusCode.OK, TimeSpan? timeout = null)
     {
         if (contentType is not null) content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
@@ -172,10 +272,36 @@ public class BlobBookCoverStorageTests
         return data.ToArray();
     }
 
-    private sealed class FakeHandler(HttpResponseMessage response) : HttpMessageHandler
+    private static HttpResponseMessage Redirect(string location)
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(response);
+        var response = new HttpResponseMessage(HttpStatusCode.Found);
+        response.Headers.Location = new Uri(location, UriKind.RelativeOrAbsolute);
+        return response;
+    }
+
+    private static HttpResponseMessage PngResponse()
+    {
+        var content = new ByteArrayContent(MakePng());
+        content.Headers.ContentType = MediaTypeHeaderValue.Parse("image/png");
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+    }
+
+    // Answers every request through respond and records the requested URLs.
+    private sealed class FakeHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
+    {
+        public FakeHandler(HttpResponseMessage response) : this(_ => response) { }
+
+        // Scripts one response per absolute URL; an unscripted URL gets 404.
+        public FakeHandler(Dictionary<string, HttpResponseMessage> byUrl)
+            : this(request => byUrl.TryGetValue(request.RequestUri!.AbsoluteUri, out var r) ? r : new HttpResponseMessage(HttpStatusCode.NotFound)) { }
+
+        public List<Uri> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Requests.Add(request.RequestUri!);
+            return Task.FromResult(respond(request));
+        }
     }
 
     // Non-seekable stream whose reads honour the cancellation token and never

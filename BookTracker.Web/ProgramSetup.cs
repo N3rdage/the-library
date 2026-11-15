@@ -158,14 +158,18 @@ public static class ProgramSetup
         // Books / Trove) into Azure Blob Storage so renders don't depend on
         // upstream latency. Local dev points at Azurite; prod uses a real
         // Storage Account via KV-resolved connection string. Background
-        // service handles both initial backfill and ongoing mirroring.
+        // service handles both initial backfill and ongoing mirroring. The
+        // client refuses non-https URLs, IP literals and hosts that resolve to
+        // private, loopback or link-local addresses, and follows at most three
+        // redirects (see CoverFetchPolicy).
         builder.Services.Configure<CoverStorageOptions>(
             builder.Configuration.GetSection(CoverStorageOptions.SectionName));
         builder.Services.AddHttpClient<IBookCoverStorage, BlobBookCoverStorage>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("BookTracker/0.1 (+github.com/N3rdage/the-library)");
-        });
+        })
+        .ConfigurePrimaryHttpMessageHandler(CoverFetchPolicy.CreateHandler);
         builder.Services.AddHostedService<CoverMirrorBackgroundService>();
 
         // /warmup touches the database once per process; this flag is the
