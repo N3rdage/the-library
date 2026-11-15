@@ -1,216 +1,24 @@
-# Security audit — living doc
+# Security
 
-Living security posture review. Per-area verdicts: **Pass** / **Concern** / **Action required**. Fixes applied in the same PR are listed at the bottom; deferred items link to `TODO.md`. Monthly scan + review is automated via `.github/workflows/security-scan.yml`.
+This page is short on purpose. It says how security is looked after in this repository, and it does not change when the code does.
 
-**Last reviewed:** 2026-07-24 via the `security-audit` skill (per-run report in `audits/security-2026-07-24.md`) — 0 critical / 0 high / 0 medium; 1 low (SEC-004 `Permissions-Policy` absent, **fixed this cycle**), rest info/clean, no drift from this doc. Prior review: 2026-05-05.
+## What runs automatically
 
----
+- **Secret scanning.** Gitleaks scans every pull request, every push to `main`, and the full history once a week (`.github/workflows/security-scan.yml`).
+- **Code scanning.** CodeQL analyses every pull request.
+- **Dependencies.** Dependabot opens update pull requests for NuGet packages and GitHub Actions.
+- **Review.** Every change reaches `main` through a pull request with an independent review and the required checks.
 
-## 1. Git history secret scan
+## Periodic review
 
-**Verdict:** **Pass** — no secrets committed.
+The code, the workflows and the infrastructure definitions are reviewed for security on a regular schedule. Findings are tracked privately until they are fixed, so this repository does not carry a list of open concerns, and fixes arrive as ordinary pull requests.
 
-- **Tool:** `gitleaks v8.30.1` (installed via `winget install gitleaks.gitleaks`). Configured to run on every PR and monthly via GitHub Actions.
-- **Result:** 228 commits scanned (~13.7 MB), zero leaks.
-- **Belt-and-braces pattern search (manual grep across full history):**
-  - `sk-ant-*` (Anthropic-key shape) — 2 hits, both documentation placeholders (`sk-ant-…` with an ellipsis in `infra/README.md`). Not real keys.
-  - `sk-proj-*` / `sk-*` (OpenAI) — 0 hits.
-  - `AIza[0-9A-Za-z_-]{35}` (Google API key) — 0 hits.
-  - `BEGIN (RSA |EC |OPENSSH |)PRIVATE KEY` — 0 hits.
-  - `gh[pous]_[A-Za-z0-9_]{36,}` (GitHub PAT) — 0 hits.
-  - `eyJ[...]*.eyJ[...]*` (JWT) — 0 hits.
-  - 86-char base64 + `==` (Azure storage key shape) — 1 hit in `wwwroot/lib/html5-qrcode/html5-qrcode.min.js`. Third-party minified library; false positive.
-  - `BookTracker!Dev1` (docker-compose SA default) — 3 hits, all in documented dev-only defaults (`docker-compose.yml`, `CLAUDE.md`, `infra/refresh-local-db.ps1`). Not a production secret.
-  - `Server=...Password=` — 1 hit, same `BookTracker!Dev1` dev default.
-- **`.gitignore` compliance:** `appsettings.json` and `appsettings.*.json` are excluded; only `appsettings*.Example.json` files are committed. Inspected the Example files — all sensitive fields are empty strings or obvious placeholders (`<your-docker-sa-password>`). No real values.
+The project's own audit rules are in [`audit-rules/security.md`](audit-rules/security.md).
 
----
+## Reporting a problem
 
-## 2. Easy Auth `excludedPaths`
+If you find a security problem here, please report it privately through GitHub's "Report a vulnerability" button on the repository's Security tab rather than in a public issue.
 
-**Verdict:** **Pass.**
+## Why there is no detailed posture document
 
-`infra/modules/app-config.bicep:86-93` lists six paths exempted from AAD sign-in:
-```
-/manifest.webmanifest, /service-worker.js,
-/icons/icon.svg, /icons/icon-192.png, /icons/icon-512.png, /icons/apple-touch-icon.png
-```
-
-- Easy Auth v2 `excludedPaths` uses **exact** matching, not prefix (noted in the Bicep comment). So an accidental future Blazor route at `/icons/something.png` would still require its full path to be added to the list before being publicly accessible.
-- Cross-checked against all Blazor `@page` routes — none collide with any excluded path.
-- All six excluded paths serve non-sensitive static content (app name, theme colour, public icons, client-side caching logic).
-
----
-
-## 3. SignalR hub authentication
-
-**Verdict:** **Pass.**
-
-`/_blazor/*` is the SignalR hub path for Interactive Server rendering. It is **not** in `excludedPaths`, so Easy Auth requires an authenticated session before the WebSocket upgrade completes. Unauthenticated users cannot reach the hub.
-
----
-
-## 4. Content-Security-Policy (CSP) headers
-
-**Verdict:** **Action required (fix applied)** — baseline CSP added in this PR.
-
-- **Before:** no CSP, no `X-Frame-Options`, no `X-Content-Type-Options`, no `Referrer-Policy`.
-- **After this PR:**
-  - `Content-Security-Policy` via `<meta>` tag in `App.razor` with these directives:
-    - `default-src 'self'` — block anything not explicitly allowed.
-    - `script-src 'self' 'unsafe-inline' 'unsafe-eval'` — Blazor Server framework needs inline + eval for its runtime. A nonce-based approach is a future tightening.
-    - `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com` — Bootstrap + MudBlazor + Google Fonts.
-    - `font-src 'self' https://fonts.gstatic.com` — Roboto.
-    - `img-src 'self' data: blob: https:` — cover art comes from many external HTTPS sources (Open Library, Google Books, etc.); locking to specific hosts would break the lookup pipeline as providers change.
-    - `connect-src 'self'` — SignalR WebSocket and fetches to the app's own origin only. Until 2026-11-15 this was `'self' ws: wss:`, which let a script opened by an injected tag reach any WebSocket host; CSP Level 3 browsers (current Chromium, Firefox and Safari) treat a same-origin `ws:`/`wss:` connection as matching `'self'`, so the bare `'self'` keeps the Blazor circuit working (LIB-019).
-    - `media-src 'self' blob:` — camera capture.
-    - `base-uri 'self'`, `form-action 'self'` — constrain form posts.
-  - `X-Frame-Options: DENY` (middleware in `Program.cs`) — clickjacking protection.
-  - `X-Content-Type-Options: nosniff` — MIME sniffing protection.
-  - `Referrer-Policy: strict-origin-when-cross-origin` — limit referrer leakage.
-  - `Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=()` (middleware in `ProgramSetup.cs`, added 2026-07-24) — deny powerful browser features by default; camera allowed same-origin only for the `/bookshop` barcode scanner (`getUserMedia`). Closes **SEC-004** from the 2026-07-24 audit run.
-- **Follow-up:** the `unsafe-inline` + `unsafe-eval` directives leave a real XSS surface. Moving to a nonce-based CSP with a script-nonce middleware is tracked as a new TODO row.
-
----
-
-## 5. Key Vault access paths
-
-**Verdict:** **Pass.**
-
-RBAC-mode vault (`enableRbacAuthorization: true`). Data-plane role assignments are narrow:
-- App Service prod MI → `Key Vault Secrets User` (read-only on secrets).
-- Staging slot MI → `Key Vault Secrets User`.
-- `booktracker-ci` OIDC SP → `Key Vault Secrets Officer` (write, scoped to the vault — needed by the rotation workflow, PR #111).
-
-No secrets exposed in App Service environment-variable UI as raw values; every secret setting resolves via `@Microsoft.KeyVault(SecretUri=...)` reference.
-
-No `Key Vault Administrator` or `Contributor` at the vault scope for any managed identity — those would allow data-plane operations and policy changes.
-
----
-
-## 6. Dependency vulnerabilities
-
-**Verdict:** **Pass.**
-
-`dotnet list BookTracker.slnx package --vulnerable --include-transitive` — zero vulnerable packages across `BookTracker.Data`, `BookTracker.Tests`, `BookTracker.Web`. Dependabot remains the forward-facing watchdog for CVEs landing after this date.
-
----
-
-## 7. PII in logs
-
-**Verdict:** **Pass, with one minor note.**
-
-Grep of `logger.Log*` call sites in `BookTracker.Web`:
-
-| Site | Context | Severity |
-|---|---|---|
-| `EditionFormatBackfillService` (4 log calls) | Operational progress + ISBN on per-row failure | Low. ISBN isn't PII; log message identifies the book under maintenance. |
-| `BookLookupService:70` | `"Open Library title/author search failed for title={Title} author={Author}"` — the strings the user typed | Low. For a single-user app the "user" is the owner of the library; search queries are effectively operational telemetry. Flagged for awareness but not acted on. |
-| `BookLookupService:112,156,211` | ISBN on lookup failure from Open Library / Google Books / Trove | Low. Same reasoning as above. |
-
-No user identifiers, email addresses, tokens, or auth material in any log string. Structured logging uses named parameters correctly (no string-concat SQL-style risks).
-
----
-
-## 8. SQL injection surface
-
-**Verdict:** **Pass.**
-
-- `FromSqlRaw` / `ExecuteSqlRaw`: zero occurrences across the solution (grep verified).
-- All app-side queries use EF Core LINQ, which parameterises by construction.
-- `migrationBuilder.Sql(...)` calls in `BookTracker.Data/Migrations/` interpolate values from `GenreSeed.All` and the hard-coded sub-genre arrays, never user input. The seed migration uses an `Escape()` helper that doubles single quotes defensively.
-
----
-
-## 9. JS interop XSS
-
-**Verdict:** **Pass.**
-
-All `IJSRuntime.Invoke*` call sites use **hardcoded string identifiers** for the JS function names (`"NavbarCollapse.close"`, `"ScrollTo.element"`, `"BarcodeScanner.start/stop"`, `"PhotoCapture.start/stop/capture"`, `"chipPicker.suppressEnterAndComma"`). The function names are not user-controlled.
-
-Arguments passed to JS:
-- `ScrollTo.element` — `$"author-row-{id}"` where `id` is a typed `int`. Not injectable.
-- `BarcodeScanner.start` — a DOM element id (`"barcode-reader"` or `"shopping-barcode-reader"`, hardcoded) plus a `DotNetObjectReference`. Safe.
-- `PhotoCapture.start` / `capture` — hardcoded DOM id `"photo-video"`. Safe.
-- `chipPicker.suppressEnterAndComma` (added 2026-05-04, multi-author chip-picker arc) — typed `ElementReference` (the picker's container `div`) + `DotNetObjectReference<MudAuthorPicker>`. The JS handler in `wwwroot/js/chip-picker-keys.js` reads `input.value` at keydown time and round-trips it to `[JSInvokable] OnCommitKey`; the .NET side trims and dedupes before adding to `Authors`, which renders via `<MudChip Text="@captured">` (Razor auto-escape). Safe.
-
-No `innerHTML`-style JS methods are exposed to the Blazor side. No user strings flow into `eval`-equivalent patterns. The new `chip-picker-keys.js` uses only safe DOM APIs (`addEventListener`, `getAttribute`, `querySelector`, reading `input.value`).
-
----
-
-## 10. Azure resource RBAC scoping
-
-**Verdict:** **Pass.**
-
-Managed-identity role assignments (Bicep + deploy-time SQL grants):
-
-| Identity | Role | Scope | Notes |
-|---|---|---|---|
-| App Service prod MI | Key Vault Secrets User | KV | Read-only data plane |
-| App Service prod MI | Cognitive Services User | OpenAI account | Inference only, no model management |
-| App Service prod MI | SQL `db_datareader/writer` | Azure SQL DB | Data plane only — `db_ddladmin` dropped 2026-05-18 (TODO #21 PR B) once deploy-time migrations landed |
-| Staging slot MI | Same three roles | (mirrored) | |
-| `booktracker-ci` OIDC SP | Contributor | Resource group | For artifact deploys + Bicep ops |
-| `booktracker-ci` OIDC SP | Key Vault Secrets Officer | KV | For secret-rotation workflow |
-| `booktracker-ci` OIDC SP | Owner of `Library-Patrons` app reg | AAD | For secret-rotation workflow |
-| `booktracker-ci` OIDC SP | Graph `Application.ReadWrite.OwnedBy` | Graph | Narrow — apps it owns only |
-| `booktracker-ci` OIDC SP | SQL `db_datareader/writer/ddladmin` | Azure SQL DB | Used by the deploy-time EF migration bundle (`.github/workflows/deploy.yml` + `swap.yml`). `db_ddladmin` lives here now, scoped to CI workflow runs only. |
-
-No role assignments at subscription or management-group scope.
-
----
-
-## 11. HSTS + HTTPS redirect
-
-**Verdict:** **Pass** (policy raised 2026-11-15, LIB-004).
-
-- `BookTracker.Web/ProgramSetup.cs` — `ConfigureServices` registers `AddHsts(ConfigureHsts)`; `ConfigureHsts` sets `MaxAge` to 365 days, `IncludeSubDomains` true, `Preload` false. `ConfigureMiddleware` calls `app.UseHsts()` in non-Development environments and `app.UseHttpsRedirection()` unconditionally.
-- Until 2026-11-15 nothing called `AddHsts`, so the framework default shipped: 30 days, same host only. The one-year value meets the six-month floor in `audit-rules/security.md` BOOK-007. `Preload` stays off: submitting `silly.ninja` to the browser preload list affects every subdomain and is Drew's call.
-- Guarded by `BookTracker.Tests/Security/HstsOptionsTests.cs`, which builds the real host in the Production environment and resolves the registered `HstsOptions`, so dropping the registration fails the test.
-- Custom domain bound with App Service managed certificate (auto-renewing). HTTPS-only binding confirmed via Bicep / deploy config.
-- Expected response header after the staging deploy: `strict-transport-security: max-age=31536000; includeSubDomains`.
-
----
-
-## 12. Outbound fetches (cover mirror)
-
-**Verdict:** **Pass, with an open item.**
-
-The cover mirror (`BookTracker.Web/Services/Covers/BlobBookCoverStorage.cs`, run by `CoverMirrorBackgroundService`) fetches upstream cover URLs stored on editions and books and copies them into the public `book-covers` container. Limits applied since 2026-11-15 (LIB-006):
-
-- **Content type:** only `image/jpeg`, `image/png`, `image/gif` and `image/webp` (`CoverImageProcessor.AllowedRawExtensions`; `image/jpg` is read as `image/jpeg`). Anything else, including SVG and a missing type, is skipped with a logged warning and the row keeps its upstream URL. The same allowlist applies to user uploads through `UploadAsync`.
-- **Size:** at most 10 MiB (`BlobBookCoverStorage.MaxDownloadBytes`), checked against `Content-Length` before the body is read and again on the bytes actually read, since `Content-Length` can be absent or wrong.
-- **Time:** the response is read with `ResponseHeadersRead`, so the body is bounded separately by a linked cancellation source set to the client's 30 s timeout; a server that sends headers and then stalls is skipped.
-- **Decode failure** of an allowed type still stores the raw bytes with a warning (Drew's call; whether to keep that fallback is LIB-007).
-- **Open item:** URL validation (scheme, private or link-local addresses, redirects) is not applied yet (LIB-017).
-
-Tests: `BookTracker.Tests/Services/Covers/BlobBookCoverStorageTests.cs` and `CoverImageProcessorTests.cs`.
-
----
-
-## Fixes applied in the PR that landed this audit
-
-1. **`Content-Security-Policy` meta tag** added to `BookTracker.Web/Components/App.razor` (see §4 for the directive set).
-2. **Security headers middleware** in `BookTracker.Web/Program.cs` setting `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`.
-3. **`.github/workflows/security-scan.yml`** — gitleaks runs on every PR + weekly, opens a GitHub issue on the 1st of each month with the audit-review checklist.
-4. **`SECURITY-AUDIT.md`** (this file) — durable record of the audit state.
-
-## Deferred items (tracked in TODO.md)
-
-- **Nonce-based CSP middleware** — replace `'unsafe-inline'` / `'unsafe-eval'` with a per-request nonce threaded through Blazor's framework inlines. Real XSS tightening; non-trivial implementation work.
-- **Scrub user-typed search queries from `BookLookupService` log lines** — optional hardening; low priority given single-user deployment.
-- ~~**Drop `db_ddladmin`** from App Service MI SQL grants — unblocked once `dotnet ef migrations bundle` replaces migrate-on-startup~~ **Resolved 2026-05-18** by [PR #275](https://github.com/N3rdage/the-library/pull/275) (deploy-time migration bundle) + PR B (this PR — runtime MI dropped to `db_datareader/writer`, GH OIDC SP holds the new `db_ddladmin` scoped to CI runs only). See §10.
-
-## Monthly review process
-
-`.github/workflows/security-scan.yml` opens a GitHub issue on the 1st of every month titled "Security review — YYYY-MM". The issue body links back to this file with a checklist:
-
-- [ ] Gitleaks scan of past month: clean?
-- [ ] Any new routes under `excludedPaths` scope? Recheck §2.
-- [ ] Any new `IJSRuntime.Invoke*` sites with user input? Recheck §9.
-- [ ] Any new `FromSqlRaw` / `ExecuteSqlRaw`? Recheck §8.
-- [ ] `dotnet list package --vulnerable` clean?
-- [ ] Any new managed-identity role assignments in Bicep? Recheck §10.
-- [ ] `Last reviewed` date updated at the top of this file.
-
-Close the issue once the review is done; push any updates to this file in the same PR.
+Until November 2026 this file was a section-by-section record of the project's security posture. It was retired because a detailed record in a public repository is out of date within hours of each change and has to be re-read for what it gives away every time it is touched. Code comments and older posts that cite a section number of this file (for example "§11") refer to that earlier version, which remains in the git history.

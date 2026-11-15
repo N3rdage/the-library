@@ -14,7 +14,7 @@ To populate this file initially, copy from `~/.claude/skills/security-audit/temp
 
 BookTracker is a single-user (Drew) Blazor Server + Azure SQL + Easy Auth app. Scale is hobby-tier (one user, ~3000 books target), production deployment is a single App Service slot pair (`production` / `staging`) with separate DBs per slot, secrets via Key Vault references with managed identity. Full architecture context is in `ARCHITECTURE.md`; the existing `SECURITY-AUDIT.md` is the living-doc record of past audit outcomes.
 
-The security audit skill should treat `SECURITY-AUDIT.md` as cross-reference material — when a finding aligns with an area already documented there, the report should call that out (e.g. "see SECURITY-AUDIT.md §4 for the deferred CSP nonce decision").
+`SECURITY-AUDIT.md` is no longer a posture record (retired November 2026; it is now a short page on how security is looked after). Do not cross-reference it for findings and do not update it from an audit run: findings and their status live in the private backlog.
 
 ---
 
@@ -81,5 +81,4 @@ The security audit skill should treat `SECURITY-AUDIT.md` as cross-reference mat
 
 ## Notes for the audit run
 
-- Cross-reference `SECURITY-AUDIT.md` (the living doc) for areas already documented as clean. Finding drift between the new audit and that doc is a useful signal — either `SECURITY-AUDIT.md` needs updating, or the new finding is real.
-- The `audits/` directory is gitignored — reports stay local to the dev machine, which is fine for a public repo where audit reports might surface ongoing soft-spots that we don't want to advertise. Living-doc summary stays in `SECURITY-AUDIT.md`; per-run snapshots stay local.
+- The `audits/` directory is gitignored — reports stay local to the dev machine, which is fine for a public repo where audit reports might surface ongoing soft-spots that we don't want to advertise. Per-run snapshots stay local; nothing from a run is summarised in the public repo.
