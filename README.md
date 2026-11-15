@@ -16,7 +16,7 @@ A secondary goal is to learn how different interaction styles affect Claude's ou
 - [`.claude-memory/`](.claude-memory/) — persistent context for Claude across sessions: workflow preferences (`feedback_*.md`), project facts (`project_*.md`), per-feature retros (`retros/`), and working patterns (`patterns.md`). Read these for the "how the sausage is made" view — they're more interesting than the code for what this experiment actually is.
 - [`SECURITY-AUDIT.md`](SECURITY-AUDIT.md) — how security is looked after here: what is scanned automatically and how to report a problem.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — living design doc, updated at each structural change.
-- [`TODO.md`](TODO.md) — priority-ordered table of open work + shipped items with estimate-vs-actual PR counts.
+- [`TODO.md`](TODO.md) — priority-ordered table of open work.
 
 If you're curious about the AI-collaboration angle specifically, the retros are the richest source — each one captures what was surprising, what was learned, and one quotable generalisation from the arc.
 
