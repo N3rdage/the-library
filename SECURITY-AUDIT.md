@@ -57,7 +57,7 @@ Living security posture review. Per-area verdicts: **Pass** / **Concern** / **Ac
 
 ## 4. Content-Security-Policy (CSP) headers
 
-**Verdict:** **Pass, with two concerns.**
+**Verdict:** **Pass, with a concern.**
 
 - `Content-Security-Policy` via `<meta>` tag at `BookTracker.Web/Components/App.razor:32`; the live tag matches this directive list:
   - `default-src 'self'` — block anything not explicitly allowed.
@@ -65,7 +65,7 @@ Living security posture review. Per-area verdicts: **Pass** / **Concern** / **Ac
   - `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com` — Bootstrap + MudBlazor + Google Fonts.
   - `font-src 'self' https://fonts.gstatic.com` — Roboto.
   - `img-src 'self' data: blob: https:` — cover art comes from many external HTTPS sources (Open Library, Google Books, etc.); locking to specific hosts would break the lookup pipeline as providers change.
-  - `connect-src 'self' ws: wss:` — SignalR WebSocket.
+  - `connect-src 'self'` — SignalR WebSocket and fetches to the app's own origin only. Until 2026-11-15 this was `'self' ws: wss:`, which let a script opened by an injected tag reach any WebSocket host; CSP Level 3 browsers (current Chromium, Firefox and Safari) treat a same-origin `ws:`/`wss:` connection as matching `'self'`, so the bare `'self'` keeps the Blazor circuit working (LIB-019, #501).
   - `media-src 'self' blob:` — camera capture.
   - `base-uri 'self'`, `form-action 'self'` — constrain form posts.
 - Headers middleware in `BookTracker.Web/ProgramSetup.cs:215-224`:
@@ -73,9 +73,7 @@ Living security posture review. Per-area verdicts: **Pass** / **Concern** / **Ac
   - `X-Content-Type-Options: nosniff` — MIME sniffing protection.
   - `Referrer-Policy: strict-origin-when-cross-origin` — limit referrer leakage.
   - `Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=()` (added 2026-07-24) — deny powerful browser features by default; camera allowed same-origin only for the `/bookshop` barcode scanner (`getUserMedia`). Closed **SEC-004** from the 2026-07-24 run.
-- **Concerns:**
-  - `connect-src` is wider than needed (LIB-019, `ready`).
-  - `unsafe-inline` + `unsafe-eval` remain; the nonce-based CSP is still `TODO.md` row 2.
+- **Concern:** `unsafe-inline` + `unsafe-eval` remain; the nonce-based CSP is still `TODO.md` row 2.
 
 ---
 
