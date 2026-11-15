@@ -2,8 +2,9 @@
   <!-- Copy to Signing.local.props (gitignored) to sign Bookshelf with a
        keystore other than the SDK's debug keystore. Leave the file absent to
        keep the default: the debug keystore, which installs over the USB build
-       and matches the MSAL redirect URI's signature hash. Passwords may also be
-       supplied as environment variables of the same names instead of here. -->
+       and matches the MSAL redirect URI's signature hash. A value set here
+       overrides an environment variable of the same name, so delete any line
+       whose value should come from the environment instead of this file. -->
   <PropertyGroup>
     <BookshelfKeyStore>C:\path\to\bookshelf.keystore</BookshelfKeyStore>
     <BookshelfKeyAlias>bookshelf</BookshelfKeyAlias>

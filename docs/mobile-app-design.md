@@ -128,7 +128,7 @@ Sized for the work, not the calendar. Ship-as-you-go.
 - New project at repo root, **`net10.0-android` target only** (iOS deferred until / unless an Apple Developer account materialises).
 - MSAL.NET interactive sign-in via `Microsoft.Maui.Authentication.WebAuthenticator` → tokens kept in MSAL.NET's built-in cache (app-private storage; not `SecureStorage`, see Authentication above). AndroidManifest entry for the redirect URI scheme; Chrome Custom Tabs handles the browser hop.
 - Single "Hello, signed-in user" page that calls `GET /api/catalog-snapshot` and dumps the response count.
-- Dev workflow: Drew connects his phone via USB with developer mode enabled, runs `dotnet build -t:Run -f net10.0-android` from the repo, MAUI deploys + launches via ADB. No store, no APK file shuffling. Same loop as `dotnet watch` for the Web app, just on a phone.
+- Dev workflow: Drew connects his phone via USB with developer mode enabled, runs `dotnet build -t:Run -f net10.0-android -c Release` from the repo (a Release build, so the installed app is not debuggable; the SDK signs it with the same debug keystore as a Debug build), MAUI deploys + launches via ADB. No store, no APK file shuffling. Same loop as `dotnet watch` for the Web app, just on a phone.
 - Size: M (lots of first-time setup — AAD app reg, redirect URI plumbing, MSAL config).
 
 ### PR 4 — Local SQLite cache (mirrors PWA's IndexedDB)
@@ -180,5 +180,5 @@ Sized for the work, not the calendar. Ship-as-you-go.
 - Scan an ISBN with the device camera → answer in <200ms, regardless of network state.
 - Author search returns matches as fast as the PWA does today.
 - Wishlist + missing-books-in-series views render from cache, refresh on demand.
-- Installable on Drew's Android phone via `dotnet build -t:Run -f net10.0-android` over USB. (GH Actions APK artifact is optional; only ships if the local-build loop turns out to be friction.)
+- Installable on Drew's Android phone via `dotnet build -t:Run -f net10.0-android -c Release` over USB. (GH Actions APK artifact is optional; only ships if the local-build loop turns out to be friction.)
 - `/bookshop` route in BookTracker.Web stays available throughout the arc; gets retired only after MAUI v1 has been Drew's daily mobile driver for a few weeks without regret.
