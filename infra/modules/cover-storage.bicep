@@ -14,6 +14,14 @@ param tags object
 param storageAccountName string
 param keyVaultName string
 
+// Each slot's system-assigned identity gets Storage Blob Data Contributor on
+// its own covers container (prod on book-covers, staging on
+// book-covers-staging), so the app can read and write covers through its
+// identity rather than the account key, and staging cannot write into the
+// production container.
+param appServicePrincipalId string
+param stagingSlotPrincipalId string
+
 // Two containers — one per slot — share a single storage account. Mirrors
 // the slot-isolation pattern used for SQL (one server, two databases). Keys
 // like `editions/{id}.jpg` would collide across slots if both wrote to the
@@ -76,6 +84,29 @@ resource stagingContainer 'Microsoft.Storage/storageAccounts/blobServices/contai
   name: stagingContainerName
   properties: {
     publicAccess: 'Blob'
+  }
+}
+
+// Storage Blob Data Contributor, scoped to one container per slot identity.
+var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+
+resource appProdContainerRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(prodContainer.id, appServicePrincipalId, storageBlobDataContributorRoleId)
+  scope: prodContainer
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
+    principalId: appServicePrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource stagingContainerRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(stagingContainer.id, stagingSlotPrincipalId, storageBlobDataContributorRoleId)
+  scope: stagingContainer
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
+    principalId: stagingSlotPrincipalId
+    principalType: 'ServicePrincipal'
   }
 }
 
