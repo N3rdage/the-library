@@ -24,12 +24,18 @@ concurrency:
   group: sql-firewall-window
   cancel-in-progress: false
 
+# Read-only by default. Only the deploy job below may request an OIDC token for Azure.
 permissions:
-  id-token: write
   contents: read
 
+# Two jobs on purpose (security sweep LIB-016). `package` compiles the merged code, and with it
+# every MSBuild target, source generator and NuGet build script the solution pulls in; it has no
+# `id-token` permission, so nothing that runs there can sign in to Azure. `deploy` holds the
+# Azure identity and compiles nothing: it downloads what `package` produced and runs only the
+# migration bundle and the Azure steps. Keep it that way: no `dotnet build`, `restore` or
+# `publish` may be added to `deploy`.
 jobs:
-  build-and-deploy:
+  package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -67,6 +73,39 @@ jobs:
             -r linux-x64 \
             --output ./migrate \
             --force
+
+      - name: Publish
+        run: dotnet publish BookTracker.Web/BookTracker.Web.csproj --configuration Release --no-build -o ./publish
+
+      - name: Zip publish output
+        run: |
+          cd publish
+          zip -r ../app.zip .
+
+      - name: Hand the build output to the deploy job
+        # The app package and the migration bundle are compiled public source with no secrets
+        # in them (appsettings*.json is gitignored and absent here). One day is ample: the
+        # deploy job reads them minutes later.
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: staging-deploy
+          path: |
+            app.zip
+            migrate
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Fetch the build output
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: staging-deploy
 
       - name: Azure login (OIDC)
         uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
@@ -144,14 +183,6 @@ jobs:
               --set publicNetworkAccess="$PUBLIC_ACCESS_WAS" \
               --output none || true
           fi
-
-      - name: Publish
-        run: dotnet publish BookTracker.Web/BookTracker.Web.csproj --configuration Release --no-build -o ./publish
-
-      - name: Zip publish output
-        run: |
-          cd publish
-          zip -r ../app.zip .
 
       - name: Deploy to staging slot
         uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383 # v3

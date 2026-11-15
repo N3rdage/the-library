@@ -231,7 +231,7 @@ The KV role assignment and app-reg ownership require the KV + app reg to already
 
 Workflows under `.github/workflows/`:
 - `ci.yml` — build on PRs.
-- `deploy.yml` — on push to `main`: build, **apply pending EF migrations to `booktracker-staging` via the deploy-time bundle** (`dotnet ef migrations bundle` + AAD-auth apply behind a temp firewall rule), then publish + deploy to the **staging** slot. Migration apply failure blocks the slot deploy — clean fail signal, no startup-probe ambiguity.
+- `deploy.yml` — on push to `main`: build, **apply pending EF migrations to `booktracker-staging` via the deploy-time bundle** (`dotnet ef migrations bundle` + AAD-auth apply behind a temp firewall rule), then publish + deploy to the **staging** slot. Migration apply failure blocks the slot deploy — clean fail signal, no startup-probe ambiguity. Two jobs: `package` compiles, publishes and bundles with no Azure rights and hands the package and the bundle on as an artifact; `deploy` alone can sign in to Azure and compiles nothing (security sweep LIB-016).
 - `swap.yml` — manual: **apply pending EF migrations to `booktracker` via the same bundle pattern**, then `az webapp deployment slot swap staging -> production`. Migration apply failure aborts the swap (prod stays on old code + old schema). (Adding a GitHub Environment with required reviewers is tracked in `TODO.md`.)
 - `rotate-easy-auth-secret.yml` — cron (twice yearly, 1st of every 6th month at 02:00 UTC) + manual dispatch: generates a new password on the `Library-Patrons` app registration, writes it to KV, trims old passwords to keep the latest 2. App Service picks up the new secret via the KV reference within ~24h. Manual dispatch: `gh workflow run rotate-easy-auth-secret.yml`.
 
