@@ -9,8 +9,12 @@
 #   - Owner of the target app registration (for Add-MgApplicationPassword /
 #     Remove-MgApplicationPassword) OR Application.ReadWrite.OwnedBy as a
 #     Graph app role
-#   - Key Vault Secrets Officer on the KV (for Set-AzKeyVaultSecret against
-#     an RBAC-enabled vault)
+#   - Permission to write a secret through Azure Resource Manager
+#     (Microsoft.KeyVault/vaults/secrets/write, which Contributor on the
+#     resource group includes). The vault denies public network access, so
+#     the secret is written through the management API, the same route the
+#     Bicep deployment uses, and never through the vault's own endpoint,
+#     which a GitHub runner cannot reach.
 #
 # Both are granted to the booktracker-ci OIDC service principal by
 # infra/setup-github-oidc.ps1.
@@ -81,9 +85,41 @@ $newPwd = Add-MgApplicationPassword -ApplicationId $app.Id -PasswordCredential @
 }
 
 # ---- Write the new secret value to Key Vault --------------------------------
-Write-Host "Writing new secret to Key Vault '$KeyVaultName' as '$KeyVaultSecretName'..."
-$secureValue = ConvertTo-SecureString $newPwd.SecretText -AsPlainText -Force
-Set-AzKeyVaultSecret -VaultName $KeyVaultName -Name $KeyVaultSecretName -SecretValue $secureValue -Expires $endDate | Out-Null
+# Through Azure Resource Manager, not the vault's data plane (see the header).
+# If the write fails for any reason, the password just added is removed again
+# before the script stops: a password nobody holds the value of must never be
+# left on the app registration, because the trim below keeps the newest
+# $KeepLatest and would then delete the one the site is actually using.
+Write-Host "Writing new secret to Key Vault '$KeyVaultName' as '$KeyVaultSecretName' (via Azure Resource Manager)..."
+try {
+    $secretPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.KeyVault/vaults/$KeyVaultName/secrets/${KeyVaultSecretName}?api-version=2023-07-01"
+    $payload = @{
+        properties = @{
+            value      = $newPwd.SecretText
+            attributes = @{
+                enabled = $true
+                exp     = [DateTimeOffset]::new($endDate).ToUnixTimeSeconds()
+            }
+        }
+    } | ConvertTo-Json -Depth 5 -Compress
+    $response = Invoke-AzRestMethod -Method PUT -Path $secretPath -Payload $payload
+    if ($response.StatusCode -notin 200, 201) {
+        # The body of a failed write holds an error message, never the secret.
+        throw "Key Vault secret write returned HTTP $($response.StatusCode): $($response.Content)"
+    }
+}
+catch {
+    $writeError = $_
+    Write-Host "Key Vault write failed; removing the password just added ('$displayName') so nothing is left behind..."
+    try {
+        Remove-MgApplicationPassword -ApplicationId $app.Id -KeyId $newPwd.KeyId
+        Write-Host "  Removed."
+    }
+    catch {
+        Write-Host "::error::Could not remove password '$displayName' (KeyId $($newPwd.KeyId)). Delete it by hand on the app registration BEFORE running this again."
+    }
+    throw $writeError
+}
 
 # ---- Trim old passwords -----------------------------------------------------
 # Re-fetch to include the new one, sort newest-first, keep the top $KeepLatest,
