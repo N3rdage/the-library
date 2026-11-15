@@ -172,6 +172,22 @@ No role assignments at subscription or management-group scope.
 
 ---
 
+## 12. Outbound fetches (cover mirror)
+
+**Verdict:** **Pass, with an open item.**
+
+The cover mirror (`BookTracker.Web/Services/Covers/BlobBookCoverStorage.cs`, run by `CoverMirrorBackgroundService`) fetches upstream cover URLs stored on editions and books and copies them into the public `book-covers` container. Limits applied since 2026-11-15 (LIB-006):
+
+- **Content type:** only `image/jpeg`, `image/png`, `image/gif` and `image/webp` (`CoverImageProcessor.AllowedRawExtensions`; `image/jpg` is read as `image/jpeg`). Anything else, including SVG and a missing type, is skipped with a logged warning and the row keeps its upstream URL. The same allowlist applies to user uploads through `UploadAsync`.
+- **Size:** at most 10 MiB (`BlobBookCoverStorage.MaxDownloadBytes`), checked against `Content-Length` before the body is read and again on the bytes actually read, since `Content-Length` can be absent or wrong.
+- **Time:** the response is read with `ResponseHeadersRead`, so the body is bounded separately by a linked cancellation source set to the client's 30 s timeout; a server that sends headers and then stalls is skipped.
+- **Decode failure** of an allowed type still stores the raw bytes with a warning (Drew's call; whether to keep that fallback is LIB-007).
+- **Open item:** URL validation (scheme, private or link-local addresses, redirects) is not applied yet (LIB-017).
+
+Tests: `BookTracker.Tests/Services/Covers/BlobBookCoverStorageTests.cs` and `CoverImageProcessorTests.cs`.
+
+---
+
 ## Fixes applied in the PR that landed this audit
 
 1. **`Content-Security-Policy` meta tag** added to `BookTracker.Web/Components/App.razor` (see §4 for the directive set).
