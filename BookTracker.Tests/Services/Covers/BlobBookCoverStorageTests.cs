@@ -103,6 +103,21 @@ public class BlobBookCoverStorageTests
     }
 
     [Fact]
+    public async Task Mirror_BodyThatNeverArrives_IsAbandonedAtTheClientTimeout()
+    {
+        // Headers arrive at once; the body never does. With ResponseHeadersRead
+        // the HttpClient timeout no longer covers the body, so the mirror has
+        // to bound the read itself or the sequential mirror loop stalls.
+        var content = new StreamContent(new HangingStream());
+
+        var result = await MirrorAsync(content, "image/jpeg", timeout: TimeSpan.FromMilliseconds(250))
+            .WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(SourceUrl, result);
+        AssertNothingUploaded();
+    }
+
+    [Fact]
     public async Task Mirror_NonSuccessStatus_IsRejected()
     {
         var result = await MirrorAsync(new ByteArrayContent(MakePng()), "image/png", HttpStatusCode.NotFound);
@@ -111,10 +126,13 @@ public class BlobBookCoverStorageTests
         AssertNothingUploaded();
     }
 
-    private async Task<string> MirrorAsync(HttpContent content, string? contentType, HttpStatusCode status = HttpStatusCode.OK)
+    private async Task<string> MirrorAsync(HttpContent content, string? contentType, HttpStatusCode status = HttpStatusCode.OK, TimeSpan? timeout = null)
     {
         if (contentType is not null) content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
-        var http = new HttpClient(new FakeHandler(new HttpResponseMessage(status) { Content = content }));
+        var http = new HttpClient(new FakeHandler(new HttpResponseMessage(status) { Content = content }))
+        {
+            Timeout = timeout ?? TimeSpan.FromSeconds(30),
+        };
         var options = Options.Create(new CoverStorageOptions
         {
             ConnectionString = "UseDevelopmentStorage=true",
@@ -139,6 +157,35 @@ public class BlobBookCoverStorageTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             Task.FromResult(response);
+    }
+
+    // Non-seekable stream whose reads honour the cancellation token and never
+    // complete otherwise: a server that sent its headers and then went quiet.
+    private sealed class HangingStream : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => 0; set => throw new NotSupportedException(); }
+
+        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return 0;
+        }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return 0;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException("async reads only");
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     // Non-seekable stream of zero bytes that records how much was handed out,

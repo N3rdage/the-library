@@ -64,9 +64,17 @@ public class BlobBookCoverStorage : IBookCoverStorage
         if (!IsEnabled || string.IsNullOrWhiteSpace(sourceUrl)) return sourceUrl;
         if (IsManagedUrl(sourceUrl)) return sourceUrl;
 
+        // ResponseHeadersRead means HttpClient.Timeout covers only the status
+        // line and headers; the body read has to be bounded separately or a
+        // slow-drip upstream stalls the sequential mirror loop. The linked
+        // source bounds the whole download (headers plus body) by the same
+        // client timeout the download had before.
+        using var downloadTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        downloadTimeout.CancelAfter(_http.Timeout);
+
         try
         {
-            using var response = await _http.GetAsync(sourceUrl, HttpCompletionOption.ResponseHeadersRead, ct);
+            using var response = await _http.GetAsync(sourceUrl, HttpCompletionOption.ResponseHeadersRead, downloadTimeout.Token);
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Cover mirror skipped — upstream returned {Status} for {Url}", (int)response.StatusCode, sourceUrl);
@@ -89,7 +97,7 @@ public class BlobBookCoverStorage : IBookCoverStorage
                 return sourceUrl;
             }
 
-            var bytes = await ReadCappedAsync(response.Content, ct);
+            var bytes = await ReadCappedAsync(response.Content, downloadTimeout.Token);
             if (bytes is null)
             {
                 _logger.LogWarning("Cover mirror skipped — {Url} body exceeded the {MaxBytes}-byte cap while reading.",
@@ -98,6 +106,12 @@ public class BlobBookCoverStorage : IBookCoverStorage
             }
 
             return await UploadAsync(bytes, mediaType, blobKey, ct);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning("Cover mirror skipped — {Url} did not finish downloading within {Timeout}.",
+                sourceUrl, _http.Timeout);
+            return sourceUrl;
         }
         catch (Exception ex)
         {
