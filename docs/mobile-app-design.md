@@ -1,14 +1,14 @@
 # Mobile companion app — design
 
-A separate **.NET MAUI** app that owns the offline-mobile-lookup use case, decoupled from the Blazor monolith. The bookshop arc proved the data shape; this proves the *delivery* shape — a real native companion that doesn't have to fight the Blazor circuit to feel native.
+A separate **.NET MAUI** app that owns the offline-mobile-lookup use case, decoupled from the Blazor monolith — a real native companion that doesn't have to fight the Blazor circuit to feel native. It consumes the same catalog data shape as `/bookshop`.
 
 ## Why split
 
-The bookshop arc shipped working, but kept telegraphing that `/bookshop` doesn't belong in the Blazor app:
+`/bookshop` doesn't belong in the Blazor app:
 
 - Page has zero Blazor interactivity by design (no `@onclick` / `@bind` / `@code` beyond a one-shot `OnAfterRenderAsync` JS init kick) — every event handler is plain DOM JS.
 - Page deliberately avoids the SignalR circuit but the project's global rendermode forces one anyway.
-- A whole parallel data layer (`catalog-cache.js`, IndexedDB schema, SW route-specific caching) was built to escape Blazor Server's connection requirement.
+- A whole parallel data layer (`catalog-cache.js`, IndexedDB schema, SW route-specific caching) exists only to escape Blazor Server's connection requirement.
 - The "Static SSR vs InteractiveServer" rendermode question is unresolvable inside the current architecture without restructuring `<Routes>`.
 
 Drew's actual usage cleanly partitions into two apps:
@@ -30,7 +30,7 @@ Picked over Blazor WebAssembly and PWA-wrap-via-Capacitor for these reasons:
 1. **Learning win.** Drew already does WASM and PWA. MAUI is the next step.
 2. **Honest "native companion" framing** — compiled iOS/Android binaries, not a WebView with extra steps. Reads better in a portfolio than "PWA wrapped in Capacitor."
 3. **C# end-to-end.** Same language as the main app; potential to share DTO contracts via a small `BookTracker.Shared` project (don't share `BookTracker.Data` — EF Core dependency would bleed into mobile).
-4. **Native primitives matter for this app.** Camera/barcode is one of the killer flows; native camera APIs + native ZXing bindings beat the WebRTC `getUserMedia` path the PWA uses today.
+4. **Native primitives matter for this app.** Camera/barcode is one of the killer flows; native camera APIs + native ZXing bindings beat the WebRTC `getUserMedia` path the PWA uses.
 
 Acknowledged costs: Apple Developer account ($99/yr) + a Mac in the build path for iOS; Play Console one-time fee ($25); two more platforms to test on. Distribution can stay TestFlight / Play internal-testing for personal use until / unless the project goes more public.
 
@@ -38,17 +38,17 @@ Acknowledged costs: Apple Developer account ($99/yr) + a Mac in the build path f
 
 ```
 ┌─────────────────────────────────────┐    ┌──────────────────────────────┐
-│  BookTracker.Mobile (MAUI)          │    │  BookTracker.Web (existing)  │
-│  Android v1 (iOS deferred)          │    │  Blazor Server, Azure        │
+│  BookTracker.Mobile (MAUI)          │    │  BookTracker.Web             │
+│  Android only (iOS deferred)        │    │  Blazor Server, Azure        │
 │  net10.0-android target             │    │  net10.0                     │
 │                                     │    │                              │
 │  • MSAL (AAD interactive sign-in)   │───▶│  • /api/catalog-snapshot     │
 │  • HttpClient + bearer token        │    │  • /api/wishlist-snapshot    │
-│  • SQLite local cache (catalog +    │    │     (new, this arc)          │
+│  • SQLite local cache (catalog +    │    │                              │
 │    wishlist + series)               │    │  • Easy Auth (token-aud      │
 │  • ZXing.Net.Maui scanner           │    │     mode, accepts the        │
-│  • Pages: Scan / Authors / Series / │    │     mobile audience)         │
-│    Wishlist / Settings              │    │                              │
+│  • Tabs: Find / Wishlist / Gaps     │    │     mobile audience)         │
+│    (+ status sheet)                 │    │                              │
 └─────────────────────────────────────┘    └──────────────────────────────┘
 ```
 
@@ -56,30 +56,26 @@ API stays put. The mobile app is a pure consumer.
 
 ## Authentication
 
-App Service Easy Auth runs in v2 mode and already accepts both browser cookie flows AND bearer-token API calls — the existing `validation.allowedAudiences` array (`['api://${authClientId}', authClientId]` in `infra/modules/app-config.bicep`) is what gates token validation. When MAUI's MSAL acquires a token for scope `api://<authClientId>/access_as_user`, the token's `aud` claim is `api://<authClientId>` — already in the allowed list. **No Bicep change is needed**, despite the original design's claim that `aadAcceptedTokenAudiences` had to be wired up — the existing config covers the mobile flow.
+App Service Easy Auth runs in v2 mode and already accepts both browser cookie flows AND bearer-token API calls — the existing `validation.allowedAudiences` array (`['api://${authClientId}', authClientId]` in `infra/modules/app-config.bicep`) is what gates token validation. When MAUI's MSAL acquires a token for scope `api://<authClientId>/access_as_user`, the token's `aud` claim is `api://<authClientId>` — already in the allowed list. **No Bicep change is needed** (no `aadAcceptedTokenAudiences` wiring) — the existing config covers the mobile flow.
 
 What IS needed is one-time AAD-side setup (manual Azure Portal click-ops; runbook in [`infra/README.md`](../infra/README.md) under "Mobile companion — AAD setup"):
 
 1. **Expose the API scope** on the existing `Library-Patrons` Web app registration: Expose an API → confirm Application ID URI = `api://<authClientId>` → Add scope `access_as_user`.
-2. **Register a new AAD app** for the mobile client (Mobile and desktop applications, public client / native) in the same tenant. Redirect URI uses Android's custom URI scheme `msauth://com.thelibrary.mobile/<base64-signature-hash>` (signature hash is derived during PR 3 from the dev keystore).
+2. **Register a new AAD app** for the mobile client (Mobile and desktop applications, public client / native) in the same tenant. Redirect URI uses Android's custom URI scheme `msauth://com.thelibrary.mobile/<base64-signature-hash>` (signature hash is derived from the signing keystore).
 3. **Grant the mobile app reg API permission** to the Web app's `access_as_user` scope (delegated, with admin consent if the tenant requires it).
 
-Then in MAUI (PR 3+):
+Then in MAUI:
 
-4. **MSAL.NET** (`Microsoft.Identity.Client` + `Microsoft.Maui.Authentication`) does the interactive sign-in once via Chrome Custom Tabs, refresh-token from then on. Tokens stay in MSAL.NET's own built-in mobile cache in the app's private storage; the app adds no cache serializer and does not use `SecureStorage`. MSAL.NET's documentation calls that mechanism secure but does not say whether it is encrypted at rest, so the cache is treated as protected by the app sandbox rather than by the Keystore; whether it can leave the device in an Android Auto Backup is the manifest's `allowBackup` setting (LIB-014). *(Corrected 2026-11-15, LIB-023; earlier revisions of this doc said "SecureStorage (Keystore on Android)", which the code never did.)*
+4. **MSAL.NET** (`Microsoft.Identity.Client` + `Microsoft.Maui.Authentication`) does the interactive sign-in once via Chrome Custom Tabs, refresh-token from then on. Tokens stay in MSAL.NET's own built-in mobile cache in the app's private storage; the app adds no cache serializer and does not use `SecureStorage`. MSAL.NET's documentation calls that mechanism secure but does not say whether it is encrypted at rest, so the cache is treated as protected by the app sandbox rather than by the Keystore; whether it can leave the device in an Android Auto Backup is the manifest's `allowBackup` setting (LIB-014).
 5. **HttpClient** attaches `Authorization: Bearer <token>` per request; intercept 401 and re-trigger interactive sign-in.
 
 The browser flow on `/bookshop` keeps working through the same cookie-mode Easy Auth until that route is retired.
 
 ## API surface
 
-Existing:
-- `GET /api/catalog-snapshot` — books, authors. Already shipped, already in use by `/bookshop`.
-
-New (this arc — to be added on BookTracker.Web before the MAUI consumer needs them):
-- `GET /api/wishlist-snapshot` — wishlist rows (id, title, author, isbn, priority, seriesId, seriesOrder). Read-only. Sized S.
-- Extend `BookSnapshot` with `seriesId`, `seriesOrder`, plus a top-level `series` array on `CatalogSnapshot` (id, name, type, expectedCount). Enables the "missing books in series" view client-side. Sized S.
-- "Favourite authors" — defer the model decision. v1 mobile derives "favourites" as "top N authors by book count" (mirrors `/Home`'s top-author tally). If real usage shows that's wrong, add an explicit `Author.IsFavourite` flag in a separate PR.
+- `GET /api/catalog-snapshot` — books, authors, series; consumed by `/bookshop` and Bookshelf. `BookSnapshot` carries `seriesId` + `seriesOrder` and `CatalogSnapshot` has a top-level `series` array (id, name, type, expectedCount), which enables the "missing books in series" view client-side.
+- `GET /api/wishlist-snapshot` — wishlist rows (id, title, author, isbn, priority, seriesId, seriesOrder). Read-only.
+- "Favourite authors" — the model decision is deferred. v1 mobile derives "favourites" as "top N authors by book count" (mirrors `/Home`'s top-author tally). If real usage shows that's wrong, add an explicit `Author.IsFavourite` flag in a separate PR.
 
 Deferred to v2 if the use case actually surfaces:
 - `POST /api/books/{id}/status` — mark read from mobile. Mobile queues writes offline + syncs on reconnect. Drew's own framing: "honestly could use the other app for that," so this stays out of v1.
@@ -88,7 +84,7 @@ Deferred to v2 if the use case actually surfaces:
 
 Everything except `/bookshop`. Specifically:
 
-- All edit / capture pages: `/books/add`, `/books/bulk-add`, `/books/{id}`, `/books/{id}/edit`
+- All edit / capture pages: `/books/add`, `/books/bulk-add`, `/books/{id}`
 - All browse pages: `/books`, `/authors`, `/publishers`, `/series`
 - `/shopping` stays (desktop wishlist write surface — no consolidation needed once `/bookshop` leaves)
 - `/duplicates`, `/assistant`
@@ -102,9 +98,9 @@ When the MAUI app is stable and Drew has stopped using `/bookshop` in the field:
 - `wwwroot/js/bookshop-page.js`, `wwwroot/js/catalog-cache.js`
 - `service-worker.js` route-specific cache-first handling for `/bookshop*` and `/api/catalog-snapshot`
 - Bookshop nav link in `MainLayout.razor`
-- `BarcodeScanner.startJs` (the pure-JS variant added for `/bookshop` — the `start` Blazor variant stays since `/books/add` and `/shopping` use it)
+- `BarcodeScanner.startJs` (the pure-JS variant used by `/bookshop` — the `start` Blazor variant stays since `/books/add` and `/shopping` use it)
 
-Cancellation: **TODO #28 (Shopping consolidation arc) — closed without code.** Premise was "fold /shopping into /bookshop tabs." With `/bookshop` leaving the main app, there's nothing to consolidate into. `/shopping` keeps its current shape as the desktop wishlist surface.
+`/shopping` is not folded into `/bookshop`: with `/bookshop` leaving the main app there is nothing to consolidate into, and `/shopping` keeps its shape as the desktop wishlist surface.
 
 ## PR / arc breakdown
 

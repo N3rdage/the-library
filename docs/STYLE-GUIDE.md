@@ -397,12 +397,10 @@ Web inherits Bootstrap / MudBlazor semantics by default. The `.clickable-tile` c
 
 ### Mobile (MAUI Android)
 
-- **Android-only for v1.** iOS deferred until / unless an Apple developer account materialises; the design is platform-agnostic enough to add `net10.0-ios` later without restructuring. See `BookTracker.Mobile.csproj:1–8`.
-- **No theme provider.** MAUI doesn't have an equivalent of `MudThemeProvider` for hex-token resolution at the time of writing. Palette values are hex literals inline in XAML, mirrored manually from `BookTrackerTheme.cs`. See [Known inconsistencies](#known-inconsistencies) for the long-term plan.
-- **System nav bar is per-page.** `NavigationPage.HasNavigationBar="False"` on root pages (MainPage) where there's nothing to navigate from; left default-true on child pages (ScanPage) so the back button is visible.
-- **`AppThemeBinding` for light/dark variants.** Used on result-card colours (`ScanPage.xaml:40–41`) — when the system theme is dark, the card swaps to a darker green pair. Not yet applied to the leather/brass palette generally; would be the v1.1 work.
+- **Android-only.** iOS deferred until / unless an Apple developer account materialises; the design is platform-agnostic enough to add `net10.0-ios` later without restructuring. See `BookTracker.Mobile.csproj:1–8`.
+- **Design tokens, not a theme provider.** MAUI has no equivalent of `MudThemeProvider`. Bookshelf uses a token set (listed in `docs/BOOKSHELF-UI-REDESIGN.md` §2) whose light/dark pairs resolve via `AppThemeBinding`; `Theming/ThemeColors` bridges them into code. Values are mirrored manually from `BookTrackerTheme.cs` — see [Known inconsistencies](#known-inconsistencies).
+- **Shell + bottom TabBar.** Find / Wishlist / Gaps tabs; drill-downs push within the active tab's stack. See `docs/BOOKSHELF-UI-REDESIGN.md` §1.
 - **Adaptive icon safe zone.** Foreground SVG design must live in the inner 66% (≈ 300×300 of a 456×456 canvas) to survive launcher masks. See [Iconography](#iconography).
-- **Page-size native lib warnings (XA0141).** Upstream `xamarin.androidx.camera.core` and `SQLitePCLRaw.lib.e_sqlite3.android` packages haven't shipped 16 KB-page-aligned native libs yet. Documented as forward-compat noise; can't be fixed at our level.
 
 ## Known inconsistencies
 
@@ -412,25 +410,24 @@ The honest version: not everything is consistent yet. These are the gaps the doc
 
 The Bookcase PWA launcher icon and `theme_color` use Material You purple (`#6750A4` / `#4F378B`) — a holdover from before the leather/brass palette was decided for the in-app UI. Tap the purple icon, land on a parchment-and-leather screen: not visually continuous.
 
-**Bookshelf MAUI was rebranded** to the in-app palette (espresso bg + brass spine + parchment text lines) when Drew installed both apps and the two purple icons sat next to each other in the launcher. So the inconsistency is now half-resolved — Bookshelf is consistent end-to-end; Bookcase still has the purple gap.
+**Bookshelf MAUI uses the in-app palette** for its launcher icon (espresso bg + brass spine + parchment text lines), so two purple icons don't sit side by side in the launcher. Bookshelf is consistent end-to-end; Bookcase has the purple gap.
 
-Options for the remaining Bookcase resolution (deferred):
+Options for the Bookcase resolution (deferred, TODO #38):
 
-1. **Rebrand the Bookcase icon** to the leather palette (matching Bookshelf's new design or its own variant). Touches `BookTracker.Web/wwwroot/icons/icon.svg`, the PNG renders via the regen script, `wwwroot/manifest.webmanifest` `theme_color`, `Components/App.razor` `theme-color` meta.
-2. **Adopt the icon palette in-app** — invert the choice: use the purple as the actual brand identity, retheme the in-app palette. Wider blast radius than (1) and would walk back Bookshelf's just-shipped alignment.
+1. **Rebrand the Bookcase icon** to the leather palette (matching Bookshelf's design or its own variant). Touches `BookTracker.Web/wwwroot/icons/icon.svg`, the PNG renders via the regen script, `wwwroot/manifest.webmanifest` `theme_color`, `Components/App.razor` `theme-color` meta.
+2. **Adopt the icon palette in-app** — invert the choice: use the purple as the actual brand identity, retheme the in-app palette. Wider blast radius than (1) and would walk back Bookshelf's alignment.
 3. **Accept and document** — current state. The purple is brand-mark only; the parchment-and-leather is the product palette. Many apps do this (e.g. Slack's neon icon vs muted desktop chrome).
 
 (3) is the current state. Revisit if the inconsistency causes confusion in real use.
 
 ### Mobile palette is manually mirrored from Web
 
-`BookTracker.Mobile/MainPage.xaml` and `Pages/ScanPage.xaml` hard-code hex literals. The canonical source is `BookTrackerTheme.cs`, but there's no language-level enforcement that Mobile stays in sync. The two surfaces have drifted exactly zero times so far (because the gap is small and the Mobile arc is recent), but the risk increases over time.
+Bookshelf's token dictionary holds hex values copied from `BookTrackerTheme.cs`. The canonical source is `BookTrackerTheme.cs`, but there's no language-level enforcement that Mobile stays in sync, and the drift risk grows over time.
 
 Long-term resolution options:
 
-1. **`Resources/Styles/Colors.xaml` ResourceDictionary on Mobile** — declare each colour as a `<Color x:Key="Leather">#6B2737</Color>` entry, reference via `{StaticResource Leather}`. Same drift risk against Web; just moves the single source within Mobile.
-2. **Shared palette file** — generate both `BookTrackerTheme.cs` and a MAUI ResourceDictionary from a single source-of-truth file (YAML / JSON / etc.). Real fix; over-engineered for one colour set.
-3. **Status quo + style-audit skill** (recommended) — keep manual mirroring, build a future style-audit skill (see new TODO row) that diffs Mobile XAML hex literals against `BookTrackerTheme.cs` values and flags drift as a finding.
+1. **Shared palette file** — generate both `BookTrackerTheme.cs` and a MAUI ResourceDictionary from a single source-of-truth file (YAML / JSON / etc.). Real fix; over-engineered for one colour set.
+2. **Status quo + style-audit skill** (recommended) — keep manual mirroring, build a style-audit skill (TODO #36) that diffs Mobile XAML hex values against `BookTrackerTheme.cs` and flags drift as a finding.
 
 ### MudBlazor migration in flight
 
@@ -438,8 +435,4 @@ Some Web pages are still Bootstrap-shaped; some are MudBlazor; some are hybrids.
 
 ### Web's `/bookshop` scan UX vs Mobile's
 
-The Web `/bookshop` scan page uses html5-qrcode's default qrbox styling — green target inside a dark letterbox, all rendered by the library. Mobile's ScanPage hand-rolls an equivalent overlay in XAML to match the same visual shape. Both look approximately the same on device, but they're independently maintained — a styling change to one won't automatically apply to the other. Likely acceptable: the two implementations are short and the visual contract is documented above.
-
-### Mobile dark-mode coverage is partial
-
-Result cards (`ScanPage.xaml:37–70`) use `AppThemeBinding` for light/dark variants. The home page palette is light-only (`MainPage.xaml`). Switching the device to dark mode currently renders the home page in its light palette, which clashes with the system chrome. A v1.1 pass to apply `AppThemeBinding` across the leather/brass values would close this gap.
+The Web `/bookshop` scan page uses html5-qrcode's default qrbox styling — green target inside a dark letterbox, all rendered by the library. Mobile's scanner hand-rolls an equivalent overlay in XAML to match the same visual shape. Both look approximately the same on device, but they're independently maintained — a styling change to one won't automatically apply to the other. Likely acceptable: the two implementations are short and the visual contract is documented above.
