@@ -10,9 +10,13 @@ updates:
       interval: "weekly"
       day: "monday"
 
-  # NuGet packages (C#)
+  # NuGet packages (C#). The root directory follows BookTracker.slnx;
+  # BookTracker.Mobile is outside the solution on purpose (see the comment
+  # in the .slnx), so it is listed on its own or Dependabot never sees it.
   - package-ecosystem: "nuget"
-    directory: "/"
+    directories:
+      - "/"
+      - "/BookTracker.Mobile"
     schedule:
       interval: "weekly"
       day: "monday"

@@ -162,12 +162,13 @@ No role assignments at subscription or management-group scope.
 
 ## 11. HSTS + HTTPS redirect
 
-**Verdict:** **Pass.**
+**Verdict:** **Pass** (policy raised 2026-11-15, LIB-004).
 
-- `Program.cs:118` — `app.UseHsts()` in non-Development environments.
-- `Program.cs:121` — `app.UseHttpsRedirection()` unconditionally.
+- `BookTracker.Web/ProgramSetup.cs` — `ConfigureServices` registers `AddHsts(ConfigureHsts)`; `ConfigureHsts` sets `MaxAge` to 365 days, `IncludeSubDomains` true, `Preload` false. `ConfigureMiddleware` calls `app.UseHsts()` in non-Development environments and `app.UseHttpsRedirection()` unconditionally.
+- Until 2026-11-15 nothing called `AddHsts`, so the framework default shipped: 30 days, same host only. The one-year value meets the six-month floor in `audit-rules/security.md` BOOK-007. `Preload` stays off: submitting `silly.ninja` to the browser preload list affects every subdomain and is Drew's call.
+- Guarded by `BookTracker.Tests/Security/HstsOptionsTests.cs`, which builds the real host in the Production environment and resolves the registered `HstsOptions`, so dropping the registration fails the test.
 - Custom domain bound with App Service managed certificate (auto-renewing). HTTPS-only binding confirmed via Bicep / deploy config.
-- HSTS header sent by ASP.NET Core default middleware; the portal/CLI can verify response headers in prod if needed.
+- Expected response header after the staging deploy: `strict-transport-security: max-age=31536000; includeSubDomains`.
 
 ---
 
