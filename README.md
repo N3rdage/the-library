@@ -15,7 +15,6 @@ A secondary goal is to learn how different interaction styles affect Claude's ou
 
 - [`.claude-memory/`](.claude-memory/) — persistent context for Claude across sessions: workflow preferences (`feedback_*.md`), project facts (`project_*.md`), per-feature retros (`retros/`), and working patterns (`patterns.md`). Read these for the "how the sausage is made" view — they're more interesting than the code for what this experiment actually is.
 - [`SECURITY-AUDIT.md`](SECURITY-AUDIT.md) — how security is looked after here: what is scanned automatically and how to report a problem.
-- [`GOING-PUBLIC.md`](GOING-PUBLIC.md) — planning doc for the recent flip-to-public decision. Example of the kind of deliberate review the workflow encourages.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — living design doc, updated at each structural change.
 - [`TODO.md`](TODO.md) — priority-ordered table of open work + shipped items with estimate-vs-actual PR counts.
 
