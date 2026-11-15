@@ -10,8 +10,9 @@ namespace BookTracker.Mobile.Services;
 // is never used here. MSAL.NET's docs (token-cache-serialization, Mobile
 // apps tab, read 2026-11-15 for 4.86.1) call that built-in mechanism
 // secure but do not say whether it is encrypted at rest, so treat the
-// cache as protected by the app sandbox only. Android Auto Backup is off
-// so the cache never leaves the device (LIB-014). See
+// cache as protected by the app sandbox only. Whether that cache can
+// leave the device in an Android Auto Backup is governed by the
+// manifest's allowBackup attribute (LIB-014). See
 // docs/mobile-app-design.md > Authentication.
 public class AuthService : IAuthService
 {

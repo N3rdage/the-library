@@ -66,7 +66,7 @@ What IS needed is one-time AAD-side setup (manual Azure Portal click-ops; runboo
 
 Then in MAUI (PR 3+):
 
-4. **MSAL.NET** (`Microsoft.Identity.Client` + `Microsoft.Maui.Authentication`) does the interactive sign-in once via Chrome Custom Tabs, refresh-token from then on. Tokens stay in MSAL.NET's own built-in mobile cache in the app's private storage; the app adds no cache serializer and does not use `SecureStorage`. MSAL.NET's documentation calls that mechanism secure but does not say whether it is encrypted at rest, so the cache is treated as protected by the app sandbox (plus Auto Backup being off) rather than by the Keystore. *(Corrected 2026-11-15, LIB-023; earlier revisions of this doc said "SecureStorage (Keystore on Android)", which the code never did.)*
+4. **MSAL.NET** (`Microsoft.Identity.Client` + `Microsoft.Maui.Authentication`) does the interactive sign-in once via Chrome Custom Tabs, refresh-token from then on. Tokens stay in MSAL.NET's own built-in mobile cache in the app's private storage; the app adds no cache serializer and does not use `SecureStorage`. MSAL.NET's documentation calls that mechanism secure but does not say whether it is encrypted at rest, so the cache is treated as protected by the app sandbox rather than by the Keystore; whether it can leave the device in an Android Auto Backup is the manifest's `allowBackup` setting (LIB-014). *(Corrected 2026-11-15, LIB-023; earlier revisions of this doc said "SecureStorage (Keystore on Android)", which the code never did.)*
 5. **HttpClient** attaches `Authorization: Bearer <token>` per request; intercept 401 and re-trigger interactive sign-in.
 
 The browser flow on `/bookshop` keeps working through the same cookie-mode Easy Auth until that route is retired.
