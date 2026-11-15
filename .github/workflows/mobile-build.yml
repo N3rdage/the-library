@@ -48,7 +48,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         if: steps.filter.outputs.mobile != 'false'
         with:
           distribution: 'microsoft'
