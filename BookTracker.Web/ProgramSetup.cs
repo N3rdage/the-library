@@ -168,6 +168,10 @@ public static class ProgramSetup
         });
         builder.Services.AddHostedService<CoverMirrorBackgroundService>();
 
+        // /warmup touches the database once per process; this flag is the
+        // "once" (see WarmupEndpoints).
+        builder.Services.AddSingleton<WarmupState>();
+
         builder.Services.Configure<AIOptions>(
             builder.Configuration.GetSection(AIOptions.SectionName));
         builder.Services.AddScoped<AIProviderFactory>(sp =>
