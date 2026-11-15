@@ -19,7 +19,7 @@ One line per memory, grouped by kind. Topic files hold the detail — open them 
 - [Feature planning conventions](feedback_planning_conventions.md) — always plan first, PR breakdown for medium+, flag 5+ file changes as complex.
 - [Testing conventions](feedback_testing_conventions.md) — minimal tests for new logic to prevent regression; skip for pure markup.
 - [Deployment safety](feedback_deployment_safety.md) — migrations must retain data; breaking changes need defaults and review tags.
-- [TODO tracking](feedback_todo_tracking.md) — all TODOs in TODO.md (no shipped list; merged PRs are the record); "sync TODOs" reconciles memory + code + TODO.md AND probes each Open row against the codebase for shipped-but-not-moved drift.
+- [TODO tracking](feedback_todo_tracking.md) — all TODOs in TODO.md (no shipped list; merged PRs are the record); "sync TODOs" reconciles memory + code + TODO.md AND probes each Open row against the codebase for shipped-but-still-open drift.
 - [Memory lands as its own chore PR](feedback_memory_commits.md) — never stage .claude-memory/ in feature commits; it lands as its own `chore(memory)` branch+PR (branch protection blocks direct-to-main). Exception: the closing PR of an arc carries that arc's retro + the deletion of the arc's TODO rows.
 - [Keep ARCHITECTURE.md updated](feedback_architecture_doc.md) — update when structural changes are made (entities, pages, services, patterns).
 - [Grep result is a checklist](feedback_grep_list_is_a_checklist.md) — after a search drives a mechanical sweep, fix/classify EVERY hit; a listed-but-untouched file is a smell. A missed reader in an atomic cutover fails silently. Lean on the compiler (drop the member → the list becomes hard errors).

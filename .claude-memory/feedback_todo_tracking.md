@@ -1,6 +1,6 @@
 ---
 name: TODO tracking conventions
-description: All TODOs go in TODO.md. Code TODOs mirror there. "Sync TODOs" reconciles memory + code + TODO.md AND probes each Open row against the codebase for "already shipped, never moved" drift.
+description: All TODOs go in TODO.md. Code TODOs mirror there. "Sync TODOs" reconciles memory + code + TODO.md AND probes each Open row against the codebase for "already shipped, row still open" drift.
 type: feedback
 originSessionId: f4ac39e5-d24f-4335-a75d-edce7263c131
 ---
