@@ -46,8 +46,9 @@
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.10" />
-		<!-- MSAL.NET — AAD interactive sign-in via Chrome Custom Tabs, token
-		     cached in SecureStorage (Keystore-backed). -->
+		<!-- MSAL.NET — AAD interactive sign-in via Chrome Custom Tabs. Tokens
+		     live in MSAL.NET's own built-in mobile cache in app-private storage
+		     (no SecureStorage, no custom serializer; see Services/AuthService.cs). -->
 		<PackageReference Include="Microsoft.Identity.Client" Version="4.86.1" />
 		<!-- Barcode scanner control + camera plumbing. ZXing.Net.MAUI
 		     wraps the platform camera APIs and exposes a

@@ -43,8 +43,8 @@
          PrivateAssets="all" keeps this DESKTOP/CI fix from flowing into the
          Android app (BookTracker.Mobile): the 3.50.x base package also carries
          an Android .so, which would collide with the .android AAR (XA4301 dup).
-         Android keeps its own native (.android 2.1.2) until upstream ships a
-         3.50.x .android — see BookTracker.Mobile's targeted NoWarn. -->
+         Android takes whatever .android native sqlite-net-pcl ships;
+         BookTracker.Mobile carries no NoWarn or pin for it today. -->
     <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" PrivateAssets="all" />
     <!-- SkiaSharp: cross-platform image decode + resize. Pulls native
          assets for Android (via transitive SkiaSharp.NativeAssets.*)
