@@ -62,7 +62,7 @@ Living security posture review. Per-area verdicts: **Pass** / **Concern** / **Ac
     - `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com` — Bootstrap + MudBlazor + Google Fonts.
     - `font-src 'self' https://fonts.gstatic.com` — Roboto.
     - `img-src 'self' data: blob: https:` — cover art comes from many external HTTPS sources (Open Library, Google Books, etc.); locking to specific hosts would break the lookup pipeline as providers change.
-    - `connect-src 'self' wss: ws:` — SignalR WebSocket.
+    - `connect-src 'self'` — SignalR WebSocket and fetches to the app's own origin only. Until 2026-11-15 this was `'self' ws: wss:`, which let a script opened by an injected tag reach any WebSocket host; CSP Level 3 browsers (current Chromium, Firefox and Safari) treat a same-origin `ws:`/`wss:` connection as matching `'self'`, so the bare `'self'` keeps the Blazor circuit working (LIB-019).
     - `media-src 'self' blob:` — camera capture.
     - `base-uri 'self'`, `form-action 'self'` — constrain form posts.
   - `X-Frame-Options: DENY` (middleware in `Program.cs`) — clickjacking protection.
