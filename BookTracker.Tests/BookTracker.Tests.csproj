@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="bunit" Version="2.7.2" />
+    <PackageReference Include="bunit" Version="2.15.2" />
     <!-- Security pin: bUnit 2.7.2 pulls AngleSharp 1.4.0 transitively, which has
          a moderate mXSS sanitizer-bypass advisory (GHSA-pgww-w46g-26qg,
          CVE-2026-54570, patched in 1.5.0). We only use AngleSharp via bUnit to
@@ -16,7 +16,7 @@
          sanitizer — but TWAE promotes the NU1902 audit warning to an error.
          Pin the patched version directly; PrivateAssets so it stays test-local.
          Remove once bUnit's own AngleSharp floor reaches >= 1.5.0. -->
-    <PackageReference Include="AngleSharp" Version="1.5.2" PrivateAssets="all" />
+    <PackageReference Include="AngleSharp" Version="1.10.1" PrivateAssets="all" />
     <!-- SkiaSharp for the CoverImageProcessor tests (make/decode sample images).
          Native assets explicit so the test host decodes on Windows (local) +
          Linux (CI). Linux.NoDependencies (not the full .Linux) because these
