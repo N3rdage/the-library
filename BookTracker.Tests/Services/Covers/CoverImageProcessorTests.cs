@@ -14,7 +14,6 @@ public class CoverImageProcessorTests
         var result = CoverImageProcessor.Process(pngBytes, sourceContentType: "image/png");
 
         Assert.NotNull(result);
-        Assert.True(result.WasNormalised);
         Assert.Equal(CoverImageProcessor.NormalisedContentType, result.ContentType);
         Assert.Equal(CoverImageProcessor.NormalisedExtension, result.Extension);
 
@@ -33,7 +32,6 @@ public class CoverImageProcessorTests
         var result = CoverImageProcessor.Process(jpegBytes, sourceContentType: "image/jpeg");
 
         Assert.NotNull(result);
-        Assert.True(result.WasNormalised);
         var (width, height) = Decode(result.Bytes);
         Assert.Equal(CoverImageProcessor.MaxEdgePixels, width);
         // 1200 / 2000 = 0.6; 1000 * 0.6 = 600.
@@ -60,13 +58,12 @@ public class CoverImageProcessorTests
     {
         // 3000×1 source — long edge 3000 > cap. Short edge scales to 1200/3000 = 0.4,
         // which rounds to 0 without the Math.Max(1, …) floor; a zero-dimension
-        // SKImageInfo makes Resize return null and we'd fall back to raw bytes.
+        // SKImageInfo makes Resize return null and the cover would be skipped.
         var jpegBytes = MakeJpeg(width: 3000, height: 1);
 
         var result = CoverImageProcessor.Process(jpegBytes, sourceContentType: "image/jpeg");
 
         Assert.NotNull(result);
-        Assert.True(result.WasNormalised);
         var (width, height) = Decode(result.Bytes);
         Assert.Equal(CoverImageProcessor.MaxEdgePixels, width);
         Assert.Equal(1, height); // floored, not 0
@@ -87,40 +84,44 @@ public class CoverImageProcessorTests
     }
 
     [Fact]
-    public void Process_CorruptBytes_FallsBackToRaw_WithRecognisedContentType()
+    public void Process_CorruptBytes_ReturnsNull()
     {
-        // Random bytes — SkiaSharp can't decode. Should return WasNormalised=false
-        // with the bytes preserved and a sensible content-type derived from the
-        // hint we passed in.
+        // Random bytes — SkiaSharp can't decode, so there is nothing to store.
         var garbage = new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04 };
 
         var result = CoverImageProcessor.Process(garbage, sourceContentType: "image/png");
 
-        Assert.NotNull(result);
-        Assert.False(result.WasNormalised);
-        Assert.Equal(garbage, result.Bytes);
-        Assert.Equal("image/png", result.ContentType);
-        Assert.Equal("png", result.Extension);
+        Assert.Null(result);
     }
 
     [Theory]
-    [InlineData("image/jpeg", "image/jpeg", "jpg")]
-    [InlineData("image/jpg", "image/jpeg", "jpg")] // alt spelling normalised
-    [InlineData("image/png", "image/png", "png")]
-    [InlineData("image/gif", "image/gif", "gif")]
-    [InlineData("image/webp", "image/webp", "webp")]
-    [InlineData("IMAGE/PNG", "image/png", "png")] // case-insensitive
-    [InlineData("image/jpeg; charset=binary", "image/jpeg", "jpg")] // strips charset suffix
-    public void Process_RawFallback_UsesAllowedSourceType(string sourceHint, string expectedType, string expectedExt)
+    [InlineData("image/jpeg")]
+    [InlineData("image/jpg")]
+    [InlineData("image/png")]
+    [InlineData("image/gif")]
+    [InlineData("image/webp")]
+    [InlineData("IMAGE/PNG")]
+    [InlineData("image/jpeg; charset=binary")]
+    public void Process_AllowedTypeWithUndecodableBytes_ReturnsNull(string sourceHint)
     {
         var garbage = new byte[] { 0xFF, 0xD8 }; // truncated JPEG header — fails decode
 
         var result = CoverImageProcessor.Process(garbage, sourceContentType: sourceHint);
 
-        Assert.NotNull(result);
-        Assert.False(result.WasNormalised);
-        Assert.Equal(expectedType, result.ContentType);
-        Assert.Equal(expectedExt, result.Extension);
+        Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData("image/jpeg", "image/jpeg")]
+    [InlineData("image/jpg", "image/jpeg")] // alt spelling normalised
+    [InlineData("image/png", "image/png")]
+    [InlineData("image/gif", "image/gif")]
+    [InlineData("image/webp", "image/webp")]
+    [InlineData("IMAGE/PNG", "image/png")] // case-insensitive
+    [InlineData("image/jpeg; charset=binary", "image/jpeg")] // strips charset suffix
+    public void AllowedMediaType_RecognisesAllowedTypes(string contentType, string expected)
+    {
+        Assert.Equal(expected, CoverImageProcessor.AllowedMediaType(contentType));
     }
 
     [Theory]
