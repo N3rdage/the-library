@@ -44,6 +44,8 @@ Config convention: connection string name is **`DefaultConnection`**. Dev value 
 
 **Never commit or push to `main`.** All changes go through a feature branch + PR. Branch-name prefixes: `feat/`, `fix/`, `chore/`, `docs/`, `refactor/` (and `agent/<issue>-<slug>` for the orchestrator's branches). Large features may use sub-branches (`feat/parent/sub-branch`) that PR into the parent feature branch before the parent PRs into `main`. Squash-merge into `main`. See `CONTRIBUTING.md` for full details.
 
+A PR that closes a row of `TODO.md`'s Open table deletes that row in the same PR. The merged PR and its backlog issue are the record of what shipped and when; no shipped list is kept, and documents describe the present rather than their own history.
+
 Before starting new work:
 
 ```powershell
