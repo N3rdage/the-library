@@ -3,9 +3,16 @@ using Microsoft.Identity.Client;
 namespace BookTracker.Mobile.Services;
 
 // MSAL.NET wrapper for AAD interactive sign-in on Android. The
-// PublicClientApplication is built once at construction; token cache
-// persists across app launches via MSAL's built-in cache (Keystore-
-// backed on Android). See docs/mobile-app-design.md > Authentication.
+// PublicClientApplication is built once at construction; the token
+// cache persists across app launches through MSAL.NET's own mobile
+// cache serialization, in the app's private storage. This code adds no
+// cache serializer and no Keystore protection of its own: SecureStorage
+// is never used here. MSAL.NET's docs (token-cache-serialization, Mobile
+// apps tab, read 2026-11-15 for 4.86.1) call that built-in mechanism
+// secure but do not say whether it is encrypted at rest, so treat the
+// cache as protected by the app sandbox only. Android Auto Backup is off
+// so the cache never leaves the device (LIB-014). See
+// docs/mobile-app-design.md > Authentication.
 public class AuthService : IAuthService
 {
     private static readonly string[] Scopes = [AppConfig.ApiScope];

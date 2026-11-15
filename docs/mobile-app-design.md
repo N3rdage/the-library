@@ -66,7 +66,7 @@ What IS needed is one-time AAD-side setup (manual Azure Portal click-ops; runboo
 
 Then in MAUI (PR 3+):
 
-4. **MSAL.NET** (`Microsoft.Identity.Client` + `Microsoft.Maui.Authentication`) does the interactive sign-in once via Chrome Custom Tabs, refresh-token from then on. Token cached in `SecureStorage` (Keystore on Android).
+4. **MSAL.NET** (`Microsoft.Identity.Client` + `Microsoft.Maui.Authentication`) does the interactive sign-in once via Chrome Custom Tabs, refresh-token from then on. Tokens stay in MSAL.NET's own built-in mobile cache in the app's private storage; the app adds no cache serializer and does not use `SecureStorage`. MSAL.NET's documentation calls that mechanism secure but does not say whether it is encrypted at rest, so the cache is treated as protected by the app sandbox (plus Auto Backup being off) rather than by the Keystore. *(Corrected 2026-11-15, LIB-023; earlier revisions of this doc said "SecureStorage (Keystore on Android)", which the code never did.)*
 5. **HttpClient** attaches `Authorization: Bearer <token>` per request; intercept 401 and re-trigger interactive sign-in.
 
 The browser flow on `/bookshop` keeps working through the same cookie-mode Easy Auth until that route is retired.
@@ -126,7 +126,7 @@ Sized for the work, not the calendar. Ship-as-you-go.
 
 ### PR 3 — `BookTracker.Mobile` MAUI project skeleton + auth flow
 - New project at repo root, **`net10.0-android` target only** (iOS deferred until / unless an Apple Developer account materialises).
-- MSAL.NET interactive sign-in via `Microsoft.Maui.Authentication.WebAuthenticator` → token cached in `SecureStorage`. AndroidManifest entry for the redirect URI scheme; Chrome Custom Tabs handles the browser hop.
+- MSAL.NET interactive sign-in via `Microsoft.Maui.Authentication.WebAuthenticator` → tokens kept in MSAL.NET's built-in cache (app-private storage; not `SecureStorage`, see Authentication above). AndroidManifest entry for the redirect URI scheme; Chrome Custom Tabs handles the browser hop.
 - Single "Hello, signed-in user" page that calls `GET /api/catalog-snapshot` and dumps the response count.
 - Dev workflow: Drew connects his phone via USB with developer mode enabled, runs `dotnet build -t:Run -f net10.0-android` from the repo, MAUI deploys + launches via ADB. No store, no APK file shuffling. Same loop as `dotnet watch` for the Web app, just on a phone.
 - Size: M (lots of first-time setup — AAD app reg, redirect URI plumbing, MSAL config).

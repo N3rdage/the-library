@@ -6,8 +6,10 @@ namespace BookTracker.Mobile.Services;
 public interface IAuthService
 {
     /// <summary>Triggers MSAL's interactive sign-in via Chrome Custom
-    /// Tabs. Caches the resulting token in SecureStorage (Keystore-
-    /// backed on Android). Returns the access token on success.</summary>
+    /// Tabs. MSAL.NET keeps the resulting tokens in its own built-in
+    /// cache in the app's private storage (no SecureStorage, no custom
+    /// serializer; see AuthService). Returns the access token on
+    /// success.</summary>
     Task<string> SignInAsync();
 
     /// <summary>Silently acquires a fresh access token from the
