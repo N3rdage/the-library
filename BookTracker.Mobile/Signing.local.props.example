@@ -1,0 +1,13 @@
+<Project>
+  <!-- Copy to Signing.local.props (gitignored) to sign Bookshelf with a
+       keystore other than the SDK's debug keystore. Leave the file absent to
+       keep the default: the debug keystore, which installs over the USB build
+       and matches the MSAL redirect URI's signature hash. Passwords may also be
+       supplied as environment variables of the same names instead of here. -->
+  <PropertyGroup>
+    <BookshelfKeyStore>C:\path\to\bookshelf.keystore</BookshelfKeyStore>
+    <BookshelfKeyAlias>bookshelf</BookshelfKeyAlias>
+    <BookshelfStorePass>replace-me</BookshelfStorePass>
+    <BookshelfKeyPass>replace-me</BookshelfKeyPass>
+  </PropertyGroup>
+</Project>
