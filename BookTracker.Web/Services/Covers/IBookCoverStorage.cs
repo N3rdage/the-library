@@ -28,17 +28,18 @@ public interface IBookCoverStorage
     /// Fetch <paramref name="sourceUrl"/> (only an allowed raster content type,
     /// at most <see cref="BlobBookCoverStorage.MaxDownloadBytes"/>, within the
     /// client timeout), run it through CoverImageProcessor (JPEG normalize +
-    /// resize; an allowed type that fails to decode is stored raw), upload to
-    /// <c>covers/{<paramref name="blobKey"/>}.{ext}</c>, return the public URL.
+    /// resize), upload to <c>covers/{<paramref name="blobKey"/>}.jpg</c>,
+    /// return the public URL.
     /// On failure or refusal (network, non-allowed type, over the cap, timeout,
-    /// blob upload error) returns <paramref name="sourceUrl"/> unchanged so the
+    /// undecodable image, blob upload error) returns <paramref name="sourceUrl"/> unchanged so the
     /// row keeps its upstream URL — the caller's record remains usable.
     /// </summary>
     Task<string> MirrorFromUrlAsync(string sourceUrl, string blobKey, CancellationToken ct);
 
     /// <summary>
-    /// Upload raw image bytes (e.g. user-uploaded photo). Same processing
-    /// rules as MirrorFromUrlAsync.
+    /// Upload image bytes (e.g. user-uploaded photo). Same processing rules as
+    /// MirrorFromUrlAsync; throws <see cref="InvalidOperationException"/> when
+    /// the content type is not allowed or the image cannot be decoded.
     /// </summary>
     Task<string> UploadAsync(byte[] bytes, string contentType, string blobKey, CancellationToken ct);
 }

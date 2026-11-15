@@ -30,22 +30,36 @@ public class BlobBookCoverStorageTests
     [InlineData("image/jpeg")]
     [InlineData("image/png")]
     [InlineData("IMAGE/WEBP")]
-    public async Task Mirror_AllowlistedType_IsStored(string contentType)
+    public async Task Mirror_AllowlistedTypeWithUndecodableBytes_IsSkipped(string contentType)
     {
         var result = await MirrorAsync(new ByteArrayContent([0x01, 0x02, 0x03]), contentType);
 
-        Assert.StartsWith(PublicBase + "/editions/1.", result);
-        Assert.NotNull(_uploadOptions);
-        Assert.Equal(contentType.ToLowerInvariant(), _uploadOptions.HttpHeaders.ContentType);
+        Assert.Equal(SourceUrl, result);
+        Assert.Null(_uploadOptions);
+        AssertNothingUploaded();
     }
 
-    [Fact]
-    public async Task Mirror_DecodableImageUnderCap_IsNormalisedAndStored()
+    [Theory]
+    [InlineData("image/jpeg")]
+    [InlineData("image/png")]
+    [InlineData("IMAGE/WEBP")]
+    public async Task Mirror_DecodableImageWithAllowlistedType_IsNormalisedAndStored(string contentType)
     {
-        var result = await MirrorAsync(new ByteArrayContent(MakePng()), "image/png");
+        var result = await MirrorAsync(new ByteArrayContent(MakePng()), contentType);
 
         Assert.Equal(PublicBase + "/editions/1." + CoverImageProcessor.NormalisedExtension, result.Split('?')[0]);
         Assert.Equal(CoverImageProcessor.NormalisedContentType, _uploadOptions?.HttpHeaders.ContentType);
+    }
+
+    [Fact]
+    public async Task Upload_UndecodableBytes_Throws()
+    {
+        var storage = CreateStorage(new HttpClient(new FakeHandler(new HttpResponseMessage(HttpStatusCode.OK))));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => storage.UploadAsync([0x01, 0x02, 0x03], "image/png", "editions/1", CancellationToken.None));
+
+        AssertNothingUploaded();
     }
 
     [Theory]
@@ -94,12 +108,13 @@ public class BlobBookCoverStorageTests
     [Fact]
     public async Task Mirror_UnknownLengthBodyUnderCap_IsAccepted()
     {
-        var body = new CountingStream(totalBytes: 1024);
+        var png = MakePng();
+        var body = new CountingStream(totalBytes: png.Length, payload: png);
 
         var result = await MirrorAsync(new StreamContent(body), "image/gif");
 
-        Assert.StartsWith(PublicBase + "/editions/1.gif", result);
-        Assert.Equal(1024, body.BytesServed);
+        Assert.StartsWith(PublicBase + "/editions/1." + CoverImageProcessor.NormalisedExtension, result);
+        Assert.Equal(png.Length, body.BytesServed);
     }
 
     [Fact]
@@ -133,13 +148,17 @@ public class BlobBookCoverStorageTests
         {
             Timeout = timeout ?? TimeSpan.FromSeconds(30),
         };
+        return await CreateStorage(http).MirrorFromUrlAsync(SourceUrl, "editions/1", CancellationToken.None);
+    }
+
+    private BlobBookCoverStorage CreateStorage(HttpClient http)
+    {
         var options = Options.Create(new CoverStorageOptions
         {
             ConnectionString = "UseDevelopmentStorage=true",
             PublicBaseUrl = PublicBase,
         });
-        var storage = new BlobBookCoverStorage(options, http, NullLogger<BlobBookCoverStorage>.Instance, _container);
-        return await storage.MirrorFromUrlAsync(SourceUrl, "editions/1", CancellationToken.None);
+        return new BlobBookCoverStorage(options, http, NullLogger<BlobBookCoverStorage>.Instance, _container);
     }
 
     private void AssertNothingUploaded() =>
@@ -188,9 +207,10 @@ public class BlobBookCoverStorageTests
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
-    // Non-seekable stream of zero bytes that records how much was handed out,
-    // so StreamContent reports no Content-Length (chunked / unknown length).
-    private sealed class CountingStream(long totalBytes) : Stream
+    // Non-seekable stream that serves totalBytes (copied from payload when one
+    // is given, zero bytes otherwise) and records how much was handed out, so
+    // StreamContent reports no Content-Length (chunked / unknown length).
+    private sealed class CountingStream(long totalBytes, byte[]? payload = null) : Stream
     {
         public long BytesServed { get; private set; }
 
@@ -203,7 +223,8 @@ public class BlobBookCoverStorageTests
         public override int Read(byte[] buffer, int offset, int count)
         {
             var n = (int)Math.Min(count, totalBytes - BytesServed);
-            Array.Clear(buffer, offset, n);
+            if (payload is null) Array.Clear(buffer, offset, n);
+            else Array.Copy(payload, BytesServed, buffer, offset, n);
             BytesServed += n;
             return n;
         }

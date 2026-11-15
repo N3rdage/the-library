@@ -105,7 +105,15 @@ public class BlobBookCoverStorage : IBookCoverStorage
                 return sourceUrl;
             }
 
-            return await UploadAsync(bytes, mediaType, blobKey, ct);
+            var processed = CoverImageProcessor.Process(bytes, mediaType);
+            if (processed is null)
+            {
+                _logger.LogWarning("Cover mirror skipped — {Url} could not be decoded as {MediaType}; the row keeps its upstream URL.",
+                    sourceUrl, mediaType);
+                return sourceUrl;
+            }
+
+            return await StoreAsync(processed, blobKey, ct);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -131,17 +139,17 @@ public class BlobBookCoverStorage : IBookCoverStorage
         var processed = CoverImageProcessor.Process(bytes, contentType);
         if (processed is null)
         {
-            _logger.LogWarning("Cover upload refused for blobKey {BlobKey} — content type {ContentType} is not an allowed raster image type.",
-                blobKey, contentType);
-            throw new InvalidOperationException("Cover content type is not an allowed image type.");
-        }
-
-        if (!processed.WasNormalised)
-        {
-            _logger.LogWarning("Cover normalisation failed for blobKey {BlobKey} (content-type {ContentType}, {ByteCount} bytes) — storing raw payload.",
+            _logger.LogWarning("Cover upload refused for blobKey {BlobKey} — content type {ContentType} ({ByteCount} bytes) is not an allowed raster image type or could not be decoded.",
                 blobKey, contentType, bytes.Length);
+            throw new InvalidOperationException("Cover is not an allowed image type or could not be decoded.");
         }
 
+        return await StoreAsync(processed, blobKey, ct);
+    }
+
+    // The single blob-upload path for both mirrored and uploaded covers.
+    private async Task<string> StoreAsync(CoverImageProcessor.ProcessedImage processed, string blobKey, CancellationToken ct)
+    {
         var container = await _containerClient.Value;
         if (container is null)
         {
@@ -165,9 +173,7 @@ public class BlobBookCoverStorage : IBookCoverStorage
         // Cache-bust the year-long Cache-Control header by appending a unix
         // timestamp. Re-uploads to the same blob key produce a new URL each
         // time, forcing browsers to refetch — without this the stale image
-        // can hang around in cache for up to a year. Mirror-from-upstream
-        // doesn't need this (URL is stable per blob), so the unstamped
-        // BuildPublicUrl is still used there.
+        // can hang around in cache for up to a year.
         var stamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         return $"{BuildPublicUrl(blobName)}?v={stamp}";
     }
