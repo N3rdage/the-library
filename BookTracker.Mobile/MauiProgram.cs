@@ -46,8 +46,17 @@ public static class MauiProgram
         // Named HttpClient for cover fetches. No BaseAddress — cover
         // URLs are absolute (Open Library / Google Books / Azure Blob
         // mirror). IHttpClientFactory handles connection pooling so
-        // repeated fetches across pages reuse the same handler.
-        builder.Services.AddHttpClient("covers");
+        // repeated fetches across pages reuse the same handler. Every
+        // caller reads the body with GetByteArrayAsync, so the buffer cap
+        // bounds what a bad upstream can make the app hold in memory
+        // (covers are a few hundred KB; Bookcase mirrors them at 1200px
+        // long edge) and the timeout bounds how long a stalled fetch can
+        // hold a page's loading state.
+        builder.Services.AddHttpClient("covers", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.MaxResponseContentBufferSize = 10 * 1024 * 1024;
+        });
 
         // Auth + catalog-sync state, lifted out of MainPage so the status
         // sheet, the SyncChip, and auto-sync-on-launch share one source.
