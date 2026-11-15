@@ -9,6 +9,7 @@ using BookTracker.Web.Services.Covers;
 using BookTracker.Web.Telemetry;
 using BookTracker.Web.ViewModels;
 using Microsoft.ApplicationInsights.Extensibility;
+using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Options;
@@ -49,6 +50,18 @@ public static class ProgramSetup
         await db.Database.MigrateAsync();
     }
 
+    /// <summary>
+    /// HSTS: one year, including subdomains. Preload is deliberately off —
+    /// it is a browser preload-list submission, not a header setting, and
+    /// is Drew's call. SECURITY-AUDIT.md §11 / audit rule BOOK-007.
+    /// </summary>
+    internal static void ConfigureHsts(HstsOptions options)
+    {
+        options.MaxAge = TimeSpan.FromDays(365);
+        options.IncludeSubDomains = true;
+        options.Preload = false;
+    }
+
     private static void ConfigureServices(WebApplicationBuilder builder)
     {
         // Application Insights: explicit SDK registration (the App Service codeless
@@ -63,6 +76,10 @@ public static class ProgramSetup
 
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
+
+        // HSTS policy for the UseHsts() call in ConfigureMiddleware. Without
+        // this the framework default ships: 30 days, same host only.
+        builder.Services.AddHsts(ConfigureHsts);
 
         // Minimal API JSON: serialize enums as strings, not their
         // underlying integers. Bookshop mode surfaces BookStatus
