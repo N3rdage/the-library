@@ -16,7 +16,7 @@ public class UserTelemetryInitializerTests
         var ctx = new DefaultHttpContext
         {
             User = new ClaimsPrincipal(new ClaimsIdentity(
-                [new Claim(ClaimTypes.Name, "drew@silly.ninja")],
+                [new Claim(ClaimTypes.Name, "user@example.com")],
                 authenticationType: "TestAuth"))
         };
         accessor.HttpContext.Returns(ctx);
@@ -25,7 +25,7 @@ public class UserTelemetryInitializerTests
         var telemetry = new TraceTelemetry();
         initializer.Initialize(telemetry);
 
-        Assert.Equal("drew@silly.ninja", telemetry.Context.User.AuthenticatedUserId);
+        Assert.Equal("user@example.com", telemetry.Context.User.AuthenticatedUserId);
     }
 
     [Fact]
