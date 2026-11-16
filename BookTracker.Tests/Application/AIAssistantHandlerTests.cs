@@ -12,47 +12,45 @@ namespace BookTracker.Tests;
 // (GetBooksNeedingGenres, AddGenresToWork, CreateSeriesFromSuggestion,
 // GetWishlistItemExists) against the SQL container. These carry the
 // persistence checks the AI assistant VM tests made before the move.
+//
+// Seeding: each test builds its whole graph in one context. Author.Name is
+// unique, so an author is created once and shared by every Work that names
+// it; genres are created in the same context rather than attached as copies.
 [Trait("Category", TestCategories.Integration)]
 public class AIAssistantHandlerTests
 {
     private readonly TestDbContextFactory _factory = new();
 
-    private async Task<int> SeedBookAsync(string title, string author, params Genre[] genres)
+    private static Book NewBook(string title, Author author, params Genre[] genres) => new()
     {
-        await using var db = _factory.CreateDbContext();
-        foreach (var g in genres) db.Attach(g);
-        var work = new Work
-        {
-            Title = title,
-            WorkAuthors = { new WorkAuthor { Author = new Author { Name = author }, Order = 0, Role = AuthorRole.Author } },
-            Genres = [.. genres],
-        };
-        var book = new Book { Title = title, Works = { work } };
-        db.Books.Add(book);
-        await db.SaveChangesAsync();
-        return book.Id;
-    }
-
-    private async Task<Genre> SeedGenreAsync(string name, int? parentId = null)
-    {
-        await using var db = _factory.CreateDbContext();
-        var g = new Genre { Name = name, ParentGenreId = parentId };
-        db.Genres.Add(g);
-        await db.SaveChangesAsync();
-        return new Genre { Id = g.Id, Name = g.Name, ParentGenreId = parentId };
-    }
+        Title = title,
+        Works =
+        [
+            new Work
+            {
+                Title = title,
+                WorkAuthors = [new WorkAuthor { Author = author, Order = 0, Role = AuthorRole.Author }],
+                Genres = [.. genres],
+            },
+        ],
+    };
 
     // --- GetBooksNeedingGenres -----------------------------------------------
 
     [Fact]
     public async Task GetBooksNeedingGenres_ordersByFewestGenres_thenTitle()
     {
-        var fantasy = await SeedGenreAsync("AIA Fantasy");
-        var comedy = await SeedGenreAsync("AIA Comedy");
-        await SeedBookAsync("Zeta", "Author Z");
-        await SeedBookAsync("Alpha", "Author A");
-        await SeedBookAsync("Mort", "Terry Pratchett", fantasy, comedy);
-        await SeedBookAsync("Beta", "Author B", fantasy);
+        await using (var db = _factory.CreateDbContext())
+        {
+            var fantasy = new Genre { Name = "AIA Fantasy" };
+            var comedy = new Genre { Name = "AIA Comedy" };
+            db.Books.AddRange(
+                NewBook("Zeta", new Author { Name = "Author Z" }),
+                NewBook("Alpha", new Author { Name = "Author A" }),
+                NewBook("Mort", new Author { Name = "Terry Pratchett" }, fantasy, comedy),
+                NewBook("Beta", new Author { Name = "Author B" }, fantasy));
+            await db.SaveChangesAsync();
+        }
 
         var rows = await new GetBooksNeedingGenresHandler(_factory).HandleAsync(new GetBooksNeedingGenres());
 
@@ -65,7 +63,12 @@ public class AIAssistantHandlerTests
     [Fact]
     public async Task GetBooksNeedingGenres_takesFifty()
     {
-        for (var i = 0; i < 52; i++) await SeedBookAsync($"Book {i:D2}", "Someone");
+        await using (var db = _factory.CreateDbContext())
+        {
+            var someone = new Author { Name = "Someone" };
+            for (var i = 0; i < 52; i++) db.Books.Add(NewBook($"Book {i:D2}", someone));
+            await db.SaveChangesAsync();
+        }
 
         var rows = await new GetBooksNeedingGenresHandler(_factory).HandleAsync(new GetBooksNeedingGenres());
 
@@ -77,17 +80,23 @@ public class AIAssistantHandlerTests
     [Fact]
     public async Task AddGenresToWork_addsNamedGenres_keepsExisting_withoutParents()
     {
-        var parent = await SeedGenreAsync("AIA Speculative");
-        await SeedGenreAsync("AIA Space Opera", parent.Id);
-        var existing = await SeedGenreAsync("AIA Adventure");
-        var bookId = await SeedBookAsync("Dune", "Frank Herbert", existing);
+        int bookId;
+        await using (var db = _factory.CreateDbContext())
+        {
+            var parent = new Genre { Name = "AIA Speculative" };
+            db.Genres.Add(new Genre { Name = "AIA Space Opera", ParentGenre = parent });
+            var book = NewBook("Dune", new Author { Name = "Frank Herbert" }, new Genre { Name = "AIA Adventure" });
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            bookId = book.Id;
+        }
 
         var result = await new AddGenresToWorkHandler(_factory).HandleAsync(
             new AddGenresToWork(bookId, ["AIA Space Opera", "AIA Adventure", "No Such Genre"]));
 
         Assert.Equal(new[] { "AIA Adventure", "AIA Space Opera" }, result!.OrderBy(n => n));
-        await using var db = _factory.CreateDbContext();
-        var names = await db.Works.Where(w => w.Books.Any(b => b.Id == bookId))
+        await using var check = _factory.CreateDbContext();
+        var names = await check.Works.Where(w => w.Books.Any(b => b.Id == bookId))
             .SelectMany(w => w.Genres).Select(g => g.Name).ToListAsync();
         Assert.Equal(new[] { "AIA Adventure", "AIA Space Opera" }, names.OrderBy(n => n)); // parent not auto-added
     }
@@ -113,11 +122,14 @@ public class AIAssistantHandlerTests
             var b = new Book { Title = "Already Seriesed" };
             b.AssignToSeries(other.Id, 4, null);
             db.Books.Add(b);
+
+            var asimov = new Author { Name = "Isaac Asimov" };
+            db.Books.AddRange(
+                NewBook("Foundation", asimov),
+                NewBook("Foundation and Empire", asimov));
             await db.SaveChangesAsync();
             seriesedBookId = b.Id;
         }
-        await SeedBookAsync("Foundation", "Isaac Asimov");
-        await SeedBookAsync("Foundation and Empire", "Isaac Asimov");
 
         var id = await new CreateSeriesFromSuggestionHandler(_factory).HandleAsync(new CreateSeriesFromSuggestion(
             "AIA Foundation", SeriesType.Series, "Asimov's saga",
@@ -141,9 +153,9 @@ public class AIAssistantHandlerTests
         await using (var db = _factory.CreateDbContext())
         {
             db.Series.Add(new Series { Name = "AIA Dup", Type = SeriesType.Collection });
+            db.Books.Add(NewBook("Lonely", new Author { Name = "Someone" }));
             await db.SaveChangesAsync();
         }
-        await SeedBookAsync("Lonely", "Someone");
 
         var id = await new CreateSeriesFromSuggestionHandler(_factory).HandleAsync(
             new CreateSeriesFromSuggestion("AIA Dup", SeriesType.Series, "r", ["Lonely"]));
@@ -157,8 +169,13 @@ public class AIAssistantHandlerTests
     [Fact]
     public async Task CreateSeriesFromSuggestion_mixedAuthors_leaveAuthorNull()
     {
-        await SeedBookAsync("Anthology A", "Writer One");
-        await SeedBookAsync("Anthology B", "Writer Two");
+        await using (var db = _factory.CreateDbContext())
+        {
+            db.Books.AddRange(
+                NewBook("Anthology A", new Author { Name = "Writer One" }),
+                NewBook("Anthology B", new Author { Name = "Writer Two" }));
+            await db.SaveChangesAsync();
+        }
 
         await new CreateSeriesFromSuggestionHandler(_factory).HandleAsync(
             new CreateSeriesFromSuggestion("AIA Mixed", SeriesType.Collection, "r", ["Anthology A", "Anthology B"]));
