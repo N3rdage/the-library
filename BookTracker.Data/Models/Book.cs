@@ -160,6 +160,15 @@ public class Book
         SetSeriesOrder(order, orderDisplay);
     }
 
+    /// <summary>Assigns this Book to a Series that may not be saved yet (no id
+    /// until SaveChanges) — EF fixes up <see cref="SeriesId"/> from the
+    /// navigation, so the series and its members land in one save.</summary>
+    public void AssignToSeries(Series series, int? order, string? orderDisplay)
+    {
+        Series = series;
+        SetSeriesOrder(order, orderDisplay);
+    }
+
     public void ClearSeries()
     {
         SeriesId = null;
