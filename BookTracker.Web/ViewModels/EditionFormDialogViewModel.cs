@@ -1,13 +1,12 @@
 using BookTracker.Application;
 using BookTracker.Application.Books;
 using BookTracker.Application.Formatting;
-using BookTracker.Data;
+using BookTracker.Application.Publishers;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.Services.Covers;
 using BookTracker.Web.Validation;
 using BookTracker.Web.Components.Shared;
-using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
 
@@ -24,7 +23,6 @@ namespace BookTracker.Web.ViewModels;
 // Work dialog). ISBN is optional (nullable, filtered unique) so
 // pre-1974 editions save without one.
 public class EditionFormDialogViewModel(
-    IDbContextFactory<BookTrackerDbContext> dbFactory,
     IBookLookupService lookup,
     IDispatcher dispatcher)
 {
@@ -73,8 +71,6 @@ public class EditionFormDialogViewModel(
     // in suggestions.
     public List<PublisherOption> ExistingPublishers { get; private set; } = [];
 
-    public record PublisherOption(int Id, string Name);
-
     public string? LookupMessage { get; private set; }
     public bool LookingUp { get; private set; }
 
@@ -84,8 +80,7 @@ public class EditionFormDialogViewModel(
         BookId = bookId;
         EditionId = null;
 
-        await using var db = await dbFactory.CreateDbContextAsync();
-        ExistingPublishers = await LoadPublishersAsync(db);
+        ExistingPublishers = await LoadPublishersAsync();
     }
 
     public async Task InitializeForEditAsync(int editionId)
@@ -93,24 +88,21 @@ public class EditionFormDialogViewModel(
         IsNew = false;
         EditionId = editionId;
 
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var edition = await db.Editions.Include(e => e.Publisher).FirstOrDefaultAsync(e => e.Id == editionId);
+        var edition = await dispatcher.Query(new GetEditionForEdit(editionId));
         if (edition is null) { NotFound = true; return; }
 
         BookId = edition.BookId;
         Isbn = edition.Isbn;
         Format = edition.Format;
-        Publisher = edition.Publisher?.Name;
+        Publisher = edition.PublisherName;
         FirstPublishedOrPrintedDate = PartialDateParser.Format(edition.DatePrinted, edition.DatePrintedPrecision);
         LoadCoverUrl(edition.CoverUrl);
-        ExistingPublishers = await LoadPublishersAsync(db);
+        ExistingPublishers = await LoadPublishersAsync();
     }
 
-    private static Task<List<PublisherOption>> LoadPublishersAsync(BookTrackerDbContext db) =>
-        db.Publishers
-            .OrderBy(p => p.Name)
-            .Select(p => new PublisherOption(p.Id, p.Name))
-            .ToListAsync();
+    // A mutable copy: a publisher created from the dialog is appended to it.
+    private async Task<List<PublisherOption>> LoadPublishersAsync() =>
+        [.. await dispatcher.Query(new GetPublisherOptions())];
 
     public Task<IEnumerable<string>> SearchPublishersAsync(string query, CancellationToken ct)
     {

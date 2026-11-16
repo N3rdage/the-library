@@ -1,11 +1,10 @@
 using BookTracker.Application;
 using BookTracker.Application.Books;
 using BookTracker.Application.Formatting;
-using BookTracker.Data;
+using BookTracker.Application.Series;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services.Covers;
 using BookTracker.Web.Validation;
-using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
 
@@ -15,9 +14,7 @@ namespace BookTracker.Web.ViewModels;
 // of a publication series. Notes have inline auto-save on the View page
 // and are deliberately absent here. Genres live on the Work and are
 // edited via WorkEditDialogViewModel.
-public class BookEditDialogViewModel(
-    IDbContextFactory<BookTrackerDbContext> dbFactory,
-    IDispatcher dispatcher)
+public class BookEditDialogViewModel(IDispatcher dispatcher)
 {
     public bool NotFound { get; private set; }
     public int BookId { get; private set; }
@@ -53,13 +50,12 @@ public class BookEditDialogViewModel(
     // override) on save via SeriesOrderParser.
     public string? SeriesOrderInput { get; set; }
 
-    public List<SeriesOption> AvailableSeries { get; private set; } = [];
+    public IReadOnlyList<SeriesPickerOption> AvailableSeries { get; private set; } = [];
 
     public async Task InitializeAsync(int bookId)
     {
         BookId = bookId;
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books.FindAsync(bookId);
+        var book = await dispatcher.Query(new GetBookEditForm(bookId));
         if (book is null) { NotFound = true; return; }
 
         Title = book.Title;
@@ -74,10 +70,7 @@ public class BookEditDialogViewModel(
             ? null
             : SeriesOrderParser.Format(book.SeriesOrder, book.SeriesOrderDisplay);
 
-        AvailableSeries = await db.Series
-            .OrderBy(s => s.Name)
-            .Select(s => new SeriesOption(s.Id, s.Name, s.Type))
-            .ToListAsync();
+        AvailableSeries = await dispatcher.Query(new GetSeriesOptions());
     }
 
     // The series dropdown routes through here (Value/ValueChanged, not two-way
@@ -114,6 +107,4 @@ public class BookEditDialogViewModel(
             // the old FindAsync-returns-null path.
         }
     }
-
-    public record SeriesOption(int Id, string Name, SeriesType Type);
 }

@@ -1,17 +1,30 @@
+using BookTracker.Application;
+using BookTracker.Application.Books;
 using BookTracker.Data.Models;
 using BookTracker.Web.ViewModels;
-using Microsoft.EntityFrameworkCore;
+using NSubstitute;
 
 namespace BookTracker.Tests.ViewModels;
 
-[Trait("Category", TestCategories.Integration)]
+// The dialog reads through GetCopyForEdit and writes through AddCopyToEdition /
+// UpdateCopy; a substituted dispatcher stands in for all three. The read's SQL
+// is covered by GetCopyForEditHandlerTests, the writes' persistence by
+// BookCommandHandlersTests.
+[Trait("Category", TestCategories.Unit)]
 public class CopyFormDialogViewModelTests
 {
+    private const int CopyId = 11;
+    private const int EditionId = 5;
+    private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
+
+    private void GivenCopy(CopyForEdit? copy) =>
+        _dispatcher.Query(Arg.Is<GetCopyForEdit>(q => q!.CopyId == CopyId), Arg.Any<CancellationToken>())
+            .Returns(copy);
+
     [Fact]
     public void InitializeForAdd_SetsIsNewAndDefaults()
     {
-        var factory = new TestDbContextFactory();
-        var vm = new CopyFormDialogViewModel(factory, TestDispatcher.For(factory));
+        var vm = new CopyFormDialogViewModel(_dispatcher);
 
         vm.InitializeForAdd(42);
 
@@ -24,10 +37,10 @@ public class CopyFormDialogViewModelTests
     [Fact]
     public async Task InitializeForEditAsync_MissingId_MarksNotFound()
     {
-        var factory = new TestDbContextFactory();
-        var vm = new CopyFormDialogViewModel(factory, TestDispatcher.For(factory));
+        GivenCopy(null);
+        var vm = new CopyFormDialogViewModel(_dispatcher);
 
-        await vm.InitializeForEditAsync(999);
+        await vm.InitializeForEditAsync(CopyId);
 
         Assert.True(vm.NotFound);
     }
@@ -35,98 +48,66 @@ public class CopyFormDialogViewModelTests
     [Fact]
     public async Task InitializeForEditAsync_LoadsCopyFields()
     {
-        var factory = new TestDbContextFactory();
-        int copyId;
-        using (var db = factory.CreateDbContext())
-        {
-            var copy = new Copy
-            {
-                Condition = BookCondition.VeryGood,
-                DateAcquired = new DateTime(2024, 3, 15),
-                Notes = "From a charity shop",
-            };
-            var edition = new Edition { Isbn = "x", Copies = [copy] };
-            db.Books.Add(new Book
-            {
-                Title = "B",
-                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
-                Editions = [edition],
-            });
-            await db.SaveChangesAsync();
-            copyId = copy.Id;
-        }
+        GivenCopy(new CopyForEdit(CopyId, EditionId, BookCondition.VeryGood, new DateTime(2024, 3, 15), "From a charity shop"));
+        var vm = new CopyFormDialogViewModel(_dispatcher);
 
-        var vm = new CopyFormDialogViewModel(factory, TestDispatcher.For(factory));
-        await vm.InitializeForEditAsync(copyId);
+        await vm.InitializeForEditAsync(CopyId);
 
         Assert.False(vm.IsNew);
         Assert.False(vm.NotFound);
+        Assert.Equal(CopyId, vm.CopyId);
+        Assert.Equal(EditionId, vm.EditionId);
         Assert.Equal(BookCondition.VeryGood, vm.Condition);
         Assert.Equal(new DateTime(2024, 3, 15), vm.DateAcquired);
         Assert.Equal("From a charity shop", vm.Notes);
     }
 
     [Fact]
-    public async Task SaveAsync_Add_AttachesCopyToEdition()
+    public async Task SaveAsync_Add_SendsAddCopyToEdition_AndReturnsNewId()
     {
-        var factory = new TestDbContextFactory();
-        int editionId;
-        using (var db = factory.CreateDbContext())
-        {
-            var seedEdition = new Edition { Isbn = "x", Copies = [new Copy { Condition = BookCondition.Good }] };
-            db.Books.Add(new Book
-            {
-                Title = "B",
-                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
-                Editions = [seedEdition],
-            });
-            await db.SaveChangesAsync();
-            editionId = seedEdition.Id;
-        }
-
-        var vm = new CopyFormDialogViewModel(factory, TestDispatcher.For(factory));
-        vm.InitializeForAdd(editionId);
+        _dispatcher.Send(Arg.Any<AddCopyToEdition>(), Arg.Any<CancellationToken>()).Returns(99);
+        var vm = new CopyFormDialogViewModel(_dispatcher);
+        vm.InitializeForAdd(EditionId);
         vm.Condition = BookCondition.Fine;
         vm.Notes = "  signed  ";
+
         var id = await vm.SaveAsync();
 
-        Assert.NotNull(id);
-        using var db2 = factory.CreateDbContext();
-        var edition = db2.Editions.Include(e => e.Copies).Single(e => e.Id == editionId);
-        Assert.Equal(2, edition.Copies.Count);
-        var added = edition.Copies.Single(c => c.Id == id);
-        Assert.Equal(BookCondition.Fine, added.Condition);
-        Assert.Equal("signed", added.Notes);
+        Assert.Equal(99, id);
+        await _dispatcher.Received(1).Send(
+            Arg.Is<AddCopyToEdition>(c => c!.EditionId == EditionId
+                && c.Condition == BookCondition.Fine
+                && c.Notes == "  signed  "), // the handler trims
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task SaveAsync_Edit_UpdatesFields()
+    public async Task SaveAsync_Edit_SendsUpdateCopy_AndReturnsCopyId()
     {
-        var factory = new TestDbContextFactory();
-        int copyId;
-        using (var db = factory.CreateDbContext())
-        {
-            var seedCopy = new Copy { Condition = BookCondition.Good, Notes = "old" };
-            var edition = new Edition { Isbn = "x", Copies = [seedCopy] };
-            db.Books.Add(new Book
-            {
-                Title = "B",
-                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
-                Editions = [edition],
-            });
-            await db.SaveChangesAsync();
-            copyId = seedCopy.Id;
-        }
-
-        var vm = new CopyFormDialogViewModel(factory, TestDispatcher.For(factory));
-        await vm.InitializeForEditAsync(copyId);
+        GivenCopy(new CopyForEdit(CopyId, EditionId, BookCondition.Good, null, "old"));
+        var vm = new CopyFormDialogViewModel(_dispatcher);
+        await vm.InitializeForEditAsync(CopyId);
         vm.Condition = BookCondition.Fair;
         vm.Notes = "";
-        await vm.SaveAsync();
 
-        using var db2 = factory.CreateDbContext();
-        var copy = db2.Copies.Single(c => c.Id == copyId);
-        Assert.Equal(BookCondition.Fair, copy.Condition);
-        Assert.Null(copy.Notes); // blank → null
+        var id = await vm.SaveAsync();
+
+        Assert.Equal(CopyId, id);
+        await _dispatcher.Received(1).Send(
+            Arg.Is<UpdateCopy>(c => c!.CopyId == CopyId
+                && c.Condition == BookCondition.Fair
+                && c.Notes == ""), // the handler stores blank as null
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SaveAsync_NotFound_IsNoOp()
+    {
+        GivenCopy(null);
+        var vm = new CopyFormDialogViewModel(_dispatcher);
+        await vm.InitializeForEditAsync(CopyId);
+
+        Assert.Null(await vm.SaveAsync());
+        await _dispatcher.DidNotReceive().Send(Arg.Any<UpdateCopy>(), Arg.Any<CancellationToken>());
     }
 }

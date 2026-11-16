@@ -24,10 +24,7 @@
 @implements IDisposable
 @using BookTracker.Application
 @using BookTracker.Application.Authors
-@using BookTracker.Data
-@using Microsoft.EntityFrameworkCore
 @using Microsoft.Extensions.Logging
-@inject IDbContextFactory<BookTrackerDbContext> DbFactory
 @inject IDispatcher Dispatcher
 @inject ILogger<MudAuthorPicker> Logger
 @inject IJSRuntime JS
@@ -91,27 +88,11 @@
         }
     }
 
-    private async Task<IEnumerable<string>> SearchAsync(string query, CancellationToken ct)
-    {
-        // Lowercased client-side before the LINQ Where so EF InMemory (case-
-        // sensitive) and SQL Server (case-insensitive default collation) agree
-        // on substring matching. Mirrors WorkEditDialogViewModel.SearchAuthorsAsync.
-        var q = (query ?? "").Trim().ToLower();
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var matches = db.Authors.AsQueryable();
-        if (!string.IsNullOrEmpty(q))
-        {
-            matches = matches.Where(a => a.Name.ToLower().Contains(q));
-        }
-
-        var existing = Authors.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return await matches
-            .OrderBy(a => a.Name)
-            .Select(a => a.Name)
-            .Where(n => !existing.Contains(n))
-            .Take(20)
-            .ToListAsync(ct);
-    }
+    // Case-insensitive substring match, at most 20, leaving out the names
+    // already chipped (a snapshot, since Authors mutates as chips are added).
+    // internal so the bUnit test can invoke it directly.
+    internal async Task<IEnumerable<string>> SearchAsync(string query, CancellationToken ct) =>
+        await Dispatcher.Query(new SearchAuthorNames(query, Authors.ToList()), ct);
 
     internal async Task OnPickedAsync(string? value)
     {

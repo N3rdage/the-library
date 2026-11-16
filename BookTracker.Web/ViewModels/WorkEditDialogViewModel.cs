@@ -1,9 +1,6 @@
 using BookTracker.Application;
 using BookTracker.Application.Works;
-using BookTracker.Data;
-using BookTracker.Data.Models;
 using BookTracker.Web.Services;
-using Microsoft.EntityFrameworkCore;
 using BookTracker.Application.Formatting;
 
 namespace BookTracker.Web.ViewModels;
@@ -12,9 +9,7 @@ namespace BookTracker.Web.ViewModels;
 // Work's title, subtitle, author (find-or-create with typeahead), first
 // published date (PartialDateParser), and genres (via MudGenrePicker — PR B).
 // Series membership is a per-Book concept now — edited via BookEditDialog.
-public class WorkEditDialogViewModel(
-    IDbContextFactory<BookTrackerDbContext> dbFactory,
-    IDispatcher dispatcher)
+public class WorkEditDialogViewModel(IDispatcher dispatcher)
 {
     public bool NotFound { get; private set; }
     public int WorkId { get; private set; }
@@ -34,51 +29,20 @@ public class WorkEditDialogViewModel(
     {
         WorkId = workId;
 
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var work = await db.Works
-            .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .Include(w => w.Genres)
-            .FirstOrDefaultAsync(w => w.Id == workId);
+        var work = await dispatcher.Query(new GetWorkForEdit(workId));
         if (work is null) { NotFound = true; return; }
 
         Title = work.Title;
         Subtitle = work.Subtitle;
-        // Order ascending so the lead author shows first in the chip list.
-        // Every Work has at least one WorkAuthor (Role=Author) post-Phase-A
-        // default-value migration.
-        AuthorNames = work.WorkAuthors
-            .Where(wa => wa.Role == AuthorRole.Author)
-            .OrderBy(wa => wa.Order)
-            .Select(wa => wa.Author.Name)
-            .ToList();
-        Contributors = work.WorkAuthors
-            .Where(wa => wa.Role != AuthorRole.Author)
-            .OrderBy(wa => (int)wa.Role)
-            .ThenBy(wa => wa.Order)
-            .Select(wa => new ContributorEntry(wa.Author.Name, wa.Role))
+        // The read returns the lead author first and contributors by role, then
+        // order. Every Work has at least one WorkAuthor (Role=Author)
+        // post-Phase-A default-value migration.
+        AuthorNames = [.. work.AuthorNames];
+        Contributors = work.Contributors
+            .Select(c => new ContributorEntry(c.Name, c.Role))
             .ToList();
         FirstPublishedDate = PartialDateParser.Format(work.FirstPublishedDate, work.FirstPublishedDatePrecision);
-        SelectedGenreIds = work.Genres.Select(g => g.Id).ToList();
-    }
-
-    public async Task<IEnumerable<string>> SearchAuthorsAsync(string query, CancellationToken ct)
-    {
-        // Lowercased client-side before the LINQ Where so the EF InMemory
-        // provider (case-sensitive) and SQL Server (case-insensitive by
-        // default collation) agree on substring matching.
-        var q = (query ?? "").Trim().ToLower();
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var matches = db.Authors.AsQueryable();
-        if (!string.IsNullOrEmpty(q))
-        {
-            matches = matches.Where(a => a.Name.ToLower().Contains(q));
-        }
-
-        return await matches
-            .OrderBy(a => a.Name)
-            .Select(a => a.Name)
-            .Take(20)
-            .ToListAsync(ct);
+        SelectedGenreIds = [.. work.GenreIds];
     }
 
     public async Task SaveAsync()

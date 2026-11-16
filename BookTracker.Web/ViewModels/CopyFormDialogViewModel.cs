@@ -1,16 +1,12 @@
 using BookTracker.Application;
 using BookTracker.Application.Books;
-using BookTracker.Data;
 using BookTracker.Data.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
 
 // Dialog VM for Add Copy (against an existing Edition) and Edit Copy,
 // picked by IsNew flag.
-public class CopyFormDialogViewModel(
-    IDbContextFactory<BookTrackerDbContext> dbFactory,
-    IDispatcher dispatcher)
+public class CopyFormDialogViewModel(IDispatcher dispatcher)
 {
     public bool IsNew { get; private set; }
     public bool NotFound { get; private set; }
@@ -34,8 +30,7 @@ public class CopyFormDialogViewModel(
         IsNew = false;
         CopyId = copyId;
 
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var copy = await db.Copies.FindAsync(copyId);
+        var copy = await dispatcher.Query(new GetCopyForEdit(copyId));
         if (copy is null) { NotFound = true; return; }
 
         EditionId = copy.EditionId;
