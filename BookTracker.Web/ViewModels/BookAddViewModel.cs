@@ -2,6 +2,7 @@ using BookTracker.Application;
 using BookTracker.Application.Authors;
 using BookTracker.Application.Books;
 using BookTracker.Application.Series;
+using BookTracker.Application.Works;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
@@ -18,7 +19,6 @@ public class BookAddViewModel(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
     IBookLookupService lookup,
     SeriesMatchService seriesMatch,
-    IWorkSearchService workSearch,
     IDispatcher dispatcher,
     ILogger<BookAddViewModel> logger)
 {
@@ -27,7 +27,7 @@ public class BookAddViewModel(
     /// captured Work rather than re-typing it. excludeBookId is null —
     /// the Book is brand-new so there's nothing to exclude.</summary>
     public Task<IReadOnlyList<WorkSearchResult>> SearchExistingWorksAsync(string query, CancellationToken ct)
-        => workSearch.SearchAsync(query, excludeBookId: null, ct: ct);
+        => dispatcher.Query(new SearchWorks(query, ExcludeBookId: null, Max: 20), ct);
 
 
     public BookFormViewModel.BookFormInput BookInput { get; set; } = new();

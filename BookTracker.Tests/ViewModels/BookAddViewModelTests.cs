@@ -1,3 +1,4 @@
+using BookTracker.Application.Works;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
@@ -14,7 +15,7 @@ public class BookAddViewModelTests
     private readonly IBookLookupService _lookup = Substitute.For<IBookLookupService>();
 
     private BookAddViewModel CreateVm() =>
-        new(_factory, _lookup, new SeriesMatchService(_factory), new WorkSearchService(_factory), TestDispatcher.For(_factory), NullLogger<BookAddViewModel>.Instance);
+        new(_factory, _lookup, new SeriesMatchService(TestDispatcher.For(_factory)), TestDispatcher.For(_factory), NullLogger<BookAddViewModel>.Instance);
 
     [Fact]
     public void AddCollectionWorkRow_StartsEmpty_RegardlessOfPreviousRowAuthors()
@@ -1069,7 +1070,7 @@ public class BookAddViewModelTests
             existingId = existing.Id;
         }
 
-        var vm = new BookAddViewModel(factory, _lookup, new SeriesMatchService(factory), new WorkSearchService(factory), TestDispatcher.For(factory), NullLogger<BookAddViewModel>.Instance);
+        var vm = new BookAddViewModel(factory, _lookup, new SeriesMatchService(TestDispatcher.For(factory)), TestDispatcher.For(factory), NullLogger<BookAddViewModel>.Instance);
         vm.BookInput.Title = "Mixed Anthology";
         vm.EditionInput.Format = BookFormat.TradePaperback;
         vm.IsCollection = true;
@@ -1118,7 +1119,7 @@ public class BookAddViewModelTests
             existingId = existing.Id;
         }
 
-        var vm = new BookAddViewModel(factory, _lookup, new SeriesMatchService(factory), new WorkSearchService(factory), TestDispatcher.For(factory), NullLogger<BookAddViewModel>.Instance);
+        var vm = new BookAddViewModel(factory, _lookup, new SeriesMatchService(TestDispatcher.For(factory)), TestDispatcher.For(factory), NullLogger<BookAddViewModel>.Instance);
         vm.BookInput.Title = "Attach-only book";
         vm.EditionInput.Format = BookFormat.TradePaperback;
         vm.IsCollection = true;

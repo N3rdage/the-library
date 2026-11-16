@@ -2,16 +2,15 @@ using BookTracker.Data;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace BookTracker.Web.Services;
+namespace BookTracker.Application.Works;
 
-public interface IWorkSearchService
-{
-    Task<IReadOnlyList<WorkSearchResult>> SearchAsync(
-        string query,
-        int? excludeBookId = null,
-        int maxResults = 20,
-        CancellationToken ct = default);
-}
+// Read-model for the existing-Work typeahead (Add page collection rows and the
+// Book Detail "Add Work" dialog): Works whose title contains the query, minus
+// those already attached to ExcludeBookId, ranked starts-with first then
+// alphabetical, capped at Max. A query shorter than two characters (after
+// trimming) returns nothing. Relocated from Web's WorkSearchService (#265).
+public sealed record SearchWorks(string Query, int? ExcludeBookId, int Max)
+    : IQuery<IReadOnlyList<WorkSearchResult>>;
 
 public record WorkSearchResult(
     int Id,
@@ -24,20 +23,17 @@ public record WorkSearchResult(
     int? FirstPublishedYear,
     int BookCount);
 
-public class WorkSearchService(IDbContextFactory<BookTrackerDbContext> dbFactory) : IWorkSearchService
+public sealed class SearchWorksHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : IQueryHandler<SearchWorks, IReadOnlyList<WorkSearchResult>>
 {
-    public async Task<IReadOnlyList<WorkSearchResult>> SearchAsync(
-        string query,
-        int? excludeBookId = null,
-        int maxResults = 20,
-        CancellationToken ct = default)
+    public async Task<IReadOnlyList<WorkSearchResult>> HandleAsync(SearchWorks query, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(query) || query.Trim().Length < 2)
+        if (string.IsNullOrWhiteSpace(query.Query) || query.Query.Trim().Length < 2)
         {
             return [];
         }
 
-        var q = query.Trim().ToLower();
+        var q = query.Query.Trim().ToLower();
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
@@ -45,14 +41,14 @@ public class WorkSearchService(IDbContextFactory<BookTrackerDbContext> dbFactory
         // doesn't get "attach this Work that's already here" options in
         // the dropdown.
         var worksQuery = db.Works.AsNoTracking();
-        if (excludeBookId is int excludeId)
+        if (query.ExcludeBookId is int excludeId)
         {
             worksQuery = worksQuery.Where(w => !w.Books.Any(b => b.Id == excludeId));
         }
 
-        // Server-evaluable substring + case filter. SQL Server default
-        // collations are case-insensitive, but ToLower() + Contains keeps
-        // the InMemory provider honest under tests.
+        // Server-evaluable substring + case filter (SQL Server's default
+        // collation is case-insensitive already; ToLower keeps the match
+        // explicit).
         var matches = await worksQuery
             .Where(w => w.Title.ToLower().Contains(q))
             .Select(w => new
@@ -68,7 +64,7 @@ public class WorkSearchService(IDbContextFactory<BookTrackerDbContext> dbFactory
                 BookCount = w.Books.Count,
                 TitleLower = w.Title.ToLower()
             })
-            .Take(maxResults * 3)
+            .Take(query.Max * 3)
             .ToListAsync(ct);
 
         // Rank in memory: starts-with first, then contains anywhere,
@@ -76,7 +72,7 @@ public class WorkSearchService(IDbContextFactory<BookTrackerDbContext> dbFactory
         return matches
             .OrderByDescending(m => m.TitleLower.StartsWith(q))
             .ThenBy(m => m.Title, StringComparer.OrdinalIgnoreCase)
-            .Take(maxResults)
+            .Take(query.Max)
             .Select(m => new WorkSearchResult(m.Id, m.Title, m.Subtitle, m.AuthorName, m.Year, m.BookCount))
             .ToList();
     }
