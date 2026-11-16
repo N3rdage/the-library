@@ -7,8 +7,8 @@ name: Swap staging to production
 on:
   workflow_dispatch:
 
+# Read-only by default. Only the swap job below may request an OIDC token for Azure.
 permissions:
-  id-token: write
   contents: read
 
 # Shared with deploy.yml: both open a temporary SQL firewall rule and restore the server's
@@ -18,10 +18,16 @@ concurrency:
   group: sql-firewall-window
   cancel-in-progress: false
 
+# Two jobs on purpose, as in deploy.yml. `package` restores and compiles, and with that runs
+# every MSBuild target, source generator and NuGet build script the solution pulls in; it has no
+# `id-token` permission and is outside the `production` environment, so nothing that runs there
+# can sign in to Azure. `swap` holds the production identity and compiles nothing: it downloads
+# the migration bundle `package` produced and runs only that and the Azure steps. Keep it that
+# way: no `dotnet build`, `restore` or `publish` may be added to `swap`. The environment's wait
+# timer starts when `swap` is reached, after `package` has finished.
 jobs:
-  swap:
+  package:
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -40,7 +46,7 @@ jobs:
 
       - name: Build migration bundle
         # Same bundle the deploy.yml workflow built against staging DB,
-        # rebuilt here from the same commit on `main` for atomicity.
+        # rebuilt here from the commit on `main` this run was started on.
         # Applies pending migrations against the connection string the
         # bundle is invoked with. See TODO #21.
         run: |
@@ -52,6 +58,29 @@ jobs:
             -r linux-x64 \
             --output ./migrate \
             --force
+
+      - name: Hand the migration bundle to the swap job
+        # Compiled from public source, with no secrets in it. One day is ample: the swap job
+        # reads it minutes later.
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: prod-migrate
+          path: migrate
+          if-no-files-found: error
+          retention-days: 1
+
+  swap:
+    needs: package
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Fetch the migration bundle
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: prod-migrate
 
       - name: Azure login (OIDC)
         uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
