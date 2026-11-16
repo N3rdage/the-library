@@ -1,170 +1,121 @@
+using BookTracker.Application;
+using BookTracker.Application.Books;
+using BookTracker.Application.Series;
+using BookTracker.Application.Wishlist;
+using BookTracker.Application.Works;
+using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 
 namespace BookTracker.Tests.ViewModels;
 
-// Pins the four data paths of the AI assistant page (genre list read, accept
-// genres, create a series from a suggestion, add a recommendation to the
-// wishlist) against SQL before they move behind IDispatcher.
-[Trait("Category", TestCategories.Integration)]
+// The AI assistant's four data paths dispatch commands and queries only. The
+// persistence each one used to do in the VM is covered by the handlers' own
+// Integration tests (AIAssistantHandlerTests).
+[Trait("Category", TestCategories.Unit)]
 public class AIAssistantViewModelTests
 {
-    private readonly TestDbContextFactory _factory = new();
+    private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
 
+    // The paths under test never reach the AI service, so the provider factory
+    // is never asked for a context.
     private AIAssistantViewModel CreateVm() =>
-        new(_factory, new AIProviderFactory(_factory, Options.Create(new AIOptions()), NullLoggerFactory.Instance));
-
-    private async Task<int> SeedBookAsync(string title, string author, params Genre[] genres)
-    {
-        await using var db = _factory.CreateDbContext();
-        foreach (var g in genres) db.Attach(g);
-        var work = new Work
-        {
-            Title = title,
-            WorkAuthors = { new WorkAuthor { Author = new Author { Name = author }, Order = 0, Role = AuthorRole.Author } },
-            Genres = [.. genres],
-        };
-        var book = new Book { Title = title, Works = { work } };
-        db.Books.Add(book);
-        await db.SaveChangesAsync();
-        return book.Id;
-    }
-
-    private async Task<Genre> SeedGenreAsync(string name, int? parentId = null)
-    {
-        await using var db = _factory.CreateDbContext();
-        var g = new Genre { Name = name, ParentGenreId = parentId };
-        db.Genres.Add(g);
-        await db.SaveChangesAsync();
-        return new Genre { Id = g.Id, Name = g.Name, ParentGenreId = parentId };
-    }
+        new(_dispatcher, new AIProviderFactory(
+            Substitute.For<IDbContextFactory<BookTrackerDbContext>>(), Options.Create(new AIOptions()), NullLoggerFactory.Instance));
 
     [Fact]
-    public async Task LoadBooksNeedingGenres_ordersByFewestGenres_thenTitle()
+    public async Task LoadBooksNeedingGenres_copiesTheQueryRows()
     {
-        var fantasy = await SeedGenreAsync("AIA Fantasy");
-        var comedy = await SeedGenreAsync("AIA Comedy");
-        await SeedBookAsync("Zeta", "Author Z");
-        await SeedBookAsync("Alpha", "Author A");
-        await SeedBookAsync("Mort", "Terry Pratchett", fantasy, comedy);
-        await SeedBookAsync("Beta", "Author B", fantasy);
+        List<BookGenreRow> rows = [new(1, "Alpha", null, "A", []), new(2, "Mort", "sub", "Terry Pratchett", ["Fantasy"])];
+        _dispatcher.Query(Arg.Any<GetBooksNeedingGenres>(), Arg.Any<CancellationToken>()).Returns(rows);
 
         var vm = CreateVm();
         await vm.LoadBooksNeedingGenresAsync();
 
         Assert.True(vm.GenresLoaded);
-        Assert.Equal(new[] { "Alpha", "Zeta", "Beta", "Mort" }, vm.BooksNeedingGenres.Select(b => b.Title));
-        var mort = vm.BooksNeedingGenres[3];
-        Assert.Equal("Terry Pratchett", mort.Author);
-        Assert.Equal(new[] { "AIA Comedy", "AIA Fantasy" }, mort.CurrentGenres.OrderBy(n => n));
+        Assert.Same(rows, vm.BooksNeedingGenres);
     }
 
     [Fact]
-    public async Task AcceptGenreSuggestions_addsNamedGenresToPrimaryWork_withoutParents_andUpdatesRow()
+    public async Task AcceptGenreSuggestions_sendsAddGenresToWork_andUpdatesTheRow()
     {
-        var parent = await SeedGenreAsync("AIA Speculative");
-        var child = await SeedGenreAsync("AIA Space Opera", parent.Id);
-        var existing = await SeedGenreAsync("AIA Adventure");
-        var bookId = await SeedBookAsync("Dune", "Frank Herbert", existing);
+        _dispatcher.Query(Arg.Any<GetBooksNeedingGenres>(), Arg.Any<CancellationToken>())
+            .Returns([new BookGenreRow(7, "Dune", null, "Frank Herbert", ["Adventure"])]);
+        _dispatcher.Send(Arg.Any<AddGenresToWork>(), Arg.Any<CancellationToken>())
+            .Returns(["Adventure", "Space Opera"]);
 
         var vm = CreateVm();
         await vm.LoadBooksNeedingGenresAsync();
-        await vm.AcceptGenreSuggestionsAsync(bookId, ["AIA Space Opera", "AIA Adventure", "No Such Genre"]);
+        await vm.AcceptGenreSuggestionsAsync(7, ["Space Opera"]);
 
-        await using var db = _factory.CreateDbContext();
-        var names = await db.Works.Where(w => w.Books.Any(b => b.Id == bookId))
-            .SelectMany(w => w.Genres).Select(g => g.Name).ToListAsync();
-        Assert.Equal(new[] { "AIA Adventure", "AIA Space Opera" }, names.OrderBy(n => n));   // parent not auto-added
-        Assert.Equal(new[] { "AIA Adventure", "AIA Space Opera" },
-            vm.BooksNeedingGenres.Single(b => b.Id == bookId).CurrentGenres.OrderBy(n => n));
+        await _dispatcher.Received(1).Send(
+            Arg.Is<AddGenresToWork>(c => c!.BookId == 7 && c.GenreNames.SequenceEqual(new[] { "Space Opera" })),
+            Arg.Any<CancellationToken>());
+        Assert.Equal(new[] { "Adventure", "Space Opera" }, vm.BooksNeedingGenres.Single().CurrentGenres);
         Assert.Null(vm.CurrentSuggestion);
     }
 
     [Fact]
-    public async Task CreateCollectionFromSuggestion_createsSeries_assignsUnseriesedMatches_inOrder()
+    public async Task AcceptGenreSuggestions_missingBook_leavesTheRowAlone()
     {
-        int seriesedBookId;
-        await using (var db = _factory.CreateDbContext())
-        {
-            var other = new Series { Name = "AIA Other", Type = SeriesType.Series };
-            db.Series.Add(other);
-            await db.SaveChangesAsync();
-            var b = new Book { Title = "Already Seriesed" };
-            b.AssignToSeries(other.Id, 4, null);
-            db.Books.Add(b);
-            await db.SaveChangesAsync();
-            seriesedBookId = b.Id;
-        }
-        await SeedBookAsync("Foundation", "Isaac Asimov");
-        await SeedBookAsync("Foundation and Empire", "Isaac Asimov");
+        _dispatcher.Query(Arg.Any<GetBooksNeedingGenres>(), Arg.Any<CancellationToken>())
+            .Returns([new BookGenreRow(7, "Dune", null, "Frank Herbert", ["Adventure"])]);
+        _dispatcher.Send(Arg.Any<AddGenresToWork>(), Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<string>?)null);
 
         var vm = CreateVm();
-        await vm.CreateCollectionFromSuggestionAsync(new CollectionGrouping(
-            "AIA Foundation", "series", "Asimov's saga", ["Foundation", "Foundation and Empire", "Already Seriesed", "Missing"]));
+        await vm.LoadBooksNeedingGenresAsync();
+        await vm.AcceptGenreSuggestionsAsync(7, ["Space Opera"]);
 
-        await using var check = _factory.CreateDbContext();
-        var series = await check.Series.Include(s => s.Books).SingleAsync(s => s.Name == "AIA Foundation");
-        Assert.Equal(SeriesType.Series, series.Type);
-        Assert.Equal("Asimov's saga", series.Description);
-        Assert.Equal("Isaac Asimov", series.Author);
-        Assert.Equal(2, series.Books.Count);
-        Assert.All(series.Books, b => Assert.InRange(b.SeriesOrder!.Value, 1, 2));
-        Assert.Equal(new[] { 1, 2 }, series.Books.Select(b => b.SeriesOrder!.Value).OrderBy(o => o));
-        var untouched = await check.Books.SingleAsync(b => b.Id == seriesedBookId);
-        Assert.Equal(4, untouched.SeriesOrder);
-        Assert.NotEqual(series.Id, untouched.SeriesId);
+        Assert.Equal(new[] { "Adventure" }, vm.BooksNeedingGenres.Single().CurrentGenres);
     }
 
-    [Fact]
-    public async Task CreateCollectionFromSuggestion_existingName_isNoOp()
+    [Theory]
+    [InlineData("Series", SeriesType.Series)]
+    [InlineData("series", SeriesType.Series)]
+    [InlineData("Collection", SeriesType.Collection)]
+    [InlineData("Themed", SeriesType.Collection)]
+    public async Task CreateCollectionFromSuggestion_sendsOneCommand_withTheMappedType(string type, SeriesType expected)
     {
-        await using (var db = _factory.CreateDbContext())
-        {
-            db.Series.Add(new Series { Name = "AIA Dup", Type = SeriesType.Collection });
-            await db.SaveChangesAsync();
-        }
-        await SeedBookAsync("Lonely", "Someone");
-
         await CreateVm().CreateCollectionFromSuggestionAsync(
-            new CollectionGrouping("AIA Dup", "Series", "r", ["Lonely"]));
+            new CollectionGrouping("Foundation", type, "Asimov's saga", ["Foundation", "Foundation and Empire"]));
 
-        await using var check = _factory.CreateDbContext();
-        Assert.Equal(1, await check.Series.CountAsync(s => s.Name == "AIA Dup"));
-        Assert.Null((await check.Books.SingleAsync(b => b.Title == "Lonely")).SeriesId);
+        await _dispatcher.Received(1).Send(
+            Arg.Is<CreateSeriesFromSuggestion>(c =>
+                c!.Name == "Foundation" && c.Type == expected && c.Description == "Asimov's saga"
+                && c.BookTitles.SequenceEqual(new[] { "Foundation", "Foundation and Empire" })),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task CreateCollectionFromSuggestion_nonSeriesType_isCollection_andMixedAuthorsLeaveAuthorNull()
+    public async Task AddRecommendationToWishlist_new_sendsAddWishlistItemAtMediumPriority()
     {
-        await SeedBookAsync("Anthology A", "Writer One");
-        await SeedBookAsync("Anthology B", "Writer Two");
+        _dispatcher.Query(Arg.Any<GetWishlistItemExists>(), Arg.Any<CancellationToken>()).Returns(false);
 
-        await CreateVm().CreateCollectionFromSuggestionAsync(
-            new CollectionGrouping("AIA Mixed", "Themed", "r", ["Anthology A", "Anthology B"]));
+        await CreateVm().AddRecommendationToWishlistAsync(new BookRecommendation("Hyperion", "Dan Simmons", "because", null));
 
-        await using var check = _factory.CreateDbContext();
-        var series = await check.Series.SingleAsync(s => s.Name == "AIA Mixed");
-        Assert.Equal(SeriesType.Collection, series.Type);
-        Assert.Null(series.Author);
+        await _dispatcher.Received(1).Query(
+            Arg.Is<GetWishlistItemExists>(q => q!.Title == "Hyperion" && q.Author == "Dan Simmons"),
+            Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).Send(
+            Arg.Is<AddWishlistItem>(c =>
+                c!.Title == "Hyperion" && c.Author == "Dan Simmons" && c.Priority == WishlistPriority.Medium
+                && c.Isbns.Count == 0 && c.CoverUrl == null),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task AddRecommendationToWishlist_addsMediumItem_andSkipsDuplicateTitleAuthor()
+    public async Task AddRecommendationToWishlist_alreadyThere_sendsNothing()
     {
-        var vm = CreateVm();
-        var rec = new BookRecommendation("Hyperion", "Dan Simmons", "because", null);
+        _dispatcher.Query(Arg.Any<GetWishlistItemExists>(), Arg.Any<CancellationToken>()).Returns(true);
 
-        await vm.AddRecommendationToWishlistAsync(rec);
-        await vm.AddRecommendationToWishlistAsync(rec);
-        await vm.AddRecommendationToWishlistAsync(rec with { Author = "Someone Else" });
+        await CreateVm().AddRecommendationToWishlistAsync(new BookRecommendation("Hyperion", "Dan Simmons", "because", null));
 
-        await using var db = _factory.CreateDbContext();
-        var items = await db.WishlistItems.Where(w => w.Title == "Hyperion").ToListAsync();
-        Assert.Equal(2, items.Count);
-        Assert.All(items, i => Assert.Equal(WishlistPriority.Medium, i.Priority));
+        await _dispatcher.DidNotReceive().Send(Arg.Any<AddWishlistItem>(), Arg.Any<CancellationToken>());
     }
 }
