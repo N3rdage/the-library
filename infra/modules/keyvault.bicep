@@ -30,6 +30,11 @@ resource kv 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enableRbacAuthorization: true
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
+    // Purge protection: a deleted secret, or the vault itself, cannot be purged
+    // inside the retention window, so a wrong or hostile delete by any identity
+    // with vault write rights (CI is Secrets Officer) stays recoverable. Azure
+    // does not allow turning this off again once it is on.
+    enablePurgeProtection: true
     enabledForDeployment: false
     enabledForDiskEncryption: false
     enabledForTemplateDeployment: false
