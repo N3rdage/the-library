@@ -155,7 +155,7 @@ else
     [Parameter] public bool SingleGenre { get; set; }
 
     /// <summary>Title autocomplete search delegate — parent owns the
-    /// IWorkSearchService and any filtering (e.g. excluding Works already
+    /// SearchWorks query and any filtering (e.g. excluding Works already
     /// attached to the Book on Book Detail).</summary>
     [Parameter, EditorRequired]
     public Func<string?, CancellationToken, Task<IEnumerable<WorkSearchResult>>> SearchExistingWorks { get; set; } = default!;

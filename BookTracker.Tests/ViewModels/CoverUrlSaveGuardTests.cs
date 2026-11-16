@@ -111,8 +111,8 @@ public class CoverUrlSaveGuardTests
     public async Task BookAdd_UnacceptableCoverUrl_ThrowsTheFieldMessageBeforeSaving(string? bookCover, string? editionCover)
     {
         var vm = new BookAddViewModel(
-            _dbFactory, Substitute.For<IBookLookupService>(), new SeriesMatchService(_dbFactory),
-            new WorkSearchService(_dbFactory), _dispatcher, NullLogger<BookAddViewModel>.Instance);
+            _dbFactory, Substitute.For<IBookLookupService>(), new SeriesMatchService(_dispatcher),
+            _dispatcher, NullLogger<BookAddViewModel>.Instance);
         vm.BookInput.Title = "Mort";
         vm.BookInput.DefaultCoverArtUrl = bookCover;
         vm.EditionInput.CoverUrl = editionCover;
