@@ -84,6 +84,9 @@ BookTracker.Mobile/AppConfig.cs
 *.pem
 .env
 .env.*
+# Local Android signing properties (keystore path, alias, passwords);
+# template committed as Signing.local.props.example.
+BookTracker.Mobile/Signing.local.props
 
 # Bicep build output (ARM JSON is generated from .bicep on the fly)
 infra/**/*.json
