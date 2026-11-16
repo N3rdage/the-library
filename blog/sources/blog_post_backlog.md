@@ -7,7 +7,7 @@ originSessionId: 21e97fa1-cba4-4b67-9d43-dc109098d6b2
 ## Status as of 2026-07-01
 
 - **19 posts shipped** (covered). #13–16 shipped 2026-06-22 → 2026-06-27, all session-driven (not catch-up corpus): two from the back-end DDD/CQRS arc (another-agent's-brief, agent-reached-for-CRUD), the close-out mega-blog (refactor-that-wasnt-broken), and the TD-11 warnings-as-errors post (the-advisory-said-no-fix). #17 (2026-07-01) is the series-on-Book arc — the bug that never said its name (implicit-handler blast radius + the four-nets review-altitude angle). #18 (2026-07-24) is the config/memory-cleanup meta-post — the-index-i-was-reading-twice (how session memory is used + bootstrapped, the `@import` double-load discovery, + an appendix field-guide to the context machinery and its failure modes). #19 (2026-11-14) is the first post written by the headless agent rather than in a paired session — three-fixes-i-was-not-allowed-to-push (the handover, the permission-split security sweep, the July deny that blocked the push).
-- **~13 strong candidates** — *building from another agent's brief* shipped (now #13) and *the advisory said there was no fix* shipped (now #16); the rest remain, plus arc spares (DRY-would-be-a-bug, the-EF-wall, risk-tracks-write-boundary).
+- **16 strong candidates** — *building from another agent's brief* shipped (now #13) and *the advisory said there was no fix* shipped (now #16); the rest remain, plus arc spares (DRY-would-be-a-bug, the-EF-wall, risk-tracks-write-boundary).
 - **6 possible catch-up candidates** (could be a post or could fold into another — TBD when picked up).
 - **15+ retros with no obvious blog hook on their own** (specific, dated, or already covered — listed at the bottom for the definitive count).
 
