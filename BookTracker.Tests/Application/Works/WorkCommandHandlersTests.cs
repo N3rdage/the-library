@@ -291,4 +291,71 @@ public class WorkCommandHandlersTests
                 new AttachWorksToBook(bookId, rows, false, false, [], [])));
         Assert.Contains("at least one work", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    // The three below carry the persistence assertions WorkEditDialogViewModelTests
+    // made against SQL before it moved to a substituted dispatcher (#264).
+
+    [Fact]
+    public async Task UpdateWork_trimsTitle_andPersistsSubtitleAndDate()
+    {
+        var (_, workId) = await SeedBookWithWorkAsync("Old");
+
+        await new UpdateWorkHandler(_factory).HandleAsync(new UpdateWork(
+            workId, "  Mort  ", "A Discworld Novel", ["Pratchett"], [],
+            new DateOnly(1987, 1, 1), DatePrecision.Year, []));
+
+        await using var verify = _factory.CreateDbContext();
+        var work = await verify.Works.FirstAsync(w => w.Id == workId);
+        Assert.Equal("Mort", work.Title);
+        Assert.Equal("A Discworld Novel", work.Subtitle);
+        Assert.Equal(new DateOnly(1987, 1, 1), work.FirstPublishedDate);
+        Assert.Equal(DatePrecision.Year, work.FirstPublishedDatePrecision);
+    }
+
+    [Fact]
+    public async Task UpdateWork_reusesExistingAuthorByName()
+    {
+        var (_, workId) = await SeedBookWithWorkAsync();
+        int existingAuthorId;
+        await using (var db = _factory.CreateDbContext())
+        {
+            var existing = new Author { Name = "Terry Pratchett" };
+            db.Authors.Add(existing);
+            await db.SaveChangesAsync();
+            existingAuthorId = existing.Id;
+        }
+
+        await new UpdateWorkHandler(_factory).HandleAsync(new UpdateWork(
+            workId, "Mort", null, ["Terry Pratchett"], [], null, DatePrecision.Day, []));
+
+        await using var verify = _factory.CreateDbContext();
+        var work = await verify.Works.Include(w => w.WorkAuthors).FirstAsync(w => w.Id == workId);
+        Assert.Equal(existingAuthorId, work.WorkAuthors.Single().AuthorId);
+        Assert.Equal(2, await verify.Authors.CountAsync()); // seed author + the reused one, no new row
+    }
+
+    [Fact]
+    public async Task UpdateWork_reconcilesGenreSelection()
+    {
+        var (_, workId) = await SeedBookWithWorkAsync();
+        int horrorId;
+        await using (var db = _factory.CreateDbContext())
+        {
+            var fantasy = new Genre { Name = "Fantasy" };
+            var horror = new Genre { Name = "Horror" };
+            db.Genres.AddRange(fantasy, horror);
+            var work = await db.Works.Include(w => w.Genres).FirstAsync(w => w.Id == workId);
+            work.Genres.Add(fantasy); // starts with Fantasy
+            await db.SaveChangesAsync();
+            horrorId = horror.Id;
+        }
+
+        // Swap selection: drop Fantasy, add Horror.
+        await new UpdateWorkHandler(_factory).HandleAsync(new UpdateWork(
+            workId, "Mort", null, ["Pratchett"], [], null, DatePrecision.Day, [horrorId]));
+
+        await using var verify = _factory.CreateDbContext();
+        var saved = await verify.Works.Include(w => w.Genres).FirstAsync(w => w.Id == workId);
+        Assert.Equal(horrorId, Assert.Single(saved.Genres).Id);
+    }
 }

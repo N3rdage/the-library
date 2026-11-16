@@ -35,10 +35,10 @@ public class GetGenreOptionsHandlerTests
         Assert.Equal(referenceId, dictionaries.ParentGenreId);
         Assert.Equal("Reference", dictionaries.ParentName);
 
-        var reference = options.Single(g => g.Name == "Reference");
-        Assert.Equal(referenceId, reference.Id);
-        Assert.Null(reference.ParentGenreId);
-        Assert.Null(reference.ParentName);
+        var top = options.Single(g => g.Name == "Reference");
+        Assert.Equal(referenceId, top.Id);
+        Assert.Null(top.ParentGenreId);
+        Assert.Null(top.ParentName);
 
         var fantasy = options.Single(g => g.Name == "Fantasy");
         Assert.Null(fantasy.ParentGenreId);
