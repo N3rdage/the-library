@@ -47,7 +47,8 @@ We are taking the **spine** of DDD + CQRS, not the cathedral. Out of scope:
   projections against the same DB. CQRS here means *separate models*, not separate storage.
 - **MVVM ceremony on Blazor.** No `INotifyPropertyChanged` / observable-property style.
   Blazor components are the view; ViewModels are the VM. The MVVM rule here is
-  **subtractive** (VMs don't touch EF), not additive.
+  **subtractive** (VMs don't touch EF), not additive. That is the target; the code does not
+  meet it yet (see [The one rule that buys the most](#the-one-rule-that-buys-the-most)).
 - **Aggregating flat lookup tables** (`Tag`, `Publisher`, `Genre`). No invariants → stay plain data.
 
 ## Architecture
@@ -80,14 +81,21 @@ We are taking the **spine** of DDD + CQRS, not the cathedral. Out of scope:
 └─────────────────────────────────────────────────────────────┘
 ```
 
+The diagram shows the target shape. [The one rule that buys the most](#the-one-rule-that-buys-the-most)
+and [Rich aggregates](#rich-aggregates-in-booktrackerdata) below say where the code does not
+meet it yet.
+
 ### The one rule that buys the most
 
 > **A ViewModel, a page, or an API endpoint must never create or touch a `DbContext`.
 > They talk to `BookTracker.Application` and nothing below it.**
 
-With `BookTracker.Application` as a **separate project**, the Web project does not reference
-`BookTracker.Data`'s `DbContext` at all (except DI registration at the composition root). The
-compiler enforces the seam — an agent *cannot* accidentally reach across it.
+The target is that the Web project touches `BookTracker.Data`'s `DbContext` only for DI
+registration at the composition root. The code does not meet that yet, and the compiler does
+not enforce it: `BookTracker.Web.csproj` references `BookTracker.Data` directly, and a number
+of ViewModels, two shared components, several services and the warm-up endpoint still inject
+`IDbContextFactory<BookTrackerDbContext>` and run EF themselves. Bringing them behind the
+Application layer is tracked in the backlog.
 
 ### Write side (commands)
 
@@ -141,7 +149,8 @@ public sealed class GetBookDetailHandler(IDbContextFactory<BookTrackerDbContext>
 
 ### Rich aggregates (in BookTracker.Data)
 
-Entities carry behaviour and have no public setters on invariant-bearing fields:
+The target is entities that carry behaviour and have no public setters on invariant-bearing
+fields:
 
 - `Book` (root) owns `Editions`; `Edition` owns `Copies`. Exposed as
   `IReadOnlyCollection<>`; mutated only through methods (`AddCopy`, `AddEdition`, …).
@@ -149,9 +158,18 @@ Entities carry behaviour and have no public setters on invariant-bearing fields:
 - EF maps to **backing fields** for encapsulated collections (`UsePropertyAccessMode(Field)`).
 - The `UpdatedAt` interceptor stays — it's a cross-cutting persistence concern, not a domain rule.
 
+The code meets the behaviour half: `Book`, `Edition` and `Work` carry the mutator methods
+(`Book.AddEdition`, `Edition.AddCopy`, `Work.Create`, `Work.RemoveFrom`, …), most handlers go
+through them, and the invariants are unit-tested under `BookTracker.Tests/Domain/`. It does not
+meet the encapsulation half yet: every property on `Book`, `Edition`, `Copy` and `Work` still has
+a public setter, their collections are public `List<>` properties, no backing fields are mapped,
+and the merge handlers assign fields directly. Closing that gap (C7) is tracked in the backlog.
+
 ## Conventions
 
-These are binding for all Application-layer work.
+These are binding for all Application-layer work. C1 and C7 are also targets that existing code
+does not meet yet (see The one rule that buys the most and Rich aggregates above); the gap is tracked in the backlog, and new code
+must not widen it.
 
 | # | Rule |
 |---|------|
@@ -179,11 +197,26 @@ These are binding for all Application-layer work.
   handler can't be forgotten. An explicit list's forgot-to-register footgun outweighs its
   one-file greppability, and `grep ": ICommandHandler<"` recovers the same list. No attribute
   (the interface is already the marker), no MediatR.
-- **Transaction ownership.** Single `SaveChanges` per handler is the default; multi-aggregate
-  writes (merges) use explicit `BeginTransaction`. No handler spans two aggregates without a
-  transaction.
-- **Exception → UI mapping** (open question). How `NotFoundException` / validation failures
-  from handlers surface to the user (snackbar).
+- **Transaction ownership.** Every command handler makes at most one `SaveChangesAsync` call
+  (`CreateSeries` and `UpdateSeries` make it through `SeriesNameGuard.SaveTranslatingDuplicateAsync`),
+  and EF Core runs one `SaveChanges` as one transaction, so a handler's writes commit or fail
+  together. Several handlers write to more than one aggregate in that one call: `DeleteBook` and
+  `RemoveWorkFromBook` (the Book's Work membership and any Work it orphans), `AttachWorkToBook`
+  (Book and Work membership), `CreateWorkOnBook` and `AttachWorksToBook` (new Works on a Book,
+  plus find-or-created Authors), `UpdateWork` (the Work plus find-or-created Authors),
+  `MarkWishlistItemBought` (WishlistItem, Book, Work, Tag, Author), `AddEditionToBook` and
+  `UpdateEdition` (plus a find-or-created Publisher), `AddTagToBook` (plus a find-or-created Tag).
+  The five merges (`MergeBooks`, `MergeWorks`, `MergeAuthors`, `MergeEditions`,
+  `MergePublishers`) also open an explicit `BeginTransactionAsync` around their single save. No
+  handler dispatches another command or saves twice.
+- **Exception → UI mapping.** Handlers throw `NotFoundException` when the root they mutate is
+  gone; aggregates (`Book`, `Work`, `Series`, `WishlistItem`) and `SeriesNameGuard` throw
+  `DomainRuleException` for a broken rule; soft outcomes come back as nullable returns or result
+  records. There is no central mapping: each caller catches what it expects. The edit-dialog
+  ViewModels, `SeriesEditViewModel` and `BookDetailViewModel`'s cover upload catch
+  `NotFoundException` and turn it into a no-op, a failure result or a not-found state;
+  `SeriesEditViewModel` shows a `DomainRuleException`'s message inline; and most pages and dialogs
+  wrap their save calls in a `catch (Exception)` that shows the message in a MudBlazor snackbar.
 
 ---
 

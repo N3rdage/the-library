@@ -14,6 +14,8 @@ Two sections:
   assumption breaks.
 
 A paid-down item is deleted from this file; the PR that fixed it is the record.
+Code comments still cite some ids (for example TD-2, TD-6, TD-15a, TD-15b, TD-16, TD-17):
+an id not listed below is closed, and git history holds its entry.
 
 ## Open — to address
 

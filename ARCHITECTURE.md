@@ -115,13 +115,13 @@ application layer (see [Application layer](#application-layer--cqrs-spine)):
 ```
 [Razor Component (.razor)]  ←→  [ViewModel (.cs)]  ──IDispatcher──▶  [Command / Query handlers]
      View (UI binding)           State + UI logic                    (BookTracker.Application)
-                                  (no DbContext)                              │
+                              (target: no DbContext)                          │
                                                                     ┌─────────┴─────────┐
                                                               [Rich aggregates]   [Read projections]
                                                               (BookTracker.Data)   (AsNoTracking → DTO)
 ```
 
-- **ViewModels** are plain C# classes under `BookTracker.Web/ViewModels/`. They hold UI state + presentation logic and **dispatch commands/queries** — they never touch `DbContext` directly.
+- **ViewModels** are plain C# classes under `BookTracker.Web/ViewModels/`. They hold UI state + presentation logic and **dispatch commands/queries**. The target is that they never touch `DbContext` directly; the code does not meet it yet — a number of ViewModels (among them `SeriesEditViewModel`, `AIAssistantViewModel` and `BookAddViewModel`, see TD-18 in `docs/TECH-DEBT.md`) still inject `IDbContextFactory<BookTrackerDbContext>`, and bringing them behind the Application layer is tracked in the backlog.
 - **Razor components** are thin views that inject a VM and bind to its properties. UI concerns only: JS interop, navigation, Blazor lifecycle.
 - **Services** still handle genuinely external concerns: ISBN lookup (Open Library / Google Books / Trove), AI features (Anthropic API), cover storage. Merges are commands + query handlers in the Application layer (see below).
 
@@ -131,8 +131,11 @@ VM lifetime:
 
 ## Application layer — CQRS spine
 
-`BookTracker.Application` is the seam between the UI and the data. It owns the
-write **and** read logic; ViewModels and services hold none of it.
+`BookTracker.Application` is the seam between the UI and the data. The target is that it owns
+all write **and** read logic and ViewModels and services hold none of it. The code does not meet
+that yet: a number of ViewModels, two shared components (`MudAuthorPicker`, `MudContributorPicker`)
+and several services still take `IDbContextFactory<BookTrackerDbContext>` and run EF
+themselves. Bringing them behind the Application layer is tracked in the backlog.
 Design + binding conventions (C1–C12) live in `docs/BACKEND-REFACTOR-DESIGN.md`.
 
 - **Dispatcher.** A thin hand-rolled `IDispatcher` (`Send(ICommand)` / `Query(IQuery<T>)`) — **no MediatR**. Handlers are discovered by a convention scan (`AddApplicationLayer()`) over the assembly, so a new handler is registered the moment it exists (and the integration tests, which dispatch through the same scan, pick it up too).
@@ -207,7 +210,7 @@ Projects the catalog into the slim wire-format `CatalogSnapshot` consumed by Boo
 
 ### GetWishlistSnapshot
 *`BookTracker.Application/Catalog/GetWishlistSnapshot.cs` (query handler).*
-Read-only wishlist projection for `/api/wishlist-snapshot`. Bookcase web remains the canonical write surface — add/remove/edit happen there. `/bookshop` and the future Bookshelf wishlist surface consume this DTO read-only and synthesise a local "bought" flag that self-heals on each catalog refresh.
+Read-only wishlist projection for `/api/wishlist-snapshot`. Bookcase web remains the canonical write surface — add/remove/edit happen there. `/bookshop` and Bookshelf's Wishlist tab (`WishlistPage`) consume this DTO read-only and synthesise a local "bought" flag that self-heals on each catalog refresh.
 
 ### BookCoverStorage
 Mirrors upstream cover URLs (Open Library / Google Books / Trove) into Azure Blob Storage so renders never depend on upstream latency. Fetches only `https` URLs with a DNS host name on the default port, refuses hosts that resolve to loopback, private, link-local, shared-address-space or multicast addresses (checked in the connect callback, so the connection goes to the checked address), and follows at most three redirects, re-checking each hop (`CoverFetchPolicy`); a refused URL is skipped with a logged warning (user info stripped from the logged URL) and the row keeps its upstream URL. The same URL rule (`CoverFetchPolicy.IsAcceptableCoverUrl`) applies when a form saves a cover URL (the `[CoverUrl]` attribute on the Add page inputs and a field `Validation` plus a Save guard on the book and edition dialogs, which apply it only to a changed URL so a stored one stays saveable) and when an ISBN lookup returns one (the first provider cover URL that passes it wins; none passing leaves the cover empty). Downloads only responses whose `Content-Type` is an allowed raster type (`image/jpeg`, `image/png`, `image/gif`, `image/webp`) and at most 10 MiB (checked against `Content-Length` and again while reading the stream); anything else is skipped with a logged warning and the row keeps its upstream URL. Normalises via SkiaSharp (JPEG, max 1200px long edge; an allowed type that SkiaSharp cannot decode is skipped with a logged warning and the row keeps its upstream URL; non-raster types such as SVG are never stored), uploads to the `book-covers` container, swaps the URL on `Edition.CoverUrl` / `Book.DefaultCoverArtUrl` to the blob URL.
