@@ -50,6 +50,26 @@ resource app 'Microsoft.Web/sites@2023-12-01' = {
   }
 }
 
+// Basic-auth publishing (FTP and the SCM/Kudu site) is off: every deploy signs
+// in with its identity (OIDC in GitHub Actions, Drew's login locally), so the
+// username/password paths to the running app are closed. Each slot has its
+// own pair of policies.
+resource appFtpPolicy 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2023-12-01' = {
+  parent: app
+  name: 'ftp'
+  properties: {
+    allow: false
+  }
+}
+
+resource appScmPolicy 'Microsoft.Web/sites/basicPublishingCredentialsPolicies@2023-12-01' = {
+  parent: app
+  name: 'scm'
+  properties: {
+    allow: false
+  }
+}
+
 // Staging deployment slot — GitHub Actions deploys here; swap.yml promotes to prod.
 // Each slot gets its own system-assigned managed identity, so both need to be
 // granted on the SQL DB (deploy.ps1 handles both).
@@ -76,6 +96,22 @@ resource stagingSlot 'Microsoft.Web/sites/slots@2023-12-01' = {
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
     }
+  }
+}
+
+resource stagingFtpPolicy 'Microsoft.Web/sites/slots/basicPublishingCredentialsPolicies@2023-12-01' = {
+  parent: stagingSlot
+  name: 'ftp'
+  properties: {
+    allow: false
+  }
+}
+
+resource stagingScmPolicy 'Microsoft.Web/sites/slots/basicPublishingCredentialsPolicies@2023-12-01' = {
+  parent: stagingSlot
+  name: 'scm'
+  properties: {
+    allow: false
   }
 }
 
