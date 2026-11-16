@@ -3,6 +3,7 @@ using BookTracker.Application.Books;
 using BookTracker.Application.Series;
 using BookTracker.Application.Wishlist;
 using BookTracker.Application.Works;
+using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 
@@ -88,11 +89,16 @@ public class AIAssistantViewModel(
     public bool SuggestingCollections { get; private set; }
     public string? CollectionError { get; private set; }
 
+    /// <summary>The domain error from the last Create on a suggested grouping
+    /// (blank or duplicate name), shown above the groupings.</summary>
+    public string? CreateCollectionError { get; private set; }
+
     public async Task SuggestCollectionsAsync()
     {
         SuggestingCollections = true;
         CollectionSuggestion = null;
         CollectionError = null;
+        CreateCollectionError = null;
 
         try
         {
@@ -114,14 +120,25 @@ public class AIAssistantViewModel(
             ? SeriesType.Series
             : SeriesType.Collection;
 
-        await dispatcher.Send(new CreateSeriesFromSuggestion(
-            grouping.SuggestedName, seriesType, grouping.Reasoning, grouping.BookTitles));
+        CreateCollectionError = null;
+        try
+        {
+            await dispatcher.Send(new CreateSeriesFromSuggestion(
+                grouping.SuggestedName, seriesType, grouping.Reasoning, grouping.BookTitles));
+        }
+        catch (DomainRuleException ex)
+        {
+            // Blank or clashing name — surface the friendly message and keep the
+            // suggestions on screen.
+            CreateCollectionError = ex.Message;
+        }
     }
 
     public void DismissCollections()
     {
         CollectionSuggestion = null;
         CollectionError = null;
+        CreateCollectionError = null;
     }
 
     // Shopping suggestions

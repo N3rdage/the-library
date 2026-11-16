@@ -9,8 +9,10 @@ namespace BookTracker.Application.Series;
 /// assigns the books whose title matches one of <see cref="BookTitles"/>,
 /// numbering them from 1 and skipping any book already in a series. The
 /// series' display author is set when every matched book's works share one
-/// lead author. A no-op (returns null) when a series with that name exists;
-/// otherwise returns the new series' id. One save, so the series and its
+/// lead author. A no-op (returns null) when a series with that (trimmed) name
+/// exists; otherwise returns the new series' id. Throws
+/// <see cref="DomainRuleException"/> on a blank name, or when a duplicate name
+/// reaches the unique index past the pre-check. One save, so the series and its
 /// assignments land together. Relocated from
 /// AIAssistantViewModel.CreateCollectionFromSuggestionAsync.</summary>
 public sealed record CreateSeriesFromSuggestion(
@@ -26,7 +28,10 @@ public sealed class CreateSeriesFromSuggestionHandler(IDbContextFactory<BookTrac
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
-        if (await db.Series.AnyAsync(s => s.Name == command.Name, ct)) return null;
+        // Compared trimmed, as the aggregate stores it. A blank name falls
+        // through to Series.Create, which throws DomainRuleException.
+        var trimmedName = command.Name.Trim();
+        if (trimmedName.Length > 0 && await db.Series.AnyAsync(s => s.Name == trimmedName, ct)) return null;
 
         var titles = command.BookTitles.ToList();
         var matchedBooks = await db.Books
@@ -60,7 +65,10 @@ public sealed class CreateSeriesFromSuggestionHandler(IDbContextFactory<BookTrac
             book.AssignToSeries(series, order++, orderDisplay: null);
         }
 
-        await db.SaveChangesAsync(ct);
+        // A clash that slips past the pre-check (a concurrent create, or a
+        // collation difference) hits the unique index; the guard turns that into
+        // DomainRuleException instead of a raw DbUpdateException.
+        await SeriesNameGuard.SaveTranslatingDuplicateAsync(db, trimmedName, excludeId: null, ct);
         return series.Id;
     }
 }

@@ -93,6 +93,31 @@ public class AIAssistantViewModelTests
     }
 
     [Fact]
+    public async Task CreateCollectionFromSuggestion_domainError_isSurfaced_notThrown()
+    {
+        _dispatcher.Send(Arg.Any<CreateSeriesFromSuggestion>(), Arg.Any<CancellationToken>())
+            .Returns<int?>(_ => throw new DomainRuleException("Series name is required."));
+        var vm = CreateVm();
+
+        await vm.CreateCollectionFromSuggestionAsync(new CollectionGrouping("  ", "Series", "r", ["A"]));
+
+        Assert.Equal("Series name is required.", vm.CreateCollectionError);
+    }
+
+    [Fact]
+    public async Task CreateCollectionFromSuggestion_success_clearsAPreviousError()
+    {
+        _dispatcher.Send(Arg.Any<CreateSeriesFromSuggestion>(), Arg.Any<CancellationToken>())
+            .Returns<int?>(_ => throw new DomainRuleException("boom"), _ => 42);
+        var vm = CreateVm();
+
+        await vm.CreateCollectionFromSuggestionAsync(new CollectionGrouping("  ", "Series", "r", ["A"]));
+        await vm.CreateCollectionFromSuggestionAsync(new CollectionGrouping("Fine", "Series", "r", ["A"]));
+
+        Assert.Null(vm.CreateCollectionError);
+    }
+
+    [Fact]
     public async Task AddRecommendationToWishlist_new_sendsAddWishlistItemAtMediumPriority()
     {
         _dispatcher.Query(Arg.Any<GetWishlistItemExists>(), Arg.Any<CancellationToken>()).Returns(false);
