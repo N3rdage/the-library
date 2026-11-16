@@ -20,13 +20,15 @@ param(
     # Claude on Foundry and a stable gpt-4o successor are not available in
     # australiaeast.
     [string] $SecondaryLocation = 'eastus2',
-    # Optional Anthropic public-API key. When supplied it's stored in Key
-    # Vault and exposed via a KV reference in App Settings.
-    [string] $AnthropicApiKey = '',
-    # Optional Trove (National Library of Australia) API key. Used as a
-    # third-line ISBN lookup provider for titles Open Library and Google
-    # Books don't index. Same storage pattern as AnthropicApiKey.
-    [string] $TroveApiKey = '',
+    # Optional Anthropic public-API key, as a SecureString (for example
+    # `Read-Host -AsSecureString`) so it stays out of PowerShell history and
+    # process listings. When supplied it's stored in Key Vault and exposed via
+    # a KV reference in App Settings.
+    [SecureString] $AnthropicApiKey,
+    # Optional Trove (National Library of Australia) API key, SecureString as
+    # above. Used as a third-line ISBN lookup provider for titles Open Library
+    # and Google Books don't index. Same storage pattern as AnthropicApiKey.
+    [SecureString] $TroveApiKey,
     # Optional: display name (in this tenant) of the Azure AD app
     # registration / SP that GitHub Actions OIDC authenticates as.
     # When supplied, the script grants that identity db_ddladmin on both
@@ -119,6 +121,13 @@ $clientSecret = $pwdCred.SecretText
 Write-Host "  Secret expires $($pwdCred.EndDateTime)."
 
 # ---- Deploy the Bicep template at subscription scope -------------------------
+# The API keys are revealed only here, into the parameter object handed to the
+# deployment; the Bicep parameters are @secure(), so they are not logged.
+function ConvertTo-PlainApiKey([SecureString] $Key) {
+    if ($null -eq $Key -or $Key.Length -eq 0) { return '' }
+    return [System.Net.NetworkCredential]::new('', $Key).Password
+}
+
 $templateFile = Join-Path $PSScriptRoot 'main.bicep'
 $deployName = "booktracker-infra-$(Get-Date -Format yyyyMMddHHmmss)"
 Write-Host "Deploying Bicep ($deployName)..."
@@ -134,8 +143,8 @@ $templateParams = @{
     customDomain        = $CustomDomain
     devClientIp         = $DevClientIp
     secondaryLocation   = $SecondaryLocation
-    anthropicApiKey     = $AnthropicApiKey
-    troveApiKey         = $TroveApiKey
+    anthropicApiKey     = ConvertTo-PlainApiKey $AnthropicApiKey
+    troveApiKey         = ConvertTo-PlainApiKey $TroveApiKey
 }
 
 $deployment = New-AzSubscriptionDeployment `

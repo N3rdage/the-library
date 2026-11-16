@@ -1,16 +1,16 @@
 ---
 name: Memory changes excluded from PRs (with closing-PR exception)
-description: Don't stage .claude-memory/ in feature commits — with one exception. The closing PR of a feature arc carries its retro + TODO Shipped move; everything else lands as its own periodic chore PR (external-reference trigger or monthly sweep).
+description: Don't stage .claude-memory/ in feature commits — with one exception. The closing PR of a feature arc carries its retro + the deletion of the arc's TODO rows; everything else lands as its own periodic chore PR (external-reference trigger or monthly sweep).
 type: feedback
 originSessionId: f4ac39e5-d24f-4335-a75d-edce7263c131
 ---
-When committing feature work, do not stage files in `.claude-memory/`. Memory changes should not be mixed into feature PRs — **with one exception**: the closing PR of a feature arc carries its own retro + the TODO.md move-to-Shipped (see "Exception" section below). Everything else still lands as a separate `chore(memory): …` PR.
+When committing feature work, do not stage files in `.claude-memory/`. Memory changes should not be mixed into feature PRs — **with one exception**: the closing PR of a feature arc carries its own retro + the deletion of the arc's rows from TODO.md (see "Exception" section below). Everything else still lands as a separate `chore(memory): …` PR.
 
 If memory files have been added or modified during the session and they're *not* covered by the closing-PR exception, mention it when handing off the branch: "Memory files were also updated — want to do a separate commit for those?"
 
 **Path note:** the harness auto-memory dir (`~/.claude/projects/C--Users-Drew-Work-code-The-Library/memory/`) is a **symlink to the repo's `.claude-memory/`** — they are the same files. So writing to "auto-memory" lands in the repo working tree and is governed by this commit discipline; there is no second, separate memory store to reconcile.
 
-**Why:** General workflow memory (feedback files, pattern docs, user-profile tweaks) is metadata about *how we work*, not metadata about *what shipped* — it doesn't belong in feature diffs. The closing-PR exception is specifically for memory that documents *the thing being shipped* (its retro) plus the TODO.md row that moves it to Shipped. Bundling those keeps the work and its record atomic.
+**Why:** General workflow memory (feedback files, pattern docs, user-profile tweaks) is metadata about *how we work*, not metadata about *what shipped* — it doesn't belong in feature diffs. The closing-PR exception is specifically for memory that documents *the thing being shipped* (its retro) plus the deletion of its TODO.md row. Bundling those keeps the work and its record atomic.
 
 **How to apply:** When running `git add`, explicitly list feature files. For closing PRs, that includes the retro + `retros/index.md` + `TODO.md`; for non-closing PRs, that excludes everything in `.claude-memory/`. After the commit, check `git status` for unstaged `.claude-memory/` changes and flag them to Drew.
 
@@ -24,7 +24,7 @@ The PR that ships the **last piece of an arc** also lands:
 
 - The arc's retro under `.claude-memory/retros/`.
 - The `retros/index.md` link to the new retro.
-- The `TODO.md` move-to-Shipped row, including any follow-up TODOs surfaced during the arc and any cross-reference renumbering.
+- The deletion of the arc's `TODO.md` rows (there is no shipped list; the merged PR and its backlog issue are the record), including any follow-up TODOs surfaced during the arc and any cross-reference fixes.
 
 These ride along with the closing PR (one branch, multiple commits if helpful — the squash preserves every commit subject in the squash-commit body). Bundling keeps the work and its full record atomic: when the feature ships, its retro and TODO state ship with it, and there's no "I shipped the feature, then forgot to write the retro / move the TODO row" gap. Locked in 2026-04-28 after the staging-DB-sep arc shipped this way (PR #130 retro + blog + TODO + new follow-ups, all together).
 

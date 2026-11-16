@@ -206,6 +206,8 @@ module coverStorage './cover-storage.bicep' = {
     tags: tags
     storageAccountName: coverStorageAccountName
     keyVaultName: keyVaultName
+    appServicePrincipalId: app.outputs.principalId
+    stagingSlotPrincipalId: app.outputs.stagingPrincipalId
   }
   dependsOn: [
     kv

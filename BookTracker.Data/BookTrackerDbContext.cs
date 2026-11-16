@@ -20,6 +20,7 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
     public DbSet<Author> Authors => Set<Author>();
     public DbSet<WorkAuthor> WorkAuthors => Set<WorkAuthor>();
     public DbSet<IgnoredDuplicate> IgnoredDuplicates => Set<IgnoredDuplicate>();
+    public DbSet<CoverMirrorState> CoverMirrorStates => Set<CoverMirrorState>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -246,5 +247,23 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
         modelBuilder.Entity<IgnoredDuplicate>()
             .HasIndex(d => new { d.EntityType, d.LowerId, d.HigherId })
             .IsUnique();
+
+        // CoverMirrorState: at most one row per cover column, so unique on
+        // (Target, TargetId). The attempt timestamps use the same
+        // Kind=Utc-on-read converter as Book.UpdatedAt so the backoff
+        // comparison against DateTime.UtcNow never mixes kinds.
+        modelBuilder.Entity<CoverMirrorState>()
+            .HasIndex(s => new { s.Target, s.TargetId })
+            .IsUnique();
+        modelBuilder.Entity<CoverMirrorState>()
+            .Property(s => s.LastAttemptUtc)
+            .HasConversion(UtcOnRead);
+        modelBuilder.Entity<CoverMirrorState>()
+            .Property(s => s.NextAttemptUtc)
+            .HasConversion(UtcOnRead);
     }
+
+    private static readonly ValueConverter<DateTime, DateTime> UtcOnRead = new(
+        v => v,
+        v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
 }

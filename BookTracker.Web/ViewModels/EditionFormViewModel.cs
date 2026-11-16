@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using BookTracker.Data;
 using BookTracker.Data.Models;
+using BookTracker.Web.Validation;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
@@ -45,6 +46,7 @@ public class EditionFormViewModel(IDbContextFactory<BookTrackerDbContext> dbFact
         public string? Publisher { get; set; }
 
         [StringLength(500)]
+        [CoverUrl]
         public string? CoverUrl { get; set; }
     }
 }

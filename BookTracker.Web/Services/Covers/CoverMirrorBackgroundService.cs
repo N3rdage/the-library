@@ -1,4 +1,5 @@
 using BookTracker.Data;
+using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.Services.Covers;
@@ -6,12 +7,18 @@ namespace BookTracker.Web.Services.Covers;
 // Periodic background service that walks Edition.CoverUrl and
 // Book.DefaultCoverArtUrl looking for upstream URLs that haven't been
 // mirrored to blob storage yet, and runs them through IBookCoverStorage.
+// The same poll covers the backfill of URLs already in the database and the
+// mirroring of newly added covers, at the cost of up to one PollInterval of
+// lag between a save and the row showing a blob URL.
 //
-// One service handles two cases — initial backfill on first deploy after
-// this ships AND ongoing mirroring of new covers added by save flows. The
-// trade-off is a brief lag (~PollInterval) between save and the row showing
-// a blob URL; PR2 will move new-cover mirroring inline at the save site so
-// the polling becomes backfill-only.
+// Each unsuccessful attempt is recorded in a CoverMirrorState row
+// (CoverMirrorQueue). A transient failure (5xx, 408, 429, timeout, network or
+// blob-upload error) is retried on a doubling backoff from one minute up to
+// 24 hours. A permanent refusal (refused URL, other 4xx, disallowed content
+// type, over the size cap, undecodable image) is not retried while the row
+// keeps that URL; a changed URL makes the row due again at once. A successful
+// mirror deletes the state row, and each tick sweeps state rows whose Edition
+// or Book is gone.
 //
 // Idempotent and safe to run on every instance — IsManagedUrl gates work
 // per row so a row mirrored by one tick won't re-process on the next.
@@ -73,19 +80,15 @@ public class CoverMirrorBackgroundService(
         var coverStorage = scope.ServiceProvider.GetRequiredService<IBookCoverStorage>();
         var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<BookTrackerDbContext>>();
         await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var nowUtc = DateTime.UtcNow;
 
-        // Editions first — they're the canonical per-edition cover. Pull URL +
-        // id, filter unmanaged in-app (EF can't translate the IsManagedUrl
-        // check). Take just the first MaxRowsPerTick of each kind to bound
-        // per-tick work.
-        var editionCandidates = await db.Editions
-            .Where(e => e.CoverUrl != null && e.CoverUrl != "")
-            .OrderBy(e => e.Id)
-            .Select(e => new { e.Id, e.CoverUrl })
-            .ToListAsync(ct);
-
-        var unmirroredEditions = editionCandidates
-            .Where(e => !coverStorage.IsManagedUrl(e.CoverUrl))
+        // Editions first — they're the canonical per-edition cover. The queue
+        // returns rows not held back by their mirror state; the unmanaged
+        // filter runs in-app (EF can't translate IsManagedUrl), and only the
+        // first MaxRowsPerTick of each kind are processed to bound per-tick work.
+        var dueEditions = await CoverMirrorQueue.DueEditionsAsync(db, nowUtc, ct);
+        var unmirroredEditions = dueEditions
+            .Where(e => !coverStorage.IsManagedUrl(e.Url))
             .Take(MaxRowsPerTick)
             .ToList();
 
@@ -93,28 +96,27 @@ public class CoverMirrorBackgroundService(
         {
             if (ct.IsCancellationRequested) return;
 
-            var blobKey = $"editions/{item.Id}";
-            var newUrl = await coverStorage.MirrorFromUrlAsync(item.CoverUrl!, blobKey, ct);
-            if (newUrl != item.CoverUrl)
+            var result = await coverStorage.MirrorFromUrlAsync(item.Url, $"editions/{item.Id}", ct);
+            if (result.Status == CoverMirrorStatus.Mirrored)
             {
                 var fresh = await db.Editions.FirstOrDefaultAsync(x => x.Id == item.Id, ct);
                 if (fresh is not null)
                 {
-                    fresh.CoverUrl = newUrl;
+                    fresh.CoverUrl = result.Url;
                     await db.SaveChangesAsync(ct);
                     logger.LogInformation("Mirrored cover for Edition {EditionId}.", item.Id);
                 }
+                await CoverMirrorQueue.ClearAsync(db, CoverMirrorTarget.Edition, item.Id, ct);
+            }
+            else
+            {
+                await RecordUnsuccessfulAsync(db, CoverMirrorTarget.Edition, item, result.Status, nowUtc, ct);
             }
         }
 
         // Books — DefaultCoverArtUrl. Same shape.
-        var bookCandidates = await db.Books
-            .Where(b => b.DefaultCoverArtUrl != null && b.DefaultCoverArtUrl != "")
-            .OrderBy(b => b.Id)
-            .Select(b => new { b.Id, Url = b.DefaultCoverArtUrl })
-            .ToListAsync(ct);
-
-        var unmirroredBooks = bookCandidates
+        var dueBooks = await CoverMirrorQueue.DueBooksAsync(db, nowUtc, ct);
+        var unmirroredBooks = dueBooks
             .Where(b => !coverStorage.IsManagedUrl(b.Url))
             .Take(MaxRowsPerTick)
             .ToList();
@@ -123,18 +125,41 @@ public class CoverMirrorBackgroundService(
         {
             if (ct.IsCancellationRequested) return;
 
-            var blobKey = $"books/{item.Id}";
-            var newUrl = await coverStorage.MirrorFromUrlAsync(item.Url!, blobKey, ct);
-            if (newUrl != item.Url)
+            var result = await coverStorage.MirrorFromUrlAsync(item.Url, $"books/{item.Id}", ct);
+            if (result.Status == CoverMirrorStatus.Mirrored)
             {
                 var fresh = await db.Books.FirstOrDefaultAsync(x => x.Id == item.Id, ct);
                 if (fresh is not null)
                 {
-                    fresh.DefaultCoverArtUrl = newUrl;
+                    fresh.DefaultCoverArtUrl = result.Url;
                     await db.SaveChangesAsync(ct);
                     logger.LogInformation("Mirrored default cover for Book {BookId}.", item.Id);
                 }
+                await CoverMirrorQueue.ClearAsync(db, CoverMirrorTarget.Book, item.Id, ct);
+            }
+            else
+            {
+                await RecordUnsuccessfulAsync(db, CoverMirrorTarget.Book, item, result.Status, nowUtc, ct);
             }
         }
+
+        await CoverMirrorQueue.RemoveOrphansAsync(db, ct);
     }
+
+    // Maps a non-mirrored status to the outcome stored on the state row.
+    // AlreadyManaged needs nothing recorded.
+    private static Task RecordUnsuccessfulAsync(
+        BookTrackerDbContext db,
+        CoverMirrorTarget target,
+        CoverMirrorCandidate item,
+        CoverMirrorStatus status,
+        DateTime nowUtc,
+        CancellationToken ct) => status switch
+    {
+        CoverMirrorStatus.PermanentRefusal => CoverMirrorQueue.RecordFailureAsync(
+            db, target, item.Id, item.Url, CoverMirrorOutcome.PermanentRefusal, nowUtc, ct),
+        CoverMirrorStatus.TransientFailure => CoverMirrorQueue.RecordFailureAsync(
+            db, target, item.Id, item.Url, CoverMirrorOutcome.TransientFailure, nowUtc, ct),
+        _ => Task.CompletedTask,
+    };
 }

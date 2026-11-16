@@ -172,6 +172,45 @@ namespace BookTracker.Data.Migrations
                     b.ToTable("Copies");
                 });
 
+            modelBuilder.Entity("BookTracker.Data.Models.CoverMirrorState", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("LastAttemptUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("LastOutcome")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("NextAttemptUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Target")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TargetId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Target", "TargetId")
+                        .IsUnique();
+
+                    b.ToTable("CoverMirrorStates");
+                });
+
             modelBuilder.Entity("BookTracker.Data.Models.Edition", b =>
                 {
                     b.Property<int>("Id")

@@ -34,7 +34,8 @@ public class BlobBookCoverStorageTests
     {
         var result = await MirrorAsync(new ByteArrayContent([0x01, 0x02, 0x03]), contentType);
 
-        Assert.Equal(SourceUrl, result);
+        Assert.Equal(SourceUrl, result.Url);
+        Assert.Equal(CoverMirrorStatus.PermanentRefusal, result.Status);
         Assert.Null(_uploadOptions);
         AssertNothingUploaded();
     }
@@ -47,8 +48,36 @@ public class BlobBookCoverStorageTests
     {
         var result = await MirrorAsync(new ByteArrayContent(MakePng()), contentType);
 
-        Assert.Equal(PublicBase + "/editions/1." + CoverImageProcessor.NormalisedExtension, result.Split('?')[0]);
+        Assert.Equal(PublicBase + "/editions/1." + CoverImageProcessor.NormalisedExtension, result.Url.Split('?')[0]);
+        Assert.Equal(CoverMirrorStatus.Mirrored, result.Status);
         Assert.Equal(CoverImageProcessor.NormalisedContentType, _uploadOptions?.HttpHeaders.ContentType);
+    }
+
+    [Fact]
+    public async Task Mirror_BlobUploadThrows_IsTransientFailure()
+    {
+        _blob.UploadAsync(Arg.Any<Stream>(), Arg.Any<BlobUploadOptions>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<Azure.Response<BlobContentInfo>>(new Azure.RequestFailedException("blob service unavailable")));
+
+        var result = await MirrorAsync(new ByteArrayContent(MakePng()), "image/png");
+
+        Assert.Equal(SourceUrl, result.Url);
+        Assert.Equal(CoverMirrorStatus.TransientFailure, result.Status);
+    }
+
+    [Fact]
+    public async Task Mirror_AlreadyManagedUrl_MakesNoRequest()
+    {
+        const string managedUrl = PublicBase + "/editions/1.jpg?v=1";
+        var handler = new FakeHandler(PngResponse());
+        var storage = CreateStorage(new HttpClient(handler));
+
+        var result = await storage.MirrorFromUrlAsync(managedUrl, "editions/1", CancellationToken.None);
+
+        Assert.Equal(managedUrl, result.Url);
+        Assert.Equal(CoverMirrorStatus.AlreadyManaged, result.Status);
+        Assert.Empty(handler.Requests);
+        AssertNothingUploaded();
     }
 
     [Fact]
@@ -71,7 +100,8 @@ public class BlobBookCoverStorageTests
     {
         var result = await MirrorAsync(new ByteArrayContent(MakePng()), contentType);
 
-        Assert.Equal(SourceUrl, result);
+        Assert.Equal(SourceUrl, result.Url);
+        Assert.Equal(CoverMirrorStatus.PermanentRefusal, result.Status);
         AssertNothingUploaded();
     }
 
@@ -84,7 +114,8 @@ public class BlobBookCoverStorageTests
 
         var result = await MirrorAsync(content, "image/jpeg");
 
-        Assert.Equal(SourceUrl, result);
+        Assert.Equal(SourceUrl, result.Url);
+        Assert.Equal(CoverMirrorStatus.PermanentRefusal, result.Status);
         Assert.Equal(0, body.BytesServed);
         AssertNothingUploaded();
     }
@@ -100,7 +131,8 @@ public class BlobBookCoverStorageTests
 
         var result = await MirrorAsync(content, "image/jpeg");
 
-        Assert.Equal(SourceUrl, result);
+        Assert.Equal(SourceUrl, result.Url);
+        Assert.Equal(CoverMirrorStatus.PermanentRefusal, result.Status);
         Assert.True(body.BytesServed < BlobBookCoverStorage.MaxDownloadBytes * 2, "reading should stop shortly after the cap");
         AssertNothingUploaded();
     }
@@ -113,7 +145,8 @@ public class BlobBookCoverStorageTests
 
         var result = await MirrorAsync(new StreamContent(body), "image/gif");
 
-        Assert.StartsWith(PublicBase + "/editions/1." + CoverImageProcessor.NormalisedExtension, result);
+        Assert.StartsWith(PublicBase + "/editions/1." + CoverImageProcessor.NormalisedExtension, result.Url);
+        Assert.Equal(CoverMirrorStatus.Mirrored, result.Status);
         Assert.Equal(png.Length, body.BytesServed);
     }
 
@@ -128,16 +161,24 @@ public class BlobBookCoverStorageTests
         var result = await MirrorAsync(content, "image/jpeg", timeout: TimeSpan.FromMilliseconds(250))
             .WaitAsync(TimeSpan.FromSeconds(10));
 
-        Assert.Equal(SourceUrl, result);
+        Assert.Equal(SourceUrl, result.Url);
+        Assert.Equal(CoverMirrorStatus.TransientFailure, result.Status);
         AssertNothingUploaded();
     }
 
-    [Fact]
-    public async Task Mirror_NonSuccessStatus_IsRejected()
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound, CoverMirrorStatus.PermanentRefusal)]
+    [InlineData(HttpStatusCode.Forbidden, CoverMirrorStatus.PermanentRefusal)]
+    [InlineData(HttpStatusCode.RequestTimeout, CoverMirrorStatus.TransientFailure)]
+    [InlineData(HttpStatusCode.TooManyRequests, CoverMirrorStatus.TransientFailure)]
+    [InlineData(HttpStatusCode.InternalServerError, CoverMirrorStatus.TransientFailure)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, CoverMirrorStatus.TransientFailure)]
+    public async Task Mirror_NonSuccessStatus_IsRejectedAndClassified(HttpStatusCode status, CoverMirrorStatus expected)
     {
-        var result = await MirrorAsync(new ByteArrayContent(MakePng()), "image/png", HttpStatusCode.NotFound);
+        var result = await MirrorAsync(new ByteArrayContent(MakePng()), "image/png", status);
 
-        Assert.Equal(SourceUrl, result);
+        Assert.Equal(SourceUrl, result.Url);
+        Assert.Equal(expected, result.Status);
         AssertNothingUploaded();
     }
 
@@ -151,7 +192,8 @@ public class BlobBookCoverStorageTests
 
         var result = await storage.MirrorFromUrlAsync(sourceUrl, "editions/1", CancellationToken.None);
 
-        Assert.Equal(sourceUrl, result);
+        Assert.Equal(sourceUrl, result.Url);
+        Assert.Equal(CoverMirrorStatus.PermanentRefusal, result.Status);
         Assert.Empty(handler.Requests);
         AssertNothingUploaded();
     }
@@ -169,7 +211,8 @@ public class BlobBookCoverStorageTests
 
         var result = await storage.MirrorFromUrlAsync(SourceUrl, "editions/1", CancellationToken.None);
 
-        Assert.StartsWith(PublicBase + "/editions/1." + CoverImageProcessor.NormalisedExtension, result);
+        Assert.StartsWith(PublicBase + "/editions/1." + CoverImageProcessor.NormalisedExtension, result.Url);
+        Assert.Equal(CoverMirrorStatus.Mirrored, result.Status);
         Assert.Equal<Uri>([new Uri(SourceUrl), new Uri(target)], handler.Requests);
     }
 
@@ -185,7 +228,8 @@ public class BlobBookCoverStorageTests
 
         var result = await storage.MirrorFromUrlAsync(SourceUrl, "editions/1", CancellationToken.None);
 
-        Assert.StartsWith(PublicBase + "/editions/1.", result);
+        Assert.StartsWith(PublicBase + "/editions/1.", result.Url);
+        Assert.Equal(CoverMirrorStatus.Mirrored, result.Status);
     }
 
     [Theory]
@@ -203,7 +247,8 @@ public class BlobBookCoverStorageTests
 
         var result = await storage.MirrorFromUrlAsync(SourceUrl, "editions/1", CancellationToken.None);
 
-        Assert.Equal(SourceUrl, result);
+        Assert.Equal(SourceUrl, result.Url);
+        Assert.Equal(CoverMirrorStatus.PermanentRefusal, result.Status);
         Assert.Single(handler.Requests);
         AssertNothingUploaded();
     }
@@ -223,7 +268,8 @@ public class BlobBookCoverStorageTests
 
         var result = await storage.MirrorFromUrlAsync(SourceUrl, "editions/1", CancellationToken.None);
 
-        Assert.Equal(SourceUrl, result);
+        Assert.Equal(SourceUrl, result.Url);
+        Assert.Equal(CoverMirrorStatus.PermanentRefusal, result.Status);
         Assert.Equal(CoverFetchPolicy.MaxRedirects + 1, handler.Requests.Count);
         AssertNothingUploaded();
     }
@@ -236,12 +282,13 @@ public class BlobBookCoverStorageTests
 
         var result = await storage.MirrorFromUrlAsync(SourceUrl, "editions/1", CancellationToken.None);
 
-        Assert.Equal(SourceUrl, result);
+        Assert.Equal(SourceUrl, result.Url);
+        Assert.Equal(CoverMirrorStatus.TransientFailure, result.Status);
         Assert.Single(handler.Requests);
         AssertNothingUploaded();
     }
 
-    private async Task<string> MirrorAsync(HttpContent content, string? contentType, HttpStatusCode status = HttpStatusCode.OK, TimeSpan? timeout = null)
+    private async Task<CoverMirrorResult> MirrorAsync(HttpContent content, string? contentType, HttpStatusCode status = HttpStatusCode.OK, TimeSpan? timeout = null)
     {
         if (contentType is not null) content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
         var http = new HttpClient(new FakeHandler(new HttpResponseMessage(status) { Content = content }))

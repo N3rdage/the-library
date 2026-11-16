@@ -236,6 +236,106 @@ public class BookLookupServiceTests
         Assert.Null(result.SeriesNumber);
     }
 
+    [Fact]
+    public async Task LookupByIsbnAsync_IpLiteralOpenLibraryCovers_FallThroughToTheIsbnCover_AndKeepTheRestOfTheResult()
+    {
+        var handler = new FakeHandler
+        {
+            ["jscmd=data"] = OkJson($$"""
+                {
+                  "ISBN:{{Isbn}}": {
+                    "title": "Sourcery",
+                    "authors": [ { "name": "Terry Pratchett" } ],
+                    "publishers": [ { "name": "Corgi" } ],
+                    "cover": {
+                      "large": "https://169.254.169.254/latest/meta-data/x.jpg",
+                      "medium": "https://10.0.0.5/x-M.jpg"
+                    }
+                  }
+                }
+                """)
+        };
+
+        var svc = CreateService(handler, troveKey: "present");
+        var result = await svc.LookupByIsbnAsync(Isbn, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal($"https://covers.openlibrary.org/b/isbn/{Isbn}-L.jpg", result!.CoverUrl);
+        Assert.Equal("Open Library", result.Source);
+        Assert.Equal("Sourcery", result.Title);
+        Assert.Equal("Terry Pratchett", result.Author);
+        Assert.Equal("Corgi", result.Publisher);
+    }
+
+    [Fact]
+    public async Task LookupByIsbnAsync_IpLiteralLargeCover_FallsThroughToTheMediumCover()
+    {
+        var handler = new FakeHandler
+        {
+            ["jscmd=data"] = OkJson($$"""
+                {
+                  "ISBN:{{Isbn}}": {
+                    "title": "Sourcery",
+                    "cover": {
+                      "large": "https://169.254.169.254/latest/meta-data/x.jpg",
+                      "medium": "https://covers.openlibrary.org/b/id/1-M.jpg"
+                    }
+                  }
+                }
+                """)
+        };
+
+        var svc = CreateService(handler, troveKey: "present");
+        var result = await svc.LookupByIsbnAsync(Isbn, CancellationToken.None);
+
+        Assert.Equal("https://covers.openlibrary.org/b/id/1-M.jpg", result?.CoverUrl);
+    }
+
+    [Fact]
+    public void FirstAcceptableCoverUrl_EveryCandidateRefused_ReturnsNull()
+    {
+        var svc = CreateService(new FakeHandler(), troveKey: "");
+
+        Assert.Null(svc.FirstAcceptableCoverUrl("Open Library", Isbn,
+            "https://169.254.169.254/x.jpg", null, "http://covers.openlibrary.org/x.jpg", "  "));
+    }
+
+    [Fact]
+    public void FirstAcceptableCoverUrl_ReturnsTheFirstAcceptableCandidateTrimmed()
+    {
+        var svc = CreateService(new FakeHandler(), troveKey: "");
+
+        Assert.Equal("https://covers.openlibrary.org/b/id/2-M.jpg", svc.FirstAcceptableCoverUrl("Open Library", Isbn,
+            "https://user:pw@covers.openlibrary.org/x.jpg", "  https://covers.openlibrary.org/b/id/2-M.jpg  ", "https://covers.openlibrary.org/b/id/3-M.jpg"));
+    }
+
+    [Fact]
+    public async Task LookupByIsbnAsync_UpgradesGoogleBooksHttpCoverToHttps()
+    {
+        var handler = new FakeHandler
+        {
+            ["openlibrary.org/api/books"] = OkJson("{}"),
+            ["googleapis.com/books/v1/volumes"] = OkJson("""
+                {
+                  "items": [
+                    {
+                      "volumeInfo": {
+                        "title": "Google Title",
+                        "imageLinks": { "thumbnail": "http://books.google.com/books/content?id=abc&printsec=frontcover&img=1&zoom=1" }
+                      }
+                    }
+                  ]
+                }
+                """)
+        };
+
+        var svc = CreateService(handler, troveKey: "");
+        var result = await svc.LookupByIsbnAsync(Isbn, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("https://books.google.com/books/content?id=abc&printsec=frontcover&img=1&zoom=1", result!.CoverUrl);
+    }
+
     [Theory]
     // Plain name, no order.
     [InlineData("Discworld", "Discworld", null, null)]

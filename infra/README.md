@@ -119,8 +119,8 @@ Optional parameters:
 | `-CustomDomain` | _empty_ | bind a custom hostname (e.g. `books.silly.ninja`) — see below |
 | `-SecondaryLocation` | `eastus2` | region for the AI VNet + OpenAI account |
 | `-DevClientIp` | _empty_ | optional IPv4 to whitelist on the SQL firewall for ad-hoc local EF migrations; leave blank to keep SQL fully private |
-| `-AnthropicApiKey` | _empty_ | optional `sk-ant-…`; when supplied it's stored in Key Vault and exposed via a KV ref |
-| `-TroveApiKey` | _empty_ | optional NLA Trove API key; when supplied it's stored in Key Vault and exposed via a KV ref |
+| `-AnthropicApiKey` | _not set_ | optional `sk-ant-…` as a `SecureString` (`Read-Host -AsSecureString`), so the key never sits in shell history or a process listing; when supplied it's stored in Key Vault and exposed via a KV ref |
+| `-TroveApiKey` | _not set_ | optional NLA Trove API key as a `SecureString`, same handling; when supplied it's stored in Key Vault and exposed via a KV ref |
 
 What the script does:
 1. Signs you in to Azure + Microsoft Graph.
@@ -258,10 +258,11 @@ The app supports up to three AI providers; only providers with valid config appe
 The Anthropic provider hits `api.anthropic.com` directly (no Azure resource needed). To enable it, supply the key on a deploy:
 
 ```powershell
-./deploy.ps1 -TenantId … -SubscriptionId … -AnthropicApiKey 'sk-ant-…'
+$anthropicKey = Read-Host -AsSecureString 'Anthropic API key'
+./deploy.ps1 -TenantId … -SubscriptionId … -AnthropicApiKey $anthropicKey
 ```
 
-The script passes the key to Bicep, which writes it to Key Vault as `AIAnthropicApiKey`. The `AI__Anthropic__ApiKey` App Setting becomes a KV reference. Rotate later by re-running the deploy with a new key.
+The parameter is a `SecureString`, so the key is typed at the prompt rather than on the command line and stays out of PowerShell history and process listings. The script passes the key to Bicep, which writes it to Key Vault as `AIAnthropicApiKey`. The `AI__Anthropic__ApiKey` App Setting becomes a KV reference. Rotate later by re-running the deploy with a new key.
 
 ## ISBN lookup providers
 
@@ -272,7 +273,8 @@ The script passes the key to Bicep, which writes it to Key Vault as `AIAnthropic
 Register at `https://trove.nla.gov.au/about/create-something/using-api` — approvals can take a few days. Once you have the key, provision it the same way as the Anthropic key:
 
 ```powershell
-./deploy.ps1 -TenantId … -SubscriptionId … -TroveApiKey '<your-key>'
+$troveKey = Read-Host -AsSecureString 'Trove API key'
+./deploy.ps1 -TenantId … -SubscriptionId … -TroveApiKey $troveKey
 ```
 
 The script writes it to Key Vault as `TroveApiKey`; the `Trove__ApiKey` App Setting becomes a KV reference. Without a key, the Trove branch of the lookup chain is skipped silently — Open Library and Google Books continue to work as before.

@@ -60,34 +60,34 @@ public class BlobBookCoverStorage : IBookCoverStorage
         return publicBase is not null && url.StartsWith(publicBase, StringComparison.OrdinalIgnoreCase);
     }
 
-    public async Task<string> MirrorFromUrlAsync(string sourceUrl, string blobKey, CancellationToken ct)
+    public async Task<CoverMirrorResult> MirrorFromUrlAsync(string sourceUrl, string blobKey, CancellationToken ct)
     {
-        if (!IsEnabled || string.IsNullOrWhiteSpace(sourceUrl)) return sourceUrl;
-        if (IsManagedUrl(sourceUrl)) return sourceUrl;
+        if (!IsEnabled || string.IsNullOrWhiteSpace(sourceUrl) || IsManagedUrl(sourceUrl))
+            return new CoverMirrorResult(sourceUrl, CoverMirrorStatus.AlreadyManaged);
 
         var refusal = CoverFetchPolicy.Validate(sourceUrl);
         if (refusal is not null)
         {
-            _logger.LogWarning("Cover mirror skipped — {Url} refused: {Reason}.", sourceUrl, refusal);
-            return sourceUrl;
+            _logger.LogWarning("Cover mirror skipped — {Url} refused: {Reason}.", CoverFetchPolicy.ForLogging(sourceUrl), refusal);
+            return Refused(sourceUrl);
         }
 
         // ResponseHeadersRead means HttpClient.Timeout covers only the status
         // line and headers; the body read has to be bounded separately or a
         // slow-drip upstream stalls the sequential mirror loop. The linked
         // source bounds the whole download (headers plus body) by the same
-        // client timeout the download had before.
+        // client timeout.
         using var downloadTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         downloadTimeout.CancelAfter(_http.Timeout);
 
         try
         {
             using var response = await GetFollowingRedirectsAsync(sourceUrl, downloadTimeout.Token);
-            if (response is null) return sourceUrl;
+            if (response is null) return Refused(sourceUrl);
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Cover mirror skipped — upstream returned {Status} for {Url}", (int)response.StatusCode, sourceUrl);
-                return sourceUrl;
+                return IsPermanentStatus(response.StatusCode) ? Refused(sourceUrl) : Transient(sourceUrl);
             }
 
             var declaredType = response.Content.Headers.ContentType?.MediaType;
@@ -96,14 +96,14 @@ public class BlobBookCoverStorage : IBookCoverStorage
             {
                 _logger.LogWarning("Cover mirror skipped — {Url} returned content type {MediaType}, not an allowed raster image type.",
                     sourceUrl, declaredType ?? "(none)");
-                return sourceUrl;
+                return Refused(sourceUrl);
             }
 
             if (response.Content.Headers.ContentLength > MaxDownloadBytes)
             {
                 _logger.LogWarning("Cover mirror skipped — {Url} declares {ByteCount} bytes, over the {MaxBytes}-byte cap.",
                     sourceUrl, response.Content.Headers.ContentLength, MaxDownloadBytes);
-                return sourceUrl;
+                return Refused(sourceUrl);
             }
 
             var bytes = await ReadCappedAsync(response.Content, downloadTimeout.Token);
@@ -111,7 +111,7 @@ public class BlobBookCoverStorage : IBookCoverStorage
             {
                 _logger.LogWarning("Cover mirror skipped — {Url} body exceeded the {MaxBytes}-byte cap while reading.",
                     sourceUrl, MaxDownloadBytes);
-                return sourceUrl;
+                return Refused(sourceUrl);
             }
 
             var processed = CoverImageProcessor.Process(bytes, mediaType);
@@ -119,23 +119,34 @@ public class BlobBookCoverStorage : IBookCoverStorage
             {
                 _logger.LogWarning("Cover mirror skipped — {Url} could not be decoded as {MediaType}; the row keeps its upstream URL.",
                     sourceUrl, mediaType);
-                return sourceUrl;
+                return Refused(sourceUrl);
             }
 
-            return await StoreAsync(processed, blobKey, ct);
+            return new CoverMirrorResult(await StoreAsync(processed, blobKey, ct), CoverMirrorStatus.Mirrored);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             _logger.LogWarning("Cover mirror skipped — {Url} did not finish downloading within {Timeout}.",
                 sourceUrl, _http.Timeout);
-            return sourceUrl;
+            return Transient(sourceUrl);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Cover mirror failed for {Url}", sourceUrl);
-            return sourceUrl;
+            return Transient(sourceUrl);
         }
     }
+
+    private static CoverMirrorResult Refused(string sourceUrl) => new(sourceUrl, CoverMirrorStatus.PermanentRefusal);
+
+    private static CoverMirrorResult Transient(string sourceUrl) => new(sourceUrl, CoverMirrorStatus.TransientFailure);
+
+    // A 4xx says the request itself is wrong, so the same URL keeps failing;
+    // 408 (timeout) and 429 (rate limit) are the exceptions a later attempt can
+    // get past. Every other non-success status is treated as transient.
+    private static bool IsPermanentStatus(HttpStatusCode status) =>
+        (int)status is >= 400 and < 500
+        && status is not (HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests);
 
     public async Task<string> UploadAsync(byte[] bytes, string contentType, string blobKey, CancellationToken ct)
     {
@@ -214,7 +225,7 @@ public class BlobBookCoverStorage : IBookCoverStorage
             if (refusal is not null)
             {
                 _logger.LogWarning("Cover mirror skipped — {Url} redirected to {Target}, refused: {Reason}.",
-                    sourceUrl, nextUri.AbsoluteUri, refusal);
+                    CoverFetchPolicy.ForLogging(sourceUrl), CoverFetchPolicy.ForLogging(nextUri.AbsoluteUri), refusal);
                 return null;
             }
 

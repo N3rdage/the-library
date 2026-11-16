@@ -66,6 +66,26 @@
 		<ProjectReference Include="..\BookTracker.Mobile.Cache\BookTracker.Mobile.Cache.csproj" />
 	</ItemGroup>
 
+	<!-- Signing. Without any of these properties the SDK signs every build,
+	     Debug and Release alike, with its debug keystore
+	     (%LOCALAPPDATA%\Xamarin\Mono for Android\debug.keystore on Windows),
+	     which is what the laptop install path and the APK workflow rely on:
+	     a Release build then installs over the previous one and the MSAL
+	     redirect URI's signature hash is unchanged. To sign with another
+	     keystore, set BookshelfKeyStore (path), BookshelfKeyAlias,
+	     BookshelfStorePass and BookshelfKeyPass in the environment or in
+	     Signing.local.props next to this file (gitignored; template in
+	     Signing.local.props.example). Keystores and passwords never live in
+	     the repo. -->
+	<Import Project="Signing.local.props" Condition="Exists('Signing.local.props')" />
+	<PropertyGroup Condition="'$(BookshelfKeyStore)' != ''">
+		<AndroidKeyStore>true</AndroidKeyStore>
+		<AndroidSigningKeyStore>$(BookshelfKeyStore)</AndroidSigningKeyStore>
+		<AndroidSigningKeyAlias>$(BookshelfKeyAlias)</AndroidSigningKeyAlias>
+		<AndroidSigningStorePass>$(BookshelfStorePass)</AndroidSigningStorePass>
+		<AndroidSigningKeyPass>$(BookshelfKeyPass)</AndroidSigningKeyPass>
+	</PropertyGroup>
+
 	<!-- Stamps the current git commit SHA into SourceRevisionId so the
 	     SDK appends it to AssemblyInformationalVersionAttribute as
 	     "+<sha>". BookTracker.Mobile/Services/BuildInfo.cs parses that
