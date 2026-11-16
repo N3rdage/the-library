@@ -27,7 +27,7 @@ public class CoverUrlSaveGuardTests
     [Fact]
     public async Task BookEditDialog_UnacceptableCoverUrl_DoesNotDispatch()
     {
-        var vm = new BookEditDialogViewModel(_dbFactory, _dispatcher) { Title = "Mort", CoverUrl = HttpCover };
+        var vm = new BookEditDialogViewModel(_dispatcher) { Title = "Mort", CoverUrl = HttpCover };
 
         Assert.False(vm.CoverUrlAcceptable);
         await vm.SaveAsync();
@@ -40,7 +40,7 @@ public class CoverUrlSaveGuardTests
     {
         // A mirrored cover in local dev is an Azurite blob URL on port 10000.
         const string stored = "http://localhost:10000/devstoreaccount1/book-covers/1.jpg";
-        var vm = new BookEditDialogViewModel(_dbFactory, _dispatcher) { Title = "Mort" };
+        var vm = new BookEditDialogViewModel(_dispatcher) { Title = "Mort" };
         vm.LoadCoverUrl(stored);
 
         Assert.True(vm.CoverUrlAcceptable);
@@ -54,7 +54,7 @@ public class CoverUrlSaveGuardTests
     [Fact]
     public async Task BookEditDialog_ChangedUnacceptableCoverUrl_IsRefused()
     {
-        var vm = new BookEditDialogViewModel(_dbFactory, _dispatcher) { Title = "Mort" };
+        var vm = new BookEditDialogViewModel(_dispatcher) { Title = "Mort" };
         vm.LoadCoverUrl("http://localhost:10000/devstoreaccount1/book-covers/1.jpg");
         vm.CoverUrl = HttpCover;
 
@@ -68,7 +68,7 @@ public class CoverUrlSaveGuardTests
     [Fact]
     public async Task BookEditDialog_PaddedAcceptableCoverUrl_IsSavedTrimmed()
     {
-        var vm = new BookEditDialogViewModel(_dbFactory, _dispatcher)
+        var vm = new BookEditDialogViewModel(_dispatcher)
         {
             Title = "Mort",
             CoverUrl = "  https://covers.example.org/x.jpg  ",
@@ -83,7 +83,7 @@ public class CoverUrlSaveGuardTests
     [Fact]
     public void EditionFormDialog_StoredUnacceptableCoverUrl_IsAcceptableOnlyWhileUnchanged()
     {
-        var vm = new EditionFormDialogViewModel(_dbFactory, Substitute.For<IBookLookupService>(), _dispatcher);
+        var vm = new EditionFormDialogViewModel(Substitute.For<IBookLookupService>(), _dispatcher);
         vm.LoadCoverUrl("https://localhost:10000/devstoreaccount1/book-covers/1.jpg");
 
         Assert.True(vm.CoverUrlAcceptable);
@@ -98,7 +98,7 @@ public class CoverUrlSaveGuardTests
     [Fact]
     public async Task EditionFormDialog_UnacceptableCoverUrl_ReturnsNullWithoutDispatching()
     {
-        var vm = new EditionFormDialogViewModel(_dbFactory, Substitute.For<IBookLookupService>(), _dispatcher) { CoverUrl = HttpCover };
+        var vm = new EditionFormDialogViewModel(Substitute.For<IBookLookupService>(), _dispatcher) { CoverUrl = HttpCover };
 
         Assert.False(vm.CoverUrlAcceptable);
         Assert.Null(await vm.SaveAsync());

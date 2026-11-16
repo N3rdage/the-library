@@ -1,5 +1,6 @@
 @using BookTracker.Application
 @using BookTracker.Application.Books
+@using BookTracker.Application.Publishers
 @using Microsoft.Extensions.Logging
 @inject EditionFormViewModel EditionVM
 @inject IDispatcher Dispatcher
@@ -128,7 +129,7 @@
             EditionInput.Publisher, EditionVM.ExistingPublishers.Select(p => p.Name), Dispatcher, Logger);
         if (created is (int id, string name))
         {
-            EditionVM.ExistingPublishers.Add(new EditionFormViewModel.PublisherOption(id, name));
+            EditionVM.ExistingPublishers.Add(new PublisherOption(id, name));
         }
     }
 

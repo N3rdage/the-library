@@ -1,9 +1,7 @@
 using BookTracker.Application;
 using BookTracker.Application.Authors;
-using BookTracker.Data;
 using BookTracker.Web.Components.Shared;
 using Bunit;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
 using NSubstitute;
@@ -31,16 +29,10 @@ public class MudAuthorPickerTests : ComponentTestBase
 
     public MudAuthorPickerTests()
     {
-        // MudAuthorPicker injects IDbContextFactory for SearchAsync (the
-        // dropdown's autocomplete provider). Tests below don't trigger
-        // typing into the autocomplete, so a stub suffices — render +
-        // chip-add paths don't touch the DB.
-        var dbFactory = Substitute.For<IDbContextFactory<BookTrackerDbContext>>();
-        Services.AddSingleton(dbFactory);
-
-        // It also dispatches CreateAuthor on commit (TD-15a eager create).
-        // A substitute returns a completed Task<int> by default, so the
-        // chip-add path proceeds; one test asserts the dispatch happens.
+        // The picker queries SearchAuthorNames for the dropdown and dispatches
+        // CreateAuthor on commit (TD-15a eager create). A substitute returns a
+        // completed Task<int> by default, so the chip-add path proceeds; the
+        // tests below assert on the calls they care about.
         Services.AddSingleton(_dispatcher);
 
         // The eager-create dispatch is wrapped in try/catch and logs on
@@ -232,6 +224,40 @@ public class MudAuthorPickerTests : ComponentTestBase
         await cut.InvokeAsync(() => cut.Instance.OnCommitKey("Pendergast"));
 
         Assert.Equal(["Preston", "Child", "Pendergast"], authors);
+    }
+
+    [Fact]
+    public async Task Search_QueriesAuthorNames_ExcludingChosenChips()
+    {
+        // The dropdown leaves out names already chipped; the handler applies the
+        // exclude (and the substring match + cap — SearchAuthorNamesHandlerTests).
+        _dispatcher.Query(Arg.Any<SearchAuthorNames>(), Arg.Any<CancellationToken>())
+            .Returns(["Pratchett & Gaiman"]);
+        var cut = Render<MudAuthorPicker>(p => p
+            .Add(c => c.Authors, new List<string> { "Terry Pratchett" }));
+
+        var results = await cut.Instance.SearchAsync("pratch", CancellationToken.None);
+
+        Assert.Equal(["Pratchett & Gaiman"], results);
+        await _dispatcher.Received(1).Query(
+            Arg.Is<SearchAuthorNames>(q => q!.Query == "pratch" && q.Exclude.SequenceEqual(new[] { "Terry Pratchett" })),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Search_ExcludeIsASnapshot_NotTheLiveChipList()
+    {
+        var authors = new List<string> { "Terry Pratchett" };
+        SearchAuthorNames? sent = null;
+        _dispatcher.Query(Arg.Do<SearchAuthorNames>(q => sent = q), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<string>());
+        var cut = Render<MudAuthorPicker>(p => p.Add(c => c.Authors, authors));
+
+        await cut.Instance.SearchAsync("", CancellationToken.None);
+        authors.Add("Neil Gaiman");
+
+        Assert.NotNull(sent);
+        Assert.Equal(["Terry Pratchett"], sent.Exclude);
     }
 
     [Fact]

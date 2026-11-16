@@ -1,6 +1,6 @@
 using BookTracker.Application;
 using BookTracker.Application.Books;
-using BookTracker.Data.Models;
+using BookTracker.Application.Publishers;
 using BookTracker.Web.Components.Shared;
 using BookTracker.Web.ViewModels;
 using Bunit;
@@ -20,25 +20,26 @@ namespace BookTracker.Tests.Components;
 /// exhaustively in <see cref="PublisherEagerCreateTests"/>); a new name is also
 /// appended to the cache. These cover the component-side wiring.
 ///
-/// Integration-flavoured: EditionCopyForm.OnInitializedAsync loads existing
-/// publishers from the DB, so it needs a real <see cref="TestDbContextFactory"/>
-/// (wiped empty, then optionally seeded per test) behind its EditionFormViewModel.
+/// EditionCopyForm.OnInitializedAsync loads the existing publishers through
+/// its EditionFormViewModel, which queries GetPublisherOptions; the substituted
+/// dispatcher answers that (empty unless a test seeds it) and the eager create.
 /// </summary>
-[Trait("Category", TestCategories.Integration)]
+[Trait("Category", TestCategories.Component)]
 public class EditionCopyFormTests : ComponentTestBase
 {
     private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
-    private readonly TestDbContextFactory _factory = new();
 
     public EditionCopyFormTests()
     {
+        GivenPublishers();
         Services.AddSingleton(_dispatcher);
         Services.AddLogging();
-        // Reuse the one (already-wiped) factory so per-test seeding survives —
-        // a fresh TestDbContextFactory would wipe again on construction. The
-        // eager-create path under test goes through the substituted dispatcher.
-        Services.AddScoped(_ => new EditionFormViewModel(_factory));
+        Services.AddScoped<EditionFormViewModel>();
     }
+
+    private void GivenPublishers(params PublisherOption[] publishers) =>
+        _dispatcher.Query(Arg.Any<GetPublisherOptions>(), Arg.Any<CancellationToken>())
+            .Returns(publishers);
 
     private (EditionFormViewModel.EditionFormInput Edition, CopyFormViewModel.CopyFormInput Copy) Inputs()
         => (new EditionFormViewModel.EditionFormInput(), new CopyFormViewModel.CopyFormInput());
@@ -68,13 +69,9 @@ public class EditionCopyFormTests : ComponentTestBase
     [Fact]
     public async Task PublisherChosen_ExistingName_StoresValueWithNoDispatch()
     {
-        // Seed an existing publisher; OnInitializedAsync caches it. Picking it
+        // An existing publisher; OnInitializedAsync caches it. Picking it
         // (even with a case clash) is a pure pick — no CreatePublisher round-trip.
-        await using (var db = _factory.CreateDbContext())
-        {
-            db.Publishers.Add(new Publisher { Name = "Penguin Books" });
-            await db.SaveChangesAsync();
-        }
+        GivenPublishers(new PublisherOption(1, "Penguin Books"));
         var (edition, copy) = Inputs();
         var cut = RenderForm(edition, copy);
 

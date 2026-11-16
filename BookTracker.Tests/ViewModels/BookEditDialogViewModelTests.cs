@@ -1,18 +1,49 @@
+using BookTracker.Application;
+using BookTracker.Application.Books;
+using BookTracker.Application.Series;
 using BookTracker.Data.Models;
 using BookTracker.Web.ViewModels;
+using NSubstitute;
 
 namespace BookTracker.Tests.ViewModels;
 
-[Trait("Category", TestCategories.Integration)]
+// The dialog reads through GetBookEditForm + GetSeriesOptions and writes through
+// UpdateBookDetails; a substituted dispatcher stands in for all three. What the
+// reads return from SQL is covered by GetBookEditFormHandlerTests and
+// GetSeriesOptionsHandlerTests; what the save persists by the UpdateBookDetails
+// handler tests.
+[Trait("Category", TestCategories.Unit)]
 public class BookEditDialogViewModelTests
 {
+    private const int BookId = 7;
+    private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
+
+    private void GivenBook(BookEditForm? form) =>
+        _dispatcher.Query(Arg.Is<GetBookEditForm>(q => q!.BookId == BookId), Arg.Any<CancellationToken>())
+            .Returns(form);
+
+    private void GivenSeries(params SeriesPickerOption[] series) =>
+        _dispatcher.Query(Arg.Any<GetSeriesOptions>(), Arg.Any<CancellationToken>())
+            .Returns(series);
+
+    private static BookEditForm Book(
+        string title = "T", BookCategory category = BookCategory.Fiction, string? cover = null,
+        int? seriesId = null, int? seriesOrder = null, string? seriesOrderDisplay = null) =>
+        new(BookId, title, category, cover, seriesId, seriesOrder, seriesOrderDisplay);
+
+    private UpdateBookDetails? SentUpdate() =>
+        _dispatcher.ReceivedCalls()
+            .Select(c => c.GetArguments()[0])
+            .OfType<UpdateBookDetails>()
+            .SingleOrDefault();
+
     [Fact]
     public async Task InitializeAsync_MissingId_MarksNotFound()
     {
-        var factory = new TestDbContextFactory();
-        var vm = new BookEditDialogViewModel(factory, TestDispatcher.For(factory));
+        GivenBook(null);
+        var vm = new BookEditDialogViewModel(_dispatcher);
 
-        await vm.InitializeAsync(999);
+        await vm.InitializeAsync(BookId);
 
         Assert.True(vm.NotFound);
     }
@@ -20,114 +51,112 @@ public class BookEditDialogViewModelTests
     [Fact]
     public async Task InitializeAsync_LoadsCurrentValues()
     {
-        var factory = new TestDbContextFactory();
-        int bookId;
-        using (var db = factory.CreateDbContext())
-        {
-            var book = new Book
-            {
-                Title = "Mort",
-                Category = BookCategory.Fiction,
-                DefaultCoverArtUrl = "https://example.com/mort.jpg",
-                Works = [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Pratchett" }, Order = 0 }] }],
-            };
-            db.Books.Add(book);
-            await db.SaveChangesAsync();
-            bookId = book.Id;
-        }
+        GivenBook(Book("Mort", BookCategory.Fiction, "https://example.com/mort.jpg"));
+        GivenSeries();
+        var vm = new BookEditDialogViewModel(_dispatcher);
 
-        var vm = new BookEditDialogViewModel(factory, TestDispatcher.For(factory));
-        await vm.InitializeAsync(bookId);
+        await vm.InitializeAsync(BookId);
 
         Assert.False(vm.NotFound);
+        Assert.Equal(BookId, vm.BookId);
         Assert.Equal("Mort", vm.Title);
         Assert.Equal(BookCategory.Fiction, vm.Category);
         Assert.Equal("https://example.com/mort.jpg", vm.CoverUrl);
+        Assert.Null(vm.SelectedSeriesId);
+        Assert.Null(vm.SeriesOrderInput);
     }
 
     [Fact]
-    public async Task SaveAsync_PersistsAllFields()
+    public async Task InitializeAsync_LoadsSeriesOptions()
     {
-        var factory = new TestDbContextFactory();
-        int bookId;
-        using (var db = factory.CreateDbContext())
-        {
-            var book = new Book
-            {
-                Title = "Old title",
-                Category = BookCategory.Fiction,
-                Works = [new Work { Title = "w", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "a" }, Order = 0 }] }],
-            };
-            db.Books.Add(book);
-            await db.SaveChangesAsync();
-            bookId = book.Id;
-        }
+        GivenBook(Book());
+        GivenSeries(
+            new SeriesPickerOption(1, "Discworld", SeriesType.Collection),
+            new SeriesPickerOption(2, "Witcher", SeriesType.Series));
+        var vm = new BookEditDialogViewModel(_dispatcher);
 
-        var vm = new BookEditDialogViewModel(factory, TestDispatcher.For(factory));
-        await vm.InitializeAsync(bookId);
+        await vm.InitializeAsync(BookId);
+
+        Assert.Equal(["Discworld", "Witcher"], vm.AvailableSeries.Select(s => s.Name));
+        Assert.Equal(SeriesType.Collection, vm.AvailableSeries[0].Type);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_InSeries_FormatsOrderFromRawSortKeyAndDisplay()
+    {
+        GivenBook(Book(seriesId: 3, seriesOrder: 4, seriesOrderDisplay: "4.5"));
+        GivenSeries();
+        var vm = new BookEditDialogViewModel(_dispatcher);
+
+        await vm.InitializeAsync(BookId);
+
+        Assert.Equal(3, vm.SelectedSeriesId);
+        Assert.Equal("4.5", vm.SeriesOrderInput);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_OrderLeftBehindWithoutASeries_IsNotPrefilled()
+    {
+        // A series delete SET NULLs SeriesId but leaves SeriesOrder behind; the
+        // stale order must not pre-fill the field.
+        GivenBook(Book(seriesId: null, seriesOrder: 5));
+        GivenSeries();
+        var vm = new BookEditDialogViewModel(_dispatcher);
+
+        await vm.InitializeAsync(BookId);
+
+        Assert.Null(vm.SeriesOrderInput);
+    }
+
+    [Fact]
+    public async Task SaveAsync_SendsAllFields()
+    {
+        GivenBook(Book("Old title"));
+        GivenSeries();
+        var vm = new BookEditDialogViewModel(_dispatcher);
+        await vm.InitializeAsync(BookId);
         vm.Title = "  New title  ";
         vm.Category = BookCategory.NonFiction;
         vm.CoverUrl = "  https://example.com/new.jpg  ";
+
         await vm.SaveAsync();
 
-        using var db2 = factory.CreateDbContext();
-        var saved = db2.Books.Single(b => b.Id == bookId);
-        Assert.Equal("New title", saved.Title);
-        Assert.Equal(BookCategory.NonFiction, saved.Category);
-        Assert.Equal("https://example.com/new.jpg", saved.DefaultCoverArtUrl);
+        var sent = SentUpdate();
+        Assert.NotNull(sent);
+        Assert.Equal(BookId, sent.BookId);
+        Assert.Equal("  New title  ", sent.Title); // the handler trims
+        Assert.Equal(BookCategory.NonFiction, sent.Category);
+        Assert.Equal("https://example.com/new.jpg", sent.CoverUrl);
     }
 
     [Fact]
-    public async Task SaveAsync_BlankCoverUrl_PersistsAsNull()
+    public async Task SaveAsync_BlankCoverUrl_SendsNull()
     {
-        var factory = new TestDbContextFactory();
-        int bookId;
-        using (var db = factory.CreateDbContext())
-        {
-            var book = new Book
-            {
-                Title = "T",
-                DefaultCoverArtUrl = "https://old.example.com",
-                Works = [new Work { Title = "w", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "a" }, Order = 0 }] }],
-            };
-            db.Books.Add(book);
-            await db.SaveChangesAsync();
-            bookId = book.Id;
-        }
-
-        var vm = new BookEditDialogViewModel(factory, TestDispatcher.For(factory));
-        await vm.InitializeAsync(bookId);
+        GivenBook(Book(cover: "https://old.example.com"));
+        GivenSeries();
+        var vm = new BookEditDialogViewModel(_dispatcher);
+        await vm.InitializeAsync(BookId);
         vm.CoverUrl = "   ";
+
         await vm.SaveAsync();
 
-        using var db2 = factory.CreateDbContext();
-        Assert.Null(db2.Books.Single(b => b.Id == bookId).DefaultCoverArtUrl);
+        var sent = SentUpdate();
+        Assert.NotNull(sent);
+        Assert.Null(sent.CoverUrl);
     }
 
     [Fact]
     public async Task SaveAsync_BlankTitle_IsNoOp()
     {
-        var factory = new TestDbContextFactory();
-        int bookId;
-        using (var db = factory.CreateDbContext())
-        {
-            var book = new Book
-            {
-                Title = "Untouched",
-                Works = [new Work { Title = "w", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "a" }, Order = 0 }] }],
-            };
-            db.Books.Add(book);
-            await db.SaveChangesAsync();
-            bookId = book.Id;
-        }
-
-        var vm = new BookEditDialogViewModel(factory, TestDispatcher.For(factory));
-        await vm.InitializeAsync(bookId);
+        GivenBook(Book("Untouched"));
+        GivenSeries();
+        var vm = new BookEditDialogViewModel(_dispatcher);
+        await vm.InitializeAsync(BookId);
         vm.Title = "   ";
+
         await vm.SaveAsync();
 
-        using var db2 = factory.CreateDbContext();
-        Assert.Equal("Untouched", db2.Books.Single(b => b.Id == bookId).Title);
+        Assert.Null(SentUpdate());
     }
 
     [Fact]
@@ -136,65 +165,39 @@ public class BookEditDialogViewModelTests
         // Regression (arc-end review): a book in series A at #5, edited and switched
         // to series B without touching the order field, must NOT save as B #5. The
         // dropdown routes through OnSeriesChanged, which resets the order.
-        var factory = new TestDbContextFactory();
-        int bookId, seriesBId;
-        using (var db = factory.CreateDbContext())
-        {
-            var seriesA = new Series { Name = "Witcher", Type = SeriesType.Series };
-            var seriesB = new Series { Name = "Dune", Type = SeriesType.Series };
-            db.Series.AddRange(seriesA, seriesB);
-            var book = new Book
-            {
-                Title = "T",
-                Series = seriesA, SeriesOrder = 5,
-                Works = [new Work { Title = "w", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "a" }, Order = 0 }] }],
-            };
-            db.Books.Add(book);
-            await db.SaveChangesAsync();
-            bookId = book.Id;
-            seriesBId = seriesB.Id;
-        }
-
-        var vm = new BookEditDialogViewModel(factory, TestDispatcher.For(factory));
-        await vm.InitializeAsync(bookId);
+        const int seriesA = 1, seriesB = 2;
+        GivenBook(Book(seriesId: seriesA, seriesOrder: 5));
+        GivenSeries(
+            new SeriesPickerOption(seriesB, "Dune", SeriesType.Series),
+            new SeriesPickerOption(seriesA, "Witcher", SeriesType.Series));
+        var vm = new BookEditDialogViewModel(_dispatcher);
+        await vm.InitializeAsync(BookId);
         Assert.Equal("5", vm.SeriesOrderInput);      // loaded order for series A
 
-        vm.OnSeriesChanged(seriesBId);               // user switches the dropdown to Dune
+        vm.OnSeriesChanged(seriesB);                 // user switches the dropdown to Dune
         Assert.Null(vm.SeriesOrderInput);            // stale "5" cleared
 
         await vm.SaveAsync();
 
-        using var db2 = factory.CreateDbContext();
-        var saved = db2.Books.Single(b => b.Id == bookId);
-        Assert.Equal(seriesBId, saved.SeriesId);
-        Assert.Null(saved.SeriesOrder);              // NOT 5 — the old series' order didn't ride over
+        var sent = SentUpdate();
+        Assert.NotNull(sent);
+        Assert.Equal(seriesB, sent.SeriesId);
+        Assert.Null(sent.SeriesOrder);               // NOT 5 — the old series' order didn't ride over
+        Assert.Null(sent.SeriesOrderDisplay);
     }
 
     [Fact]
     public async Task OnSeriesChanged_SameSeries_KeepsLoadedOrder()
     {
         // Re-selecting the current series (a no-op change) must not wipe the order.
-        var factory = new TestDbContextFactory();
-        int bookId, seriesId;
-        using (var db = factory.CreateDbContext())
-        {
-            var series = new Series { Name = "Witcher", Type = SeriesType.Series };
-            db.Series.Add(series);
-            var book = new Book
-            {
-                Title = "T",
-                Series = series, SeriesOrder = 5,
-                Works = [new Work { Title = "w", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "a" }, Order = 0 }] }],
-            };
-            db.Books.Add(book);
-            await db.SaveChangesAsync();
-            bookId = book.Id;
-            seriesId = series.Id;
-        }
+        const int seriesId = 1;
+        GivenBook(Book(seriesId: seriesId, seriesOrder: 5));
+        GivenSeries(new SeriesPickerOption(seriesId, "Witcher", SeriesType.Series));
+        var vm = new BookEditDialogViewModel(_dispatcher);
+        await vm.InitializeAsync(BookId);
 
-        var vm = new BookEditDialogViewModel(factory, TestDispatcher.For(factory));
-        await vm.InitializeAsync(bookId);
         vm.OnSeriesChanged(seriesId);                // same series → no reset
+
         Assert.Equal("5", vm.SeriesOrderInput);
     }
 }
