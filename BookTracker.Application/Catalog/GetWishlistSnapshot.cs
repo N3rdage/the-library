@@ -34,7 +34,6 @@ public sealed class GetWishlistSnapshotHandler(IDbContextFactory<BookTrackerDbCo
         // Bookshelf scan-flag.
         var raw = await db.WishlistItems
             .AsNoTracking()
-            .Include(w => w.Isbns)
             .OrderByDescending(w => w.Priority)
             .ThenBy(w => w.DateAdded)
             .Select(w => new

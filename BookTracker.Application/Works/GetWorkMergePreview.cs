@@ -92,15 +92,32 @@ public sealed class GetWorkMergePreviewHandler(IDbContextFactory<BookTrackerDbCo
 
     private static async Task<WorkMergeDetail?> LoadDetailAsync(BookTrackerDbContext db, int id, CancellationToken ct)
     {
+        // Projected (C5): the work scalars, its contributors' (name, role,
+        // order) and its genre names. Contributors come back in WorkAuthor key
+        // order (AuthorId, Role) — the order the old Include graph handed the
+        // formatter's stable sort, so tied Orders still render the same way.
         var work = await db.Works
             .AsNoTracking()
-            .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .Include(w => w.Genres)
-            .FirstOrDefaultAsync(w => w.Id == id, ct);
+            .Where(w => w.Id == id)
+            .Select(w => new
+            {
+                w.Id,
+                w.Title,
+                w.Subtitle,
+                w.FirstPublishedDate,
+                Contributors = w.WorkAuthors
+                    .OrderBy(wa => wa.AuthorId)
+                    .ThenBy(wa => wa.Role)
+                    .Select(wa => new { wa.Author.Name, wa.Role, wa.Order })
+                    .ToList(),
+                GenreNames = w.Genres.Select(g => g.Name).ToList(),
+            })
+            .FirstOrDefaultAsync(ct);
         if (work is null) return null;
 
         var bookCount = await db.Books.CountAsync(b => b.Works.Any(w => w.Id == id), ct);
         var sampleBookTitles = await db.Books
+            .AsNoTracking()
             .Where(b => b.Works.Any(w => w.Id == id))
             .OrderBy(b => b.Title)
             .Take(SampleBookLimit)
@@ -114,9 +131,9 @@ public sealed class GetWorkMergePreviewHandler(IDbContextFactory<BookTrackerDbCo
 
         return new WorkMergeDetail(
             work.Id, work.Title, work.Subtitle,
-            WorkAuthorshipFormatter.Display(work),
+            WorkAuthorshipFormatter.Display(work.Contributors.Select(c => (c.Name, c.Role, c.Order))),
             work.FirstPublishedDate?.Year,
-            work.Genres.Select(g => g.Name).OrderBy(n => n).ToList(),
+            work.GenreNames.OrderBy(n => n).ToList(),
             bookCount, sampleBookTitles,
             fallbackCover);
     }

@@ -64,6 +64,7 @@ public sealed class GetLibraryGroupsHandler(IDbContextFactory<BookTrackerDbConte
         // its canonical, so the single group row is keyed + labelled by the
         // canonical (King), matching the unfiltered fan-out's rollup.
         var matched = await db.Authors
+            .AsNoTracking()
             .Where(a => a.Name == selectedName)
             .Select(a => new
             {
@@ -122,6 +123,7 @@ public sealed class GetLibraryGroupsHandler(IDbContextFactory<BookTrackerDbConte
 
         var genreIds = raw.Select(r => r.GenreId).ToList();
         var names = await db.Genres
+            .AsNoTracking()
             .Where(g => genreIds.Contains(g.Id))
             .Select(g => new { g.Id, g.Name })
             .ToDictionaryAsync(x => x.Id, x => x.Name, ct);
@@ -152,6 +154,7 @@ public sealed class GetLibraryGroupsHandler(IDbContextFactory<BookTrackerDbConte
     {
         var ids = canonicalIds.ToList();
         return await db.Authors
+            .AsNoTracking()
             .Where(a => ids.Contains(a.Id))
             .Select(a => new { a.Id, a.Name })
             .ToDictionaryAsync(x => x.Id, x => x.Name, ct);
