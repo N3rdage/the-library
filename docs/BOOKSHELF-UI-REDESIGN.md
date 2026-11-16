@@ -195,7 +195,7 @@ Pages use these tokens, not inline hex. All colour pairs resolve via `AppThemeBi
 
 ## 3. Component kit
 
-These are reusable `ContentView`s, not imperative code-behind cards. Every one consumes §2 tokens only.
+The target is that these are reusable `ContentView`s, not imperative code-behind cards, and that every one consumes §2 tokens only. The code does not meet that yet: `BookTracker.Mobile` has no `ContentView` and no `BookRow`, `ResultCard`, `SyncChip`, `Badge` or `EmptyState` type. The button and card entries exist as styles in `Resources/Styles/Styles.xaml` (`PrimaryButton`, `OutlinedButton`, `Card`); the rest are built per page, mostly in code-behind (the rows in `FindPage`, `AuthorWorksPage` and `WishlistPage`, the badges in `WishlistPage`, the progress bars in `SeriesGapsPage`) and partly in page XAML (the result card in `ResultPage.xaml`, the sync chip in `FindPage.xaml`). Extracting the kit is tracked in the backlog.
 
 | Component | Spec |
 |---|---|
@@ -211,7 +211,7 @@ These are reusable `ContentView`s, not imperative code-behind cards. Every one c
 | `ProgressBar` | Track `BarTrack`, fill green-leather. Used in Gaps. |
 | `EmptyState` | Centered muted Tabler glyph (~30 px, 50% opacity) + one line. For zero results / empty wishlist / no gaps. |
 
-**Icons:** the Tabler outline set, not emoji, never mixed on one surface. Star rating stays as `★★★★☆` text.
+**Icons:** the target is the Tabler outline set, not emoji, never mixed on one surface. Star rating stays as `★★★★☆` text. The code does not meet that yet: `TablerIcons` carries only the three tab glyphs (`Search`, `Star`, `Books`, used by `AppShell`), and the pages still use emoji and symbol characters — the `📖` cover placeholder in `FindPage`, `ResultPage`, `AuthorWorksPage` and `WishlistPage`, `⭐ On your wishlist` in `ResultPage.xaml`, and `⟳` / `⚠ offline` on the Find sync chip. Moving them to Tabler glyphs is tracked in the backlog.
 
 ---
 
@@ -350,6 +350,7 @@ Motion.Enabled = scale > 0f;
 |---|---|---|
 | **Add to wishlist (local write)** | **Parked — button present but inert** | Appears on Not-found (§4.3) and Author-works missing rows (§5). Wire as a local write like the Bought flag (survives refresh, reconciles on sync). When implemented, lights up in all locations at once. No layout change needed to activate. |
 | **Online edition lookup** | **Parked** | The disabled "Other editions of this work — online only" row in `WorkEditionPanel`. When online, resolves an unknown ISBN against the web catalogue → "you have this *work*, not this *edition*". Must degrade gracefully to "online only" offline; never blocks the primary answer. |
+| **Unconsumed styles and tokens** | **Parked** | `Styles.xaml` defines `KillerButton` and `GapProgress`, and `Colors.xaml` defines `FoundPillBgL/D`, `FoundPillTxL/D` and `OnlineBgL/D`, with no consumer (`SeriesGapsPage` colours its progress bars in code-behind instead of using `GapProgress`). They stay for the surfaces §3 specifies; delete any that the component kit does not end up using. |
 | **Gaps tab longevity** | **Watch** | Candidate for later deprecation as missing→wishlist grows. Keep self-contained. |
 | **Recent-lookups list** (§4.1) | **Parked** | Find opens to an empty search-ready state. Adding it needs a lookup-history store (in-memory resets on restart; persisted = new SQLite table). |
 | **Online layer (work-level ownership · author Missing · other editions)** | **Parked — TODO #54** | The cache holds only the owned library, so all "what am I *missing*" features need online catalogue data. Find is offline search/scan of owned items; the online layer is a separate arc. |

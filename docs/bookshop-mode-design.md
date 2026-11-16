@@ -155,7 +155,7 @@ Offline indicator uses `navigator.onLine` + visibilitychange events. Unauthentic
 
 ## Open decisions
 
-- **Result card cover image** — a placeholder icon, or a tiny thumbnail per book from the snapshot (~50 bytes per book × 3000 = 150 KB extra)? Icon only unless mobile testing shows the icon-only card feels too anonymous.
+- **Result card cover image** — the snapshot already carries one: `BookSnapshot.CoverUrl` (and `EditionSnapshot.CoverUrl`), which Bookshelf's cover cache uses. `/bookshop` ignores it; its result cards (`wwwroot/js/bookshop-page.js`) are text only, with no image or placeholder icon. Showing the cover would cost an image fetch per result, not snapshot size; the open question is whether that is worth it on a shop's cellular connection.
 - **Service worker BackgroundSync API** — Chrome supports it; iOS doesn't. The page refreshes on visit; if actual usage shows a daily background refresh while the phone is in a pocket is wanted, revisit.
 - **Author canonical-vs-alias UI** — when search hits both Stephen King and Richard Bachman, surface only the canonical, or both? Leaning canonical-only in the result list, with alias awareness through the search itself (typing "Bachman" matches King's row).
 
