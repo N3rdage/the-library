@@ -1,12 +1,15 @@
 using System.Text.RegularExpressions;
-using BookTracker.Data;
+using BookTracker.Application;
+using BookTracker.Application.Series;
 using BookTracker.Data.Models;
-using Microsoft.EntityFrameworkCore;
 using BookTracker.Application.Formatting;
 
 namespace BookTracker.Web.Services;
 
-public partial class SeriesMatchService(IDbContextFactory<BookTrackerDbContext> dbFactory)
+// The series-suggestion rules. Its reads (the name match, the author's series
+// and the author's unseriesed book count) are the GetSeriesMatchCandidates
+// query, sent through IDispatcher; this class holds no data access.
+public partial class SeriesMatchService(IDispatcher dispatcher)
 {
     /// <summary>
     /// Returns a series suggestion using upstream series data from an ISBN
@@ -20,15 +23,13 @@ public partial class SeriesMatchService(IDbContextFactory<BookTrackerDbContext> 
     {
         if (!string.IsNullOrWhiteSpace(lookup.Series))
         {
-            await using var db = await dbFactory.CreateDbContextAsync();
             var apiSeriesName = lookup.Series.Trim();
 
             // Local match by name (case-insensitive). When the API series
             // matches an existing local Series, attach to that one — the
             // user might have already created it from a previous capture.
-            var localMatch = await db.Series
-                .Where(s => s.Name.ToLower() == apiSeriesName.ToLower())
-                .FirstOrDefaultAsync();
+            var localMatch = (await dispatcher.Query(
+                new GetSeriesMatchCandidates(apiSeriesName, Author: null))).NameMatch;
 
             // SeriesOrderParser is the single authority that turns an order
             // token into (sort int, display label) — interquel floor included.
@@ -80,12 +81,11 @@ public partial class SeriesMatchService(IDbContextFactory<BookTrackerDbContext> 
         if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(author))
             return null;
 
-        await using var db = await dbFactory.CreateDbContextAsync();
+        var candidates = await dispatcher.Query(
+            new GetSeriesMatchCandidates(SeriesName: null, author.Trim()));
 
         // Strategy 1: Check if the author already has a series (by Series.Author).
-        var authorSeries = await db.Series
-            .Where(s => s.Author != null && s.Author == author.Trim())
-            .ToListAsync();
+        var authorSeries = candidates.AuthorSeries;
 
         if (authorSeries.Count > 0)
         {
@@ -114,11 +114,9 @@ public partial class SeriesMatchService(IDbContextFactory<BookTrackerDbContext> 
 
         // Strategy 2: Check if the author has other books (not yet in a series)
         // that might suggest grouping. Series membership lives on the Book now,
-        // so count this author's books with no Book-level series.
-        var authorName = author.Trim();
-        var authorBookCount = await db.Books
-            .CountAsync(b => b.SeriesId == null
-                && b.Works.Any(w => w.Authors.Any(a => a.Name == authorName)));
+        // so count this author's books with no Book-level series (the query
+        // counts them only when the author has no series).
+        var authorBookCount = candidates.UnseriesedAuthorBookCount;
 
         if (authorBookCount >= 2)
         {

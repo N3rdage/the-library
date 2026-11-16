@@ -13,7 +13,7 @@ public class BulkAddViewModelTests
     private readonly TestDbContextFactory _factory = new();
     private readonly IBookLookupService _lookup = Substitute.For<IBookLookupService>();
 
-    private BulkAddViewModel CreateVm() => new(_factory, _lookup, new SeriesMatchService(_factory), NullLogger<BulkAddViewModel>.Instance, TestDispatcher.For(_factory));
+    private BulkAddViewModel CreateVm() => new(_factory, _lookup, new SeriesMatchService(TestDispatcher.For(_factory)), NullLogger<BulkAddViewModel>.Instance, TestDispatcher.For(_factory));
 
     [Fact]
     public async Task AddIsbnAsync_AddsRowToGrid()
