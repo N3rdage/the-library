@@ -1,11 +1,9 @@
 using BookTracker.Application;
 using BookTracker.Application.Authors;
-using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Components.Shared;
 using BookTracker.Web.ViewModels;
 using Bunit;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
 using NSubstitute;
@@ -27,9 +25,8 @@ public class MudContributorPickerTests : ComponentTestBase
 
     public MudContributorPickerTests()
     {
-        // The picker's SearchAsync opens a DbContext; the tests below don't
-        // type into the autocomplete, so a stub suffices.
-        Services.AddSingleton(Substitute.For<IDbContextFactory<BookTrackerDbContext>>());
+        // The picker queries SearchAuthorNames for the dropdown and dispatches
+        // CreateAuthor on Add; a substitute stands in for both.
         Services.AddSingleton(_dispatcher);
         Services.AddLogging();
     }
@@ -179,6 +176,23 @@ public class MudContributorPickerTests : ComponentTestBase
         await ClickAddAsync(cut);
 
         Assert.Single(contributors);
+    }
+
+    [Fact]
+    public async Task Search_QueriesAuthorNames_WithNothingExcluded()
+    {
+        // Unlike the author picker, a name already chipped stays suggestable: one
+        // person can hold several roles on a Work.
+        _dispatcher.Query(Arg.Any<SearchAuthorNames>(), Arg.Any<CancellationToken>())
+            .Returns(["Doug Mauss"]);
+        var cut = RenderPicker([new ContributorEntry("Doug Mauss", AuthorRole.Editor)]);
+
+        var results = await cut.Instance.SearchAsync("doug", CancellationToken.None);
+
+        Assert.Equal(["Doug Mauss"], results);
+        await _dispatcher.Received(1).Query(
+            Arg.Is<SearchAuthorNames>(q => q!.Query == "doug" && q.Exclude.Count == 0),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

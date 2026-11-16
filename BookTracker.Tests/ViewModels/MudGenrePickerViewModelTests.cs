@@ -1,11 +1,38 @@
-using BookTracker.Data.Models;
+using BookTracker.Application;
+using BookTracker.Application.Genres;
 using BookTracker.Web.ViewModels;
+using NSubstitute;
 
 namespace BookTracker.Tests.ViewModels;
 
-[Trait("Category", TestCategories.Integration)]
+// The picker reads its catalogue through GetGenreOptions; a substituted
+// dispatcher stands in for it. The read's SQL (flat list by name, parent id +
+// name) is covered by GetGenreOptionsHandlerTests.
+[Trait("Category", TestCategories.Unit)]
 public class MudGenrePickerViewModelTests
 {
+    private const int ReferenceId = 1;
+    private const int DictionariesId = 2;
+    private const int AtlasesId = 3;
+    private const int FantasyId = 4;
+
+    private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
+
+    private async Task<MudGenrePickerViewModel> LoadedVm(params GenrePickerOption[] genres)
+    {
+        _dispatcher.Query(Arg.Any<GetGenreOptions>(), Arg.Any<CancellationToken>())
+            .Returns(genres);
+        var vm = new MudGenrePickerViewModel(_dispatcher);
+        await vm.InitializeAsync();
+        return vm;
+    }
+
+    // The catalogue as GetGenreOptions returns it: by name, flat, with parents.
+    private static readonly GenrePickerOption Atlases = new(AtlasesId, "Atlases", ReferenceId, "Reference");
+    private static readonly GenrePickerOption Dictionaries = new(DictionariesId, "Dictionaries", ReferenceId, "Reference");
+    private static readonly GenrePickerOption Fantasy = new(FantasyId, "Fantasy", null, null);
+    private static readonly GenrePickerOption Reference = new(ReferenceId, "Reference", null, null);
+
     [Theory]
     // Whole-word matches inside a longer candidate.
     [InlineData("Fantasy fiction", "Fantasy", true)]
@@ -36,22 +63,12 @@ public class MudGenrePickerViewModelTests
     [Fact]
     public async Task InitializeAsync_LoadsFlatGenresWithParentNames()
     {
-        var factory = new TestDbContextFactory();
-        using (var db = factory.CreateDbContext())
-        {
-            var reference = new Genre { Name = "Reference" };
-            db.Genres.Add(reference);
-            db.Genres.Add(new Genre { Name = "Dictionaries", ParentGenre = reference });
-            await db.SaveChangesAsync();
-        }
-
-        var vm = new MudGenrePickerViewModel(factory);
-        await vm.InitializeAsync();
+        var vm = await LoadedVm(Dictionaries, Reference);
 
         Assert.Equal(2, vm.AllGenres.Count);
         var dict = vm.AllGenres.Single(g => g.Name == "Dictionaries");
         Assert.Equal("Reference", dict.ParentName);
-        Assert.NotNull(dict.ParentGenreId);
+        Assert.Equal(ReferenceId, dict.ParentGenreId);
         var refGenre = vm.AllGenres.Single(g => g.Name == "Reference");
         Assert.Null(refGenre.ParentName);
         Assert.Null(refGenre.ParentGenreId);
@@ -60,97 +77,43 @@ public class MudGenrePickerViewModelTests
     [Fact]
     public async Task Search_SubstringCaseInsensitive_ExcludesSelected()
     {
-        var factory = new TestDbContextFactory();
-        int dictionariesId;
-        using (var db = factory.CreateDbContext())
-        {
-            var reference = new Genre { Name = "Reference" };
-            var dictionaries = new Genre { Name = "Dictionaries", ParentGenre = reference };
-            db.Genres.AddRange(reference, dictionaries,
-                new Genre { Name = "Atlases", ParentGenre = reference },
-                new Genre { Name = "Fantasy" });
-            await db.SaveChangesAsync();
-            dictionariesId = dictionaries.Id;
-        }
-
-        var vm = new MudGenrePickerViewModel(factory);
-        await vm.InitializeAsync();
+        var vm = await LoadedVm(Atlases, Dictionaries, Fantasy, Reference);
 
         var results = vm.Search("DICT", []).ToList();
         Assert.Single(results);
         Assert.Equal("Dictionaries", results[0].Name);
 
         // already-selected ids are excluded
-        var filtered = vm.Search("dict", [dictionariesId]).ToList();
+        var filtered = vm.Search("dict", [DictionariesId]).ToList();
         Assert.Empty(filtered);
     }
 
     [Fact]
     public async Task ChipLabel_UsesParentSlashLeafForNested_LeafForTopLevel()
     {
-        var factory = new TestDbContextFactory();
-        int dictionariesId;
-        int fantasyId;
-        using (var db = factory.CreateDbContext())
-        {
-            var reference = new Genre { Name = "Reference" };
-            var dictionaries = new Genre { Name = "Dictionaries", ParentGenre = reference };
-            var fantasy = new Genre { Name = "Fantasy" };
-            db.Genres.AddRange(reference, dictionaries, fantasy);
-            await db.SaveChangesAsync();
-            dictionariesId = dictionaries.Id;
-            fantasyId = fantasy.Id;
-        }
+        var vm = await LoadedVm(Dictionaries, Fantasy, Reference);
 
-        var vm = new MudGenrePickerViewModel(factory);
-        await vm.InitializeAsync();
-
-        Assert.Equal("Reference / Dictionaries", vm.ChipLabel(dictionariesId));
-        Assert.Equal("Fantasy", vm.ChipLabel(fantasyId));
+        Assert.Equal("Reference / Dictionaries", vm.ChipLabel(DictionariesId));
+        Assert.Equal("Fantasy", vm.ChipLabel(FantasyId));
     }
 
     [Fact]
     public async Task AddGenre_AutoIncludesParentWhenChildPicked()
     {
-        var factory = new TestDbContextFactory();
-        int referenceId;
-        int dictionariesId;
-        using (var db = factory.CreateDbContext())
-        {
-            var reference = new Genre { Name = "Reference" };
-            var dictionaries = new Genre { Name = "Dictionaries", ParentGenre = reference };
-            db.Genres.AddRange(reference, dictionaries);
-            await db.SaveChangesAsync();
-            referenceId = reference.Id;
-            dictionariesId = dictionaries.Id;
-        }
+        var vm = await LoadedVm(Dictionaries, Reference);
 
-        var vm = new MudGenrePickerViewModel(factory);
-        await vm.InitializeAsync();
-
-        var after = vm.AddGenre(dictionariesId, []);
-        Assert.Contains(dictionariesId, after);
-        Assert.Contains(referenceId, after);
+        var after = vm.AddGenre(DictionariesId, []);
+        Assert.Contains(DictionariesId, after);
+        Assert.Contains(ReferenceId, after);
     }
 
     [Fact]
     public async Task AddGenre_IsIdempotent()
     {
-        var factory = new TestDbContextFactory();
-        int fantasyId;
-        using (var db = factory.CreateDbContext())
-        {
-            var fantasy = new Genre { Name = "Fantasy" };
-            db.Genres.Add(fantasy);
-            await db.SaveChangesAsync();
-            fantasyId = fantasy.Id;
-        }
+        var vm = await LoadedVm(Fantasy);
 
-        var vm = new MudGenrePickerViewModel(factory);
-        await vm.InitializeAsync();
-
-        var once = vm.AddGenre(fantasyId, []);
-        var twice = vm.AddGenre(fantasyId, once);
+        var once = vm.AddGenre(FantasyId, []);
+        var twice = vm.AddGenre(FantasyId, once);
         Assert.Single(twice);
     }
 
@@ -159,44 +122,17 @@ public class MudGenrePickerViewModelTests
     {
         // Removing a child doesn't deselect its parent — matches the existing
         // picker's behaviour (parent selection is independent of child presence).
-        var factory = new TestDbContextFactory();
-        int referenceId;
-        int dictionariesId;
-        using (var db = factory.CreateDbContext())
-        {
-            var reference = new Genre { Name = "Reference" };
-            var dictionaries = new Genre { Name = "Dictionaries", ParentGenre = reference };
-            db.Genres.AddRange(reference, dictionaries);
-            await db.SaveChangesAsync();
-            referenceId = reference.Id;
-            dictionariesId = dictionaries.Id;
-        }
+        var vm = await LoadedVm(Dictionaries, Reference);
 
-        var vm = new MudGenrePickerViewModel(factory);
-        await vm.InitializeAsync();
-
-        var after = vm.RemoveGenre(dictionariesId, [dictionariesId, referenceId]);
-        Assert.Contains(referenceId, after);
-        Assert.DoesNotContain(dictionariesId, after);
+        var after = vm.RemoveGenre(DictionariesId, [DictionariesId, ReferenceId]);
+        Assert.Contains(ReferenceId, after);
+        Assert.DoesNotContain(DictionariesId, after);
     }
 
     [Fact]
     public async Task BuildTreeItems_GroupsChildrenUnderParents()
     {
-        var factory = new TestDbContextFactory();
-        using (var db = factory.CreateDbContext())
-        {
-            var reference = new Genre { Name = "Reference" };
-            db.Genres.AddRange(
-                reference,
-                new Genre { Name = "Dictionaries", ParentGenre = reference },
-                new Genre { Name = "Atlases", ParentGenre = reference },
-                new Genre { Name = "Fantasy" });
-            await db.SaveChangesAsync();
-        }
-
-        var vm = new MudGenrePickerViewModel(factory);
-        await vm.InitializeAsync();
+        var vm = await LoadedVm(Atlases, Dictionaries, Fantasy, Reference);
         var tree = vm.BuildTreeItems([]);
 
         Assert.Equal(2, tree.Count); // Reference + Fantasy
@@ -205,5 +141,18 @@ public class MudGenrePickerViewModelTests
         Assert.Equal(2, referenceNode.Children!.Count);
         var fantasyNode = tree.Single(t => t.Text == "Fantasy");
         Assert.True(fantasyNode.Children is null || fantasyNode.Children.Count == 0);
+    }
+
+    [Fact]
+    public async Task ApplyLookupCandidates_AddsFuzzyMatchAndItsParent()
+    {
+        var vm = await LoadedVm(Atlases, Dictionaries, Fantasy, Reference);
+
+        var after = vm.ApplyLookupCandidates(["English dictionaries", "Epic fantasy"], []);
+
+        Assert.Contains(DictionariesId, after);
+        Assert.Contains(ReferenceId, after);
+        Assert.Contains(FantasyId, after);
+        Assert.DoesNotContain(AtlasesId, after);
     }
 }
