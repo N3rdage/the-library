@@ -44,13 +44,40 @@ public sealed class GetBookMergePreviewHandler(IDbContextFactory<BookTrackerDbCo
 
     private static async Task<BookMergeDetail?> LoadDetailAsync(BookTrackerDbContext db, int id, CancellationToken ct)
     {
+        // Projected (C5): the book scalars, its editions' cover URLs (in Edition
+        // id order — the order the old Include graph gave the "first edition
+        // cover" fallback), each work's per-book Order + title + contributors,
+        // and the tag names. No entity graph is hydrated.
         var book = await db.Books
             .AsNoTracking()
-            .Include(b => b.Editions)
-            .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .Include(b => b.BookWorks)   // for the per-book Order (headline pick)
-            .Include(b => b.Tags)
-            .FirstOrDefaultAsync(b => b.Id == id, ct);
+            .Where(b => b.Id == id)
+            .Select(b => new
+            {
+                b.Id,
+                b.Title,
+                b.Category,
+                b.Status,
+                b.Rating,
+                b.Notes,
+                b.DateAdded,
+                b.DefaultCoverArtUrl,
+                EditionCoverUrls = b.Editions.OrderBy(e => e.Id).Select(e => e.CoverUrl).ToList(),
+                Works = b.BookWorks.Select(bw => new
+                {
+                    bw.Order,
+                    bw.WorkId,
+                    bw.Work.Title,
+                    // WorkAuthor key order (AuthorId, Role), as the Include graph
+                    // handed the formatter's stable sort.
+                    Contributors = bw.Work.WorkAuthors
+                        .OrderBy(wa => wa.AuthorId)
+                        .ThenBy(wa => wa.Role)
+                        .Select(wa => new { wa.Author.Name, wa.Role, wa.Order })
+                        .ToList(),
+                }).ToList(),
+                TagNames = b.Tags.Select(t => t.Name).ToList(),
+            })
+            .FirstOrDefaultAsync(ct);
         if (book is null) return null;
 
         var copyCount = await db.Copies.CountAsync(c => c.Edition.BookId == id, ct);
@@ -59,22 +86,23 @@ public sealed class GetBookMergePreviewHandler(IDbContextFactory<BookTrackerDbCo
         // Edition's CoverUrl.
         var cover = !string.IsNullOrWhiteSpace(book.DefaultCoverArtUrl)
             ? book.DefaultCoverArtUrl
-            : book.Editions.Select(e => e.CoverUrl).FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
+            : book.EditionCoverUrls.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
 
         // Primary Work's authorship for the merge dialog headline — the Work the
         // user ordered first (BookWork.Order 0), matching the BookDetail headline
-        // after a reorder. BookWorks carries only the ordering key; pick the work
-        // itself from the already-loaded (authorship-hydrated) Works list.
-        var primaryWorkId = book.BookWorks.OrderBy(bw => bw.Order).Select(bw => bw.WorkId).FirstOrDefault();
-        var primaryWork = book.Works.FirstOrDefault(w => w.Id == primaryWorkId) ?? book.Works.FirstOrDefault();
-        var firstAuthor = primaryWork is null ? null : WorkAuthorshipFormatter.Display(primaryWork);
+        // after a reorder. WorkId breaks Order ties, as the BookWork key order did
+        // for the old in-memory sort.
+        var primaryWork = book.Works.OrderBy(w => w.Order).ThenBy(w => w.WorkId).FirstOrDefault();
+        var firstAuthor = primaryWork is null
+            ? null
+            : WorkAuthorshipFormatter.Display(primaryWork.Contributors.Select(c => (c.Name, c.Role, c.Order)));
 
         return new BookMergeDetail(
             book.Id, book.Title, firstAuthor,
             book.Category, book.Status, book.Rating, book.Notes, book.DateAdded,
-            book.Editions.Count, copyCount,
+            book.EditionCoverUrls.Count, copyCount,
             book.Works.Select(w => w.Title).OrderBy(t => t).ToList(),
-            book.Tags.Select(t => t.Name).OrderBy(t => t).ToList(),
+            book.TagNames.OrderBy(t => t).ToList(),
             cover);
     }
 }

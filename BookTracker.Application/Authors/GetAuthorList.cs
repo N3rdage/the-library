@@ -30,11 +30,20 @@ public sealed class GetAuthorListHandler(IDbContextFactory<BookTrackerDbContext>
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
+        // Projected (C5): the row scalars, the canonical's name and the alias
+        // names — no Author entities. Alias names are sorted in memory below,
+        // as before, so the ordering doesn't move to the SQL collation.
         var authorsRaw = await db.Authors
             .AsNoTracking()
-            .Include(a => a.CanonicalAuthor)
-            .Include(a => a.Aliases)
             .OrderBy(a => a.Name)
+            .Select(a => new
+            {
+                a.Id,
+                a.Name,
+                a.CanonicalAuthorId,
+                CanonicalName = a.CanonicalAuthor == null ? null : a.CanonicalAuthor.Name,
+                AliasNames = a.Aliases.Select(al => al.Name).ToList(),
+            })
             .ToListAsync(ct);
 
         // SQL-side per-author distinct counts (Author-role only). Canonical rows
@@ -55,8 +64,8 @@ public sealed class GetAuthorListHandler(IDbContextFactory<BookTrackerDbContext>
                 a.Id,
                 a.Name,
                 a.CanonicalAuthorId,
-                a.CanonicalAuthor?.Name,
-                a.Aliases.Select(al => al.Name).OrderBy(n => n).ToList(),
+                a.CanonicalName,
+                a.AliasNames.OrderBy(n => n).ToList(),
                 counts?.WorkCount ?? 0,
                 counts?.BookCount ?? 0,
                 counts?.SeriesCount ?? 0));

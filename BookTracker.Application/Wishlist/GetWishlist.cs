@@ -20,7 +20,7 @@ public sealed class GetWishlistHandler(IDbContextFactory<BookTrackerDbContext> d
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         return await db.WishlistItems
-            .Include(w => w.Series)
+            .AsNoTracking()
             .OrderByDescending(w => w.Priority)
             .ThenBy(w => w.Title)
             .Select(w => new WishlistRow(

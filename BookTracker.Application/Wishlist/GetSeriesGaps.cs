@@ -46,10 +46,22 @@ public sealed class GetSeriesGapsHandler(IDbContextFactory<BookTrackerDbContext>
         // Structured series with a known expected count where we're missing books.
         // Series membership is a per-Book concept — the Book is installment N.
         // The Books navigation is filtered by the global soft-delete query
-        // filter, so tombstoned books don't count as owned.
+        // filter, so tombstoned books don't count as owned. Projected (C5): only
+        // the series scalars and each book's id / title / order cross the wire;
+        // the SeriesSlots rule and the gap arithmetic run in memory below.
         var incompleteSeries = await db.Series
-            .Include(s => s.Books)
+            .AsNoTracking()
             .Where(s => s.Type == SeriesType.Series && s.ExpectedCount != null)
+            .Select(s => new
+            {
+                s.Id,
+                s.Name,
+                s.Author,
+                ExpectedCount = s.ExpectedCount!.Value,
+                Books = s.Books
+                    .Select(b => new { b.Id, b.Title, b.SeriesOrder, b.SeriesOrderDisplay })
+                    .ToList(),
+            })
             .ToListAsync(ct);
 
         var gaps = incompleteSeries
@@ -62,11 +74,11 @@ public sealed class GetSeriesGapsHandler(IDbContextFactory<BookTrackerDbContext>
                 var ownedPositions = s.Books
                     .Where(b => SeriesSlots.OccupiesNumberedSlot(b.SeriesOrder, b.SeriesOrderDisplay))
                     .Select(b => b.SeriesOrder!.Value)
-                    .Where(o => o <= s.ExpectedCount!.Value)
+                    .Where(o => o <= s.ExpectedCount)
                     .ToHashSet();
 
                 var missing = new List<int>();
-                for (int i = 1; i <= s.ExpectedCount!.Value; i++)
+                for (int i = 1; i <= s.ExpectedCount; i++)
                 {
                     if (!ownedPositions.Contains(i))
                         missing.Add(i);
@@ -77,9 +89,12 @@ public sealed class GetSeriesGapsHandler(IDbContextFactory<BookTrackerDbContext>
                     s.Name,
                     s.Author,
                     ownedPositions.Count,
-                    s.ExpectedCount.Value,
+                    s.ExpectedCount,
                     missing,
+                    // Book id breaks SeriesOrder ties — the order the old Include
+                    // graph handed the stable sort.
                     s.Books.OrderBy(b => b.SeriesOrder ?? int.MaxValue)
+                        .ThenBy(b => b.Id)
                         .Select(b => new OwnedSeriesBook(
                             b.Id,
                             b.Title,
@@ -94,24 +109,31 @@ public sealed class GetSeriesGapsHandler(IDbContextFactory<BookTrackerDbContext>
         // numbered book. Highest-owned-order seeds the suggestion; series with
         // all-null SeriesOrder still surface (HighestOwnedOrder=0).
         var openSeries = await db.Series
-            .Include(s => s.Books)
+            .AsNoTracking()
             .Where(s => s.Type == SeriesType.Series && s.ExpectedCount == null && s.Books.Any())
+            .Select(s => new
+            {
+                s.Id,
+                s.Name,
+                s.Author,
+                BookCount = s.Books.Count,
+                Orders = s.Books
+                    .Where(b => b.SeriesOrder != null)
+                    .Select(b => b.SeriesOrder!.Value)
+                    .ToList(),
+            })
             .ToListAsync(ct);
 
         var open = openSeries
             .OrderBy(s => s.Name)
             .Select(s =>
             {
-                var orders = s.Books
-                    .Where(b => b.SeriesOrder.HasValue)
-                    .Select(b => b.SeriesOrder!.Value)
-                    .OrderBy(n => n)
-                    .ToList();
+                var orders = s.Orders.OrderBy(n => n).ToList();
                 return new OpenSeries(
                     s.Id,
                     s.Name,
                     s.Author,
-                    s.Books.Count,
+                    s.BookCount,
                     orders.Count == 0 ? 0 : orders.Max(),
                     orders);
             })
