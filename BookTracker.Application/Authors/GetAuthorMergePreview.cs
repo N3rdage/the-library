@@ -54,13 +54,21 @@ public sealed class GetAuthorMergePreviewHandler(IDbContextFactory<BookTrackerDb
     {
         var author = await db.Authors
             .AsNoTracking()
-            .Include(a => a.CanonicalAuthor)
-            .FirstOrDefaultAsync(a => a.Id == id, ct);
+            .Where(a => a.Id == id)
+            .Select(a => new
+            {
+                a.Id,
+                a.Name,
+                a.CanonicalAuthorId,
+                CanonicalName = a.CanonicalAuthor == null ? null : a.CanonicalAuthor.Name,
+            })
+            .FirstOrDefaultAsync(ct);
         if (author is null) return null;
 
         var workCount = await db.Works.CountAsync(w => w.Authors.Any(a => a.Id == id), ct);
         var aliasCount = await db.Authors.CountAsync(a => a.CanonicalAuthorId == id, ct);
         var sampleTitles = await db.Works
+            .AsNoTracking()
             .Where(w => w.Authors.Any(a => a.Id == id))
             .OrderBy(w => w.Title)
             .Take(SampleWorkLimit)
@@ -75,7 +83,7 @@ public sealed class GetAuthorMergePreviewHandler(IDbContextFactory<BookTrackerDb
         return new AuthorMergeDetail(
             author.Id, author.Name,
             author.CanonicalAuthorId,
-            author.CanonicalAuthor?.Name,
+            author.CanonicalName,
             workCount, aliasCount, sampleTitles,
             cover);
     }
