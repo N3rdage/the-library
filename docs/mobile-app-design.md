@@ -75,7 +75,7 @@ The browser flow on `/bookshop` keeps working through the same cookie-mode Easy 
 
 - `GET /api/catalog-snapshot` — books, authors, series; consumed by `/bookshop` and Bookshelf. `BookSnapshot` carries `seriesId` + `seriesOrder` and `CatalogSnapshot` has a top-level `series` array (id, name, type, expectedCount), which enables the "missing books in series" view client-side.
 - `GET /api/wishlist-snapshot` — wishlist rows (id, title, author, isbn, priority, seriesId, seriesOrder). Read-only.
-- "Favourite authors" — the model decision is deferred. v1 mobile derives "favourites" as "top N authors by book count" (mirrors `/Home`'s top-author tally). If real usage shows that's wrong, add an explicit `Author.IsFavourite` flag in a separate PR.
+- "Favourite authors" — there is no favourites model, and Bookshelf has no favourites view. The nearest thing is Bookcase's top-10 authors card on the `/` dashboard.
 
 Deferred to v2 if the use case actually surfaces:
 - `POST /api/books/{id}/status` — mark read from mobile. Mobile queues writes offline + syncs on reconnect. Drew's own framing: "honestly could use the other app for that," so this stays out of v1.
