@@ -9,9 +9,10 @@ using AuthorResolver = BookTracker.Application.Authors.AuthorResolver;
 
 namespace BookTracker.Application.Books;
 
-/// <summary>Creates a Book from the Add page in one save: the book, its works
-/// (a single new Work, or a collection of new and existing Works), its first
-/// Edition with one Copy, and its series membership. Returns the new Book's id.
+/// <summary>Creates a Book from the Add page or a bulk-add row in one save: the
+/// book, its works (a single new Work, or a collection of new and existing
+/// Works), its first Edition with one Copy, its series membership and its tags
+/// (find-or-create by name). Returns the new Book's id.
 /// Throws <see cref="InvalidOperationException"/> with a user-facing message when
 /// the works carry no usable contributor or no usable collection row.</summary>
 public sealed record CreateBook(
@@ -19,7 +20,8 @@ public sealed record CreateBook(
     NewBookWorks Works,
     NewEdition Edition,
     BookCondition CopyCondition,
-    SeriesChoice Series) : ICommand<int>;
+    SeriesChoice Series,
+    IReadOnlyList<string> TagNames) : ICommand<int>;
 
 /// <summary>The Book-level fields captured on the Add page.</summary>
 public sealed record NewBook(
@@ -108,6 +110,8 @@ public sealed class CreateBookHandler(IDbContextFactory<BookTrackerDbContext> db
 
         await SeriesResolver.AttachToBookAsync(
             db, book, command.Series.SeriesId, command.Series.Name, command.Series.OrderLabel, ct);
+
+        await TagResolver.AttachToBookAsync(db, book, command.TagNames, ct);
 
         db.Books.Add(book);
         await db.SaveChangesAsync(ct);
