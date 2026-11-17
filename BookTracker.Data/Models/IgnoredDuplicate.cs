@@ -7,8 +7,8 @@ namespace BookTracker.Data.Models;
 //
 // IDs are stored with LowerId &lt; HigherId so (A,B) and (B,A) normalise to the
 // same row. No FK to the referenced entity (polymorphic across four types
-// via EntityType) — stale rows are filtered out by the detection service
-// when either side no longer exists.
+// via EntityType) — stale rows are removed by the SweepOrphanedDismissals
+// handler when either side no longer exists.
 public class IgnoredDuplicate
 {
     public int Id { get; set; }
