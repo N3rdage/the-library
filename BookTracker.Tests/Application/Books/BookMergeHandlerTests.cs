@@ -26,21 +26,28 @@ public class BookMergeHandlerTests
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = new Book { Title = "B", Works = [work] };
         var loser = new Book { Title = "B", Works = [work] };
-        var loserEdition = new Edition
+        var hardcover = new Edition
         {
             Book = loser,
             Isbn = "9780000000001",
             Format = BookFormat.Hardcover,
+            Copies = [new Copy { Condition = BookCondition.Good }, new Copy { Condition = BookCondition.Fair }]
+        };
+        var paperback = new Edition
+        {
+            Book = loser,
+            Isbn = "9780000000002",
+            Format = BookFormat.TradePaperback,
             Copies = [new Copy { Condition = BookCondition.Good }]
         };
         db.Books.AddRange(winner, loser);
-        db.Editions.Add(loserEdition);
+        db.Editions.AddRange(hardcover, paperback);
         await db.SaveChangesAsync();
 
         var result = await Merge(winner.Id, loser.Id);
 
         Assert.True(result.Success);
-        Assert.Equal(1, result.EditionsReassigned);
+        Assert.Equal(2, result.EditionsReassigned);
 
         using var verify = _factory.CreateDbContext();
         // Loser invisible to normal queries (soft-deleted) ...
@@ -51,9 +58,17 @@ public class BookMergeHandlerTests
             .FirstOrDefaultAsync(b => b.Id == loser.Id);
         Assert.NotNull(husk);
         Assert.NotNull(husk!.DeletedAt);
-        var winnerEditions = verify.Editions.Where(e => e.BookId == winner.Id).ToList();
-        Assert.Single(winnerEditions);
-        Assert.Equal("9780000000001", winnerEditions[0].Isbn);
+        // The same Edition rows (not replacements) now belong to the winner,
+        // each still holding its Copies.
+        var moved = verify.Editions.Include(e => e.Copies)
+            .Where(e => e.Id == hardcover.Id || e.Id == paperback.Id)
+            .ToDictionary(e => e.Id);
+        Assert.Equal(2, moved.Count);
+        Assert.Equal(winner.Id, moved[hardcover.Id].BookId);
+        Assert.Equal(winner.Id, moved[paperback.Id].BookId);
+        Assert.Equal(2, moved[hardcover.Id].Copies.Count);
+        Assert.Single(moved[paperback.Id].Copies);
+        Assert.Equal(2, verify.Editions.Count(e => e.BookId == winner.Id));
     }
 
     [Fact]
