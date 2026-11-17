@@ -145,8 +145,6 @@ public static class ProgramSetup
         // See docs/BACKEND-REFACTOR-DESIGN.md.
         builder.Services.AddApplicationLayer();
 
-        builder.Services.AddScoped<IDuplicateDetectionService, DuplicateDetectionService>();
-
         // One-shot startup task that re-classifies existing Editions using the
         // richer BookFormat enum (populated from upstream metadata). Idempotent via
         // a MaintenanceLog marker; safe to leave registered after the backfill has

@@ -243,7 +243,7 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
 
         // IgnoredDuplicate pairs: unique on (EntityType, LowerId, HigherId)
         // so the same pair can't be dismissed twice. Pair IDs are normalised
-        // with the smaller ID first in DuplicateDetectionService.
+        // with the smaller ID first by the DismissDuplicatePair handler.
         modelBuilder.Entity<IgnoredDuplicate>()
             .HasIndex(d => new { d.EntityType, d.LowerId, d.HigherId })
             .IsUnique();

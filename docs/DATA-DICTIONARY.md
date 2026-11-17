@@ -298,7 +298,7 @@ User-dismissed duplicate-candidate pairs so `/duplicates` doesn't keep resurfaci
 | `DismissedAt` | DateTime | |
 | `Note` | string? (≤1000) | |
 
-Stale rows (where either side no longer exists) are filtered out lazily by `DuplicateDetectionService`.
+Stale rows (where either side no longer exists) are deleted lazily by the `SweepOrphanedDismissals` command, which the `/duplicates` page dispatches on every load.
 
 ---
 

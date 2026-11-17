@@ -224,8 +224,9 @@ Mirrors upstream cover URLs (Open Library / Google Books / Trove) into Azure Blo
 ### BookLookupService
 Looks up book metadata by ISBN. Tries Open Library first, falls back to Google Books, then Trove (NLA) as a coverage-of-last-resort for self-published / Australian titles the other two tend to miss. Trove is skipped silently when no API key is configured. Returns `BookLookupResult` with title, author, publisher, genres, cover URL, etc.
 
-### DuplicateDetectionService
-Scans the library for candidate duplicate pairs across Authors, Works, Books, and Editions. Authors match on either normalised full name *or* shared surname + first-name initial (so "Doug Preston" / "Douglas Preston" / "D Preston" all surface together). Works, Books, and Editions use exact-after-normalisation. Dismissed pairs are persisted in `IgnoredDuplicate` (polymorphic table, unique on `(EntityType, LowerId, HigherId)`) and orphaned rows are swept on each run. Returns a `DuplicateReport`.
+### Duplicate detection
+*The `GetDuplicateReport` query and the `SweepOrphanedDismissals`, `DismissDuplicatePair` and `RestoreDismissedDuplicate` commands in `BookTracker.Application/Duplicates/`.*
+`GetDuplicateReport` scans the library for candidate duplicate pairs across Authors, Works, Books, and Editions and returns a `DuplicateReport`; it is read-only (every read `AsNoTracking()`). Authors match on either normalised full name *or* shared surname + first-name initial (so "Doug Preston" / "Douglas Preston" / "D Preston" all surface together). Works, Books, and Editions use exact-after-normalisation (`DuplicateNormalization`). Dismissed pairs are persisted in `IgnoredDuplicate` (polymorphic table, unique on `(EntityType, LowerId, HigherId)`) and come back on their pair as `Dismissed`. `DismissDuplicatePair` stores a pair lower-id-first and is a no-op for equal ids or an existing dismissal; `RestoreDismissedDuplicate` deletes a dismissal and is a no-op when it is gone. `SweepOrphanedDismissals` deletes dismissals whose ids no longer name an existing row; `DuplicatesViewModel` dispatches it before `GetDuplicateReport` on every load of `/duplicates`.
 
 ### MergeAuthors (was AuthorMergeService)
 *Now the `MergeAuthors` command + `GetAuthorMergePreview` query in `BookTracker.Application/Authors/`; compatibility check shared via `AuthorMergeCompatibility`.*
