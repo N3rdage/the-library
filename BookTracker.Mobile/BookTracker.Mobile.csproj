@@ -89,7 +89,7 @@
 	<!-- Stamps the current git commit SHA into SourceRevisionId so the
 	     SDK appends it to AssemblyInformationalVersionAttribute as
 	     "+<sha>". BookTracker.Mobile/Services/BuildInfo.cs parses that
-	     and renders it in the MainPage footer so Drew can confirm which
+	     and renders it in the status sheet's footer so Drew can confirm which
 	     build is on the device.
 	     Skips silently when SourceRevisionId is already set (e.g. a CI
 	     build) or when git isn't on PATH / not in a repo (downloaded
