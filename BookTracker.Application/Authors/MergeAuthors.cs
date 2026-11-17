@@ -109,8 +109,8 @@ public sealed class MergeAuthorsHandler(IDbContextFactory<BookTrackerDbContext> 
         }
 
         // Clear any dismissed-dup rows referencing the loser — they're about to
-        // become orphans anyway. DetectAllAsync would sweep them on the next
-        // run, but removing them here keeps the UI tidy immediately.
+        // become orphans anyway. SweepOrphanedDismissals removes orphans on the
+        // next /duplicates load, but removing them here keeps the UI tidy immediately.
         var staleIgnores = await db.IgnoredDuplicates
             .Where(d => d.EntityType == DuplicateEntityType.Author
                     && (d.LowerId == loser.Id || d.HigherId == loser.Id))

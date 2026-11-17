@@ -62,7 +62,7 @@ public class DuplicatesViewModelTests
     }
 
     [Fact]
-    public async Task DismissAsync_calls_service_and_reloads()
+    public async Task DismissAsync_sends_the_command_and_reloads()
     {
         ReturnsReport(new DuplicateReport([], [], [], []));
 
@@ -79,7 +79,7 @@ public class DuplicatesViewModelTests
     }
 
     [Fact]
-    public async Task UnignoreAsync_calls_service_and_reloads()
+    public async Task UnignoreAsync_sends_the_restore_command_and_reloads()
     {
         ReturnsReport(new DuplicateReport([], [], [], []));
 

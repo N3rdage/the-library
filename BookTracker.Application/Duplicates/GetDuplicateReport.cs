@@ -26,30 +26,38 @@ public sealed class GetDuplicateReportHandler(IDbContextFactory<BookTrackerDbCon
             Editions: await DetectEditionsAsync(db, ignoredLookup.GetValueOrDefault(DuplicateEntityType.Edition), ct));
     }
 
-    private static async Task<Dictionary<DuplicateEntityType, Dictionary<(int Lower, int Higher), IgnoredDuplicate>>> BuildIgnoredLookupAsync(
+    private static async Task<Dictionary<DuplicateEntityType, Dictionary<(int Lower, int Higher), DismissalInfo>>> BuildIgnoredLookupAsync(
         BookTrackerDbContext db, CancellationToken ct)
     {
-        var all = await db.IgnoredDuplicates.AsNoTracking().ToListAsync(ct);
+        var all = await db.IgnoredDuplicates
+            .Select(i => new IgnoredPairProjection(i.Id, i.EntityType, i.LowerId, i.HigherId, i.DismissedAt, i.Note))
+            .ToListAsync(ct);
         return all
             .GroupBy(i => i.EntityType)
             .ToDictionary(
                 g => g.Key,
-                g => g.ToDictionary(i => (i.LowerId, i.HigherId), i => i));
+                g => g.ToDictionary(i => (i.LowerId, i.HigherId), i => new DismissalInfo(i.Id, i.DismissedAt, i.Note)));
     }
 
     private static DismissalInfo? LookupDismissal(
-        Dictionary<(int Lower, int Higher), IgnoredDuplicate>? ignored,
+        Dictionary<(int Lower, int Higher), DismissalInfo>? ignored,
         int lower, int higher)
     {
         if (ignored is null) return null;
-        return ignored.TryGetValue((lower, higher), out var row)
-            ? new DismissalInfo(row.Id, row.DismissedAt, row.Note)
-            : null;
+        return ignored.TryGetValue((lower, higher), out var dismissal) ? dismissal : null;
     }
+
+    private sealed record IgnoredPairProjection(
+        int Id,
+        DuplicateEntityType EntityType,
+        int LowerId,
+        int HigherId,
+        DateTime DismissedAt,
+        string? Note);
 
     private static async Task<List<AuthorDuplicatePair>> DetectAuthorsAsync(
         BookTrackerDbContext db,
-        Dictionary<(int Lower, int Higher), IgnoredDuplicate>? ignored,
+        Dictionary<(int Lower, int Higher), DismissalInfo>? ignored,
         CancellationToken ct)
     {
         var authors = await db.Authors
@@ -122,7 +130,7 @@ public sealed class GetDuplicateReportHandler(IDbContextFactory<BookTrackerDbCon
 
     private static async Task<List<WorkDuplicatePair>> DetectWorksAsync(
         BookTrackerDbContext db,
-        Dictionary<(int Lower, int Higher), IgnoredDuplicate>? ignored,
+        Dictionary<(int Lower, int Higher), DismissalInfo>? ignored,
         CancellationToken ct)
     {
         // Project an Author "fingerprint" — sorted, comma-joined Author IDs —
@@ -183,7 +191,7 @@ public sealed class GetDuplicateReportHandler(IDbContextFactory<BookTrackerDbCon
 
     private static async Task<List<BookDuplicatePair>> DetectBooksAsync(
         BookTrackerDbContext db,
-        Dictionary<(int Lower, int Higher), IgnoredDuplicate>? ignored,
+        Dictionary<(int Lower, int Higher), DismissalInfo>? ignored,
         CancellationToken ct)
     {
         // Project once; re-use for both detection strategies.
@@ -270,7 +278,7 @@ public sealed class GetDuplicateReportHandler(IDbContextFactory<BookTrackerDbCon
 
     private static async Task<List<EditionDuplicatePair>> DetectEditionsAsync(
         BookTrackerDbContext db,
-        Dictionary<(int Lower, int Higher), IgnoredDuplicate>? ignored,
+        Dictionary<(int Lower, int Higher), DismissalInfo>? ignored,
         CancellationToken ct)
     {
         var editions = await db.Editions
@@ -316,7 +324,7 @@ public sealed class GetDuplicateReportHandler(IDbContextFactory<BookTrackerDbCon
     private static void EmitEditionPairs(
         IReadOnlyList<EditionProjection> members,
         string reason,
-        Dictionary<(int Lower, int Higher), IgnoredDuplicate>? ignored,
+        Dictionary<(int Lower, int Higher), DismissalInfo>? ignored,
         List<EditionDuplicatePair> output)
     {
         var ordered = members.OrderBy(m => m.Id).ToList();

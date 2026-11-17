@@ -11,7 +11,7 @@ public class DuplicateCommandHandlersTests
     private Task DismissAsync(DuplicateEntityType type, int idA, int idB, string? note) =>
         new DismissDuplicatePairHandler(_factory).HandleAsync(new DismissDuplicatePair(type, idA, idB, note));
 
-    private Task UnignoreAsync(int ignoredDuplicateId) =>
+    private Task RestoreAsync(int ignoredDuplicateId) =>
         new RestoreDismissedDuplicateHandler(_factory).HandleAsync(new RestoreDismissedDuplicate(ignoredDuplicateId));
 
     private Task SweepAsync() =>
@@ -70,7 +70,7 @@ public class DuplicateCommandHandlersTests
         var afterDismiss = await DetectAsync();
         var ignoredId = afterDismiss.Authors[0].Dismissed!.IgnoredDuplicateId;
 
-        await UnignoreAsync(ignoredId);
+        await RestoreAsync(ignoredId);
 
         var afterUnignore = await DetectAsync();
         Assert.Null(afterUnignore.Authors[0].Dismissed);
@@ -79,15 +79,31 @@ public class DuplicateCommandHandlersTests
     // ─── Orphan cleanup ───────────────────────────────────────────────
 
     [Fact]
-    public async Task Orphaned_ignored_rows_are_swept()
+    public async Task Sweep_keeps_valid_dismissals_and_removes_only_orphans()
     {
+        var (a, b) = await SeedAuthorsAsync("J.R.R. Tolkien", "JRR Tolkien");
+        var (c, d) = await SeedAuthorsAsync("Doug Preston", "Douglas Preston");
+        await DismissAsync(DuplicateEntityType.Author, a, b, "keep me");
+        await DismissAsync(DuplicateEntityType.Author, c, d, null);
+
         using (var db = _factory.CreateDbContext())
         {
+            // Orphan by deletion: one side of the second pair no longer exists.
+            db.Authors.Remove(db.Authors.Single(x => x.Id == d));
+            // Orphan by id that never existed.
             db.IgnoredDuplicates.Add(new IgnoredDuplicate
             {
                 EntityType = DuplicateEntityType.Author,
-                LowerId = 999,
-                HigherId = 1000,
+                LowerId = Math.Max(a, b) + 1000,
+                HigherId = Math.Max(a, b) + 1001,
+                DismissedAt = DateTime.UtcNow
+            });
+            // Orphan by entity type: the ids are real Authors but no such Works exist.
+            db.IgnoredDuplicates.Add(new IgnoredDuplicate
+            {
+                EntityType = DuplicateEntityType.Work,
+                LowerId = Math.Min(a, b),
+                HigherId = Math.Max(a, b),
                 DismissedAt = DateTime.UtcNow
             });
             await db.SaveChangesAsync();
@@ -96,7 +112,11 @@ public class DuplicateCommandHandlersTests
         await SweepAsync();
 
         using var verify = _factory.CreateDbContext();
-        Assert.Empty(verify.IgnoredDuplicates);
+        var survivor = Assert.Single(verify.IgnoredDuplicates);
+        Assert.Equal(DuplicateEntityType.Author, survivor.EntityType);
+        Assert.Equal(Math.Min(a, b), survivor.LowerId);
+        Assert.Equal(Math.Max(a, b), survivor.HigherId);
+        Assert.Equal("keep me", survivor.Note);
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────
