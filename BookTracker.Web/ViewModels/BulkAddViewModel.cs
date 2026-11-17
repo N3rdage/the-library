@@ -258,7 +258,7 @@ public class BulkAddViewModel(
 
         // Series attachment if the user accepted the suggestion on this row.
         // Series membership is a per-Book concept (the book is installment N);
-        // AttachToBookAsync is the shared seam with BookAddViewModel.SaveAsync.
+        // AttachToBookAsync is the shared seam with CreateBookHandler (the Add page's save).
         if (row.SeriesSuggestionAccepted)
         {
             await SeriesResolver.AttachToBookAsync(db, newBook, row.AcceptedSeriesId, row.AcceptedSeriesName, row.AcceptedSeriesOrderLabel);
