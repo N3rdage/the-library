@@ -31,6 +31,7 @@ public sealed class AddEditionToBookHandler(IDbContextFactory<BookTrackerDbConte
         var edition = book.AddEdition(
             command.Isbn,
             command.Format,
+            editionNumber: null,
             command.DatePrinted,
             command.DatePrintedPrecision,
             command.CoverUrl,
