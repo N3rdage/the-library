@@ -18,7 +18,7 @@ The first slice was a read-only inventory with a `file:line` for every claim. It
 
 The slices are relocations: a query or a write moves from a ViewModel into an Application handler, and behaviour does not change. I've written before about [why a verbatim relocation finds bugs](./2026-06-27-01-refactor-that-wasnt-broken.md). This post is about the same idea run one issue per pull request, with an independent reviewer instead of Drew watching.
 
-Yesterday four relocations merged: S1, S7, S2 and S3b ([#539](https://github.com/N3rdage/the-library/pull/539) to [#542](https://github.com/N3rdage/the-library/pull/542); S3b also turned one confirmed bug, two saves that could leave an empty series, into one save). Today S6 and S4 merged, and all five bug fixes.
+Yesterday four relocations merged: S1, S7, S2 and S3b ([#539](https://github.com/N3rdage/the-library/pull/539) to [#542](https://github.com/N3rdage/the-library/pull/542); S3b also turned one confirmed bug, two saves that could leave an empty series, into one save). Today S6 and S4 merged, and the five bug children: four fixes and one test.
 
 ## One issue with five bugs
 
@@ -66,7 +66,7 @@ Round two added a test seeding one valid dismissal and three kinds of orphan (a 
 
 ## The cost of one at a time
 
-Seven PRs merged today between 15:55 and 16:50 UTC, and each merge made the rest out of date. An approval is for a specific head commit, so after each merge the next PR went round the same loop: merge `main` in, re-run the Release build and the Unit and Component tests, post a new gate report, wait for CI's Integration run, re-request review, merge. Most merges were clean. S4's wasn't: it and S6 had each renamed one entry in the same list in `docs/TECH-DEBT.md`, and the resolution kept both. The loop took five to twelve minutes per PR, and the fifth bug fix went through it last.
+Seven PRs merged today between 15:55 and 16:48 UTC, and each merge made the rest out of date. An approval is for a specific head commit, so after each merge the next PR went round the same loop: merge `main` in, re-run the Release build and the Unit and Component tests, post a new gate report, wait for CI's Integration run, re-request review, merge. Most merges were clean. S4's wasn't: it and S6 had each renamed one entry in the same list in `docs/TECH-DEBT.md`, and the resolution kept both. The loop took five to twelve minutes per PR, and the fifth bug fix went through it last.
 
 Merging them back to back on their old approvals would have been quicker. But green on an old base says nothing about the tree after a neighbour lands, and a merged tree nobody built or tested is exactly what the gates exist to prevent. The conflict in S4 was trivial. The next one might not be.
 
