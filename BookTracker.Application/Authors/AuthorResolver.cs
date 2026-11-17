@@ -13,8 +13,8 @@ namespace BookTracker.Application.Authors;
 //
 // Lives in the application layer (relocated from Web in the back-end
 // refactor) so command handlers can resolve authors without reaching up
-// into Web. Web ViewModels that still create Works directly (Add / Bulk Add)
-// reference it here until they migrate. Find-or-create has the same
+// into Web. The Bulk Add ViewModel, which still creates Works directly,
+// references it here until it migrates. Find-or-create has the same
 // check-then-insert race as PublisherResolver — see TECH-DEBT TD-15.
 public static class AuthorResolver
 {

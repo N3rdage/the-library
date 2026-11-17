@@ -1,10 +1,8 @@
 using BookTracker.Application;
 using BookTracker.Application.Books;
-using BookTracker.Data;
 using BookTracker.Web.Services;
 using BookTracker.Web.Validation;
 using BookTracker.Web.ViewModels;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
@@ -12,7 +10,7 @@ namespace BookTracker.Tests.ViewModels;
 
 /// <summary>
 /// The save paths that take a cover URL refuse one the cover mirror cannot fetch
-/// before touching the database or the dispatcher, so substitutes stand in for both.
+/// before sending anything through the dispatcher, so a substitute stands in for it.
 /// The edit dialogs apply the rule only to a changed URL: a stored URL stays
 /// saveable while unchanged.
 /// </summary>
@@ -21,7 +19,6 @@ public class CoverUrlSaveGuardTests
 {
     private const string HttpCover = "http://covers.example.org/x.jpg";
 
-    private readonly IDbContextFactory<BookTrackerDbContext> _dbFactory = Substitute.For<IDbContextFactory<BookTrackerDbContext>>();
     private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
 
     [Fact]
@@ -111,7 +108,7 @@ public class CoverUrlSaveGuardTests
     public async Task BookAdd_UnacceptableCoverUrl_ThrowsTheFieldMessageBeforeSaving(string? bookCover, string? editionCover)
     {
         var vm = new BookAddViewModel(
-            _dbFactory, Substitute.For<IBookLookupService>(), new SeriesMatchService(_dispatcher),
+            Substitute.For<IBookLookupService>(), new SeriesMatchService(_dispatcher),
             _dispatcher, NullLogger<BookAddViewModel>.Instance);
         vm.BookInput.Title = "Mort";
         vm.BookInput.DefaultCoverArtUrl = bookCover;
@@ -121,7 +118,6 @@ public class CoverUrlSaveGuardTests
 
         Assert.Equal(CoverUrlAttribute.Message, ex.Message);
         Assert.False(vm.Saving);
-        Assert.Empty(_dbFactory.ReceivedCalls());
         Assert.Empty(_dispatcher.ReceivedCalls());
     }
 }

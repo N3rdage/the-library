@@ -137,13 +137,83 @@ public class BookAggregateTests
     public void AddEdition_createsEditionWithSingleFirstCopy_andTrimsIsbn()
     {
         var book = new Book { Title = "X" };
-        var edition = book.AddEdition("  978-1  ", BookFormat.Hardcover, null, DatePrecision.Day, null, null, BookCondition.Fine);
+        var edition = book.AddEdition("  978-1  ", BookFormat.Hardcover, null, null, DatePrecision.Day, null, null, BookCondition.Fine);
 
         Assert.Single(book.Editions);
         Assert.Same(edition, book.Editions[0]);
         Assert.Equal("978-1", edition.Isbn);
         Assert.Single(edition.Copies);
         Assert.Equal(BookCondition.Fine, edition.Copies[0].Condition);
+    }
+
+    [Fact]
+    public void AddEdition_setsEditionNumber()
+    {
+        var book = new Book { Title = "Joy of Cooking" };
+        var edition = book.AddEdition(null, BookFormat.Hardcover, 3, null, DatePrecision.Day, null, null, BookCondition.Good);
+
+        Assert.Equal(3, edition.EditionNumber);
+    }
+
+    [Fact]
+    public void AddEdition_nullEditionNumber_leavesItNull()
+    {
+        var book = new Book { Title = "Foundation" };
+        var edition = book.AddEdition(null, BookFormat.MassMarketPaperback, null, null, DatePrecision.Day, null, null, BookCondition.Good);
+
+        Assert.Null(edition.EditionNumber);
+    }
+
+    [Fact]
+    public void AddEdition_isbnIsTrimmedOnly_notNormalised()
+    {
+        var book = new Book { Title = "X" };
+        var edition = book.AddEdition(" 978-0-345-39180-3 ", BookFormat.Hardcover, null, null, DatePrecision.Day, null, null, BookCondition.Good);
+
+        Assert.Equal("978-0-345-39180-3", edition.Isbn);
+    }
+
+    [Fact]
+    public void Create_setsFields_trimsTitle_andNullsBlankNotesAndCover()
+    {
+        var book = Book.Create("  Mort  ", BookCategory.NonFiction, BookStatus.Reading, 4, "   ", "   ");
+
+        Assert.Equal("Mort", book.Title);
+        Assert.Equal(BookCategory.NonFiction, book.Category);
+        Assert.Equal(BookStatus.Reading, book.Status);
+        Assert.Equal(4, book.Rating);
+        Assert.Null(book.Notes);
+        Assert.Null(book.DefaultCoverArtUrl);
+        Assert.Empty(book.Editions);
+        Assert.Empty(book.BookWorks);
+        Assert.Null(book.SeriesId);
+    }
+
+    [Fact]
+    public void Create_trimsNotesAndCover()
+    {
+        var book = Book.Create("Mort", BookCategory.Fiction, BookStatus.Unread, 0, "  signed  ", "  https://c/x.jpg  ");
+
+        Assert.Equal("signed", book.Notes);
+        Assert.Equal("https://c/x.jpg", book.DefaultCoverArtUrl);
+    }
+
+    [Fact]
+    public void Create_stampsDateAddedAtCreation()
+    {
+        var before = DateTime.UtcNow;
+        var book = Book.Create("Mort", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
+
+        Assert.InRange(book.DateAdded, before, DateTime.UtcNow);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Create_blankTitle_throws(string title)
+    {
+        Assert.Throws<DomainRuleException>(() =>
+            Book.Create(title, BookCategory.Fiction, BookStatus.Unread, 0, null, null));
     }
 
     [Fact]
