@@ -152,7 +152,42 @@ public class SeriesCommandHandlersTests
         Assert.Null(await db.Series.FindAsync(seriesId));   // gone
         var book = await db.Books.FindAsync(bookId);
         Assert.NotNull(book);                                // book survives
-        Assert.Null(book!.SeriesId);                         // link cleared by FK SetNull
+        Assert.Null(book!.SeriesId);                         // link cleared
+    }
+
+    [Fact]
+    public async Task DeleteSeries_bumpsEachMemberBooksUpdatedAt_andClearsMembership()
+    {
+        var seriesId = await SeedSeriesAsync();
+        var firstId = await SeedBookAsync("Mort", seriesId, order: 4, orderDisplay: "4");
+        var secondId = await SeedBookAsync("Reaper Man", seriesId, order: 11);
+
+        DateTime firstBefore, secondBefore;
+        await using (var seeded = _factory.CreateDbContext())
+        {
+            firstBefore = (await seeded.Books.FindAsync(firstId))!.UpdatedAt;
+            secondBefore = (await seeded.Books.FindAsync(secondId))!.UpdatedAt;
+        }
+
+        // Keeps the delete's save off the seed's clock tick (datetime2 is 100ns).
+        await Task.Delay(TimeSpan.FromMilliseconds(20));
+
+        await new DeleteSeriesHandler(_factory).HandleAsync(new DeleteSeries(seriesId));
+
+        await using var db = _factory.CreateDbContext();
+        var first = await db.Books.FindAsync(firstId);
+        var second = await db.Books.FindAsync(secondId);
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        Assert.True(first!.UpdatedAt > firstBefore,
+            $"Expected UpdatedAt to bump. before={firstBefore:O}, after={first.UpdatedAt:O}");
+        Assert.True(second!.UpdatedAt > secondBefore,
+            $"Expected UpdatedAt to bump. before={secondBefore:O}, after={second.UpdatedAt:O}");
+        Assert.Null(first.SeriesId);
+        Assert.Null(second.SeriesId);
+        Assert.Null(first.SeriesOrder);
+        Assert.Null(first.SeriesOrderDisplay);
+        Assert.Null(second.SeriesOrder);
     }
 
     [Fact]
