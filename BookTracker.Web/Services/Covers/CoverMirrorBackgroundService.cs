@@ -79,6 +79,15 @@ public class CoverMirrorBackgroundService(
         await using var scope = scopeFactory.CreateAsyncScope();
         var coverStorage = scope.ServiceProvider.GetRequiredService<IBookCoverStorage>();
         var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<BookTrackerDbContext>>();
+        await ProcessTickAsync(coverStorage, dbFactory, logger, ct);
+    }
+
+    internal static async Task ProcessTickAsync(
+        IBookCoverStorage coverStorage,
+        IDbContextFactory<BookTrackerDbContext> dbFactory,
+        ILogger logger,
+        CancellationToken ct)
+    {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var nowUtc = DateTime.UtcNow;
 
@@ -100,6 +109,14 @@ public class CoverMirrorBackgroundService(
             if (result.Status == CoverMirrorStatus.Mirrored)
             {
                 var fresh = await db.Editions.FirstOrDefaultAsync(x => x.Id == item.Id, ct);
+                if (fresh is not null && fresh.CoverUrl != item.Url)
+                {
+                    // The state row is left alone: it can only hold the row back while
+                    // its Url equals the current one, so the changed URL stays due.
+                    logger.LogInformation(
+                        "Cover for Edition {EditionId} changed during the mirror; the write is skipped.", item.Id);
+                    continue;
+                }
                 if (fresh is not null)
                 {
                     fresh.CoverUrl = result.Url;
@@ -129,6 +146,13 @@ public class CoverMirrorBackgroundService(
             if (result.Status == CoverMirrorStatus.Mirrored)
             {
                 var fresh = await db.Books.FirstOrDefaultAsync(x => x.Id == item.Id, ct);
+                if (fresh is not null && fresh.DefaultCoverArtUrl != item.Url)
+                {
+                    // As for editions: the untouched state row cannot hold back a changed URL.
+                    logger.LogInformation(
+                        "Default cover for Book {BookId} changed during the mirror; the write is skipped.", item.Id);
+                    continue;
+                }
                 if (fresh is not null)
                 {
                     fresh.DefaultCoverArtUrl = result.Url;
