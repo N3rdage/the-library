@@ -146,6 +146,8 @@
                         </MudSelect>
                     </MudItem>
                     <MudItem xs="12" md="3">
+                        @* The filter matches an author name exactly, so it commits only on a
+                           picked suggestion or a cleared field; unpicked typed text reverts. *@
                         <MudAutocomplete T="string"
                                          Value="@VM.SelectedAuthor"
                                          ValueChanged="@OnAuthorChanged"
@@ -155,7 +157,9 @@
                                          Margin="Margin.Dense"
                                          Dense="true"
                                          Clearable="true"
-                                         CoerceValue="true" />
+                                         CoerceValue="false"
+                                         CoerceText="true"
+                                         ResetValueOnEmptyText="true" />
                     </MudItem>
                     <MudItem xs="12" md="1" Class="d-none d-md-flex">
                         <MudIconButton OnClick="ClearFilters"
