@@ -43,6 +43,11 @@ public class BookAddViewModelTests
     private BookAddViewModel CreateVm() =>
         new(_lookup, new SeriesMatchService(_dispatcher), _dispatcher, NullLogger<BookAddViewModel>.Instance);
 
+    private static ExistingBookMatch HobbitMatch() =>
+        new(BookId: 4, EditionId: 5, Title: "The Hobbit", Authors: "Tolkien", CopyCount: 1,
+            LeadWorkSubtitle: null, LeadWorkAuthorship: "Tolkien", CoverUrl: null, Publisher: null,
+            DatePrinted: null, DatePrintedPrecision: DatePrecision.Day, Format: BookFormat.TradePaperback);
+
     private void GivenSeriesOptions(params SeriesPickerOption[] options) =>
         _dispatcher.Query(Arg.Any<GetSeriesOptions>(), Arg.Any<CancellationToken>()).Returns(options);
 
@@ -557,7 +562,7 @@ public class BookAddViewModelTests
     [Fact]
     public async Task LookupAsync_ExistingIsbn_FlagsExistingBookInsteadOfPrefilling()
     {
-        var match = new ExistingBookMatch(BookId: 4, EditionId: 5, Title: "The Hobbit", Authors: "Tolkien", CopyCount: 1);
+        var match = HobbitMatch();
         _dispatcher.Query(Arg.Is<FindEditionByIsbn>(q => q!.Isbn == "9780345391803"), Arg.Any<CancellationToken>())
             .Returns(match);
         var vm = CreateVm();
@@ -609,7 +614,7 @@ public class BookAddViewModelTests
     public async Task AddCopyToExistingAsync_SendsAddCopyToFlaggedEdition()
     {
         _dispatcher.Query(Arg.Any<FindEditionByIsbn>(), Arg.Any<CancellationToken>())
-            .Returns(new ExistingBookMatch(4, 5, "The Hobbit", "Tolkien", 1));
+            .Returns(HobbitMatch());
         var vm = CreateVm();
         vm.LookupIsbn = "9780345391803";
         await vm.LookupAsync();

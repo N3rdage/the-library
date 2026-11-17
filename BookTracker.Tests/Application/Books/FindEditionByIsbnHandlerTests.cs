@@ -34,7 +34,90 @@ public class FindEditionByIsbnHandlerTests
 
         var match = await FindAsync("9780345391803");
 
-        Assert.Equal(new ExistingBookMatch(bookId, editionId, "The Hobbit", "Tolkien", 1), match);
+        Assert.Equal(
+            new ExistingBookMatch(bookId, editionId, "The Hobbit", "Tolkien", 1,
+                null, "Tolkien", null, null, null, DatePrecision.Day, BookFormat.TradePaperback),
+            match);
+    }
+
+    [Fact]
+    public async Task ExistingIsbn_returnsTheLeadWorkEditionDetailsAndBookCoverFallback()
+    {
+        // Bulk add hydrates an owned row from these (055210617X, Funny Money by
+        // Richard Sapir: an ISBN the upstream providers do not index).
+        await using (var db = _factory.CreateDbContext())
+        {
+            var book = new Book
+            {
+                Title = "Funny Money",
+                DefaultCoverArtUrl = "https://example.test/funny-money.jpg",
+                Editions =
+                [
+                    new Edition
+                    {
+                        Isbn = "055210617X",
+                        Format = BookFormat.MassMarketPaperback,
+                        DatePrinted = new DateOnly(1983, 1, 1),
+                        DatePrintedPrecision = DatePrecision.Year,
+                        Publisher = new Publisher { Name = "Pinnacle" },
+                        Copies = [new Copy { Condition = BookCondition.Good }],
+                    },
+                ],
+            };
+            book.AttachWork(new Work
+            {
+                Title = "Funny Money",
+                Subtitle = "The Destroyer #54",
+                WorkAuthors =
+                [
+                    new WorkAuthor { Author = new Author { Name = "Richard Sapir" }, Order = 0 },
+                    new WorkAuthor { Author = new Author { Name = "Some Editor" }, Order = 0, Role = AuthorRole.Editor },
+                ],
+            });
+            book.AttachWork(new Work
+            {
+                Title = "Second Story",
+                Subtitle = "not the lead",
+                WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Warren Murphy" }, Order = 0 }],
+            });
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+        }
+
+        var match = await FindAsync("055210617X");
+
+        Assert.NotNull(match);
+        Assert.Equal("Funny Money", match.Title);
+        Assert.Equal("The Destroyer #54", match.LeadWorkSubtitle);
+        Assert.Equal("Richard Sapir; Some Editor (editor)", match.LeadWorkAuthorship);
+        Assert.Equal("https://example.test/funny-money.jpg", match.CoverUrl);
+        Assert.Equal("Pinnacle", match.Publisher);
+        Assert.Equal(new DateOnly(1983, 1, 1), match.DatePrinted);
+        Assert.Equal(DatePrecision.Year, match.DatePrintedPrecision);
+        Assert.Equal(BookFormat.MassMarketPaperback, match.Format);
+    }
+
+    [Fact]
+    public async Task EditionCover_winsOverTheBookDefault_andABookWithoutWorksHasNoLeadWork()
+    {
+        await using (var db = _factory.CreateDbContext())
+        {
+            db.Books.Add(new Book
+            {
+                Title = "Loose Edition",
+                DefaultCoverArtUrl = "https://example.test/book.jpg",
+                Editions = [new Edition { Isbn = "9780000000002", CoverUrl = "https://example.test/edition.jpg", Copies = [new Copy()] }],
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var match = await FindAsync("9780000000002");
+
+        Assert.NotNull(match);
+        Assert.Equal("https://example.test/edition.jpg", match.CoverUrl);
+        Assert.Null(match.LeadWorkSubtitle);
+        Assert.Null(match.LeadWorkAuthorship);
+        Assert.Null(match.Publisher);
     }
 
     [Fact]

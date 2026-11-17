@@ -38,9 +38,10 @@ public class CreateBookHandlerTests
 
     private static WorkCollection Collection(params WorkRow[] rows) => new(rows, false, false, [], []);
 
-    private Task<int> CreateAsync(NewBook book, NewBookWorks works, NewEdition? edition = null, SeriesChoice? series = null) =>
+    private Task<int> CreateAsync(
+        NewBook book, NewBookWorks works, NewEdition? edition = null, SeriesChoice? series = null, string[]? tags = null) =>
         new CreateBookHandler(_factory).HandleAsync(
-            new CreateBook(book, works, edition ?? EditionWith(), BookCondition.Good, series ?? NoSeries));
+            new CreateBook(book, works, edition ?? EditionWith(), BookCondition.Good, series ?? NoSeries, tags ?? []));
 
     private async Task<int> SeedSeriesAsync(string name)
     {
@@ -301,7 +302,8 @@ public class CreateBookHandlerTests
             new NewEdition(null, BookFormat.Hardcover, null, new DateOnly(1987, 10, 1), DatePrecision.Month,
                 "  Gollancz  ", "  https://covers.example.org/mort-ed.jpg  "),
             BookCondition.Fair,
-            NoSeries);
+            NoSeries,
+            []);
 
         var bookId = await new CreateBookHandler(_factory).HandleAsync(command);
 
@@ -393,6 +395,83 @@ public class CreateBookHandlerTests
         var book = db.Books.Single();
         Assert.Null(book.SeriesId);
         Assert.Null(book.SeriesOrder);
+    }
+
+    [Fact]
+    public async Task SeriesWithNonIntegerOrder_persistsFlooredOrderAndDisplay()
+    {
+        var seriesId = await SeedSeriesAsync("The Stormlight Archive");
+
+        await CreateAsync(BookTitled("Edgedancer"), OneWork("Edgedancer", ["Brandon Sanderson"]),
+            series: new SeriesChoice(seriesId, "The Stormlight Archive", "2.5"));
+
+        await using var db = _factory.CreateDbContext();
+        var book = db.Books.Single();
+        Assert.Equal(seriesId, book.SeriesId);
+        Assert.Equal(2, book.SeriesOrder);             // floored sort key
+        Assert.Equal("2.5", book.SeriesOrderDisplay);  // raw display override
+    }
+
+    [Fact]
+    public async Task Tags_reuseAnExistingTag_inTheSameSaveAsTheBook()
+    {
+        // Bulk add's follow-up: the seeded tag is attached, not duplicated.
+        await using (var seed = _factory.CreateDbContext())
+        {
+            seed.Tags.Add(new Tag { Name = "follow-up" });
+            await seed.SaveChangesAsync();
+        }
+
+        var bookId = await CreateAsync(BookTitled("The Hobbit"), OneWork("The Hobbit", ["J.R.R. Tolkien"]),
+            tags: ["follow-up"]);
+
+        await using var db = _factory.CreateDbContext();
+        var book = await db.Books.Include(b => b.Tags).SingleAsync(b => b.Id == bookId);
+        Assert.Equal("follow-up", Assert.Single(book.Tags).Name);
+        Assert.Equal(1, await db.Tags.CountAsync());
+    }
+
+    [Fact]
+    public async Task Tags_createAMissingTag_normalisedAndOnce()
+    {
+        var bookId = await CreateAsync(BookTitled("The Hobbit"), OneWork("The Hobbit", ["J.R.R. Tolkien"]),
+            tags: ["  Follow-Up ", "follow-up", " "]);
+
+        await using var db = _factory.CreateDbContext();
+        var book = await db.Books.Include(b => b.Tags).SingleAsync(b => b.Id == bookId);
+        Assert.Equal("follow-up", Assert.Single(book.Tags).Name);
+        Assert.Equal(1, await db.Tags.CountAsync());
+    }
+
+    [Fact]
+    public async Task NoTags_attachesNone()
+    {
+        var bookId = await CreateAsync(BookTitled("The Hobbit"), OneWork("The Hobbit", ["J.R.R. Tolkien"]));
+
+        await using var db = _factory.CreateDbContext();
+        Assert.Empty((await db.Books.Include(b => b.Tags).SingleAsync(b => b.Id == bookId)).Tags);
+        Assert.Empty(db.Tags);
+    }
+
+    [Fact]
+    public async Task SingleWork_genreIds_attachToTheWork()
+    {
+        int fantasyId, highFantasyId;
+        await using (var seed = _factory.CreateDbContext())
+        {
+            var fantasy = new Genre { Name = "Fantasy" };
+            var high = new Genre { Name = "High Fantasy", ParentGenre = fantasy };
+            seed.Genres.AddRange(fantasy, high);
+            await seed.SaveChangesAsync();
+            fantasyId = fantasy.Id;
+            highFantasyId = high.Id;
+        }
+
+        await CreateAsync(BookTitled("The Hobbit"), OneWork("The Hobbit", ["J.R.R. Tolkien"], genreIds: [highFantasyId, fantasyId]));
+
+        await using var db = _factory.CreateDbContext();
+        var work = await db.Works.Include(w => w.Genres).SingleAsync();
+        Assert.Equal([fantasyId, highFantasyId], work.Genres.Select(g => g.Id).Order());
     }
 
     [Fact]

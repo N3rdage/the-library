@@ -122,7 +122,7 @@ TODO #55):
                                                               (BookTracker.Data)   (AsNoTracking → DTO)
 ```
 
-- **ViewModels** are plain C# classes under `BookTracker.Web/ViewModels/`. They hold UI state + presentation logic and **dispatch commands/queries** — they no longer touch `DbContext` directly (every display VM was migrated off it during the arc).
+- **ViewModels** are plain C# classes under `BookTracker.Web/ViewModels/`. They hold UI state + presentation logic and **dispatch commands/queries** — they never touch `DbContext`; every read and write goes through `IDispatcher`.
 - **Razor components** are thin views that inject a VM and bind to its properties. UI concerns only: JS interop, navigation, Blazor lifecycle.
 - **Services** still handle genuinely external concerns: ISBN lookup (Open Library / Google Books / Trove), AI features (Anthropic API), cover storage. The old per-entity *merge* services were dissolved into commands + query handlers (see below).
 

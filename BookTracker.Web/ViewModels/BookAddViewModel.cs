@@ -551,7 +551,8 @@ public class BookAddViewModel(
                     EditionInput.Publisher,
                     EditionInput.CoverUrl),
                 CopyInput.Condition,
-                new SeriesChoice(AcceptedSeriesId, AcceptedSeriesName, AcceptedSeriesOrderLabel)));
+                new SeriesChoice(AcceptedSeriesId, AcceptedSeriesName, AcceptedSeriesOrderLabel),
+                []));
         }
         finally
         {

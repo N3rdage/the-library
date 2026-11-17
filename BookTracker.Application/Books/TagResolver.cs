@@ -34,4 +34,21 @@ public static class TagResolver
         db.Tags.Add(tag);
         return tag;
     }
+
+    /// <summary>Find-or-creates each named tag and attaches it to the book unless
+    /// the book already carries it. Blank names are skipped and names equal after
+    /// normalisation resolve once. The book's <see cref="Book.Tags"/> must be
+    /// loaded (a new Book's empty list is correct).</summary>
+    public static async Task AttachToBookAsync(
+        BookTrackerDbContext db, Book book, IReadOnlyList<string> tagNames, CancellationToken ct = default)
+    {
+        foreach (var name in tagNames.Select(Normalize).Where(n => n.Length > 0).Distinct())
+        {
+            var tag = await FindOrCreateAsync(name, db, ct);
+            // tag.Id == 0 is a brand-new (unsaved) tag, which by definition isn't
+            // on the book yet.
+            if (tag.Id == 0 || book.Tags.All(t => t.Id != tag.Id))
+                book.Tags.Add(tag);
+        }
+    }
 }
