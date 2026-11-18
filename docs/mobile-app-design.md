@@ -66,8 +66,8 @@ What IS needed is one-time AAD-side setup (manual Azure Portal click-ops; runboo
 
 Then in MAUI:
 
-4. **MSAL.NET** (`Microsoft.Identity.Client` + `Microsoft.Maui.Authentication`) does the interactive sign-in once via Chrome Custom Tabs, refresh-token from then on. Tokens stay in MSAL.NET's own built-in mobile cache in the app's private storage; the app adds no cache serializer and does not use `SecureStorage`. MSAL.NET's documentation calls that mechanism secure but does not say whether it is encrypted at rest, so the cache is treated as protected by the app sandbox rather than by the Keystore. `Platforms/Android/AndroidManifest.xml` sets `android:allowBackup="false"`, so the app's data, the token cache included, is left out of Android's cloud Auto Backup. The manifest declares no data-extraction rules, and on Android 12 and later `allowBackup` does not govern device-to-device transfer.
-5. **HttpClient** attaches `Authorization: Bearer <token>` per request; intercept 401 and re-trigger interactive sign-in.
+4. **MSAL.NET** (`Microsoft.Identity.Client`; `MainActivity` forwards the sign-in result to MSAL) does the interactive sign-in once via Chrome Custom Tabs, refresh-token from then on. Tokens stay in MSAL.NET's own built-in mobile cache in the app's private storage; the app adds no cache serializer and does not use `SecureStorage`. MSAL.NET's documentation calls that mechanism secure but does not say whether it is encrypted at rest, so the cache is treated as protected by the app sandbox rather than by the Keystore. `Platforms/Android/AndroidManifest.xml` sets `android:allowBackup="false"`, so the app's data, the token cache included, is left out of Android's cloud Auto Backup. The manifest declares no data-extraction rules, and on Android 12 and later `allowBackup` does not govern device-to-device transfer.
+5. **`ApiClient`** acquires a token silently before each request, falls back to interactive sign-in when silent acquisition returns none, and attaches `Authorization: Bearer <token>`. A 401 response is not handled specially: `EnsureSuccessStatusCode` throws and the caller shows the failure.
 
 The browser flow on `/bookshop` keeps working through the same cookie-mode Easy Auth until that route is retired.
 
@@ -86,7 +86,7 @@ Everything except `/bookshop`. Specifically:
 
 - All edit / capture pages: `/books/add`, `/books/bulk-add`, `/books/{id}`
 - All browse pages: `/books`, `/authors`, `/publishers`, `/series`
-- `/shopping` stays (desktop wishlist write surface — no consolidation needed once `/bookshop` leaves)
+- `/wishlist` (also reachable as `/shopping`) stays as the desktop wishlist write surface
 - `/duplicates`, `/assistant`
 - All `/api/*` endpoints — these grow, they don't move
 
@@ -98,9 +98,9 @@ When the MAUI app is stable and Drew has stopped using `/bookshop` in the field:
 - `wwwroot/js/bookshop-page.js`, `wwwroot/js/catalog-cache.js`
 - `service-worker.js` route-specific cache-first handling for `/bookshop*` and `/api/catalog-snapshot`
 - Bookshop nav link in `MainLayout.razor`
-- `BarcodeScanner.startJs` (the pure-JS variant used by `/bookshop` — the `start` Blazor variant stays since `/books/add` and `/shopping` use it)
+- `BarcodeScanner.startJs` (the pure-JS variant used by `/bookshop` — the `start` Blazor variant stays since `/books/bulk-add` uses it)
 
-`/shopping` is not folded into `/bookshop`: with `/bookshop` leaving the main app there is nothing to consolidate into, and `/shopping` keeps its shape as the desktop wishlist surface.
+The wishlist page is not folded into `/bookshop`: with `/bookshop` leaving the main app there is nothing to consolidate into, and `/wishlist` keeps its shape as the desktop wishlist surface.
 
 ## Decisions
 
