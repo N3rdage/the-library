@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using BookTracker.Application.Formatting;
 using BookTracker.Data.Models;
+using BookTracker.Shared.Online;
 using BookTracker.Web.Services.Covers;
 using Microsoft.Extensions.Options;
 
@@ -99,6 +100,52 @@ public partial class BookLookupService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Open Library title/author search failed for title={Title} author={Author}", t, a);
+            return [];
+        }
+    }
+
+    public async Task<IReadOnlyList<OnlineAuthorWork>> GetAuthorWorksAsync(string author, CancellationToken ct)
+    {
+        var a = author?.Trim() ?? "";
+        if (a.Length == 0) return [];
+
+        try
+        {
+            // Same field-scoped phrase as SearchByTitleAuthorAsync, so
+            // "Martin Grant" does not match every Martin. sort=editions is
+            // Open Library's most-editions-first order: the well-known books
+            // lead and the 100-row cap drops the obscure tail rather than a
+            // random slice.
+            var query = new List<string>
+            {
+                $"q={Uri.EscapeDataString($"author:\"{EscapeLuceneValue(a)}\"")}",
+                "limit=100",
+                "fields=key,title,first_publish_year,edition_count,cover_i",
+                "sort=editions",
+            };
+
+            var url = $"https://openlibrary.org/search.json?{string.Join("&", query)}";
+            var doc = await http.GetFromJsonAsync<OpenLibrarySearchResponse>(url, ct);
+            if (doc?.Docs is null) return [];
+
+            // Re-sorted here too (stable, so ties keep Open Library's order)
+            // because the phone renders the list as given and the sort
+            // parameter is the provider's to change.
+            return doc.Docs
+                .Where(d => !string.IsNullOrWhiteSpace(d.Key))
+                .OrderByDescending(d => d.EditionCount ?? 0)
+                .Select(d => new OnlineAuthorWork(
+                    WorkKey: d.Key!,
+                    Title: d.Title,
+                    FirstPublishYear: d.FirstPublishYear,
+                    CoverUrl: d.CoverId is int id ? $"https://covers.openlibrary.org/b/id/{id}-M.jpg" : null,
+                    EditionCount: d.EditionCount,
+                    OwnedBookId: null))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Open Library author works search failed for author={Author}", a);
             return [];
         }
     }
