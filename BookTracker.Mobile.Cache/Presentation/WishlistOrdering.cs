@@ -7,7 +7,7 @@ public static class WishlistOrdering
 {
     // High / Medium / everything-else (Low). "Low" catches any other server
     // priority string so no row is silently dropped.
-    public static readonly (string Label, Func<WishlistItemSnapshot, bool> InBucket)[] PriorityBuckets =
+    private static readonly (string Label, Func<WishlistItemSnapshot, bool> InBucket)[] PriorityBuckets =
     [
         ("High", i => i.Priority == "High"),
         ("Medium", i => i.Priority == "Medium"),

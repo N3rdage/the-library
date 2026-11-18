@@ -20,7 +20,7 @@ public class IsbnInputTests
     [InlineData("123456789", false)]      // too short
     [InlineData("12345678901234", false)] // too long
     [InlineData("08044X2957", false)]     // X not in the last position
-    [InlineData("978-0306406157", false)] // hyphens are not stripped first
+    [InlineData("978-030640615", false)]  // 13 chars with hyphens: not stripped before the check
     [InlineData("978030640615 ", false)]  // trailing space
     [InlineData("", false)]
     [InlineData("foundation", false)]
