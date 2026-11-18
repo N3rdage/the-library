@@ -1,4 +1,5 @@
 using BookTracker.Mobile.Cache;
+using BookTracker.Mobile.Cache.Presentation;
 using BookTracker.Mobile.Theming;
 using BookTracker.Shared.Catalog;
 using Microsoft.Maui.Controls.Shapes;
@@ -97,7 +98,7 @@ public partial class AuthorWorksPage : ContentPage
 
         var metaLabel = new Label
         {
-            Text = FormatBookMeta(book),
+            Text = BookMetaFormatter.FormatBookMeta(book),
             FontSize = 13,
             LineBreakMode = LineBreakMode.WordWrap,
         };
@@ -150,20 +151,6 @@ public partial class AuthorWorksPage : ContentPage
 
         _ = Covers.LoadIntoAsync(_cache, _httpFactory, book.Id, coverImage, coverPlaceholder);
         return border;
-    }
-
-    // "★★★☆☆ · Read" — stars (if rated) then status, skipping empties.
-    private static string FormatBookMeta(BookSnapshot book)
-    {
-        var parts = new List<string>();
-        if (book.Rating > 0)
-        {
-            var clamped = Math.Clamp(book.Rating, 0, 5);
-            parts.Add(new string('★', clamped) + new string('☆', 5 - clamped));
-        }
-        if (!string.IsNullOrWhiteSpace(book.Status))
-            parts.Add(book.Status);
-        return parts.Count == 0 ? "" : string.Join("  ·  ", parts);
     }
 
     private async Task OpenInAppAsync(int bookId)
