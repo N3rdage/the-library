@@ -1,5 +1,4 @@
-using BookTracker.Data;
-using Microsoft.EntityFrameworkCore;
+using BookTracker.Application;
 using Microsoft.Extensions.Options;
 
 namespace BookTracker.Web.Services;
@@ -9,7 +8,7 @@ namespace BookTracker.Web.Services;
 /// Scoped lifetime — one per Blazor circuit. Allows runtime provider switching.
 /// </summary>
 public class AIProviderFactory(
-    IDbContextFactory<BookTrackerDbContext> dbFactory,
+    IDispatcher dispatcher,
     IOptions<AIOptions> options,
     ILoggerFactory loggerFactory)
 {
@@ -43,9 +42,9 @@ public class AIProviderFactory(
 
     private IAIAssistantService CreateService(AIProvider provider) => provider switch
     {
-        AIProvider.Anthropic => new AnthropicAIAssistantService(dbFactory, _options.Anthropic, loggerFactory.CreateLogger<AnthropicAIAssistantService>()),
-        AIProvider.MicrosoftFoundry => new MicrosoftFoundryAIAssistantService(dbFactory, _options.MicrosoftFoundry),
-        AIProvider.AzureOpenAI => new AzureOpenAIAssistantService(dbFactory, _options.AzureOpenAI),
+        AIProvider.Anthropic => new AnthropicAIAssistantService(dispatcher, _options.Anthropic, loggerFactory.CreateLogger<AnthropicAIAssistantService>()),
+        AIProvider.MicrosoftFoundry => new MicrosoftFoundryAIAssistantService(dispatcher, _options.MicrosoftFoundry),
+        AIProvider.AzureOpenAI => new AzureOpenAIAssistantService(dispatcher, _options.AzureOpenAI),
         _ => throw new ArgumentOutOfRangeException(nameof(provider))
     };
 
