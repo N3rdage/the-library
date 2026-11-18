@@ -168,5 +168,5 @@ Offline indicator uses `navigator.onLine` + visibilitychange events. Unauthentic
 
 ## Cross-references
 
-- The mobile-latency root-cause analysis lives in [the May 8 perf-investigation blog post](../blog/2026-05-08-01-i-blamed-the-cold-start-the-trace-disagreed.md). The "Postscript: the deploy itself was the incident" section + the postscript-meta-lesson section frame why static-pattern fixes alone won't hit the demo-quality bar.
+- The mobile-latency root-cause analysis lives in [the cold-start perf-investigation blog post](../blog/2026-05-08-01-i-blamed-the-cold-start-the-trace-disagreed.md); its closing sections explain why static-pattern fixes alone won't hit the demo-quality bar.
 - The existing PWA caching strategy (network-first with cache fallback for static assets, `/_blazor/*` passthrough) is documented in `ARCHITECTURE.md` "Progressive Web App (PWA)" section. The bookshop SW rules layer on top, not over.
