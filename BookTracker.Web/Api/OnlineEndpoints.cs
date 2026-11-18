@@ -1,4 +1,5 @@
 using BookTracker.Application;
+using BookTracker.Application.Books;
 using BookTracker.Application.Works;
 using BookTracker.Shared.Online;
 using BookTracker.Web.Services;
@@ -16,6 +17,7 @@ public static class OnlineEndpoints
     {
         app.MapGet("/api/online/isbn/{isbn}", HandleAsync);
         app.MapGet("/api/online/author-works", HandleAuthorWorksAsync);
+        app.MapGet("/api/online/work-editions", HandleWorkEditionsAsync);
         return app;
     }
 
@@ -47,7 +49,8 @@ public static class OnlineEndpoints
             found.CoverUrl,
             found.DatePrinted?.Year,
             found.Source,
-            owned));
+            owned,
+            found.WorkKey));
     }
 
     // Internal for the same reason as HandleAsync. The title match is the
@@ -79,6 +82,39 @@ public static class OnlineEndpoints
                 .Select(w => w with
                 {
                     OwnedBookId = w.Title is not null && owned.TryGetValue(w.Title, out var bookId) ? bookId : null,
+                })
+                .ToList()));
+    }
+
+    // Internal for the same reason as HandleAsync. Ownership is by exact
+    // ISBN: the service has already cleaned Open Library's ISBNs to the
+    // stored form.
+    internal static async Task<IResult> HandleWorkEditionsAsync(
+        string? workKey,
+        IBookLookupService lookup,
+        IDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        if (!BookLookupService.IsOpenLibraryWorkKey(workKey))
+            return Results.BadRequest("A work key has the form /works/OL…W, e.g. /works/OL45804W.");
+
+        var editions = await lookup.GetWorkEditionsAsync(workKey!, ct);
+
+        var isbns = editions
+            .Select(e => e.Isbn)
+            .OfType<string>()
+            .Distinct()
+            .ToList();
+        if (isbns.Count == 0) return Results.Ok(new OnlineWorkEditions(workKey!, editions));
+
+        var owned = await dispatcher.Query(new FindOwnedEditions(isbns), ct);
+
+        return Results.Ok(new OnlineWorkEditions(
+            workKey!,
+            editions
+                .Select(e => e with
+                {
+                    OwnedBookId = e.Isbn is not null && owned.TryGetValue(e.Isbn, out var bookId) ? bookId : null,
                 })
                 .ToList()));
     }
