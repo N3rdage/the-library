@@ -235,6 +235,35 @@ public class BookLookupServiceTests
         Assert.Equal("Sourcery", result!.Title);
         Assert.Null(result.Series);
         Assert.Null(result.SeriesNumber);
+        Assert.Null(result.WorkKey);
+    }
+
+    [Fact]
+    public async Task LookupByIsbnAsync_TakesTheWorkKey_FromTheFirstWorkInTheDetailsView()
+    {
+        var handler = new FakeHandler
+        {
+            ["jscmd=data"] = OkJson($$"""
+                {
+                  "ISBN:{{Isbn}}": { "title": "Sourcery" }
+                }
+                """),
+            ["jscmd=details"] = OkJson($$"""
+                {
+                  "ISBN:{{Isbn}}": {
+                    "details": {
+                      "works": [ { "key": "/works/OL45804W" }, { "key": "/works/OL99W" } ]
+                    }
+                  }
+                }
+                """)
+        };
+
+        var result = await CreateService(handler, troveKey: "").LookupByIsbnAsync(Isbn, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("/works/OL45804W", result!.WorkKey);
+        Assert.Null(result.Series);
     }
 
     [Fact]
@@ -444,6 +473,102 @@ public class BookLookupServiceTests
 
         Assert.Empty(works);
         Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task GetWorkEditionsAsync_AsksForTheWorksEditions_AndMapsTheEntries()
+    {
+        var handler = new FakeHandler
+        {
+            ["openlibrary.org/works/OL45804W/editions.json"] = OkJson("""
+                {
+                  "entries": [
+                    {
+                      "title": "Mort",
+                      "publishers": ["Corgi", "Transworld"],
+                      "publish_date": "1988",
+                      "physical_format": "Paperback",
+                      "isbn_10": ["0-552-13106-x"],
+                      "isbn_13": ["978-0-552-13106-3"],
+                      "covers": [8231432]
+                    },
+                    {
+                      "title": "Mort",
+                      "publishers": ["Gollancz"],
+                      "isbn_10": ["057503 9123"],
+                      "covers": [-1]
+                    },
+                    { "title": "Mort (book club)", "publishers": ["Book Club Associates"], "publish_date": "Nov 1987" },
+                    { "title": "Mort, no publisher" },
+                    { "publishers": ["Nobody"] }
+                  ]
+                }
+                """)
+        };
+
+        var editions = await CreateService(handler, troveKey: "").GetWorkEditionsAsync("/works/OL45804W", CancellationToken.None);
+
+        Assert.Equal("https://openlibrary.org/works/OL45804W/editions.json?limit=50", Assert.Single(handler.Requests));
+        Assert.Equal(
+            new[]
+            {
+                new OnlineEdition("9780552131063", "Mort", "Corgi", "1988", "Paperback",
+                    "https://covers.openlibrary.org/b/id/8231432-M.jpg", null),
+                new OnlineEdition("0575039123", "Mort", "Gollancz", null, null,
+                    "https://covers.openlibrary.org/b/isbn/0575039123-M.jpg", null),
+                new OnlineEdition(null, "Mort (book club)", "Book Club Associates", "Nov 1987", null, null, null),
+            },
+            editions);
+    }
+
+    [Fact]
+    public async Task GetWorkEditionsAsync_UpperCasesAnIsbn10CheckDigit()
+    {
+        var handler = new FakeHandler
+        {
+            ["editions.json"] = OkJson("""{ "entries": [ { "isbn_10": ["0-552-13106-x"] } ] }""")
+        };
+
+        var editions = await CreateService(handler, troveKey: "").GetWorkEditionsAsync("/works/OL1W", CancellationToken.None);
+
+        Assert.Equal("055213106X", Assert.Single(editions).Isbn);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("OL45804W")]
+    [InlineData("/works/OL45804M")]
+    [InlineData("/works/OL45804W\n")]
+    [InlineData("/works/OL45804W/../../authors")]
+    public async Task GetWorkEditionsAsync_MalformedKey_MakesNoRequest(string workKey)
+    {
+        var handler = new FakeHandler();
+
+        var editions = await CreateService(handler, troveKey: "").GetWorkEditionsAsync(workKey, CancellationToken.None);
+
+        Assert.Empty(editions);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task GetWorkEditionsAsync_ProviderError_ReturnsEmpty()
+    {
+        var handler = new FakeHandler { ["editions.json"] = new HttpResponseMessage(HttpStatusCode.InternalServerError) };
+
+        var editions = await CreateService(handler, troveKey: "").GetWorkEditionsAsync("/works/OL45804W", CancellationToken.None);
+
+        Assert.Empty(editions);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task GetWorkEditionsAsync_TransportException_ReturnsEmpty()
+    {
+        var handler = new FakeHandler { Throws = new HttpRequestException("connection reset") };
+
+        var editions = await CreateService(handler, troveKey: "").GetWorkEditionsAsync("/works/OL45804W", CancellationToken.None);
+
+        Assert.Empty(editions);
     }
 
     private static BookLookupService CreateService(FakeHandler handler, string troveKey)
