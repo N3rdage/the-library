@@ -124,7 +124,7 @@ TODO #55):
 
 - **ViewModels** are plain C# classes under `BookTracker.Web/ViewModels/`. They hold UI state + presentation logic and **dispatch commands/queries** — they never touch `DbContext`; every read and write goes through `IDispatcher`.
 - **Razor components** are thin views that inject a VM and bind to its properties. UI concerns only: JS interop, navigation, Blazor lifecycle.
-- **Services** still handle genuinely external concerns: ISBN lookup (Open Library / Google Books / Trove), AI features (Anthropic API), cover storage. The old per-entity *merge* services were dissolved into commands + query handlers (see below).
+- **Services** handle only external concerns: ISBN lookup (Open Library / Google Books / Trove), the LLM calls behind the AI features, and cover storage. They hold no library reads: a service that needs library facts dispatches a query through `IDispatcher`, as a ViewModel does. Merges are commands (see below).
 
 VM lifetime:
 - **Transient**: most VMs — each component instance gets its own.
@@ -262,7 +262,9 @@ Multi-provider architecture with runtime switching via `AIProviderFactory`.
 - `MicrosoftFoundryAIAssistantService` — Claude via Microsoft Foundry. Same Anthropic SDK with custom endpoint. Uses Azure credits.
 - `AzureOpenAIAssistantService` — GPT-4o via Azure OpenAI SDK. Single deployment for all operations.
 
-**Shared logic:** `SharedParsers` provides JSON parsing and prompt building used by all providers.
+**Library facts:** the providers take `IDispatcher` and read the library through the queries in `Application/Ai/`: `GetGenreTaxonomy` (genre suggestions), `GetUnseriesedBooksForAi` plus `GetSeriesList` (collection suggestions), `GetAiLibraryProfile` (shopping list: top authors, top genres, highly rated books, and the series gaps from `GetSeriesGaps`, the same rule as the `/wishlist` series-gaps section) and `GetLibraryProfileForAdvisor` (book advisor).
+
+**Shared logic:** `AiPromptContext` renders those read models into the prompt text, and `SharedParsers` holds the prompt templates and the JSON parsing; all three providers use both.
 
 | Method | Speed | Purpose |
 |--------|-------|---------|
