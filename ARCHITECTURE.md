@@ -166,6 +166,7 @@ A short-lived context is created per operation. Never inject `DbContext` directl
 | `/series` | Series List | All series/collections with completion status |
 | `/series/new` | New Series | Create a new series or collection |
 | `/series/{id}` | Edit Series | Edit series, manage books in series, reorder |
+| `/shelf-order` | Shelf order | Read-only list for shelving at the bookcase, readable on a phone and printable: books grouped by the top-level genre of their first Work (the alphabetically first root when there are several, others shown as "also"; no genre → a last "Unsorted" group), each group ordered by lead-author surname, series and series order, year first published, then title (`GetShelfOrder`, `ShelfOrderKey` in `Application/Shelf/`). |
 | `/shopping` | Shopping Mode | Earlier mobile-optimised page covering scan + series gaps + wishlist. Overlaps with `/bookshop`; TODO #28 tracks the consolidation. |
 | `/assistant` | AI Assistant | Book advisor (Opus), genre cleanup, collection cataloguing, shopping suggestions (Sonnet). |
 | `/authors` | Authors | MudBlazor list with per-row drill-down to Works/Books, alias rollup on canonical rows, inline rename / merge / alias-resolve. Deep-linked from Home top-10. |

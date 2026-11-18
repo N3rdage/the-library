@@ -203,6 +203,7 @@ public static class ProgramSetup
         builder.Services.AddTransient<BulkAddViewModel>();
         builder.Services.AddTransient<SeriesListViewModel>();
         builder.Services.AddTransient<SeriesEditViewModel>();
+        builder.Services.AddTransient<ShelfOrderViewModel>();
         builder.Services.AddTransient<AuthorListViewModel>();
         builder.Services.AddTransient<AuthorDetailViewModel>();
         builder.Services.AddTransient<PublisherListViewModel>();
