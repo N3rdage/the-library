@@ -115,7 +115,7 @@ application layer (see [Application layer](#application-layer--cqrs-spine)):
 ```
 [Razor Component (.razor)]  ←→  [ViewModel (.cs)]  ──IDispatcher──▶  [Command / Query handlers]
      View (UI binding)           State + UI logic                    (BookTracker.Application)
-                              (target: no DbContext)                          │
+                                (no DbContext)                                │
                                                                     ┌─────────┴─────────┐
                                                               [Rich aggregates]   [Read projections]
                                                               (BookTracker.Data)   (AsNoTracking → DTO)
@@ -131,11 +131,14 @@ VM lifetime:
 
 ## Application layer — CQRS spine
 
-`BookTracker.Application` is the seam between the UI and the data. The target is that it owns
-all write **and** read logic and ViewModels and services hold none of it. The code does not meet
-that yet: a number of ViewModels, two shared components (`MudAuthorPicker`, `MudContributorPicker`)
-and several services still take `IDbContextFactory<BookTrackerDbContext>` and run EF
-themselves. Bringing them behind the Application layer is tracked in the backlog.
+`BookTracker.Application` is the seam between the UI and the data. It owns all write **and**
+read logic: no ViewModel, page or component touches `DbContext`. Five files in `BookTracker.Web`
+are the named exceptions (C1): `ProgramSetup.cs` (the composition root, which registers the
+context factory and runs the Development-only migrate-on-startup), `Api/WarmupEndpoints.cs` (the
+`/warmup` probe), `Services/Covers/CoverMirrorBackgroundService.cs` with its helper
+`Services/Covers/CoverMirrorQueue.cs`, and `Services/EditionFormatBackfillService.cs`. The
+compiler does not enforce the rule: `BookTracker.Web` references `BookTracker.Data`, so a new
+injection of `IDbContextFactory<BookTrackerDbContext>` in Web compiles.
 Design + binding conventions (C1–C12) live in `docs/BACKEND-REFACTOR-DESIGN.md`.
 
 - **Dispatcher.** A thin hand-rolled `IDispatcher` (`Send(ICommand)` / `Query(IQuery<T>)`) — **no MediatR**. Handlers are discovered by a convention scan (`AddApplicationLayer()`) over the assembly, so a new handler is registered the moment it exists (and the integration tests, which dispatch through the same scan, pick it up too).

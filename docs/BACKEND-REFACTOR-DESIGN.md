@@ -47,8 +47,8 @@ We are taking the **spine** of DDD + CQRS, not the cathedral. Out of scope:
   projections against the same DB. CQRS here means *separate models*, not separate storage.
 - **MVVM ceremony on Blazor.** No `INotifyPropertyChanged` / observable-property style.
   Blazor components are the view; ViewModels are the VM. The MVVM rule here is
-  **subtractive** (VMs don't touch EF), not additive. That is the target; the code does not
-  meet it yet (see [The one rule that buys the most](#the-one-rule-that-buys-the-most)).
+  **subtractive** (VMs don't touch EF), not additive. No ViewModel or component touches EF
+  (see [The one rule that buys the most](#the-one-rule-that-buys-the-most)).
 - **Aggregating flat lookup tables** (`Tag`, `Publisher`, `Genre`). No invariants → stay plain data.
 
 ## Architecture
@@ -59,7 +59,7 @@ We are taking the **spine** of DDD + CQRS, not the cathedral. Out of scope:
 │   Components/Pages/*.razor   →  inject ViewModel only        │
 │   ViewModels/*               →  call Application ONLY        │
 │   Api/*                      →  call Application ONLY        │
-│   (DbContext referenced ONLY at the composition root)        │
+│   (DbContext: composition root + the C1 exceptions only)     │
 └───────────────┬─────────────────────────────────────────────┘
                 │ depends on
 ┌───────────────▼─────────────────────────────────────────────┐
@@ -81,21 +81,29 @@ We are taking the **spine** of DDD + CQRS, not the cathedral. Out of scope:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The diagram shows the target shape. [The one rule that buys the most](#the-one-rule-that-buys-the-most)
-and [Rich aggregates](#rich-aggregates-in-booktrackerdata) below say where the code does not
-meet it yet.
+The Web layer matches the diagram apart from the C1 exceptions named below. The Data layer's
+encapsulation does not match it yet; [Rich aggregates](#rich-aggregates-in-booktrackerdata)
+below says where.
 
 ### The one rule that buys the most
 
-> **A ViewModel, a page, or an API endpoint must never create or touch a `DbContext`.
-> They talk to `BookTracker.Application` and nothing below it.**
+> **A ViewModel, a page, a component, or an API endpoint must never create or touch a
+> `DbContext`. They talk to `BookTracker.Application` and nothing below it.**
 
-The target is that the Web project touches `BookTracker.Data`'s `DbContext` only for DI
-registration at the composition root. The code does not meet that yet, and the compiler does
-not enforce it: `BookTracker.Web.csproj` references `BookTracker.Data` directly, and a number
-of ViewModels, two shared components, several services and the warm-up endpoint still inject
-`IDbContextFactory<BookTrackerDbContext>` and run EF themselves. Bringing them behind the
-Application layer is tracked in the backlog.
+No ViewModel, page or component in `BookTracker.Web` touches `DbContext`. Five files in the
+Web project do, and they are the named exceptions in C1:
+
+- `ProgramSetup.cs` — the composition root: it registers `AddDbContextFactory<BookTrackerDbContext>`
+  and runs the Development-only migrate-on-startup.
+- `Api/WarmupEndpoints.cs` — the anonymous `/warmup` probe, which runs one trivial query to warm
+  the SQL connection pool before a slot swap.
+- `Services/Covers/CoverMirrorBackgroundService.cs` and its helper
+  `Services/Covers/CoverMirrorQueue.cs` — the cover-mirror hosted service and its due-row
+  queries and `CoverMirrorState` writes.
+- `Services/EditionFormatBackfillService.cs` — the one-shot startup backfill of Edition formats.
+
+The compiler does not enforce the rule: `BookTracker.Web.csproj` references `BookTracker.Data`
+directly, so a new `IDbContextFactory<BookTrackerDbContext>` injection in Web compiles.
 
 ### Write side (commands)
 
@@ -103,22 +111,21 @@ A command is an intent. A handler orchestrates one transaction: load aggregate �
 **method on the aggregate** → save. Business rules live on the aggregate, not the handler.
 
 ```csharp
-// Application/Books/AddCopyToBook.cs
-public sealed record AddCopyToBook(int BookId, int EditionId, Condition Condition, DateOnly? Acquired);
+// Application/Books/AddCopyToEdition.cs
+public sealed record AddCopyToEdition(int EditionId, BookCondition Condition, DateTime? DateAcquired, string? Notes) : ICommand<int>;
 
-public sealed class AddCopyToBookHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+public sealed class AddCopyToEditionHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : ICommandHandler<AddCopyToEdition, int>
 {
-    public async Task HandleAsync(AddCopyToBook cmd, CancellationToken ct)
+    public async Task<int> HandleAsync(AddCopyToEdition command, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var book = await db.Books
-            .Include(b => b.Editions).ThenInclude(e => e.Copies)
-            .FirstOrDefaultAsync(b => b.Id == cmd.BookId, ct)
-            ?? throw new NotFoundException(...);
+        var edition = await db.Editions.FindAsync([command.EditionId], ct)
+            ?? throw new NotFoundException($"Edition {command.EditionId} not found.");
 
-        book.AddCopy(cmd.EditionId, cmd.Condition, cmd.Acquired); // ← invariant lives here
-
+        var copy = edition.AddCopy(command.Condition, command.DateAcquired, command.Notes); // ← invariant lives here
         await db.SaveChangesAsync(ct);
+        return copy.Id;
     }
 }
 ```
@@ -130,17 +137,20 @@ A query handler projects straight to a **read-model DTO** with `AsNoTracking()`.
 
 ```csharp
 // Application/Books/GetBookDetail.cs
-public sealed record GetBookDetail(int BookId);
+public sealed record GetBookDetail(int BookId) : IQuery<BookDetail?>;
 
 public sealed class GetBookDetailHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : IQueryHandler<GetBookDetail, BookDetail?>
 {
-    public async Task<BookDetailView?> HandleAsync(GetBookDetail q, CancellationToken ct)
+    public async Task<BookDetail?> HandleAsync(GetBookDetail query, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        return await db.Books.AsNoTracking()
-            .Where(b => b.Id == q.BookId)
-            .Select(b => new BookDetailView(/* flat projection */))
+        var book = await db.Books
+            .AsNoTracking()
+            .Where(b => b.Id == query.BookId)
+            .Select(b => new { /* only the scalars and small lists the page shows */ })
             .FirstOrDefaultAsync(ct);
+        // ... formats the projection into the BookDetail record (abridged)
     }
 }
 ```
@@ -167,13 +177,13 @@ and the merge handlers assign fields directly. Closing that gap (C7) is tracked 
 
 ## Conventions
 
-These are binding for all Application-layer work. C1 and C7 are also targets that existing code
-does not meet yet (see The one rule that buys the most and Rich aggregates above); the gap is tracked in the backlog, and new code
+These are binding for all Application-layer work. C7 is also a target that existing code
+does not meet yet (see Rich aggregates above); the gap is tracked in the backlog, and new code
 must not widen it.
 
 | # | Rule |
 |---|------|
-| C1 | ViewModels / pages / API endpoints never touch `DbContext`. They call Application handlers only. |
+| C1 | ViewModels / pages / components / API endpoints never touch `DbContext`. They call Application handlers only. In `BookTracker.Web` exactly five files may touch it: `ProgramSetup.cs` (composition root), `Api/WarmupEndpoints.cs`, `Services/Covers/CoverMirrorBackgroundService.cs`, `Services/Covers/CoverMirrorQueue.cs` and `Services/EditionFormatBackfillService.cs`. |
 | C2 | One feature = one folder under `BookTracker.Application/<Feature>/`. Commands, queries, handlers, and read-model DTOs for that feature live together. |
 | C3 | Every cross-boundary contract is a `record` (commands, queries, read-model views). No EF entity crosses out of Application to the UI. |
 | C4 | One handler per file. File name = command/query name. Handlers are `sealed`. |
@@ -197,10 +207,12 @@ must not widen it.
   handler can't be forgotten. An explicit list's forgot-to-register footgun outweighs its
   one-file greppability, and `grep ": ICommandHandler<"` recovers the same list. No attribute
   (the interface is already the marker), no MediatR.
-- **Transaction ownership.** Every command handler makes at most one `SaveChangesAsync` call
+- **Transaction ownership.** The rule: a command handler's writes go through one
+  `SaveChanges`, or through an explicit transaction when there is more than one, so they commit
+  or fail together. Every command handler makes at most one `SaveChangesAsync` call
   (`CreateSeries` and `UpdateSeries` make it through `SeriesNameGuard.SaveTranslatingDuplicateAsync`),
-  and EF Core runs one `SaveChanges` as one transaction, so a handler's writes commit or fail
-  together. Several handlers write to more than one aggregate in that one call: `DeleteBook` and
+  and EF Core runs one `SaveChanges` as one transaction. Several handlers write to more than one
+  aggregate in that one call, for example `DeleteBook` and
   `RemoveWorkFromBook` (the Book's Work membership and any Work it orphans), `AttachWorkToBook`
   (Book and Work membership), `CreateWorkOnBook` and `AttachWorksToBook` (new Works on a Book,
   plus find-or-created Authors), `UpdateWork` (the Work plus find-or-created Authors),
@@ -209,14 +221,18 @@ must not widen it.
   The five merges (`MergeBooks`, `MergeWorks`, `MergeAuthors`, `MergeEditions`,
   `MergePublishers`) also open an explicit `BeginTransactionAsync` around their single save. No
   handler dispatches another command or saves twice.
-- **Exception → UI mapping.** Handlers throw `NotFoundException` when the root they mutate is
+- **Exception → UI mapping (open question).** How a failed command or query reaches the user
+  is undecided; a consistent design is pending Drew's choice, and callers stay as they are until
+  then. Today: handlers throw `NotFoundException` when the root they mutate is
   gone; aggregates (`Book`, `Work`, `Series`, `WishlistItem`) and `SeriesNameGuard` throw
   `DomainRuleException` for a broken rule; soft outcomes come back as nullable returns or result
   records. There is no central mapping: each caller catches what it expects. The edit-dialog
-  ViewModels, `SeriesEditViewModel` and `BookDetailViewModel`'s cover upload catch
+  ViewModels (`BookEditDialogViewModel`, `WorkEditDialogViewModel`, `EditionFormDialogViewModel`,
+  `CopyFormDialogViewModel`), `SeriesEditViewModel` and `BookDetailViewModel`'s cover upload catch
   `NotFoundException` and turn it into a no-op, a failure result or a not-found state;
-  `SeriesEditViewModel` shows a `DomainRuleException`'s message inline; and most pages and dialogs
-  wrap their save calls in a `catch (Exception)` that shows the message in a MudBlazor snackbar.
+  `SeriesEditViewModel` and `AIAssistantViewModel` (creating a series from a suggestion) show a
+  `DomainRuleException`'s message inline; and many pages and dialogs wrap their save calls in a
+  `catch (Exception)` that shows the message in a MudBlazor snackbar.
 
 ---
 
