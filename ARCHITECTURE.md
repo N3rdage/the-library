@@ -11,26 +11,30 @@ BookTracker is the codebase / namespace umbrella for **two apps**:
 
 AI features sit in Bookcase via multiple providers: Anthropic (Claude, public API) and Azure OpenAI (GPT-4o, Azure-hosted). Microsoft Foundry (Claude on Azure) is supported in code but not currently provisioned — see `infra/README.md` and `TODO.md`.
 
-Target deployment for Bookcase: Azure App Service + Azure SQL (Basic tier) via GitHub Actions. SQL, Key Vault, and Azure OpenAI sit behind Private Endpoints; the App Service reaches them through VNet integration + a peered eastus2 VNet for the OpenAI account. Bookshelf is an APK that talks to Bookcase's `/api/*` surface over HTTPS with AAD bearer tokens.
+Target deployment for Bookcase: Azure App Service + Azure SQL (Standard S0) via GitHub Actions. SQL, Key Vault, and Azure OpenAI sit behind Private Endpoints; the cover-storage account is public (its cover containers allow anonymous blob reads); the App Service reaches them through VNet integration + a peered eastus2 VNet for the OpenAI account. Bookshelf is an APK that talks to Bookcase's `/api/*` surface over HTTPS with AAD bearer tokens.
 
 ## Solution structure
 
 ```
 BookTracker.slnx
-  BookTracker.Data/                Class library — entities (rich aggregates), DbContext, EF migrations
+  BookTracker.Data/                Class library — entities, DbContext, EF migrations
   BookTracker.Application/         Command + query handlers, the IDispatcher, read-model
                                    projections + formatters — the DDD/CQRS spine
   BookTracker.Shared/              Wire-format DTOs (CatalogSnapshot, BookSnapshot, …)
                                    — no EF dependency, referenced by Web + Mobile
   BookTracker.Web/                 Blazor Web App (Bookcase) — UI, ViewModels (dispatch-only), /api/*
-  BookTracker.Mobile/              .NET MAUI Android app (Bookshelf) — net10.0-android
   BookTracker.Mobile.Cache/        SQLite-backed catalog cache library — pure net10.0
                                    (referenced by Mobile + tested independently)
   BookTracker.Mobile.Cache.Tests/  xUnit tests for the cache, no MAUI runtime needed
   BookTracker.Tests/               xUnit tests for Web — real SQL via Testcontainers
+  BookTracker.Tools.SnapshotDump/  Console tool that dumps the catalog to a JSON snapshot
+
+Outside the solution:
+  BookTracker.Mobile/              .NET MAUI Android app (Bookshelf) — net10.0-android;
+                                   built by its own project file and the mobile-build workflow
 ```
 
-All projects target `net10.0` (the Mobile project adds `net10.0-android`).
+All projects target `net10.0` except `BookTracker.Mobile`, which targets `net10.0-android`.
 
 ## Data model
 
@@ -48,7 +52,8 @@ Book                                                ← physical-object grouping
   │     BookWork.Order = per-book display position (0-based, appends on add,
   │       user-reorderable); works render in this order, not alphabetically
   │     Title, Subtitle, FirstPublishedDate
-  │     ├── Author (many-to-1 → Author)
+  │     ├── WorkAuthors (many-to-many → Author via WorkAuthor join;
+  │     │     Role = Author/Editor/Translator/…, Order = display position per role)
   │     └── Genres (many-to-many → Genre)
   ├── Editions (1-to-many)
   │     ISBN (filtered unique, nullable for pre-ISBN books),
@@ -69,7 +74,7 @@ Author
   Name (unique)
   CanonicalAuthorId (nullable self-FK — pen name aliases)
   └── Aliases (1-to-many — inverse of CanonicalAuthorId)
-  └── Works (1-to-many)
+  └── Works (many-to-many via WorkAuthor)
 
 Genre
   Name (unique), ParentGenre (self-referential)
@@ -99,7 +104,7 @@ GenreSeed
 
 Key design decisions:
 - **Work vs Book vs Edition vs Copy**: A `Work` is the abstract creative unit (a story / novel / play / poem). A `Book` is the physical-object grouping containing one or more Works (a compendium contains many; a novel contains one). An `Edition` is a specific printing of the Book with a unique ISBN. A `Copy` is the physical item you own. Authorship, subtitle, and genres belong to the Work, not the Book — a Christie short-story collection is "horror" because each contained story is, not because the volume itself is tagged. Series membership belongs to the **Book** — the book is installment N of a publication series (see Series.Type below).
-- **Author entity with self-referential pen names**: each `Work` points at a specific `Author` row. Pen names (Richard Bachman) get their own Author row with `CanonicalAuthorId` pointing at the canonical (Stephen King). A Bachman novel is *displayed* as "by Richard Bachman" (the Work's `AuthorId` points at Bachman) but aggregations group by `CanonicalAuthorId ?? Id` so King's tally includes the Bachman titles. Lookups are find-or-created **eagerly at the picker** (typing a fresh name and committing it — chip Enter/comma, dropdown-pick, or field blur — creates the row immediately), with find-or-create on save kept as a net for ISBN-prefilled names that bypass the picker. Merging duplicates and managing aliases happens on `/authors`.
+- **Author entity with self-referential pen names**: each `Work` credits one or more specific `Author` rows through `WorkAuthor` join rows (with a `Role` and a per-role `Order`; `Order` 0 is the lead). Pen names (Richard Bachman) get their own Author row with `CanonicalAuthorId` pointing at the canonical (Stephen King). A Bachman novel is *displayed* as "by Richard Bachman" (its `WorkAuthor` row points at Bachman) but aggregations group by `CanonicalAuthorId ?? Id` so King's tally includes the Bachman titles. Lookups are find-or-created **eagerly at the picker** (typing a fresh name and committing it — chip Enter/comma, dropdown-pick, or field blur — creates the row immediately), with find-or-create on save kept as a net for ISBN-prefilled names that bypass the picker. Merging duplicates and managing aliases happens on `/authors`.
 - **Single-Work books are the common case** — the Add page auto-creates one Work alongside the Book and mirrors the title between them. Compendium support (multiple Works per Book) lives on Book Detail's "Add Work" dialog.
 - **Edition.ISBN is unique** (filtered — pre-1974 books with no ISBN coexist as nullable rows).
 - **Series.Type**: `Series` = numbered with known order; `Collection` = loose grouping. Series membership is **per-Book** — the book is installment N of a publication series. A single-Work novel and a multi-Work short-story collection both sit in the series as one installment; the constituent Works carry no series of their own.
@@ -170,11 +175,12 @@ A short-lived context is created per operation. Never inject `DbContext` directl
 | `/series` | Series List | All series/collections with completion status |
 | `/series/new` | New Series | Create a new series or collection |
 | `/series/{id}` | Edit Series | Edit series, manage books in series, reorder |
-| `/shopping` | Shopping Mode | Mobile-optimised page covering scan + series gaps + wishlist. Overlaps with `/bookshop`. |
+| `/wishlist` (also `/shopping`) | Wishlist | Search-and-add card (ISBN or title/author lookup through Open Library / Google Books / Trove), series gaps, open-ended series, and the wishlist itself. `/shopping` is a second route on the same page. |
 | `/assistant` | AI Assistant | Book advisor (Opus), genre cleanup, collection cataloguing, shopping suggestions (Sonnet). |
 | `/authors` | Authors | MudBlazor list with per-row drill-down to Works/Books, alias rollup on canonical rows, inline rename / merge / alias-resolve. Deep-linked from Home top-10. |
 | `/authors/{id}` | Author Detail | Per-author drill-down — works list, alias graph, attached books. |
 | `/publishers` | Publishers | MudBlazor list mirroring `/authors` structurally — per-row drill-down to editions, inline rename, two-step-confirm merge (no alias model — outright absorption), delete-unused. |
+| `/privacy` | Privacy | Static privacy statement. |
 | `/duplicates` | Duplicates | Tabs for Authors / Works / Books / Editions. Lists candidate duplicate pairs detected on-demand. Dismiss false positives (reversible via the "Dismissed" section). Author pairs have a Merge → button. Web-primary, desktop-first layout. |
 | `/duplicates/merge/author/{idA}/{idB}` | Merge authors | Side-by-side review of the pair, radio to pick a winner, preview of impact (N works + M aliases to reassign), transactional merge. Refuses when the two authors resolve to different canonicals — user resolves aliases on `/authors` first. |
 | `/duplicates/merge/work/{idA}/{idB}` | Merge works | Side-by-side review, radio to pick a winner, preview of impact (books to reassign + any books that already contain both → loser dropped). Transactional with auto-fill-empties semantics. Refuses if the two resolve to different authors (merge authors first). |
@@ -196,7 +202,7 @@ Lightweight JSON surface consumed by Bookshelf (MAUI) and `/bookshop` (PWA). Eac
 | Component | Purpose |
 |-----------|---------|
 | `BookForm.razor` | Book metadata fields (title, author, category, status, rating, notes, cover URL) + cover preview |
-| `GenrePicker.razor` | Hierarchical genre checkbox grid with fuzzy matching from ISBN lookup |
+| `MudGenrePicker.razor` | Genre chips plus a type-to-search autocomplete (picking a sub-genre includes its parent); fuzzy-matches ISBN-lookup subjects against the genre list on request |
 | `EditionCopyForm.razor` | Edition fields (ISBN, format, publisher, date, cover) + copy condition |
 | `AIProviderToggle.razor` | Dropdown to switch AI provider at runtime + call counter badge |
 
@@ -232,7 +238,7 @@ Looks up book metadata by ISBN. Tries Open Library first, falls back to Google B
 
 ### MergeAuthors
 *The `MergeAuthors` command + `GetAuthorMergePreview` query in `BookTracker.Application/Authors/`; compatibility check shared via `AuthorMergeCompatibility`.*
-Merges two Author rows after user review. Refuses when the two authors resolve to different canonicals (user must resolve aliases on `/authors` first). Otherwise runs in one transaction: reassigns `Work.AuthorId`, reassigns external aliases' `CanonicalAuthorId`, clears any `IgnoredDuplicate` rows mentioning the loser, deletes the loser. One edge case: when the winner is itself an alias of the loser, winner is promoted to canonical before the delete so its `CanonicalAuthorId` doesn't dangle. Returns a result with reassignment counts + a flag for the promotion case.
+Merges two Author rows after user review. Refuses when the two authors resolve to different canonicals (user must resolve aliases on `/authors` first). Otherwise runs in one transaction: moves the loser's `WorkAuthor` credits to the winner (deduplicated by Work and Role, so distinct roles survive), reassigns external aliases' `CanonicalAuthorId`, clears any `IgnoredDuplicate` rows mentioning the loser, deletes the loser. One edge case: when the winner is itself an alias of the loser, winner is promoted to canonical before the delete so its `CanonicalAuthorId` doesn't dangle. Returns a result with reassignment counts + a flag for the promotion case.
 
 ### MergeWorks
 *The `MergeWorks` command + `GetWorkMergePreview` query in `BookTracker.Application/Works/`.*
@@ -244,13 +250,14 @@ Merges two Edition rows belonging to the same Book after user review. Same shape
 
 ### MergeBooks
 *The `MergeBooks` command + `GetBookMergePreview` query in `BookTracker.Application/Books/`; loser-side soft-delete.*
-Merges two Book rows. Reassigns Editions (which carry their Copies) via `Edition.BookId`, unions Works and Tags (dedup by ID), auto-fills empty winner fields (Notes, DefaultCoverArtUrl, Rating — where `Rating == 0` is treated as "unrated" since the stars-1-to-5 UI can't produce an active 0). Transactional; clears stale `IgnoredDuplicate` rows; deletes the loser Book. No structural incompatibility path — the Edition unique-ISBN index is global so two Books can never hold editions with overlapping non-null ISBNs. Any resulting no-ISBN Edition duplicates (same format/publisher/date) surface on `/duplicates` for separate cleanup.
+Merges two Book rows. Reassigns Editions (which carry their Copies) via `Edition.BookId`, unions Works and Tags (dedup by ID), auto-fills empty winner fields (Notes, DefaultCoverArtUrl, Rating — where `Rating == 0` is treated as "unrated" since the stars-1-to-5 UI can't produce an active 0). Transactional; clears stale `IgnoredDuplicate` rows; soft-deletes the loser Book (stamps its `DeletedAt`, so the catalog snapshot reports it in `deletedIds[]`). No structural incompatibility path — the Edition unique-ISBN index is global so two Books can never hold editions with overlapping non-null ISBNs. Any resulting no-ISBN Edition duplicates (same format/publisher/date) surface on `/duplicates` for separate cleanup.
 
-### WorkSearchService
-Typeahead-style substring search across Works. Min 2 chars; case-insensitive via `ToLower()` on both sides. Ranks starts-with matches above contains-anywhere, alphabetical within. `excludeBookId` filter lets the attach-existing-Work UI exclude Works already attached. Returns up to `maxResults` results (default 20).
+### SearchWorks
+*The `SearchWorks` query in `BookTracker.Application/Works/`.*
+Typeahead-style substring search across Works. Min 2 chars (after trimming); case-insensitive via `ToLower()` on both sides. Ranks starts-with matches above contains-anywhere, alphabetical within. `ExcludeBookId` lets the attach-existing-Work UI exclude Works already attached. Returns up to `Max` results (both callers, the Add page and Book Detail's Add Work dialog, pass 20).
 
 ### SeriesMatchService
-Local series detection after ISBN lookup. Strategies:
+Local series detection after ISBN lookup. The rules live in `BookTracker.Web/Services/SeriesMatchService.cs`; its reads are the `GetSeriesMatchCandidates` query in `BookTracker.Application/Series/`, sent through `IDispatcher`. When the lookup returned series data, that series is matched by name to a local series, or proposed as a new one. Otherwise:
 1. Author already has a series — suggests it
 2. Author has multiple series — matches by title
 3. Author has 2+ ungrouped books — suggests creating a collection
@@ -282,25 +289,25 @@ Scoped factory managing provider lifecycle. Auto-detects available providers fro
 ## ISBN capture
 
 ### Barcode scanning
-ISBN barcodes (EAN-13/EAN-8) are scanned via the `html5-qrcode` library (v2.3.8, static JS under `wwwroot/lib/`). A JS interop wrapper (`barcode-scanner.js`) manages the scanner lifecycle with 3-second debounce on duplicate scans. The scanning viewport is optimised for 1D barcodes (wide and short, `aspectRatio: 2.0`). Used on Bulk Add and Shopping pages.
+ISBN barcodes (EAN-13/EAN-8) are scanned via the `html5-qrcode` library (v2.3.8, static JS under `wwwroot/lib/`). A JS interop wrapper (`barcode-scanner.js`) manages the scanner lifecycle with 3-second debounce on duplicate scans. The scanning viewport is optimised for 1D barcodes (wide and short, `aspectRatio: 2.0`). Used on Bulk Add (through JS interop from the page) and on `/bookshop` (driven by `bookshop-page.js`).
 
 ### Photo ISBN OCR
 For older books without barcodes, `photo-capture.js` opens the camera for a still photo. The image is scaled to max 800px, compressed to 70% JPEG, and sent to the active AI provider's `ExtractIsbnFromImageAsync` for vision OCR. SignalR max message size increased to 512KB for image transfer.
 
 ## UI component library
 
-Mid-migration from Bootstrap to **MudBlazor 9** (`BookTracker.Web.csproj`). Current state:
+Two UI libraries are in use side by side: **MudBlazor 9** (`BookTracker.Web.csproj`) and Bootstrap. The split:
 
-- **Pages using MudBlazor:** Home, Duplicates/MergeBook, Book Detail (`/books/{id}`) and its dialogs (BookEditDialog, WorkEditDialog, EditionFormDialog, CopyFormDialog, AddWorkDialog), the `MudGenrePicker` + `MudAuthorPicker` + `MudContributorPicker` shared components, Authors, Publishers, Book Add, Book Bulk Add. These use `MudCard`, `MudButton`, `MudText`, `MudContainer`, `MudDialog`, `MudAutocomplete`, etc.
+- **Pages using MudBlazor:** Home, Library list (`/books`), Book Add, Book Bulk Add, Book Detail (`/books/{id}`) and its dialogs (BookEditDialog, WorkEditDialog, EditionFormDialog, CopyFormDialog, AddWorkDialog), Authors and Author Detail, Publishers, Duplicates/MergeBook, and the `MudGenrePicker` + `MudAuthorPicker` + `MudContributorPicker` shared components. These use `MudCard`, `MudButton`, `MudText`, `MudContainer`, `MudDialog`, `MudAutocomplete`, etc.
   - `MudAuthorPicker` handles `Role=Author` contributors (the dominant case). `MudContributorPicker` is its sibling for non-Author roles (editor / translator / illustrator / etc.) — used on every Work-editing surface (Add Book single-Work + per-collection-row, AddWorkDialog, WorkEditDialog). The two-picker split keeps the common single-Author case zero-cost while making editor / translator / illustrator credit explicit when needed; see `AuthorRole` in `BookTracker.Data/Models/WorkAuthor.cs` for the role list.
-- **Pages still on Bootstrap:** Library list, Series, Shopping, AI Assistant, Duplicates list. The navbar in `MainLayout.razor` is still Bootstrap.
-- **Rollout strategy:** no migration deadline — pages convert as they're touched for other reasons. Low-traffic pages may stay Bootstrap indefinitely; that's fine.
+- **Pages on Bootstrap:** Series list and edit, Wishlist, AI Assistant, Bookshop, the Duplicates list and the author / work / edition merge pages. The navbar in `MainLayout.razor` is Bootstrap.
+- **Conversion policy:** no deadline — a Bootstrap page converts to MudBlazor when it is touched for another reason. Low-traffic pages may stay Bootstrap indefinitely.
 - **Coexistence:** both stylesheets are loaded in `App.razor`. MudBlazor's four root providers (`MudThemeProvider`, `MudPopoverProvider`, `MudDialogProvider`, `MudSnackbarProvider`) sit in `MainLayout.razor` — harmless on Bootstrap-only pages. Each page picks one lane.
 - **Theme:** custom "warm library" palette in `BookTracker.Web/Theme/BookTrackerTheme.cs` (oxblood / antique brass / forest / parchment / espresso). Applied globally via `<MudThemeProvider Theme="BookTrackerTheme.Default" />`. Dark mode not wired yet.
 
 ## Mobile responsiveness (Bookcase web)
 
-Key mobile workflows: barcode scanning, library search, shopping mode. Pages use Bootstrap responsive utilities:
+Key mobile workflows: barcode scanning, library search, the wishlist. Pages use the `d-none` / `d-md-*` breakpoint utility classes:
 - **Collapsible filters** on Library list (below `md` breakpoint)
 - **Card layouts** replacing tables on mobile (Library list, Bulk Add discovery grid, Series list)
 - **Scanner-first** on mobile (full-width primary button above text input)
@@ -336,7 +343,7 @@ CI runs `dotnet test` on all PRs to main. Playwright E2E lives in `BookTracker.T
 
 ## Audit skills
 
-A family of read-only Claude Code skills that flag patterns of interest in specific domains (`security-audit`, `scale-audit`, with `a11y-audit` + `codehealth-audit` planned). Each one is **static-pattern analysis, not runtime measurement** — for runtime metrics see the App Insights queries in [the May 8 perf blog post](blog/2026-05-08-01-i-blamed-the-cold-start-the-trace-disagreed.md). The audit catches "this pattern *might* bite at scale"; App Insights catches "this pattern *is* biting now." Full doc + skill list: [`docs/audit-skills.md`](docs/audit-skills.md). Project-level rule overrides live at `audit-rules/<name>.md`; per-run reports land in `audits/` (gitignored).
+A family of read-only Claude Code skills that flag patterns of interest in specific domains (`security-audit`, `scale-audit`, with `a11y-audit` + `codehealth-audit` planned). Each one is **static-pattern analysis, not runtime measurement** — for runtime metrics see the App Insights queries in [the cold-start perf-investigation blog post](blog/2026-05-08-01-i-blamed-the-cold-start-the-trace-disagreed.md). The audit catches "this pattern *might* bite at scale"; App Insights catches "this pattern *is* biting now." Full doc + skill list: [`docs/audit-skills.md`](docs/audit-skills.md). Project-level rule overrides live at `audit-rules/<name>.md`; per-run reports land in `audits/` (gitignored).
 
 ## Configuration
 
@@ -365,7 +372,7 @@ Dev config templates: `appsettings.Example.json`, `appsettings.Development.Examp
 - Docker Compose for local SQL Server 2022 Developer + Azurite (cover-storage blob emulator)
 - GitHub Actions CI (build + test on PR), a Bookshelf compile check on PRs that touch it (`mobile-build.yml`), an on-demand Bookshelf APK build uploaded to a private container that Drew downloads from with his own Azure login (`bookshelf-apk.yml`), deploy-to-staging-slot, manual swap workflow, secret rotation
 - Dependabot for NuGet (EF Core grouped) and npm (html5-qrcode)
-- Azure Bicep templates under `infra/`. SQL, Key Vault, Azure OpenAI, and the cover-storage Blob account are reachable only via Private Endpoints; the App Service uses VNet integration + a peered eastus2 VNet to reach OpenAI. See `infra/README.md` for the full topology.
+- Azure Bicep templates under `infra/`. SQL, Key Vault, and Azure OpenAI are reachable only via Private Endpoints; the cover-storage Blob account has public network access, with anonymous blob reads on its two cover containers and a private `bookshelf-builds` container; the App Service uses VNet integration + a peered eastus2 VNet to reach OpenAI. See `infra/README.md` for the full topology.
 - **Slot-swap warmup** — `WEBSITE_SWAP_WARMUP_PING_PATH=/warmup` (set in `app-config.bicep`) makes Azure ping the dedicated `/warmup` endpoint during a slot swap, so the SQL pool + AAD token cold-start happens before promotion. Without the dedicated endpoint Azure would ping `/` which Easy Auth blocks (302 to login) and warm nothing.
 - **Container start time limit** — `WEBSITES_CONTAINER_START_TIME_LIMIT=600` (Linux App Service default is 230s, too tight under cold AAD + CA-cert update). See the in-bicep comment for the timing breakdown.
 - Migrations run at deploy time: `deploy.yml` builds an EF migration bundle and applies it to the staging database before the slot deploy, and `swap.yml` does the same for production before the swap. Migrate-on-startup is a Development-only convenience (`Program.cs` gates it on `IsDevelopment`), so a multi-instance deployment never races on the schema.

@@ -8,7 +8,7 @@ BookTracker uses a family of read-only Claude Code "audit skills" — automated 
 
 This is a deliberate boundary, because confusing the two leads to using the wrong tool for the job. Static analysis catches *patterns that correlate with problems* — an unbounded `ToListAsync`, a missing `@secure()` decorator, a multi-collection EF Include without `AsSplitQuery`. It catches the *shape*, not the *behaviour*.
 
-For runtime measurement — actual query latency, working-set memory under load, cold-start time, request-pipeline gaps — the source of truth is **Application Insights**. The five reusable KQL queries documented in [the May 8 perf-investigation blog post](../blog/2026-05-08-01-i-blamed-the-cold-start-the-trace-disagreed.md) are the durable artefact for that:
+For runtime measurement — actual query latency, working-set memory under load, cold-start time, request-pipeline gaps — the source of truth is **Application Insights**. The five reusable KQL queries documented in [the cold-start perf-investigation blog post](../blog/2026-05-08-01-i-blamed-the-cold-start-the-trace-disagreed.md) are the durable artefact for that:
 
 - **Q1** — Top SQL operations by p95 latency (catches `InternalOpenAsync` cold-handshake patterns)
 - **Q2** — N+1 detector (SQL calls per Blazor operation)
@@ -16,7 +16,7 @@ For runtime measurement — actual query latency, working-set memory under load,
 - **Q4** — Initial page-load durations (true GETs, before SignalR takes over)
 - **Q5** — Cold-start sanity check (request p95 over time, sawtooth detection)
 
-Plus the runbook memory entries from the same incident:
+Plus the runbook memory entries:
 - `runbook_sqlclient_pool_zombies.md` — when both slots wedge
 - `runbook_container_warmup_calibration.md` — `WEBSITES_CONTAINER_START_TIME_LIMIT` calibration
 
