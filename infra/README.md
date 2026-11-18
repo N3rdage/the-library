@@ -1,6 +1,6 @@
 # Azure infrastructure
 
-Provisions the Azure footprint for BookTracker into a single resource group. Everything reachable from the App Service is locked behind Private Endpoints; the only public surface is the App Service itself (gated by Easy Auth).
+Provisions the Azure footprint for BookTracker into a single resource group. SQL, Key Vault and Azure OpenAI are locked behind Private Endpoints. Two things are public: the App Service (gated by Easy Auth) and the cover-storage account, whose cover containers allow anonymous blob reads so cover URLs render directly (see the Storage Account row below).
 
 ## What gets created
 
@@ -221,7 +221,11 @@ The script also grants the CI SP the narrow permissions needed by the scheduled 
 The KV role assignment and app-reg ownership require the KV + app reg to already exist. If you run `setup-github-oidc.ps1` before `deploy.ps1`, those steps are skipped with a warning; re-run it after the first deploy to fill them in.
 
 Workflows under `.github/workflows/`:
-- `ci.yml` — build on PRs.
+- `ci.yml` — on PRs: build the solution and run the Unit, Component and Integration test categories.
+- `mobile-build.yml` — on PRs that touch Bookshelf or what it builds on: compile `BookTracker.Mobile` for Android (the required `mobile-build` check).
+- `bookshelf-apk.yml` — manual, in the `bookshelf-apk` environment: build and sign a Release APK and upload it to the private `bookshelf-builds` container (uses the APK identity described above).
+- `security-scan.yml` — on PRs, pushes and weekly: gitleaks secret scan.
+- `notify-drew-blog.yml` — on pushes to `main` that touch `blog/**`: asks the blog repo to re-sync (skips when its token secret is absent).
 - `deploy.yml` — on push to `main`: build, **apply pending EF migrations to `booktracker-staging` via the deploy-time bundle** (`dotnet ef migrations bundle` + AAD-auth apply behind a temp firewall rule), then publish + deploy to the **staging** slot. Migration apply failure blocks the slot deploy — clean fail signal, no startup-probe ambiguity. Two jobs: `package` compiles, publishes and bundles with no Azure rights and hands the package and the bundle on as an artifact; `deploy` alone can sign in to Azure and compiles nothing.
 - `swap.yml` — manual: **apply pending EF migrations to `booktracker` via the same bundle pattern**, then `az webapp deployment slot swap staging -> production`. Migration apply failure aborts the swap (prod stays on old code + old schema).
 - `rotate-easy-auth-secret.yml` — cron (twice yearly, 1st of every 6th month at 02:00 UTC) + manual dispatch: generates a new password on the `Library-Patrons` app registration, writes it to KV, trims old passwords to keep the latest 2. App Service picks up the new secret via the KV reference within ~24h. Manual dispatch: `gh workflow run rotate-easy-auth-secret.yml`.
