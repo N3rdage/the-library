@@ -57,7 +57,7 @@ public sealed class MergeAuthorsHandler(IDbContextFactory<BookTrackerDbContext> 
 
         if (winnerWasAliasOfLoser)
         {
-            winner.CanonicalAuthorId = null;
+            winner.PromoteToCanonical();
         }
 
         // Reassign every WorkAuthor row from loser to winner. Composite PK
@@ -105,7 +105,7 @@ public sealed class MergeAuthorsHandler(IDbContextFactory<BookTrackerDbContext> 
             .ToListAsync(ct);
         foreach (var a in aliases)
         {
-            a.CanonicalAuthorId = winner.Id;
+            a.MarkAliasOf(winner);
         }
 
         // Clear any dismissed-dup rows referencing the loser — they're about to
