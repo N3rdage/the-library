@@ -7,7 +7,9 @@ namespace BookTracker.Shared.Online;
 
 /// <summary>A provider answer for one ISBN. <see cref="Source"/> names the
 /// provider that answered; <see cref="Owned"/> is null when the library holds
-/// neither this edition nor its work.</summary>
+/// neither this edition nor its work. <see cref="WorkKey"/> is Open Library's
+/// work key (e.g. <c>/works/OL45804W</c>), which the phone passes to
+/// <c>/api/online/work-editions</c>; null when another provider answered.</summary>
 public record OnlineIsbnLookup(
     string Isbn,
     string? Title,
@@ -17,7 +19,8 @@ public record OnlineIsbnLookup(
     string? CoverUrl,
     int? PublishedYear,
     string Source,
-    OwnedWorkMatch? Owned);
+    OwnedWorkMatch? Owned,
+    string? WorkKey);
 
 /// <summary>The owned Book behind an online lookup. <see cref="SameEdition"/>
 /// separates "you own this printing" from "you own this work in another

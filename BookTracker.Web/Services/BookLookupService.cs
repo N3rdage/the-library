@@ -150,6 +150,70 @@ public partial class BookLookupService(
         }
     }
 
+    public async Task<IReadOnlyList<OnlineEdition>> GetWorkEditionsAsync(string workKey, CancellationToken ct)
+    {
+        if (!IsOpenLibraryWorkKey(workKey)) return [];
+        var id = workKey["/works/".Length..];
+
+        try
+        {
+            var url = $"https://openlibrary.org/works/{id}/editions.json?limit=50";
+            var doc = await http.GetFromJsonAsync<OpenLibraryEditionsResponse>(url, ct);
+            if (doc?.Entries is null) return [];
+
+            var editions = new List<OnlineEdition>();
+            foreach (var entry in doc.Entries)
+            {
+                var isbn = FirstCleanIsbn(entry.Isbn13) ?? FirstCleanIsbn(entry.Isbn10);
+                var title = NullIfBlank(entry.Title);
+                var publisher = entry.Publishers?.Select(NullIfBlank).FirstOrDefault(p => p is not null);
+
+                // Without an ISBN the phone can neither match nor scan the
+                // edition, so it is worth listing only when it can be told apart.
+                if (isbn is null && (title is null || publisher is null)) continue;
+
+                var coverId = entry.Covers?.FirstOrDefault() ?? 0;
+                var coverUrl = coverId > 0
+                    ? $"https://covers.openlibrary.org/b/id/{coverId}-M.jpg"
+                    : isbn is not null ? $"https://covers.openlibrary.org/b/isbn/{isbn}-M.jpg" : null;
+
+                editions.Add(new OnlineEdition(
+                    Isbn: isbn,
+                    Title: title,
+                    Publisher: publisher,
+                    PublishDate: entry.PublishDate,
+                    Format: entry.PhysicalFormat,
+                    CoverUrl: coverUrl,
+                    OwnedBookId: null));
+            }
+            return editions;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Open Library work editions lookup failed for work {WorkKey}", workKey);
+            return [];
+        }
+    }
+
+    /// <summary>True for an Open Library work key of the form
+    /// <c>/works/OL45804W</c>. The work-editions endpoint uses it too, so its
+    /// 400 and this service's no-call agree on what a key is.</summary>
+    internal static bool IsOpenLibraryWorkKey(string? workKey) =>
+        workKey is not null && WorkKeyRegex().IsMatch(workKey);
+
+    // [0-9] and \z rather than \d and $: \d takes any Unicode digit and $
+    // allows a trailing newline, neither of which belongs in the request URL.
+    [GeneratedRegex(@"^/works/OL[0-9]+W\z")]
+    private static partial Regex WorkKeyRegex();
+
+    private static string? FirstCleanIsbn(List<string?>? isbns) =>
+        isbns?
+            .Select(i => new string((i ?? "").Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant())
+            .FirstOrDefault(i => i.Length > 0);
+
+    private static string? NullIfBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     /// <summary>Escape the two characters Lucene treats specially *inside*
     /// a phrase: backslash and double-quote. Other Lucene metacharacters
     /// (parentheses, plus, minus, braces, brackets, asterisk, question,
@@ -187,7 +251,7 @@ public partial class BookLookupService(
             // curated view we hit above — so this is a separate call. Failure
             // here is non-fatal: the result still returns with Series=null and
             // the suggestion banner falls back to local title/author matching.
-            var (seriesName, seriesNumber, seriesNumberRaw) = await TryFetchOpenLibrarySeriesAsync(isbn, ct);
+            var details = await TryFetchOpenLibraryDetailsAsync(isbn, ct);
             return new BookLookupResult(
                 Isbn: isbn,
                 Title: book.Title,
@@ -202,9 +266,10 @@ public partial class BookLookupService(
                 Source: "Open Library",
                 Format: BookFormatNormalizer.Normalize(book.PhysicalFormat, book.PhysicalDimensions),
                 DatePrintedPrecision: olPrecision,
-                Series: seriesName,
-                SeriesNumber: seriesNumber,
-                SeriesNumberRaw: seriesNumberRaw);
+                Series: details.Series,
+                SeriesNumber: details.SeriesNumber,
+                SeriesNumberRaw: details.SeriesNumberRaw,
+                WorkKey: details.WorkKey);
         }
         catch (Exception ex)
         {
@@ -213,7 +278,8 @@ public partial class BookLookupService(
         }
     }
 
-    private async Task<(string?, int?, string?)> TryFetchOpenLibrarySeriesAsync(string isbn, CancellationToken ct)
+    // The series and the work key both come from the `jscmd=details` view.
+    private async Task<OpenLibraryDetailsHit> TryFetchOpenLibraryDetailsAsync(string isbn, CancellationToken ct)
     {
         try
         {
@@ -221,15 +287,24 @@ public partial class BookLookupService(
             var doc = await http.GetFromJsonAsync<Dictionary<string, OpenLibraryDetailsWrapper>>(url, ct);
             if (doc is null || !doc.TryGetValue($"ISBN:{isbn}", out var wrapper) || wrapper.Details is null)
             {
-                return (null, null, null);
+                return OpenLibraryDetailsHit.None;
             }
-            return ParseOpenLibrarySeries(wrapper.Details.Series);
+            var (name, number, numberRaw) = ParseOpenLibrarySeries(wrapper.Details.Series);
+            var workKey = wrapper.Details.Works?
+                .Select(w => w.Key?.Trim())
+                .FirstOrDefault(k => !string.IsNullOrEmpty(k));
+            return new OpenLibraryDetailsHit(name, number, numberRaw, workKey);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Open Library details lookup failed for ISBN {Isbn}", isbn);
-            return (null, null, null);
+            return OpenLibraryDetailsHit.None;
         }
+    }
+
+    private sealed record OpenLibraryDetailsHit(string? Series, int? SeriesNumber, string? SeriesNumberRaw, string? WorkKey)
+    {
+        public static readonly OpenLibraryDetailsHit None = new(null, null, null, null);
     }
 
     private async Task<BookLookupResult?> TryGoogleBooksAsync(string isbn, CancellationToken ct)
@@ -462,7 +537,7 @@ public partial class BookLookupService(
     }
 
     // The `jscmd=details` view wraps the Edition's raw record under `details`.
-    // Used only for the `series` field — everything else parses from the
+    // Used only for the `series` and `works` fields — everything else parses from the
     // friendlier `jscmd=data` shape (OpenLibraryBook above).
     private sealed class OpenLibraryDetailsWrapper
     {
@@ -473,6 +548,26 @@ public partial class BookLookupService(
         // Free-text strings — entries like "Discworld", "Discworld -- 5",
         // or "Foundation series ; bk. 1". Parsed via ParseOpenLibrarySeries.
         [JsonPropertyName("series")] public List<string>? Series { get; set; }
+        // The edition's works, e.g. [{ "key": "/works/OL45804W" }]; the first
+        // becomes BookLookupResult.WorkKey.
+        [JsonPropertyName("works")] public List<OpenLibraryWorkRef>? Works { get; set; }
+    }
+    private sealed class OpenLibraryWorkRef { [JsonPropertyName("key")] public string? Key { get; set; } }
+
+    // GET /works/{id}/editions.json: one entry per edition of the work.
+    private sealed class OpenLibraryEditionsResponse
+    {
+        [JsonPropertyName("entries")] public List<OpenLibraryEditionEntry>? Entries { get; set; }
+    }
+    private sealed class OpenLibraryEditionEntry
+    {
+        [JsonPropertyName("title")] public string? Title { get; set; }
+        [JsonPropertyName("publishers")] public List<string?>? Publishers { get; set; }
+        [JsonPropertyName("publish_date")] public string? PublishDate { get; set; }
+        [JsonPropertyName("physical_format")] public string? PhysicalFormat { get; set; }
+        [JsonPropertyName("isbn_13")] public List<string?>? Isbn13 { get; set; }
+        [JsonPropertyName("isbn_10")] public List<string?>? Isbn10 { get; set; }
+        [JsonPropertyName("covers")] public List<long>? Covers { get; set; }
     }
     private sealed class OpenLibraryAuthor { [JsonPropertyName("name")] public string? Name { get; set; } }
     private sealed class OpenLibraryPublisher { [JsonPropertyName("name")] public string? Name { get; set; } }
