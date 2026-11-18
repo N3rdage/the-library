@@ -23,7 +23,6 @@ namespace BookTracker.Web.ViewModels;
 // the loaded BookDetail snapshot).
 public class BookDetailViewModel(
     IBookCoverStorage coverStorage,
-    IWorkSearchService workSearch,
     ILogger<BookDetailViewModel> logger,
     IDispatcher dispatcher)
 {
@@ -224,7 +223,7 @@ public class BookDetailViewModel(
     public Task<IReadOnlyList<WorkSearchResult>> SearchAttachableWorksAsync(string query, CancellationToken ct)
     {
         if (Book is null) return Task.FromResult<IReadOnlyList<WorkSearchResult>>([]);
-        return workSearch.SearchAsync(query, excludeBookId: Book.Id, ct: ct);
+        return dispatcher.Query(new SearchWorks(query, ExcludeBookId: Book.Id, Max: 20), ct);
     }
 
     /// <summary>Attach an existing Work to this Book. Returns the Work's
@@ -271,7 +270,7 @@ public class BookDetailViewModel(
     }
 
     /// <summary>Attach a batch of new + existing Works to this Book in
-    /// one transaction. Mirrors <see cref="BookAddViewModel.SaveAsync"/>'s
+    /// one transaction. Mirrors <see cref="CreateBookHandler"/>'s
     /// collection-mode branch (single-name-resolution pass, attach-by-id
     /// for existing rows, build-from-fields for new rows) but the Book
     /// already exists. Used by AddMultipleWorksDialog on the View page

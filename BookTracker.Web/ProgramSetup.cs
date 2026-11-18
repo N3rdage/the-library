@@ -145,9 +145,6 @@ public static class ProgramSetup
         // See docs/BACKEND-REFACTOR-DESIGN.md.
         builder.Services.AddApplicationLayer();
 
-        builder.Services.AddScoped<IDuplicateDetectionService, DuplicateDetectionService>();
-        builder.Services.AddScoped<IWorkSearchService, WorkSearchService>();
-
         // One-shot startup task that re-classifies existing Editions using the
         // richer BookFormat enum (populated from upstream metadata). Idempotent via
         // a MaintenanceLog marker; safe to leave registered after the backfill has
@@ -181,7 +178,7 @@ public static class ProgramSetup
         builder.Services.AddScoped<AIProviderFactory>(sp =>
         {
             var factory = new AIProviderFactory(
-                sp.GetRequiredService<IDbContextFactory<BookTrackerDbContext>>(),
+                sp.GetRequiredService<IDispatcher>(),
                 sp.GetRequiredService<IOptions<AIOptions>>(),
                 sp.GetRequiredService<ILoggerFactory>());
             factory.Initialize();

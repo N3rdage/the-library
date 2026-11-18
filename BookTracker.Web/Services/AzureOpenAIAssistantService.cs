@@ -1,8 +1,8 @@
 using System.ClientModel;
 using Azure.AI.OpenAI;
-using BookTracker.Data;
-using BookTracker.Data.Models;
-using Microsoft.EntityFrameworkCore;
+using BookTracker.Application;
+using BookTracker.Application.Ai;
+using BookTracker.Application.Series;
 using OpenAI.Chat;
 
 namespace BookTracker.Web.Services;
@@ -11,7 +11,7 @@ namespace BookTracker.Web.Services;
 /// AI assistant implementation using Azure OpenAI (GPT-4o).
 /// </summary>
 public class AzureOpenAIAssistantService(
-    IDbContextFactory<BookTrackerDbContext> dbFactory,
+    IDispatcher dispatcher,
     AzureOpenAIOptions options) : IAIAssistantService
 {
     private ChatClient? _client;
@@ -57,15 +57,8 @@ public class AzureOpenAIAssistantService(
         string title, string author, string? subtitle,
         IReadOnlyList<string> currentGenres, CancellationToken ct = default)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-
-        var allGenres = await db.Genres
-            .OrderBy(g => g.Name)
-            .Select(g => new { g.Name, ParentName = g.ParentGenre != null ? g.ParentGenre.Name : null })
-            .ToListAsync(ct);
-
-        var taxonomyText = string.Join("\n", allGenres.Select(g =>
-            g.ParentName is not null ? $"  - {g.Name} (sub-genre of {g.ParentName})" : $"- {g.Name}"));
+        var allGenres = await dispatcher.Query(new GetGenreTaxonomy(), ct);
+        var taxonomyText = AiPromptContext.GenreTaxonomy(allGenres);
 
         var currentGenresText = currentGenres.Count > 0
             ? $"Currently assigned genres: {string.Join(", ", currentGenres)}"
@@ -94,30 +87,15 @@ Rules:
 
     public async Task<CollectionSuggestionResult> SuggestCollectionsAsync(CancellationToken ct = default)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-
-        // Books not in any series. Project the contained Works' authors since
-        // Book no longer carries Author directly.
-        var uncategorised = await db.Books
-            .Where(b => b.SeriesId == null)
-            .OrderBy(b => b.Title)
-            .Select(b => new
-            {
-                b.Title,
-                Author = string.Join(", ", b.Works.SelectMany(w => w.Authors.Select(a => a.Name)).Distinct())
-            })
-            .ToListAsync(ct);
+        var uncategorised = await dispatcher.Query(new GetUnseriesedBooksForAi(), ct);
 
         if (uncategorised.Count == 0)
             return new CollectionSuggestionResult([], "All books are already in a series or collection.");
 
-        var existingSeries = await db.Series.OrderBy(s => s.Name)
-            .Select(s => new { s.Name, s.Type, BookCount = s.Books.Count }).ToListAsync(ct);
+        var existingSeries = await dispatcher.Query(new GetSeriesList(null, null), ct);
 
-        var booksText = string.Join("\n", uncategorised.Select(b => $"- \"{b.Title}\" by {b.Author}"));
-        var seriesText = existingSeries.Count > 0
-            ? "Existing series/collections:\n" + string.Join("\n", existingSeries.Select(s => $"- {s.Name} ({s.Type}, {s.BookCount} books)"))
-            : "No existing series or collections.";
+        var booksText = AiPromptContext.UnseriesedBooks(uncategorised);
+        var seriesText = AiPromptContext.ExistingSeries(existingSeries);
 
         var responseText = await CallWithSystemAsync(SharedParsers.BuildCollectionSystemPrompt(seriesText),
             $"Here are the books not in any series:\n\n{booksText}\n\nSuggest groupings. Respond with JSON only.", 2048, ct);
@@ -126,8 +104,7 @@ Rules:
 
     public async Task<ShoppingSuggestionResult> SuggestShoppingListAsync(CancellationToken ct = default)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var context = await SharedParsers.BuildLibraryContextAsync(db, ct);
+        var context = AiPromptContext.LibraryProfile(await dispatcher.Query(new GetAiLibraryProfile(), ct));
 
         var responseText = await CallWithSystemAsync(SharedParsers.ShoppingSystemPrompt,
             $"{context}\n\nSuggest 5-10 books to look for. Respond with JSON only.", 2048, ct);
@@ -136,23 +113,7 @@ Rules:
 
     public async Task<BookAdvisorResult> AssessBookAsync(string query, CancellationToken ct = default)
     {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-
-        var allBooks = await db.Books
-            .Include(b => b.Works).ThenInclude(w => w.Genres)
-            .OrderBy(b => b.Title)
-            .Select(b => new
-            {
-                b.Title,
-                Author = string.Join(", ", b.Works.SelectMany(w => w.Authors.Select(a => a.Name)).Distinct()),
-                b.Rating,
-                Genres = b.Works.SelectMany(w => w.Genres).Select(g => g.Name).Distinct().ToList()
-            })
-            .ToListAsync(ct);
-
-        var booksText = allBooks.Count > 0
-            ? string.Join("\n", allBooks.Select(b => $"- \"{b.Title}\" by {b.Author} | {b.Rating}/5 | {string.Join(", ", b.Genres)}"))
-            : "Library is empty.";
+        var booksText = AiPromptContext.AdvisorBooks(await dispatcher.Query(new GetLibraryProfileForAdvisor(), ct));
 
         var responseText = await CallWithSystemAsync(SharedParsers.BuildAdvisorSystemPrompt(booksText),
             $"I'm considering: {query}\n\nShould I get it? Respond with JSON only.", 2048, ct);

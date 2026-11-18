@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
-using BookTracker.Data;
-using Microsoft.EntityFrameworkCore;
+using BookTracker.Application;
+using BookTracker.Application.Genres;
 using MudBlazor;
 
 namespace BookTracker.Web.ViewModels;
@@ -11,26 +11,17 @@ namespace BookTracker.Web.ViewModels;
 // full genre catalog and the search/projection helpers; selection
 // state is owned by the component (passed in as a parameter, kept
 // in sync via a callback).
-public class MudGenrePickerViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
+public class MudGenrePickerViewModel(IDispatcher dispatcher)
 {
     public List<GenreRow> AllGenres { get; private set; } = [];
     private Dictionary<int, GenreRow> _byId = [];
 
     public async Task InitializeAsync()
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var rows = await db.Genres
-            .OrderBy(g => g.Name)
-            .Select(g => new { g.Id, g.Name, g.ParentGenreId })
-            .ToListAsync();
+        var options = await dispatcher.Query(new GetGenreOptions());
 
-        var byId = rows.ToDictionary(r => r.Id, r => r);
-
-        AllGenres = rows.Select(r => new GenreRow(
-            r.Id,
-            r.Name,
-            r.ParentGenreId,
-            r.ParentGenreId is int pid && byId.TryGetValue(pid, out var parent) ? parent.Name : null))
+        AllGenres = options
+            .Select(g => new GenreRow(g.Id, g.Name, g.ParentGenreId, g.ParentName))
             .ToList();
 
         _byId = AllGenres.ToDictionary(g => g.Id);

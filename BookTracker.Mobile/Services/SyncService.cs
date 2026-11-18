@@ -1,4 +1,5 @@
 using BookTracker.Mobile.Cache;
+using BookTracker.Mobile.Cache.Presentation;
 using Microsoft.Maui.Networking;
 using Microsoft.Maui.Storage;
 
@@ -164,13 +165,5 @@ public sealed class SyncService : ISyncService
     /// <summary>Relative-time label for a last-synced timestamp:
     /// "never" / "just now" / "5m ago" / "2h ago" / "2026-05-12 14:23".
     /// Shared by the status sheet + the SyncChip.</summary>
-    public static string FormatAge(DateTime? syncedUtc)
-    {
-        if (syncedUtc is not { } utc) return "never";
-        var ago = DateTime.UtcNow - utc;
-        if (ago.TotalMinutes < 1) return "just now";
-        if (ago.TotalMinutes < 60) return $"{(int)ago.TotalMinutes}m ago";
-        if (ago.TotalHours < 24) return $"{(int)ago.TotalHours}h ago";
-        return utc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
-    }
+    public static string FormatAge(DateTime? syncedUtc) => SyncAgeFormatter.FormatAge(syncedUtc);
 }

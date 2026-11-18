@@ -1,25 +1,20 @@
 using System.ComponentModel.DataAnnotations;
-using BookTracker.Data;
+using BookTracker.Application;
+using BookTracker.Application.Publishers;
 using BookTracker.Data.Models;
 using BookTracker.Web.Validation;
-using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
 
-public class EditionFormViewModel(IDbContextFactory<BookTrackerDbContext> dbFactory)
+public class EditionFormViewModel(IDispatcher dispatcher)
 {
+    // A mutable copy: a publisher created from the form is appended to it.
     public List<PublisherOption> ExistingPublishers { get; private set; } = [];
 
     public async Task InitializeAsync()
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        ExistingPublishers = await db.Publishers
-            .OrderBy(p => p.Name)
-            .Select(p => new PublisherOption(p.Id, p.Name))
-            .ToListAsync();
+        ExistingPublishers = [.. await dispatcher.Query(new GetPublisherOptions())];
     }
-
-    public record PublisherOption(int Id, string Name);
 
     public class EditionFormInput
     {

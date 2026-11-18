@@ -1,4 +1,5 @@
 using BookTracker.Mobile.Cache;
+using BookTracker.Mobile.Cache.Presentation;
 using BookTracker.Mobile.Theming;
 using BookTracker.Shared.Catalog;
 
@@ -72,7 +73,7 @@ public partial class ResultPage : ContentPage
         FoundTitle.Text = book.Title;
         var formatted = ContributorFormatter.Format(book.AllAuthors);
         FoundAuthors.Text = string.IsNullOrEmpty(formatted) ? book.PrimaryAuthor : formatted;
-        FoundStatusRating.Text = FormatStatusRating(book);
+        FoundStatusRating.Text = BookMetaFormatter.FormatBookMeta(book);
         FoundIsbn.Text = $"ISBN: {_isbn}";
         OpenInAppButton.CommandParameter = book.Id;
         FoundFrame.IsVisible = true;
@@ -150,8 +151,8 @@ public partial class ResultPage : ContentPage
         coverSlot.SetThemeColor(Grid.BackgroundColorProperty, "CoverMissL", "CoverMissD");
 
         var formatText = edition.EditionNumber is int n
-            ? $"{FormatPrettyName(edition.Format)} · {FormatOrdinalEdition(n)}"
-            : FormatPrettyName(edition.Format);
+            ? $"{EditionFormatName.FormatPrettyName(edition.Format)} · {FormatOrdinalEdition(n)}"
+            : EditionFormatName.FormatPrettyName(edition.Format);
         var formatLabel = new Label { Text = formatText, FontSize = 13, FontAttributes = FontAttributes.Bold };
         formatLabel.SetThemeColor(Label.TextColorProperty, "TextL", "TextD");
         var isbnLabel = new Label
@@ -200,32 +201,8 @@ public partial class ResultPage : ContentPage
         catch { /* placeholder stays */ }
     }
 
-    private static string FormatPrettyName(string format)
-    {
-        if (string.IsNullOrEmpty(format)) return "(unknown)";
-        var sb = new System.Text.StringBuilder(format.Length + 4);
-        for (int i = 0; i < format.Length; i++)
-        {
-            if (i > 0 && char.IsUpper(format[i]) && !char.IsUpper(format[i - 1])) sb.Append(' ');
-            sb.Append(format[i]);
-        }
-        return sb.ToString();
-    }
-
     private static string FormatOrdinalEdition(int n) =>
         BookTracker.Shared.Formatting.OrdinalFormatter.OrdinalEdition(n);
-
-    private static string FormatStatusRating(BookSnapshot book)
-    {
-        var parts = new List<string>();
-        if (book.Rating > 0)
-        {
-            var clamped = Math.Clamp(book.Rating, 0, 5);
-            parts.Add(new string('★', clamped) + new string('☆', 5 - clamped));
-        }
-        if (!string.IsNullOrWhiteSpace(book.Status)) parts.Add(book.Status);
-        return parts.Count == 0 ? "" : string.Join("  ·  ", parts);
-    }
 
     private async void OnOpenInAppClicked(object? sender, EventArgs e)
     {

@@ -1,45 +1,21 @@
-using System.Text;
-using System.Text.RegularExpressions;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace BookTracker.Web.Services;
+namespace BookTracker.Application.Duplicates;
 
-public interface IDuplicateDetectionService
+/// <summary>Scans the library for candidate duplicate pairs across Authors,
+/// Works, Books and Editions, attaching any recorded dismissal to each pair.
+/// Read-only: orphaned dismissals are removed by <see cref="SweepOrphanedDismissals"/>,
+/// which the page dispatches before this query.</summary>
+public sealed record GetDuplicateReport : IQuery<DuplicateReport>;
+
+public sealed class GetDuplicateReportHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
+    : IQueryHandler<GetDuplicateReport, DuplicateReport>
 {
-    Task<DuplicateReport> DetectAllAsync(CancellationToken ct = default);
-    Task DismissAsync(DuplicateEntityType type, int idA, int idB, string? note, CancellationToken ct = default);
-    Task UnignoreAsync(int ignoredDuplicateId, CancellationToken ct = default);
-}
-
-public record DuplicateReport(
-    IReadOnlyList<AuthorDuplicatePair> Authors,
-    IReadOnlyList<WorkDuplicatePair> Works,
-    IReadOnlyList<BookDuplicatePair> Books,
-    IReadOnlyList<EditionDuplicatePair> Editions);
-
-public record DismissalInfo(int IgnoredDuplicateId, DateTime DismissedAt, string? Note);
-
-public record DuplicateAuthorView(int Id, string Name, int WorkCount, int? CanonicalAuthorId, string? CanonicalName);
-public record AuthorDuplicatePair(DuplicateAuthorView Lower, DuplicateAuthorView Higher, DismissalInfo? Dismissed, string MatchReason);
-
-public record DuplicateWorkView(int Id, string Title, string? Subtitle, string AuthorName, int BookCount, int? FirstPublishedYear);
-public record WorkDuplicatePair(DuplicateWorkView Lower, DuplicateWorkView Higher, DismissalInfo? Dismissed, string MatchReason);
-
-public record DuplicateBookView(int Id, string Title, string? AuthorName, int EditionCount, int CopyCount, DateTime DateAdded);
-public record BookDuplicatePair(DuplicateBookView Lower, DuplicateBookView Higher, DismissalInfo? Dismissed, string MatchReason);
-
-public record DuplicateEditionView(int Id, string? Isbn, BookFormat Format, string? PublisherName, DateOnly? DatePrinted, int CopyCount, int BookId, string BookTitle);
-public record EditionDuplicatePair(DuplicateEditionView Lower, DuplicateEditionView Higher, DismissalInfo? Dismissed, string MatchReason);
-
-public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> dbFactory) : IDuplicateDetectionService
-{
-    public async Task<DuplicateReport> DetectAllAsync(CancellationToken ct = default)
+    public async Task<DuplicateReport> HandleAsync(GetDuplicateReport query, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-
-        await CleanupOrphansAsync(db, ct);
 
         var ignoredLookup = await BuildIgnoredLookupAsync(db, ct);
 
@@ -50,94 +26,42 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
             Editions: await DetectEditionsAsync(db, ignoredLookup.GetValueOrDefault(DuplicateEntityType.Edition), ct));
     }
 
-    public async Task DismissAsync(DuplicateEntityType type, int idA, int idB, string? note, CancellationToken ct = default)
-    {
-        if (idA == idB) return;
-        var (lower, higher) = idA < idB ? (idA, idB) : (idB, idA);
-
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var existing = await db.IgnoredDuplicates
-            .FirstOrDefaultAsync(d => d.EntityType == type && d.LowerId == lower && d.HigherId == higher, ct);
-        if (existing is not null) return;
-
-        db.IgnoredDuplicates.Add(new IgnoredDuplicate
-        {
-            EntityType = type,
-            LowerId = lower,
-            HigherId = higher,
-            DismissedAt = DateTime.UtcNow,
-            Note = note
-        });
-        await db.SaveChangesAsync(ct);
-    }
-
-    public async Task UnignoreAsync(int ignoredDuplicateId, CancellationToken ct = default)
-    {
-        await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var row = await db.IgnoredDuplicates.FirstOrDefaultAsync(d => d.Id == ignoredDuplicateId, ct);
-        if (row is null) return;
-        db.IgnoredDuplicates.Remove(row);
-        await db.SaveChangesAsync(ct);
-    }
-
-    private static async Task CleanupOrphansAsync(BookTrackerDbContext db, CancellationToken ct)
-    {
-        var rows = await db.IgnoredDuplicates.ToListAsync(ct);
-        if (rows.Count == 0) return;
-
-        var authorIds = await db.Authors.Select(a => a.Id).ToHashSetAsync(ct);
-        var workIds = await db.Works.Select(w => w.Id).ToHashSetAsync(ct);
-        var bookIds = await db.Books.Select(b => b.Id).ToHashSetAsync(ct);
-        var editionIds = await db.Editions.Select(e => e.Id).ToHashSetAsync(ct);
-
-        var orphans = rows.Where(r =>
-        {
-            var ids = r.EntityType switch
-            {
-                DuplicateEntityType.Author => authorIds,
-                DuplicateEntityType.Work => workIds,
-                DuplicateEntityType.Book => bookIds,
-                DuplicateEntityType.Edition => editionIds,
-                _ => null
-            };
-            return ids is null || !ids.Contains(r.LowerId) || !ids.Contains(r.HigherId);
-        }).ToList();
-
-        if (orphans.Count > 0)
-        {
-            db.IgnoredDuplicates.RemoveRange(orphans);
-            await db.SaveChangesAsync(ct);
-        }
-    }
-
-    private static async Task<Dictionary<DuplicateEntityType, Dictionary<(int Lower, int Higher), IgnoredDuplicate>>> BuildIgnoredLookupAsync(
+    private static async Task<Dictionary<DuplicateEntityType, Dictionary<(int Lower, int Higher), DismissalInfo>>> BuildIgnoredLookupAsync(
         BookTrackerDbContext db, CancellationToken ct)
     {
-        var all = await db.IgnoredDuplicates.ToListAsync(ct);
+        var all = await db.IgnoredDuplicates
+            .Select(i => new IgnoredPairProjection(i.Id, i.EntityType, i.LowerId, i.HigherId, i.DismissedAt, i.Note))
+            .ToListAsync(ct);
         return all
             .GroupBy(i => i.EntityType)
             .ToDictionary(
                 g => g.Key,
-                g => g.ToDictionary(i => (i.LowerId, i.HigherId), i => i));
+                g => g.ToDictionary(i => (i.LowerId, i.HigherId), i => new DismissalInfo(i.Id, i.DismissedAt, i.Note)));
     }
 
     private static DismissalInfo? LookupDismissal(
-        Dictionary<(int Lower, int Higher), IgnoredDuplicate>? ignored,
+        Dictionary<(int Lower, int Higher), DismissalInfo>? ignored,
         int lower, int higher)
     {
         if (ignored is null) return null;
-        return ignored.TryGetValue((lower, higher), out var row)
-            ? new DismissalInfo(row.Id, row.DismissedAt, row.Note)
-            : null;
+        return ignored.TryGetValue((lower, higher), out var dismissal) ? dismissal : null;
     }
+
+    private sealed record IgnoredPairProjection(
+        int Id,
+        DuplicateEntityType EntityType,
+        int LowerId,
+        int HigherId,
+        DateTime DismissedAt,
+        string? Note);
 
     private static async Task<List<AuthorDuplicatePair>> DetectAuthorsAsync(
         BookTrackerDbContext db,
-        Dictionary<(int Lower, int Higher), IgnoredDuplicate>? ignored,
+        Dictionary<(int Lower, int Higher), DismissalInfo>? ignored,
         CancellationToken ct)
     {
         var authors = await db.Authors
-            .Include(a => a.CanonicalAuthor)
+            .AsNoTracking()
             .Select(a => new AuthorProjection(
                 a.Id,
                 a.Name,
@@ -206,7 +130,7 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
 
     private static async Task<List<WorkDuplicatePair>> DetectWorksAsync(
         BookTrackerDbContext db,
-        Dictionary<(int Lower, int Higher), IgnoredDuplicate>? ignored,
+        Dictionary<(int Lower, int Higher), DismissalInfo>? ignored,
         CancellationToken ct)
     {
         // Project an Author "fingerprint" — sorted, comma-joined Author IDs —
@@ -220,6 +144,7 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
         // query with multi-LEFT-JOIN cartesian — slow plus the row count
         // multiplies materialisation memory.
         var works = (await db.Works
+            .AsNoTracking()
             .AsSplitQuery()
             .Select(w => new
             {
@@ -266,7 +191,7 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
 
     private static async Task<List<BookDuplicatePair>> DetectBooksAsync(
         BookTrackerDbContext db,
-        Dictionary<(int Lower, int Higher), IgnoredDuplicate>? ignored,
+        Dictionary<(int Lower, int Higher), DismissalInfo>? ignored,
         CancellationToken ct)
     {
         // Project once; re-use for both detection strategies.
@@ -276,6 +201,7 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
         // splitting, EF SingleQuery cartesian-joins them and the row count
         // explodes (the warning logged in App Insights trace 3.a).
         var books = await db.Books
+            .AsNoTracking()
             .AsSplitQuery()
             .Select(b => new
             {
@@ -352,12 +278,11 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
 
     private static async Task<List<EditionDuplicatePair>> DetectEditionsAsync(
         BookTrackerDbContext db,
-        Dictionary<(int Lower, int Higher), IgnoredDuplicate>? ignored,
+        Dictionary<(int Lower, int Higher), DismissalInfo>? ignored,
         CancellationToken ct)
     {
         var editions = await db.Editions
-            .Include(e => e.Publisher)
-            .Include(e => e.Book)
+            .AsNoTracking()
             .Select(e => new EditionProjection(
                 e.Id,
                 e.Isbn,
@@ -399,7 +324,7 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
     private static void EmitEditionPairs(
         IReadOnlyList<EditionProjection> members,
         string reason,
-        Dictionary<(int Lower, int Higher), IgnoredDuplicate>? ignored,
+        Dictionary<(int Lower, int Higher), DismissalInfo>? ignored,
         List<EditionDuplicatePair> output)
     {
         var ordered = members.OrderBy(m => m.Id).ToList();
@@ -431,70 +356,4 @@ public class DuplicateDetectionService(IDbContextFactory<BookTrackerDbContext> d
         int CopyCount,
         int BookId,
         string BookTitle);
-}
-
-internal static class DuplicateNormalization
-{
-    private static readonly Regex PunctuationAndSymbols = new(@"[\p{P}\p{S}]", RegexOptions.Compiled);
-    private static readonly Regex Whitespace = new(@"\s+", RegexOptions.Compiled);
-    private static readonly Regex LeadingArticle = new(@"^(the|a|an)\s+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-    // Normalise an author name so "J.R.R. Tolkien", "JRR Tolkien", and
-    // "J R R Tolkien" all collapse to "jrr tolkien". Single-letter runs
-    // (typically initials) are joined into one token.
-    public static string Author(string? name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return "";
-        var lower = name.ToLowerInvariant();
-        var depunct = PunctuationAndSymbols.Replace(lower, " ");
-        var tokens = depunct.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
-        var output = new List<string>();
-        var run = new StringBuilder();
-        foreach (var tok in tokens)
-        {
-            if (tok.Length == 1)
-            {
-                run.Append(tok);
-            }
-            else
-            {
-                if (run.Length > 0)
-                {
-                    output.Add(run.ToString());
-                    run.Clear();
-                }
-                output.Add(tok);
-            }
-        }
-        if (run.Length > 0) output.Add(run.ToString());
-
-        return string.Join(' ', output);
-    }
-
-    // Secondary author key: "<surname>|<first-name-initial>". Returns empty
-    // if the normalised name has fewer than two tokens (can't identify a
-    // first-name initial). Used by the looser author-dup detection pass so
-    // "Doug Preston" / "Douglas Preston" / "D Preston" surface as candidates.
-    public static string AuthorSurnameInitialKey(string? name)
-    {
-        var normalized = Author(name);
-        if (string.IsNullOrWhiteSpace(normalized)) return "";
-        var tokens = normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (tokens.Length < 2) return "";
-        var surname = tokens[^1];
-        var firstInitial = tokens[0][0];
-        return $"{surname}|{firstInitial}";
-    }
-
-    // Normalise a title for comparison. Lowercase, strip punctuation, collapse
-    // whitespace, drop a leading article ("The ", "A ", "An ").
-    public static string Title(string? title)
-    {
-        if (string.IsNullOrWhiteSpace(title)) return "";
-        var lower = title.ToLowerInvariant();
-        var depunct = PunctuationAndSymbols.Replace(lower, " ");
-        var collapsed = Whitespace.Replace(depunct, " ").Trim();
-        return LeadingArticle.Replace(collapsed, "");
-    }
 }

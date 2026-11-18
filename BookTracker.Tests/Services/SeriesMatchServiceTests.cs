@@ -1,43 +1,63 @@
+using BookTracker.Application;
+using BookTracker.Application.Series;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
+using NSubstitute;
 
 namespace BookTracker.Tests.Services;
 
-[Trait("Category", TestCategories.Integration)]
+// The suggestion rules, over a substituted dispatcher. The reads behind them
+// (name match, the author's series, the unseriesed count) are covered against
+// SQL by GetSeriesMatchCandidatesHandlerTests.
+[Trait("Category", TestCategories.Unit)]
 public class SeriesMatchServiceTests
 {
+    private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
+
+    private SeriesMatchService CreateService() => new(_dispatcher);
+
+    private void GivenCandidates(
+        SeriesCandidate? nameMatch = null, SeriesCandidate[]? authorSeries = null, int unseriesedCount = 0) =>
+        _dispatcher.Query(Arg.Any<GetSeriesMatchCandidates>(), Arg.Any<CancellationToken>())
+            .Returns(new SeriesMatchCandidates(nameMatch, authorSeries ?? [], unseriesedCount));
+
+    private GetSeriesMatchCandidates? SentQuery() =>
+        _dispatcher.ReceivedCalls()
+            .Select(c => c.GetArguments()[0])
+            .OfType<GetSeriesMatchCandidates>()
+            .SingleOrDefault();
+
+    private static BookLookupResult Lookup(string title, string author, string? series, int? number, string? raw) =>
+        new(Isbn: "9780000000000", Title: title, Subtitle: null,
+            Author: author, Publisher: null,
+            GenreCandidates: [], DatePrinted: null, CoverUrl: null,
+            Source: "Open Library",
+            Series: series, SeriesNumber: number, SeriesNumberRaw: raw);
+
     [Fact]
     public async Task FindMatchAsync_AuthorWithExistingSeries_ReturnsSuggestion()
     {
-        var factory = new TestDbContextFactory();
-        using (var db = factory.CreateDbContext())
-        {
-            var series = new Series { Name = "Discworld", Author = "Terry Pratchett", Type = SeriesType.Collection };
-            db.Series.Add(series);
-            await db.SaveChangesAsync();
-        }
+        GivenCandidates(authorSeries: [new SeriesCandidate(1, "Discworld", SeriesType.Collection)]);
 
-        var service = new SeriesMatchService(factory);
-        var match = await service.FindMatchAsync("The Colour of Magic", "Terry Pratchett");
+        var match = await CreateService().FindMatchAsync("The Colour of Magic", " Terry Pratchett ");
 
         Assert.NotNull(match);
         Assert.Equal(MatchReason.AuthorMatch, match.Reason);
         Assert.Equal("Discworld", match.SeriesName);
+        Assert.Equal(1, match.SeriesId);
+        Assert.Equal(new GetSeriesMatchCandidates(null, "Terry Pratchett"), SentQuery()); // trimmed, no name lookup
     }
 
     [Fact]
     public async Task FindMatchAsync_AuthorWithMultipleSeries_TitleMatch_ReturnsSpecificSeries()
     {
-        var factory = new TestDbContextFactory();
-        using (var db = factory.CreateDbContext())
-        {
-            db.Series.Add(new Series { Name = "Discworld", Author = "Terry Pratchett", Type = SeriesType.Collection });
-            db.Series.Add(new Series { Name = "Long Earth", Author = "Terry Pratchett", Type = SeriesType.Series });
-            await db.SaveChangesAsync();
-        }
+        GivenCandidates(authorSeries:
+        [
+            new SeriesCandidate(1, "Discworld", SeriesType.Collection),
+            new SeriesCandidate(2, "Long Earth", SeriesType.Series),
+        ]);
 
-        var service = new SeriesMatchService(factory);
-        var match = await service.FindMatchAsync("The Long Earth", "Terry Pratchett");
+        var match = await CreateService().FindMatchAsync("The Long Earth", "Terry Pratchett");
 
         Assert.NotNull(match);
         Assert.Equal(MatchReason.TitleAndAuthorMatch, match.Reason);
@@ -45,73 +65,75 @@ public class SeriesMatchServiceTests
     }
 
     [Fact]
+    public async Task FindMatchAsync_AuthorWithMultipleSeries_NoTitleMatch_SuggestsFirst()
+    {
+        GivenCandidates(authorSeries:
+        [
+            new SeriesCandidate(1, "Discworld", SeriesType.Collection),
+            new SeriesCandidate(2, "Long Earth", SeriesType.Series),
+        ]);
+
+        var match = await CreateService().FindMatchAsync("Good Omens", "Terry Pratchett");
+
+        Assert.NotNull(match);
+        Assert.Equal(MatchReason.AuthorMatch, match.Reason);
+        Assert.Equal("Discworld", match.SeriesName);
+        Assert.Contains("2 series/collections", match.Message);
+    }
+
+    [Fact]
     public async Task FindMatchAsync_AuthorWithMultipleUngroupedBooks_SuggestsCollection()
     {
-        var factory = new TestDbContextFactory();
-        using (var db = factory.CreateDbContext())
-        {
-            var someAuthor = new Author { Name = "Some Author" };
-            db.Books.AddRange(
-                new Book { Title = "Book A", Works = [new Work { Title = "Book A", WorkAuthors = [new WorkAuthor { Author = someAuthor, Order = 0 }] }] },
-                new Book { Title = "Book B", Works = [new Work { Title = "Book B", WorkAuthors = [new WorkAuthor { Author = someAuthor, Order = 0 }] }] }
-            );
-            await db.SaveChangesAsync();
-        }
+        GivenCandidates(unseriesedCount: 2);
 
-        var service = new SeriesMatchService(factory);
-        var match = await service.FindMatchAsync("Book C", "Some Author");
+        var match = await CreateService().FindMatchAsync("Book C", "Some Author");
 
         Assert.NotNull(match);
         Assert.Equal(MatchReason.AuthorHasMultipleBooks, match.Reason);
+        Assert.Contains("2 other books", match.Message);
     }
 
     [Fact]
-    public async Task FindMatchAsync_AuthorBooksAllInSeries_DoesNotSuggestCollection()
+    public async Task FindMatchAsync_AuthorWithOneUngroupedBook_DoesNotSuggestCollection()
     {
-        // Regression for the Work→Book series cutover (#56). Series membership
-        // lives on the Book now and Work.SeriesId stays null, so Strategy 2 must
-        // count Book-level membership — otherwise an author whose books are ALL
-        // already in a series gets a spurious "create a collection" suggestion.
-        var factory = new TestDbContextFactory();
-        using (var db = factory.CreateDbContext())
-        {
-            var author = new Author { Name = "Grouped Author" };
-            // Series has no Author string, so Strategy 1 (match by Series.Author)
-            // can't fire — isolating Strategy 2's book-count behaviour.
-            var series = new Series { Name = "Existing Series", Type = SeriesType.Series };
-            db.Books.AddRange(
-                new Book { Title = "Book A", Series = series, SeriesOrder = 1, Works = [new Work { Title = "Book A", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }] },
-                new Book { Title = "Book B", Series = series, SeriesOrder = 2, Works = [new Work { Title = "Book B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }] }
-            );
-            await db.SaveChangesAsync();
-        }
+        GivenCandidates(unseriesedCount: 1);
 
-        var service = new SeriesMatchService(factory);
-        var match = await service.FindMatchAsync("Book C", "Grouped Author");
-
-        Assert.Null(match); // both books already in a series → no "ungrouped books" hint
-    }
-
-    [Fact]
-    public async Task FindMatchAsync_NoMatch_ReturnsNull()
-    {
-        var factory = new TestDbContextFactory();
-        var service = new SeriesMatchService(factory);
-
-        var match = await service.FindMatchAsync("Random Book", "Unknown Author");
+        var match = await CreateService().FindMatchAsync("Book C", "Grouped Author");
 
         Assert.Null(match);
     }
 
     [Fact]
-    public async Task FindMatchAsync_NullInputs_ReturnsNull()
+    public async Task FindMatchAsync_TitlePattern_SuggestsSeriesNumber()
     {
-        var factory = new TestDbContextFactory();
-        var service = new SeriesMatchService(factory);
+        GivenCandidates();
+
+        var match = await CreateService().FindMatchAsync("Saga Vol. 3", "Unknown Author");
+
+        Assert.NotNull(match);
+        Assert.Equal(MatchReason.TitlePattern, match.Reason);
+        Assert.Contains("#3", match.Message);
+    }
+
+    [Fact]
+    public async Task FindMatchAsync_NoMatch_ReturnsNull()
+    {
+        GivenCandidates();
+
+        var match = await CreateService().FindMatchAsync("Random Book", "Unknown Author");
+
+        Assert.Null(match);
+    }
+
+    [Fact]
+    public async Task FindMatchAsync_NullInputs_ReturnsNull_WithoutQuerying()
+    {
+        var service = CreateService();
 
         Assert.Null(await service.FindMatchAsync(null, "Author"));
         Assert.Null(await service.FindMatchAsync("Title", null));
         Assert.Null(await service.FindMatchAsync(null, null));
+        Assert.Empty(_dispatcher.ReceivedCalls());
     }
 
     [Theory]
@@ -131,46 +153,27 @@ public class SeriesMatchServiceTests
     [Fact]
     public async Task FindMatchAsync_FromLookup_ApiSeriesMatchesLocal_ReturnsApiMatchExisting()
     {
-        var factory = new TestDbContextFactory();
-        using (var db = factory.CreateDbContext())
-        {
-            db.Series.Add(new Series { Name = "Discworld", Author = "Terry Pratchett", Type = SeriesType.Collection });
-            await db.SaveChangesAsync();
-        }
+        GivenCandidates(nameMatch: new SeriesCandidate(7, "Discworld", SeriesType.Collection));
 
-        var service = new SeriesMatchService(factory);
-        var lookup = new BookLookupResult(
-            Isbn: "9780552134613", Title: "Sourcery", Subtitle: null,
-            Author: "Terry Pratchett", Publisher: null,
-            GenreCandidates: [], DatePrinted: null, CoverUrl: null,
-            Source: "Open Library",
-            Series: "Discworld", SeriesNumber: 5, SeriesNumberRaw: "5");
-
-        var match = await service.FindMatchAsync(lookup);
+        var match = await CreateService().FindMatchAsync(
+            Lookup("Sourcery", "Terry Pratchett", " discworld ", 5, "5"));
 
         Assert.NotNull(match);
         Assert.Equal(MatchReason.ApiMatchExisting, match.Reason);
-        Assert.Equal("Discworld", match.SeriesName);
-        Assert.NotNull(match.SeriesId); // Should point to the existing local series.
+        Assert.Equal("Discworld", match.SeriesName); // the local series' own casing
+        Assert.Equal(7, match.SeriesId);
         Assert.Contains("Open Library", match.Message);
         Assert.Contains("#5", match.Message);
+        Assert.Equal(new GetSeriesMatchCandidates("discworld", null), SentQuery()); // trimmed, name only
     }
 
     [Fact]
     public async Task FindMatchAsync_FromLookup_ApiSeriesNoLocalMatch_ReturnsApiMatchNewSeries()
     {
-        // No local Series rows seeded — the API series is a new one to us.
-        var factory = new TestDbContextFactory();
-        var service = new SeriesMatchService(factory);
+        GivenCandidates();
 
-        var lookup = new BookLookupResult(
-            Isbn: "9780765326355", Title: "The Way of Kings", Subtitle: null,
-            Author: "Brandon Sanderson", Publisher: null,
-            GenreCandidates: [], DatePrinted: null, CoverUrl: null,
-            Source: "Open Library",
-            Series: "The Stormlight Archive", SeriesNumber: 1, SeriesNumberRaw: "1");
-
-        var match = await service.FindMatchAsync(lookup);
+        var match = await CreateService().FindMatchAsync(
+            Lookup("The Way of Kings", "Brandon Sanderson", "The Stormlight Archive", 1, "1"));
 
         Assert.NotNull(match);
         Assert.Equal(MatchReason.ApiMatchNewSeries, match.Reason);
@@ -183,21 +186,13 @@ public class SeriesMatchServiceTests
     [Fact]
     public async Task FindMatchAsync_FromLookup_NonIntegerOrder_FloorsForSortAndKeepsRawForDisplay()
     {
-        // Non-integer interquel orders ("2.5", Edgedancer) now floor to a sort
-        // int (2) so the work sorts next to its neighbours, and carry the raw
-        // string through SuggestedOrderDisplay → Work.SeriesOrderDisplay on
-        // Accept. The suggestion message shows the raw label.
-        var factory = new TestDbContextFactory();
-        var service = new SeriesMatchService(factory);
+        // Non-integer interquel orders ("2.5", Edgedancer) floor to a sort int
+        // (2) so the book sorts next to its neighbours, and carry the raw string
+        // through SuggestedOrderDisplay on Accept. The message shows the raw label.
+        GivenCandidates();
 
-        var lookup = new BookLookupResult(
-            Isbn: "9780765326362", Title: "Edgedancer", Subtitle: null,
-            Author: "Brandon Sanderson", Publisher: null,
-            GenreCandidates: [], DatePrinted: null, CoverUrl: null,
-            Source: "Open Library",
-            Series: "The Stormlight Archive", SeriesNumber: null, SeriesNumberRaw: "2.5");
-
-        var match = await service.FindMatchAsync(lookup);
+        var match = await CreateService().FindMatchAsync(
+            Lookup("Edgedancer", "Brandon Sanderson", "The Stormlight Archive", null, "2.5"));
 
         Assert.NotNull(match);
         Assert.Equal(2, match.SuggestedOrder);            // floored for sort + gaps
@@ -208,27 +203,16 @@ public class SeriesMatchServiceTests
     [Fact]
     public async Task FindMatchAsync_FromLookup_NoApiSeries_FallsBackToLocalMatching()
     {
-        var factory = new TestDbContextFactory();
-        using (var db = factory.CreateDbContext())
-        {
-            db.Series.Add(new Series { Name = "Discworld", Author = "Terry Pratchett", Type = SeriesType.Collection });
-            await db.SaveChangesAsync();
-        }
+        GivenCandidates(authorSeries: [new SeriesCandidate(1, "Discworld", SeriesType.Collection)]);
 
-        var service = new SeriesMatchService(factory);
-        var lookup = new BookLookupResult(
-            Isbn: "9780552134613", Title: "Mort", Subtitle: null,
-            Author: "Terry Pratchett", Publisher: null,
-            GenreCandidates: [], DatePrinted: null, CoverUrl: null,
-            Source: "Open Library",
-            Series: null, SeriesNumber: null, SeriesNumberRaw: null);
+        var match = await CreateService().FindMatchAsync(
+            Lookup("Mort", "Terry Pratchett", null, null, null));
 
-        var match = await service.FindMatchAsync(lookup);
-
-        // Falls back to FindMatchAsync(title, author) which finds the existing
+        // Falls back to FindMatchAsync(title, author), which finds the existing
         // Discworld series via author match.
         Assert.NotNull(match);
         Assert.Equal(MatchReason.AuthorMatch, match.Reason);
         Assert.Equal("Discworld", match.SeriesName);
+        Assert.Equal(new GetSeriesMatchCandidates(null, "Terry Pratchett"), SentQuery());
     }
 }

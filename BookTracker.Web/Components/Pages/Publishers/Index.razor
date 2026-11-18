@@ -67,9 +67,10 @@
                         </MudText>
                     </MudStack>
 
-                    @* Action bar — rename / merge / delete-unused. stopPropagation
-                       keeps clicks here from re-toggling the row. *@
-                    <div @onclick:stopPropagation="true" class="px-3 pb-3">
+                    @* Action bar — rename / merge / delete-unused. It sits beside the
+                       expand toggle, not inside it, so its clicks never toggle the row
+                       and the merge autocomplete's popover gets its document click. *@
+                    <div class="px-3 pb-3">
                         @if (renamingId == publisher.Id)
                         {
                             <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
@@ -125,7 +126,7 @@
 
                     @if (expanded)
                     {
-                        <div @onclick:stopPropagation="true" class="px-3 pb-3">
+                        <div class="px-3 pb-3">
                             @if (!VM.DetailByPublisherId.TryGetValue(publisher.Id, out var detail))
                             {
                                 <MudStack AlignItems="AlignItems.Center" Class="py-3">

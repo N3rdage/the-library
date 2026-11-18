@@ -3,8 +3,6 @@ using BookTracker.Application;
 using BookTracker.Application.Series;
 using BookTracker.Data;
 using BookTracker.Data.Models;
-using BookTracker.Web.Services;
-using Microsoft.EntityFrameworkCore;
 using BookTracker.Application.Formatting;
 
 namespace BookTracker.Web.ViewModels;
@@ -14,13 +12,12 @@ namespace BookTracker.Web.ViewModels;
 // short-story collection. The page lists each Book in the series (in order) so
 // a series of collection books is managed at the book grain.
 //
-// Writes go through the Application layer (PR3b): create/edit/delete and the
-// book-membership ops dispatch commands; reads (Initialize, SearchBooks) stay
-// on the DbContext factory. The in-memory Books list is kept in sync after each
-// mutation so the page doesn't reload.
-public class SeriesEditViewModel(
-    IDbContextFactory<BookTrackerDbContext> dbFactory,
-    IDispatcher dispatcher)
+// Every read and write goes through the Application layer via IDispatcher:
+// GetSeriesDetail loads the form and rows, SearchBooksForSeries feeds the add
+// search, GetSeriesBookRow builds the row after AddBookToSeries; create/edit/
+// delete and the book-membership ops dispatch commands. The in-memory Books
+// list is kept in sync after each mutation so the page doesn't reload.
+public class SeriesEditViewModel(IDispatcher dispatcher)
 {
     public SeriesFormInput? Input { get; private set; }
     public List<SeriesBookRow> Books { get; private set; } = [];
@@ -36,7 +33,7 @@ public class SeriesEditViewModel(
     // Add book
     public bool ShowingAddBook { get; set; }
     public string BookSearchTerm { get; set; } = "";
-    public List<BookSearchResult> BookSearchResults { get; private set; } = [];
+    public List<SeriesBookSearchResult> BookSearchResults { get; private set; } = [];
 
     public void InitializeNew()
     {
@@ -46,11 +43,7 @@ public class SeriesEditViewModel(
 
     public async Task InitializeAsync(int seriesId)
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-
-        var series = await db.Series
-            .Include(s => s.Books).ThenInclude(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .FirstOrDefaultAsync(s => s.Id == seriesId);
+        var series = await dispatcher.Query(new GetSeriesDetail(seriesId));
 
         if (series is null)
         {
@@ -67,16 +60,7 @@ public class SeriesEditViewModel(
             Description = series.Description
         };
 
-        Books = series.Books
-            .OrderBy(b => b.SeriesOrder ?? int.MaxValue)
-            .ThenBy(b => b.Title)
-            .Select(b => new SeriesBookRow(
-                b.Id,
-                b.Title,
-                BookAuthorDisplay(b),
-                b.SeriesOrder,
-                b.SeriesOrderDisplay))
-            .ToList();
+        Books = series.Books.ToList(); // already in page order
     }
 
     public async Task<int?> SaveAsync(int? seriesId)
@@ -143,25 +127,13 @@ public class SeriesEditViewModel(
             return;
         }
 
-        var term = BookSearchTerm.Trim();
-        var currentBookIds = Books.Select(b => b.Id).ToHashSet();
+        var currentBookIds = Books.Select(b => b.Id).ToList();
 
-        await using var db = await dbFactory.CreateDbContextAsync();
-        // Load the works+authors graph for the (≤10) matches and build the author
-        // string via BookAuthorDisplay — the SAME helper the in-series rows use —
-        // so a book shows one consistent author in the search dropdown and in the
-        // table once it's added.
-        var matches = await db.Books
-            .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .Where(b => !currentBookIds.Contains(b.Id))
-            .Where(b => b.Title.Contains(term) || b.Works.Any(w => w.Title.Contains(term) || w.Authors.Any(a => a.Name.Contains(term))))
-            .OrderBy(b => b.Title)
-            .Take(10)
-            .ToListAsync();
-
-        BookSearchResults = matches
-            .Select(b => new BookSearchResult(b.Id, b.Title, BookAuthorDisplay(b), b.SeriesId))
-            .ToList();
+        // The query builds the author string with the same rule as the in-series
+        // rows, so a book shows one consistent author in the search dropdown and
+        // in the table once it's added.
+        var matches = await dispatcher.Query(new SearchBooksForSeries(BookSearchTerm.Trim(), currentBookIds));
+        BookSearchResults = matches.ToList();
     }
 
     public async Task AddBookToSeriesAsync(int seriesId, int bookId)
@@ -170,19 +142,11 @@ public class SeriesEditViewModel(
 
         await dispatcher.Send(new AddBookToSeries(seriesId, bookId)); // handler assigns the next order
 
-        // Reload the book to build its row (and read the order the handler set).
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var book = await db.Books
-            .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .FirstOrDefaultAsync(b => b.Id == bookId);
-        if (book is null) return;
+        // Read the book's row back (and with it the order the handler set).
+        var row = await dispatcher.Query(new GetSeriesBookRow(bookId));
+        if (row is null) return;
 
-        Books.Add(new SeriesBookRow(
-            book.Id,
-            book.Title,
-            BookAuthorDisplay(book),
-            book.SeriesOrder,
-            book.SeriesOrderDisplay));
+        Books.Add(row);
         BookSearchResults.RemoveAll(r => r.Id == bookId);
     }
 
@@ -206,20 +170,6 @@ public class SeriesEditViewModel(
             Books[idx] = row with { SeriesOrder = order, SeriesOrderDisplay = display };
         }
     }
-
-    // A book's author display = distinct Author-role names across its Works,
-    // lead-first within each Work. Mirrors the Library list's comma-join (the
-    // " & " formatter is reserved for single-Work detail surfaces).
-    private static string BookAuthorDisplay(Book book) =>
-        string.Join(", ", book.Works
-            .SelectMany(w => w.WorkAuthors
-                .Where(wa => wa.Role == AuthorRole.Author)
-                .OrderBy(wa => wa.Order)
-                .Select(wa => wa.Author.Name))
-            .Distinct());
-
-    public record SeriesBookRow(int Id, string Title, string Author, int? SeriesOrder, string? SeriesOrderDisplay);
-    public record BookSearchResult(int Id, string Title, string Author, int? CurrentSeriesId);
 
     public class SeriesFormInput
     {

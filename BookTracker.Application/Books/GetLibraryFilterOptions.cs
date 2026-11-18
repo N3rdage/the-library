@@ -22,6 +22,7 @@ public sealed class GetLibraryFilterOptionsHandler(IDbContextFactory<BookTracker
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
         var genres = await db.Genres
+            .AsNoTracking()
             .OrderBy(g => g.Name)
             .Select(g => new GenreOption(g.Id, g.Name, g.ParentGenreId))
             .ToListAsync(ct);
@@ -35,11 +36,13 @@ public sealed class GetLibraryFilterOptionsHandler(IDbContextFactory<BookTracker
         }
 
         var tags = await db.Tags
+            .AsNoTracking()
             .OrderBy(t => t.Name)
             .Select(t => new TagOption(t.Id, t.Name))
             .ToListAsync(ct);
 
         var series = await db.Series
+            .AsNoTracking()
             .OrderBy(s => s.Name)
             .Select(s => new SeriesOption(s.Id, s.Name))
             .ToListAsync(ct);
@@ -47,6 +50,7 @@ public sealed class GetLibraryFilterOptionsHandler(IDbContextFactory<BookTracker
         // Every Author entity (including pen names) by name, so the user can
         // filter by either the canonical or an alias.
         var authors = await db.Authors
+            .AsNoTracking()
             .OrderBy(a => a.Name)
             .Select(a => a.Name)
             .ToListAsync(ct);

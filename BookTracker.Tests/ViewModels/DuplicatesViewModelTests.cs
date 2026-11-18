@@ -1,5 +1,6 @@
+using BookTracker.Application;
+using BookTracker.Application.Duplicates;
 using BookTracker.Data.Models;
-using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
 using NSubstitute;
 
@@ -8,9 +9,9 @@ namespace BookTracker.Tests.ViewModels;
 [Trait("Category", TestCategories.Unit)]
 public class DuplicatesViewModelTests
 {
-    private readonly IDuplicateDetectionService _detector = Substitute.For<IDuplicateDetectionService>();
+    private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
 
-    private DuplicatesViewModel CreateVm() => new(_detector);
+    private DuplicatesViewModel CreateVm() => new(_dispatcher);
 
     private static AuthorDuplicatePair ActiveAuthorPair(int a, int b) =>
         new(new DuplicateAuthorView(a, $"Author {a}", 0, null, null),
@@ -23,10 +24,13 @@ public class DuplicatesViewModelTests
             new DismissalInfo(ignoredId, DateTime.UtcNow, null),
             "test");
 
+    private void ReturnsReport(DuplicateReport report) =>
+        _dispatcher.Query(Arg.Any<GetDuplicateReport>(), Arg.Any<CancellationToken>()).Returns(report);
+
     [Fact]
     public async Task LoadAsync_populates_active_and_dismissed_splits_per_tab()
     {
-        _detector.DetectAllAsync(Arg.Any<CancellationToken>()).Returns(new DuplicateReport(
+        ReturnsReport(new DuplicateReport(
             Authors: [ActiveAuthorPair(1, 2), DismissedAuthorPair(3, 4, 99)],
             Works: [],
             Books: [],
@@ -43,35 +47,50 @@ public class DuplicatesViewModelTests
     }
 
     [Fact]
-    public async Task DismissAsync_calls_service_and_reloads()
+    public async Task LoadAsync_sweeps_orphaned_dismissals_before_querying_the_report()
     {
-        _detector.DetectAllAsync(Arg.Any<CancellationToken>()).Returns(new DuplicateReport([], [], [], []));
+        ReturnsReport(new DuplicateReport([], [], [], []));
 
         var vm = CreateVm();
         await vm.LoadAsync();
-        _detector.ClearReceivedCalls();
+
+        Received.InOrder(() =>
+        {
+            _dispatcher.Send(Arg.Any<SweepOrphanedDismissals>(), Arg.Any<CancellationToken>());
+            _dispatcher.Query(Arg.Any<GetDuplicateReport>(), Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public async Task DismissAsync_sends_the_command_and_reloads()
+    {
+        ReturnsReport(new DuplicateReport([], [], [], []));
+
+        var vm = CreateVm();
+        await vm.LoadAsync();
+        _dispatcher.ClearReceivedCalls();
 
         await vm.DismissAsync(DuplicateEntityType.Author, 2, 1, "note");
 
-        // IDs should normalise (lower, higher) inside the service; VM passes through as-is.
-        await _detector.Received(1).DismissAsync(DuplicateEntityType.Author, 2, 1, "note", Arg.Any<CancellationToken>());
-        await _detector.Received(1).DetectAllAsync(Arg.Any<CancellationToken>());
+        // IDs should normalise (lower, higher) inside the handler; VM passes through as-is.
+        await _dispatcher.Received(1).Send(new DismissDuplicatePair(DuplicateEntityType.Author, 2, 1, "note"), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).Query(Arg.Any<GetDuplicateReport>(), Arg.Any<CancellationToken>());
         Assert.NotNull(vm.SuccessMessage);
     }
 
     [Fact]
-    public async Task UnignoreAsync_calls_service_and_reloads()
+    public async Task UnignoreAsync_sends_the_restore_command_and_reloads()
     {
-        _detector.DetectAllAsync(Arg.Any<CancellationToken>()).Returns(new DuplicateReport([], [], [], []));
+        ReturnsReport(new DuplicateReport([], [], [], []));
 
         var vm = CreateVm();
         await vm.LoadAsync();
-        _detector.ClearReceivedCalls();
+        _dispatcher.ClearReceivedCalls();
 
         await vm.UnignoreAsync(42);
 
-        await _detector.Received(1).UnignoreAsync(42, Arg.Any<CancellationToken>());
-        await _detector.Received(1).DetectAllAsync(Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).Send(new RestoreDismissedDuplicate(42), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).Query(Arg.Any<GetDuplicateReport>(), Arg.Any<CancellationToken>());
         Assert.NotNull(vm.SuccessMessage);
     }
 

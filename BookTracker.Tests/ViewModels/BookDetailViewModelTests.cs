@@ -17,7 +17,6 @@ public class BookDetailViewModelTests
 {
     private static BookDetailViewModel CreateVm(TestDbContextFactory factory, IBookCoverStorage? coverStorage = null) =>
         new(coverStorage ?? Substitute.For<IBookCoverStorage>(),
-            new WorkSearchService(factory),
             NullLogger<BookDetailViewModel>.Instance,
             BuildDispatcher(factory));
 
@@ -689,7 +688,7 @@ public class BookDetailViewModelTests
     public async Task SearchAttachableWorksAsync_ExcludesWorksAlreadyOnThisBook()
     {
         // The dialog's search shouldn't offer up Works the user has already
-        // attached — the underlying WorkSearchService already excludes by
+        // attached — the underlying SearchWorks query already excludes by
         // bookId, so this verifies the VM is wiring that excludeBookId
         // through correctly.
         var factory = new TestDbContextFactory();

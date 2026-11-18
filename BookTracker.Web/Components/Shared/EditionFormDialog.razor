@@ -4,6 +4,7 @@
 
 @using BookTracker.Application
 @using BookTracker.Application.Books
+@using BookTracker.Application.Publishers
 @using Microsoft.Extensions.Logging
 @inject EditionFormDialogViewModel VM
 @inject ISnackbar Snackbar
@@ -148,7 +149,7 @@
             VM.Publisher, VM.ExistingPublishers.Select(p => p.Name), Dispatcher, Logger);
         if (created is (int id, string name))
         {
-            VM.ExistingPublishers.Add(new EditionFormDialogViewModel.PublisherOption(id, name));
+            VM.ExistingPublishers.Add(new PublisherOption(id, name));
         }
     }
 

@@ -7,12 +7,12 @@ namespace BookTracker.Shared.Catalog;
 /// NOT own slot #4, so it must not mask a genuinely-missing numbered volume.
 ///
 /// Centralised here rather than re-derived per consumer because the rule is
-/// wire-coupled and crosses the project boundary: the web gap views
-/// (<c>SharedParsers</c> AI profile, <c>WishlistViewModel</c> finite-series card)
-/// and the offline mobile cache (<c>CatalogCache.GetSeriesGapsAsync</c>) all need
-/// it, and mobile can't reference Web — Shared is the only common home. Keeping
-/// the predicate in one place stops the three sites drifting (they already had:
-/// mobile was missing the upper range clamp the web sites applied).
+/// wire-coupled and crosses the project boundary: the web gap read
+/// (<c>GetSeriesGaps</c>, behind the Wishlist gaps card and the AI library
+/// profile) and the offline mobile cache (<c>CatalogCache.GetSeriesGapsAsync</c>)
+/// both need it, and mobile can't reference Web — Shared is the only common
+/// home. Keeping the predicate in one place stops the sites drifting (they
+/// already had: mobile was missing the upper range clamp the web side applied).
 /// </summary>
 public static class SeriesSlots
 {

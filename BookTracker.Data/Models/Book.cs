@@ -117,6 +117,32 @@ public class Book
     // (Collection setters stay public for now — the C7 encapsulation lock-down
     // is deferred until every writer routes through these methods.)
 
+    /// <summary>Creates a Book from the Add page's book fields. Title is required
+    /// and trimmed; notes and cover trim to null. The rating is stored as given,
+    /// the way the Add page has always stored it (<see cref="Rate"/> is the guarded
+    /// 0–5 mutation). DateAdded keeps its creation-time default. Works, editions
+    /// and series attach through their own methods.</summary>
+    public static Book Create(
+        string title,
+        BookCategory category,
+        BookStatus status,
+        int rating,
+        string? notes,
+        string? coverUrl)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            throw new DomainRuleException("Title is required.");
+        return new Book
+        {
+            Title = title.Trim(),
+            Category = category,
+            Status = status,
+            Rating = rating,
+            Notes = notes.TrimToNull(),
+            DefaultCoverArtUrl = coverUrl.TrimToNull(),
+        };
+    }
+
     /// <summary>Sets the 0–5 star rating; rejects out-of-range values.</summary>
     public void Rate(int rating)
     {
@@ -157,6 +183,15 @@ public class Book
     public void AssignToSeries(int seriesId, int? order, string? orderDisplay)
     {
         SeriesId = seriesId;
+        SetSeriesOrder(order, orderDisplay);
+    }
+
+    /// <summary>Assigns this Book to a Series that may not be saved yet (no id
+    /// until SaveChanges) — EF fixes up <see cref="SeriesId"/> from the
+    /// navigation, so the series and its members land in one save.</summary>
+    public void AssignToSeries(Series series, int? order, string? orderDisplay)
+    {
+        Series = series;
         SetSeriesOrder(order, orderDisplay);
     }
 
@@ -205,6 +240,7 @@ public class Book
     public Edition AddEdition(
         string? isbn,
         BookFormat format,
+        int? editionNumber,
         DateOnly? datePrinted,
         DatePrecision datePrintedPrecision,
         string? coverUrl,
@@ -215,6 +251,7 @@ public class Book
         {
             Isbn = isbn.TrimToNull(),
             Format = format,
+            EditionNumber = editionNumber,
             DatePrinted = datePrinted,
             DatePrintedPrecision = datePrintedPrecision,
             Publisher = publisher,

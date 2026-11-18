@@ -1,24 +1,19 @@
 using BookTracker.Application;
-using BookTracker.Application.Authors;
 using BookTracker.Application.Books;
 using BookTracker.Application.Series;
-using BookTracker.Data;
-using BookTracker.Data.Models;
+using BookTracker.Application.Works;
 using BookTracker.Web.Services;
 using BookTracker.Web.Services.Covers;
 using BookTracker.Web.Validation;
 using BookTracker.Web.Components.Shared;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using BookTracker.Application.Formatting;
 
 namespace BookTracker.Web.ViewModels;
 
 public class BookAddViewModel(
-    IDbContextFactory<BookTrackerDbContext> dbFactory,
     IBookLookupService lookup,
     SeriesMatchService seriesMatch,
-    IWorkSearchService workSearch,
     IDispatcher dispatcher,
     ILogger<BookAddViewModel> logger)
 {
@@ -27,7 +22,7 @@ public class BookAddViewModel(
     /// captured Work rather than re-typing it. excludeBookId is null —
     /// the Book is brand-new so there's nothing to exclude.</summary>
     public Task<IReadOnlyList<WorkSearchResult>> SearchExistingWorksAsync(string query, CancellationToken ct)
-        => workSearch.SearchAsync(query, excludeBookId: null, ct: ct);
+        => dispatcher.Query(new SearchWorks(query, ExcludeBookId: null, Max: 20), ct);
 
 
     public BookFormViewModel.BookFormInput BookInput { get; set; } = new();
@@ -259,11 +254,8 @@ public class BookAddViewModel(
     /// Called once from the page's OnInitializedAsync.</summary>
     public async Task InitializeAsync()
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        ExistingSeries = await db.Series
-            .OrderBy(s => s.Name)
-            .Select(s => new SeriesOption(s.Id, s.Name))
-            .ToListAsync();
+        var options = await dispatcher.Query(new GetSeriesOptions());
+        ExistingSeries = options.Select(s => new SeriesOption(s.Id, s.Name)).ToList();
     }
 
     public Task<IEnumerable<string>> SearchSeriesAsync(string? query, CancellationToken ct)
@@ -333,27 +325,11 @@ public class BookAddViewModel(
             // letting the user save a duplicate that would hit the unique
             // ISBN constraint.
             var cleanIsbn = new string(LookupIsbn.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
-            await using (var db = await dbFactory.CreateDbContextAsync())
+            ExistingBook = await dispatcher.Query(new FindEditionByIsbn(cleanIsbn));
+            if (ExistingBook is not null)
             {
-                var existing = await db.Editions
-                    .Include(e => e.Book)
-                        .ThenInclude(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-                    .Include(e => e.Copies)
-                    .FirstOrDefaultAsync(e => e.Isbn == cleanIsbn);
-
-                if (existing is not null)
-                {
-                    ExistingBook = new ExistingBookMatch(
-                        existing.Book.Id,
-                        existing.Id,
-                        existing.Book.Title,
-                        string.Join(", ", existing.Book.Works
-                            .SelectMany(w => w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.Author.Name))
-                            .Distinct()),
-                        existing.Copies.Count);
-                    LookupMessage = null;
-                    return;
-                }
+                LookupMessage = null;
+                return;
             }
 
             var result = await lookup.LookupByIsbnAsync(LookupIsbn, CancellationToken.None);
@@ -437,14 +413,8 @@ public class BookAddViewModel(
         AddingCopy = true;
         try
         {
-            await using var db = await dbFactory.CreateDbContextAsync();
-            var newCopy = new Copy
-            {
-                EditionId = ExistingBook.EditionId,
-                Condition = CopyInput.Condition,
-            };
-            db.Copies.Add(newCopy);
-            await db.SaveChangesAsync();
+            await dispatcher.Send(new AddCopyToEdition(
+                ExistingBook.EditionId, CopyInput.Condition, DateAcquired: null, Notes: null));
             return ExistingBook.BookId;
         }
         finally
@@ -486,8 +456,6 @@ public class BookAddViewModel(
         // its selectedGenreIds + this VM's LookupCandidates above. No
         // direct picker poke needed.
     }
-
-    public record ExistingBookMatch(int BookId, int EditionId, string Title, string Author, int CopyCount);
 
     public async Task SearchAsync()
     {
@@ -558,202 +526,33 @@ public class BookAddViewModel(
         Saving = true;
         try
         {
-            await using var db = await dbFactory.CreateDbContextAsync();
-
-            var selectedGenres = await db.Genres
-                .Where(g => selectedGenreIds.Contains(g.Id))
-                .ToListAsync();
-
-            var publisher = await PublisherResolver.ResolveAsync(db, EditionInput.Publisher);
-
-            List<Work> works;
-            if (IsCollection)
-            {
-                // Collection mode: build N Works, one per row. Rows split
-                // into two flavours:
-                //   - attach-existing rows (AttachedWorkId set): load the
-                //     existing Work from the DB and attach it; the inline
-                //     edit fields are not used.
-                //   - new-work rows (AttachedWorkId null): create a Work
-                //     from the row fields (title, authors, subtitle,
-                //     first-published, per-row or shared genres).
-                //
-                // Book-level series (AcceptedSeries*) is attached below via
-                // AttachToBookAsync just as in single-work mode — a collection
-                // is still installment N of a publication series. What stays
-                // deferred to per-work editing on /books/{id} is any *per-Work*
-                // series notion (the lookup flow can't pick per-work, and
-                // applying one to all would be wrong). Author source depends on
-                // SingleAuthor mode; genre source on SingleGenre — both apply
-                // only to new-work rows (existing Works bring their own).
-                List<string> AuthorsFor(WorkFormViewModel.WorkFormInput row) =>
-                    SingleAuthor ? SharedAuthors : row.Authors;
-                List<int> GenresFor(WorkFormViewModel.WorkFormInput row) =>
-                    SingleGenre ? SharedGenreIds : row.GenreIds;
-
-                // Preserve the user-entered order across both row flavours so
-                // the saved Book.Works reflects the order on screen.
-                var orderedRows = CollectionWorks
-                    .Where(w => w.AttachedWorkId is not null
-                                || (!string.IsNullOrWhiteSpace(w.Title) && AuthorsFor(w).Count > 0))
-                    .ToList();
-                if (orderedRows.Count == 0)
-                {
-                    throw new InvalidOperationException(SingleAuthor
-                        ? "A collection in Single-Author mode needs at least one work with a title, plus at least one shared author. (Or attach an existing work.)"
-                        : "A collection must contain at least one work with a title and an author. (Or attach an existing work.)");
-                }
-
-                var newRows = orderedRows.Where(r => r.AttachedWorkId is null).ToList();
-                var attachIds = orderedRows
-                    .Where(r => r.AttachedWorkId is int)
-                    .Select(r => r.AttachedWorkId!.Value)
-                    .Distinct()
-                    .ToList();
-
-                // Resolve the union of distinct author names across new-work
-                // rows in one pass — calling FindOrCreate per row would
-                // create duplicate Author entities when the same name
-                // appears in multiple stories (the existence check queries
-                // the committed DB, missing pending entities in the change
-                // tracker).
-                var allNames = SingleAuthor ? SharedAuthors : newRows.SelectMany(r => r.Authors);
-                // Union the contributor names into the same FindOrCreateAll pass
-                // so a person credited as Author in one row and Editor in another
-                // resolves to a single Author entity (the existence check queries
-                // committed rows only — per-row FindOrCreate would insert dupes).
-                var contributorNames = newRows.SelectMany(r => r.Contributors.Select(c => c.Name));
-                var allAuthors = await AuthorResolver.FindOrCreateAllAsync(allNames.Concat(contributorNames), db);
-                var byName = allAuthors.ToDictionary(a => a.Name, StringComparer.OrdinalIgnoreCase);
-
-                // Resolve the union of distinct genre ids across new-work
-                // rows in one query.
-                var allGenreIds = (SingleGenre
-                    ? SharedGenreIds
-                    : newRows.SelectMany(r => r.GenreIds))
-                    .Distinct()
-                    .ToList();
-                var collectionGenres = allGenreIds.Count == 0
-                    ? new List<Genre>()
-                    : await db.Genres.Where(g => allGenreIds.Contains(g.Id)).ToListAsync();
-                var genresById = collectionGenres.ToDictionary(g => g.Id);
-
-                // Load the attach-existing Works in one query. Missing ids
-                // are silently dropped — they can only happen if the Work
-                // was deleted between picking it in the dialog and saving;
-                // failing the whole save over that would be unhelpful.
-                var attachedWorks = attachIds.Count == 0
-                    ? new List<Work>()
-                    : await db.Works.Where(w => attachIds.Contains(w.Id)).ToListAsync();
-                var attachedById = attachedWorks.ToDictionary(w => w.Id);
-
-                works = new List<Work>(orderedRows.Count);
-                foreach (var row in orderedRows)
-                {
-                    if (row.AttachedWorkId is int existingId)
-                    {
-                        if (attachedById.TryGetValue(existingId, out var existing))
-                        {
-                            works.Add(existing);
-                        }
-                        continue;
-                    }
-
-                    var rowAuthors = AuthorsFor(row)
-                        .Select(n => n?.Trim())
-                        .Where(n => !string.IsNullOrEmpty(n))
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .Select(n => byName[n!])
-                        .ToList();
-                    var rowContributors = row.Contributors
-                        .Where(c => !string.IsNullOrWhiteSpace(c.Name) && byName.ContainsKey(c.Name.Trim()))
-                        .Select(c => (Person: byName[c.Name.Trim()], c.Role))
-                        .ToList();
-                    if (rowAuthors.Count == 0 && rowContributors.Count == 0)
-                    {
-                        throw new InvalidOperationException($"Each work in the collection needs at least one contributor (work \"{row.Title}\" had none).");
-                    }
-                    var rowGenres = GenresFor(row)
-                        .Distinct()
-                        .Where(genresById.ContainsKey)
-                        .Select(id => genresById[id])
-                        .ToList();
-                    var rowFirstPub = PartialDateParser.TryParse(row.FirstPublishedDate) ?? PartialDate.Empty;
-                    var w = new Work
-                    {
-                        Title = row.Title!.Trim(),
-                        Subtitle = string.IsNullOrWhiteSpace(row.Subtitle) ? null : row.Subtitle!.Trim(),
-                        FirstPublishedDate = rowFirstPub.Date,
-                        FirstPublishedDatePrecision = rowFirstPub.Precision,
-                        Genres = rowGenres,
-                    };
-                    w.AssignAuthorship(rowAuthors, rowContributors);
-                    works.Add(w);
-                }
-            }
-            else
-            {
-                var authors = await AuthorResolver.FindOrCreateAllAsync(WorkInput.Authors, db);
-                var contributors = await ResolveContributorsAsync(WorkInput.Contributors, db);
-                if (authors.Count == 0 && contributors.Count == 0)
-                {
-                    throw new InvalidOperationException("At least one contributor (author, editor, or other role) is required to save a Work.");
-                }
-                var firstPub = PartialDateParser.TryParse(WorkInput.FirstPublishedDate) ?? PartialDate.Empty;
-                var work = new Work
-                {
-                    Title = (WorkInput.Title ?? BookInput.Title)!.Trim(),
-                    Subtitle = string.IsNullOrWhiteSpace(WorkInput.Subtitle) ? null : WorkInput.Subtitle!.Trim(),
-                    FirstPublishedDate = firstPub.Date,
-                    FirstPublishedDatePrecision = firstPub.Precision,
-                    Genres = selectedGenres,
-                };
-                work.AssignAuthorship(authors, contributors);
-
-                works = [work];
-            }
-
+            // Collection mode sends every row (attach-existing and new) in
+            // on-screen order with the shared-author / shared-genre modes; the
+            // handler drops empty rows and owns the user-facing validation
+            // messages. The chosen series (suggestion accept or manual
+            // typeahead) lands on the Book in both modes: a collection is still
+            // installment N of a publication series.
             var datePrinted = PartialDateParser.TryParse(EditionInput.DatePrinted) ?? PartialDate.Empty;
-            var book = new Book
-            {
-                Title = BookInput.Title!.Trim(),
-                Notes = string.IsNullOrWhiteSpace(BookInput.Notes) ? null : BookInput.Notes.Trim(),
-                Category = BookInput.Category,
-                Status = BookInput.Status,
-                Rating = BookInput.Rating,
-                DefaultCoverArtUrl = string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl) ? null : BookInput.DefaultCoverArtUrl.Trim(),
-                Editions =
-                [
-                    new Edition
-                    {
-                        Isbn = string.IsNullOrWhiteSpace(EditionInput.Isbn) ? null : EditionInput.Isbn.Trim(),
-                        Format = EditionInput.Format,
-                        EditionNumber = EditionInput.EditionNumber,
-                        DatePrinted = datePrinted.Date,
-                        DatePrintedPrecision = datePrinted.Precision,
-                        Publisher = publisher,
-                        CoverUrl = string.IsNullOrWhiteSpace(EditionInput.CoverUrl) ? null : EditionInput.CoverUrl.Trim(),
-                        Copies = [new Copy { Condition = CopyInput.Condition }]
-                    }
-                ]
-            };
-
-            // Append the works in dialog order so the book's work order mirrors
-            // capture order (a new book starts empty, so Order runs 0,1,2…).
-            // Routed through AttachWork rather than the order-less Works skip-nav.
-            foreach (var w in works)
-                book.AttachWork(w);
-
-            // Attach the book to the chosen series, if any — set either by accepting
-            // a lookup suggestion or by the manual series typeahead. Series membership
-            // is a per-Book concept (the book is installment N), so it lands on the
-            // Book regardless of whether it holds one Work or a whole collection.
-            // AttachToBookAsync is the shared seam with BulkAddViewModel.
-            await SeriesResolver.AttachToBookAsync(db, book, AcceptedSeriesId, AcceptedSeriesName, AcceptedSeriesOrderLabel);
-
-            db.Books.Add(book);
-            await db.SaveChangesAsync();
-            return book.Id;
+            return await dispatcher.Send(new CreateBook(
+                new NewBook(
+                    BookInput.Title ?? string.Empty,
+                    BookInput.Category,
+                    BookInput.Status,
+                    BookInput.Rating,
+                    BookInput.Notes,
+                    BookInput.DefaultCoverArtUrl),
+                IsCollection ? BuildCollection() : BuildSingleWork(selectedGenreIds),
+                new NewEdition(
+                    EditionInput.Isbn,
+                    EditionInput.Format,
+                    EditionInput.EditionNumber,
+                    datePrinted.Date,
+                    datePrinted.Precision,
+                    EditionInput.Publisher,
+                    EditionInput.CoverUrl),
+                CopyInput.Condition,
+                new SeriesChoice(AcceptedSeriesId, AcceptedSeriesName, AcceptedSeriesOrderLabel),
+                []));
         }
         finally
         {
@@ -761,21 +560,40 @@ public class BookAddViewModel(
         }
     }
 
-    // Resolve non-Author contributor entries through FindOrCreateAsync so
-    // brand-new names get an Author row, and pair each with its picked Role.
-    // Blank-name rows are skipped silently — the picker permits an empty
-    // pending row to coexist with chips.
-    private static async Task<List<(Author Person, AuthorRole Role)>> ResolveContributorsAsync(
-        List<ContributorEntry> entries,
-        BookTrackerDbContext db)
+    // The single Work takes the page's genre picker selection; its title falls
+    // back to the book title when the work title was never set.
+    private SingleWork BuildSingleWork(List<int> selectedGenreIds)
     {
-        var result = new List<(Author, AuthorRole)>();
-        foreach (var entry in entries)
-        {
-            if (string.IsNullOrWhiteSpace(entry.Name)) continue;
-            var author = await AuthorResolver.FindOrCreateAsync(entry.Name, db);
-            result.Add((author, entry.Role));
-        }
-        return result;
+        var firstPub = PartialDateParser.TryParse(WorkInput.FirstPublishedDate) ?? PartialDate.Empty;
+        return new SingleWork(
+            WorkInput.Title ?? BookInput.Title ?? string.Empty,
+            WorkInput.Subtitle,
+            firstPub.Date,
+            firstPub.Precision,
+            WorkInput.Authors,
+            ToContributorInputs(WorkInput.Contributors),
+            selectedGenreIds);
     }
+
+    private WorkCollection BuildCollection() => new(
+        CollectionWorks.Select(r =>
+        {
+            var firstPub = PartialDateParser.TryParse(r.FirstPublishedDate) ?? PartialDate.Empty;
+            return new WorkRow(
+                r.AttachedWorkId,
+                r.Title,
+                r.Subtitle,
+                firstPub.Date,
+                firstPub.Precision,
+                r.Authors,
+                ToContributorInputs(r.Contributors),
+                r.GenreIds);
+        }).ToList(),
+        SingleAuthor,
+        SingleGenre,
+        SharedAuthors,
+        SharedGenreIds);
+
+    private static List<ContributorInput> ToContributorInputs(List<ContributorEntry> entries) =>
+        entries.Select(c => new ContributorInput(c.Name, c.Role)).ToList();
 }

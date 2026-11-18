@@ -222,6 +222,11 @@
         }
         else if (VM.CollectionSuggestion is not null)
         {
+            @if (VM.CreateCollectionError is not null)
+            {
+                <div class="alert alert-warning py-2 small mb-3">@VM.CreateCollectionError</div>
+            }
+
             @if (!string.IsNullOrEmpty(VM.CollectionSuggestion.Summary))
             {
                 <p class="text-muted small mb-3">@VM.CollectionSuggestion.Summary</p>

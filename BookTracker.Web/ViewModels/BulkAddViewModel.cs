@@ -1,19 +1,17 @@
 using BookTracker.Application;
 using BookTracker.Application.Authors;
 using BookTracker.Application.Books;
-using BookTracker.Application.Series;
-using BookTracker.Data;
-using BookTracker.Data.Models;
-using BookTracker.Web.Services;
-using BookTracker.Web.Components.Shared;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using BookTracker.Application.Formatting;
+using BookTracker.Application.Genres;
+using BookTracker.Application.Series;
+using BookTracker.Data.Models;
+using BookTracker.Web.Components.Shared;
+using BookTracker.Web.Services;
+using Microsoft.Extensions.Logging;
 
 namespace BookTracker.Web.ViewModels;
 
 public class BulkAddViewModel(
-    IDbContextFactory<BookTrackerDbContext> dbFactory,
     IBookLookupService lookup,
     SeriesMatchService seriesMatch,
     ILogger<BulkAddViewModel> logger,
@@ -54,25 +52,19 @@ public class BulkAddViewModel(
 
     private async Task<bool> TryHydrateFromExistingAsync(DiscoveryRow row)
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var existing = await db.Editions
-            .Include(e => e.Book).ThenInclude(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .Include(e => e.Publisher)
-            .FirstOrDefaultAsync(e => e.Isbn == row.Isbn);
-
+        var existing = await dispatcher.Query(new FindEditionByIsbn(row.Isbn));
         if (existing is null) return false;
 
         // Single-Work books are the common case; compendiums fall back to
         // the lead Work for subtitle/author display. Save path doesn't care
         // (it appends a Copy to the existing Edition either way).
-        var firstWork = existing.Book.Works.FirstOrDefault();
         row.IsDuplicate = true;
-        row.Title = existing.Book.Title;
-        row.Subtitle = firstWork?.Subtitle;
-        row.Author = firstWork is not null ? WorkAuthorshipFormatter.Display(firstWork) : null;
-        row.CoverUrl = existing.CoverUrl ?? existing.Book.DefaultCoverArtUrl;
+        row.Title = existing.Title;
+        row.Subtitle = existing.LeadWorkSubtitle;
+        row.Author = existing.LeadWorkAuthorship;
+        row.CoverUrl = existing.CoverUrl;
         row.Source = "Local library";
-        row.Publisher = existing.Publisher?.Name;
+        row.Publisher = existing.Publisher;
         row.DatePrinted = existing.DatePrinted;
         row.DatePrintedPrecision = existing.DatePrintedPrecision;
         row.Format = existing.Format;
@@ -163,7 +155,7 @@ public class BulkAddViewModel(
 
     private async Task SaveBookAsync(DiscoveryRow row, bool followUp)
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
+        IReadOnlyList<string> tagNames = followUp ? [FollowUpTag] : [];
 
         // Re-check at save time rather than relying on row.IsDuplicate (which
         // was set when the row was scanned). Two scans of the same ISBN in
@@ -171,32 +163,11 @@ public class BulkAddViewModel(
         // second one's saved the first row may have already been accepted
         // and inserted the Edition — in which case we want to add a Copy,
         // not crash on the unique-ISBN constraint.
-        var existingEdition = string.IsNullOrWhiteSpace(row.Isbn)
-            ? null
-            : await db.Editions
-                .Include(e => e.Book)
-                .FirstOrDefaultAsync(e => e.Isbn == row.Isbn);
-
-        if (existingEdition is not null)
+        if (!string.IsNullOrWhiteSpace(row.Isbn)
+            && await dispatcher.Send(new AddScannedCopy(row.Isbn, tagNames)) is not null)
         {
-            var newCopy = new Copy
-            {
-                EditionId = existingEdition.Id,
-                Condition = BookCondition.Good
-            };
-            db.Copies.Add(newCopy);
-
-            if (followUp)
-            {
-                var book = await db.Books.Include(b => b.Tags).FirstAsync(b => b.Id == existingEdition.BookId);
-                await EnsureFollowUpTagAsync(db, book);
-            }
-
-            await db.SaveChangesAsync();
             return;
         }
-
-        var publisher = await PublisherResolver.ResolveAsync(db, row.Publisher);
 
         var bookTitle = (row.Title ?? $"Unknown book — {row.Isbn}").Trim();
         // row.Author can be a comma- or ampersand-separated list of names from
@@ -205,85 +176,52 @@ public class BulkAddViewModel(
         // author behaviour for not-found / blank rows.
         var authorNames = AuthorResolver.ParseNames(row.Author);
         if (authorNames.Count == 0) authorNames = ["Unknown"];
-        var authors = await AuthorResolver.FindOrCreateAllAsync(authorNames, db);
-        var work = new Work
-        {
-            Title = bookTitle,
-            Subtitle = row.Subtitle,
-        };
-        // Dual-write: Work.Author = lead (legacy compat); Work.WorkAuthors = all.
-        work.AssignAuthorship(authors);
 
-        if (row.GenreCandidates.Count > 0)
+        await dispatcher.Send(new CreateBook(
+            new NewBook(bookTitle, BookCategory.Fiction, BookStatus.Unread, 0, null, row.CoverUrl),
+            new SingleWork(bookTitle, row.Subtitle, null, DatePrecision.Day, authorNames, [], await MatchGenreIdsAsync(row.GenreCandidates)),
+            new NewEdition(
+                row.Isbn,
+                row.Format ?? BookFormat.TradePaperback,
+                null,
+                row.DatePrinted,
+                row.DatePrintedPrecision,
+                row.Publisher,
+                null),
+            BookCondition.Good,
+            // Series attachment only if the user accepted the suggestion on this
+            // row. Series membership is a per-Book concept (the book is
+            // installment N).
+            row.SeriesSuggestionAccepted
+                ? new SeriesChoice(row.AcceptedSeriesId, row.AcceptedSeriesName, row.AcceptedSeriesOrderLabel)
+                : new SeriesChoice(null, null, null),
+            tagNames));
+    }
+
+    // Each lookup candidate picks the first genre (in id order) it fuzzy-matches,
+    // plus that genre's parent; each genre is picked once.
+    private async Task<List<int>> MatchGenreIdsAsync(IReadOnlyList<string> candidates)
+    {
+        var matched = new List<int>();
+        if (candidates.Count == 0) return matched;
+
+        var allGenres = (await dispatcher.Query(new GetGenreOptions())).OrderBy(g => g.Id).ToList();
+        foreach (var candidate in candidates)
         {
-            var allGenres = await db.Genres.ToListAsync();
-            var matched = new HashSet<int>();
-            foreach (var candidate in row.GenreCandidates)
+            var genre = allGenres.FirstOrDefault(g => MudGenrePickerViewModel.FuzzyGenreMatch(candidate, g.Name));
+            if (genre is null || matched.Contains(genre.Id)) continue;
+
+            matched.Add(genre.Id);
+            if (genre.ParentGenreId is int parentId && !matched.Contains(parentId)
+                && allGenres.Any(g => g.Id == parentId))
             {
-                var genre = allGenres.FirstOrDefault(g => MudGenrePickerViewModel.FuzzyGenreMatch(candidate, g.Name));
-                if (genre is not null && matched.Add(genre.Id))
-                {
-                    work.Genres.Add(genre);
-                    if (genre.ParentGenreId is int parentId && matched.Add(parentId))
-                    {
-                        var parent = allGenres.FirstOrDefault(g => g.Id == parentId);
-                        if (parent is not null) work.Genres.Add(parent);
-                    }
-                }
+                matched.Add(parentId);
             }
         }
-
-        var newBook = new Book
-        {
-            Title = bookTitle,
-            DefaultCoverArtUrl = row.CoverUrl,
-            Editions =
-            [
-                new Edition
-                {
-                    Isbn = row.Isbn,
-                    Format = row.Format ?? BookFormat.TradePaperback,
-                    DatePrinted = row.DatePrinted,
-                    DatePrintedPrecision = row.DatePrintedPrecision,
-                    Publisher = publisher,
-                    Copies = [new Copy { Condition = BookCondition.Good }]
-                }
-            ]
-        };
-        // Attach through the aggregate seam (assigns BookWork.Order) rather than
-        // the order-less Works initializer — bulk-add is one Work per Book so
-        // this is Order 0 either way, but it keeps the "never write Book.Works
-        // directly" invariant (Book.cs) true everywhere.
-        newBook.AttachWork(work);
-
-        // Series attachment if the user accepted the suggestion on this row.
-        // Series membership is a per-Book concept (the book is installment N);
-        // AttachToBookAsync is the shared seam with BookAddViewModel.SaveAsync.
-        if (row.SeriesSuggestionAccepted)
-        {
-            await SeriesResolver.AttachToBookAsync(db, newBook, row.AcceptedSeriesId, row.AcceptedSeriesName, row.AcceptedSeriesOrderLabel);
-        }
-
-        db.Books.Add(newBook);
-        await db.SaveChangesAsync();
-
-        if (followUp)
-        {
-            await EnsureFollowUpTagAsync(db, newBook);
-            await db.SaveChangesAsync();
-        }
+        return matched;
     }
 
-    private static async Task EnsureFollowUpTagAsync(BookTrackerDbContext db, Book book)
-    {
-        // Shared find-or-create seam (TD-15) — same resolver the BookDetail tag
-        // writes and MarkWishlistItemBought use.
-        var tag = await TagResolver.FindOrCreateAsync("follow-up", db);
-        if (!book.Tags.Any(t => t.Name == "follow-up"))
-        {
-            book.Tags.Add(tag);
-        }
-    }
+    private const string FollowUpTag = "follow-up";
 
     public static string RowCssClass(DiscoveryRow row) => row.Action switch
     {

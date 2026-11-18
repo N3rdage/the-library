@@ -37,7 +37,7 @@ public sealed class MarkWishlistItemBoughtHandler(IDbContextFactory<BookTrackerD
         // Route the Edition through the aggregate factory so it owns its first
         // Copy and the ISBN is normalised — same seam every other add path uses.
         if (!string.IsNullOrWhiteSpace(item.Isbn))
-            book.AddEdition(item.Isbn, BookFormat.TradePaperback, datePrinted: null,
+            book.AddEdition(item.Isbn, BookFormat.TradePaperback, editionNumber: null, datePrinted: null,
                 DatePrecision.Day, coverUrl: null, publisher: null, BookCondition.Good);
 
         db.WishlistItems.Remove(item);
