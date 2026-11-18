@@ -1,4 +1,5 @@
 using BookTracker.Application;
+using BookTracker.Application.Books;
 using BookTracker.Application.Works;
 using BookTracker.Shared.Online;
 using BookTracker.Web.Api;
@@ -10,8 +11,8 @@ using NSubstitute;
 namespace BookTracker.Tests.Api;
 
 // The response shapes of the online endpoints. The Application queries
-// behind them are covered against the Testcontainer by FindOwnedWorkTests and
-// GetOwnedWorksByAuthorTests.
+// behind them are covered against the Testcontainer by FindOwnedWorkTests,
+// GetOwnedWorksByAuthorTests and FindOwnedEditionsTests.
 [Trait("Category", TestCategories.Unit)]
 public class OnlineEndpointsTests
 {
@@ -69,8 +70,20 @@ public class OnlineEndpointsTests
         Assert.Equal(
             new OnlineIsbnLookup(
                 "9780552124751", "The Colour of Magic", "A Discworld Novel", "Terry Pratchett", "Corgi",
-                "https://covers.example.test/colour.jpg", 1985, "Open Library", null),
+                "https://covers.example.test/colour.jpg", 1985, "Open Library", null, null),
             ok.Value);
+    }
+
+    [Fact]
+    public async Task ProviderWorkKey_isCarriedThrough()
+    {
+        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Hit() with { WorkKey = "/works/OL45804W" });
+
+        var result = await HandleAsync("9780552124751");
+
+        var ok = Assert.IsType<Ok<OnlineIsbnLookup>>(result);
+        Assert.Equal("/works/OL45804W", ok.Value!.WorkKey);
     }
 
     [Fact]
@@ -158,5 +171,81 @@ public class OnlineEndpointsTests
         Assert.Equal("Nobody Atall", ok.Value!.Author);
         Assert.Empty(ok.Value.Works);
         await _dispatcher.DidNotReceive().Query(Arg.Any<GetOwnedWorksByAuthor>(), Arg.Any<CancellationToken>());
+    }
+
+    // GET /api/online/work-editions. The ownership query itself is covered
+    // against the Testcontainer by FindOwnedEditionsTests.
+    private Task<IResult> HandleWorkEditionsAsync(string? workKey) =>
+        OnlineEndpoints.HandleWorkEditionsAsync(workKey, _lookup, _dispatcher, CancellationToken.None);
+
+    private static OnlineEdition Edition(string? isbn, string? title = "Mort") =>
+        new(isbn, title, "Corgi", "1988", "Paperback", null, null);
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("OL45804W")]
+    [InlineData("/works/OL45804M")]
+    [InlineData("/books/OL45804W")]
+    [InlineData("/works/OL45804W/editions")]
+    [InlineData("/works/OLW")]
+    public async Task MalformedWorkKey_isABadRequest_andNothingIsCalled(string? workKey)
+    {
+        var result = await HandleWorkEditionsAsync(workKey);
+
+        var bad = Assert.IsType<BadRequest<string>>(result);
+        Assert.False(string.IsNullOrWhiteSpace(bad.Value));
+        await _lookup.DidNotReceive().GetWorkEditionsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _dispatcher.DidNotReceive().Query(Arg.Any<FindOwnedEditions>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProviderEditions_carryTheOwnedBookIdsTheQueryReturns()
+    {
+        _lookup.GetWorkEditionsAsync("/works/OL45804W", Arg.Any<CancellationToken>()).Returns(
+        [
+            Edition("9780552131063"),
+            Edition("055213106X"),
+            Edition(null, "Mort (book club)"),
+            Edition("9780552131063"),
+        ]);
+        _dispatcher.Query(Arg.Any<FindOwnedEditions>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, int> { ["9780552131063"] = 7 });
+
+        var result = await HandleWorkEditionsAsync("/works/OL45804W");
+
+        var ok = Assert.IsType<Ok<OnlineWorkEditions>>(result);
+        Assert.Equal("/works/OL45804W", ok.Value!.WorkKey);
+        Assert.Equal(new int?[] { 7, null, null, 7 }, ok.Value.Editions.Select(e => e.OwnedBookId));
+        Assert.Equal(Edition("055213106X"), ok.Value.Editions[1]);
+        await _dispatcher.Received(1).Query(
+            Arg.Is<FindOwnedEditions>(q =>
+                q != null && q.Isbns.SequenceEqual(new[] { "9780552131063", "055213106X" })),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task EditionsWithoutIsbns_areOk_andNoLibraryQuery()
+    {
+        _lookup.GetWorkEditionsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns([Edition(null)]);
+
+        var result = await HandleWorkEditionsAsync("/works/OL45804W");
+
+        var ok = Assert.IsType<Ok<OnlineWorkEditions>>(result);
+        Assert.Equal(Edition(null), Assert.Single(ok.Value!.Editions));
+        await _dispatcher.DidNotReceive().Query(Arg.Any<FindOwnedEditions>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task EmptyProviderList_isOkWithNoEditions_andNoLibraryQuery()
+    {
+        _lookup.GetWorkEditionsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns([]);
+
+        var result = await HandleWorkEditionsAsync("/works/OL1W");
+
+        var ok = Assert.IsType<Ok<OnlineWorkEditions>>(result);
+        Assert.Equal("/works/OL1W", ok.Value!.WorkKey);
+        Assert.Empty(ok.Value.Editions);
+        await _dispatcher.DidNotReceive().Query(Arg.Any<FindOwnedEditions>(), Arg.Any<CancellationToken>());
     }
 }

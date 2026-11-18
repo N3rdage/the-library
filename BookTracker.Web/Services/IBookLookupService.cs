@@ -18,4 +18,10 @@ public interface IBookLookupService
     // endpoint fills it from the library. Empty on a blank author or a
     // provider failure.
     Task<IReadOnlyList<OnlineAuthorWork>> GetAuthorWorksAsync(string author, CancellationToken ct);
+
+    // Bookshelf's other editions of a work: up to 50 editions of an Open
+    // Library work (key of the form /works/OL…W). OwnedBookId is always null
+    // here; the endpoint fills it from the library. Empty on a malformed key
+    // (no request is made) or a provider failure.
+    Task<IReadOnlyList<OnlineEdition>> GetWorkEditionsAsync(string workKey, CancellationToken ct);
 }
