@@ -135,6 +135,7 @@ VM lifetime:
 `BookTracker.Application` is the seam between the UI and the data. It owns the
 write **and** read logic that used to live inline in ViewModels and services.
 Design + binding conventions (C1–C12) live in `docs/BACKEND-REFACTOR-DESIGN.md`.
+`BookTracker.Tests/Architecture/WebLayeringTests.cs` enforces the seam: no type in `BookTracker.Web` takes or holds a `BookTrackerDbContext`, its factory or a `DbSet<>` except the five exceptions (`ProgramSetup`, `WarmupEndpoints`, `CoverMirrorBackgroundService`, `CoverMirrorQueue`, `EditionFormatBackfillService`), and no ViewModel or component holds a Data entity (Data enums are allowed).
 
 - **Dispatcher.** A thin hand-rolled `IDispatcher` (`Send(ICommand)` / `Query(IQuery<T>)`) — **no MediatR**. Handlers are discovered by a convention scan (`AddApplicationLayer()`) over the assembly, so a new handler is registered the moment it exists (which is why the integration tests auto-track relocated reads).
 - **Commands** name **atomic user gestures, not table columns** (C10): `MarkBookRead(rating, notes)` is one command, not `SetStatus` + `RateBook` + `UpdateNotes` — one load, one save, one `UpdatedAt` bump. Handlers load the aggregate, call a method on it, and save; invariants live **on the entity** (e.g. `Book.Rate` enforces 0–5, `Work` self-orphans at ref-count 0 — C11). Merge operations are transactional commands (`MergeBooks`/`MergeWorks`/`MergeAuthors`/`MergeEditions`/`MergePublishers`).
