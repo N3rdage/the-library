@@ -19,7 +19,7 @@ public class GetOwnedWorksByAuthorTests
         await using var db = _factory.CreateDbContext();
         // Author.Name is unique, so a second book by the same author reuses the row.
         var authorRow = await db.Authors.SingleOrDefaultAsync(a => a.Name == author)
-            ?? new Author { Name = author };
+            ?? Author.Create(author);
         var book = new Book
         {
             Title = title,
@@ -40,7 +40,7 @@ public class GetOwnedWorksByAuthorTests
         await using var db = _factory.CreateDbContext();
         var canonicalRow = await db.Authors.SingleAsync(a => a.Name == canonical);
         var aliasRow = await db.Authors.SingleAsync(a => a.Name == alias);
-        aliasRow.CanonicalAuthorId = canonicalRow.Id;
+        aliasRow.MarkAliasOf(canonicalRow);
         await db.SaveChangesAsync();
     }
 

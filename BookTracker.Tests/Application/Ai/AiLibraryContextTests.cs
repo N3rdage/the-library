@@ -22,8 +22,8 @@ public class AiLibraryContextTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
-            var leGuin = new Author { Name = "Ursula K. Le Guin" };
+            var asimov = Author.Create("Isaac Asimov");
+            var leGuin = Author.Create("Ursula K. Le Guin");
             var sf = new Genre { Name = "Science Fiction" };
             var fantasy = new Genre { Name = "Fantasy" };
             db.Genres.Add(new Genre { Name = "Poetry" });   // unused: not a top genre

@@ -22,7 +22,7 @@ public class SearchBooksForSeriesHandlerTests
         {
             Title = title,
             SeriesId = seriesId,
-            Works = [new Work { Title = workTitle ?? title, WorkAuthors = [new WorkAuthor { Author = existing ?? new Author { Name = author }, Order = 0 }] }],
+            Works = [new Work { Title = workTitle ?? title, WorkAuthors = [new WorkAuthor { Author = existing ?? Author.Create(author), Order = 0 }] }],
         };
         db.Books.Add(book);
         await db.SaveChangesAsync();
@@ -106,8 +106,8 @@ public class SearchBooksForSeriesHandlerTests
                         Title = "Relic",
                         WorkAuthors =
                         [
-                            new WorkAuthor { Author = new Author { Name = "Lincoln Child" }, Order = 1, Role = AuthorRole.Author },
-                            new WorkAuthor { Author = new Author { Name = "Douglas Preston" }, Order = 0, Role = AuthorRole.Author },
+                            new WorkAuthor { Author = Author.Create("Lincoln Child"), Order = 1, Role = AuthorRole.Author },
+                            new WorkAuthor { Author = Author.Create("Douglas Preston"), Order = 0, Role = AuthorRole.Author },
                         ],
                     },
                 ],

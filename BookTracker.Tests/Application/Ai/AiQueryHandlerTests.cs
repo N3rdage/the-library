@@ -51,8 +51,8 @@ public class AiQueryHandlerTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            var gaiman = new Author { Name = "Neil Gaiman" };
-            var pratchett = new Author { Name = "Terry Pratchett" };
+            var gaiman = Author.Create("Neil Gaiman");
+            var pratchett = Author.Create("Terry Pratchett");
             var series = new Series { Name = "Discworld", Type = SeriesType.Series };
             var omens = new Book
             {
@@ -84,7 +84,7 @@ public class AiQueryHandlerTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            var author = new Author { Name = "Ursula K. Le Guin" };
+            var author = Author.Create("Ursula K. Le Guin");
             var fantasy = new Genre { Name = "Fantasy" };
             var sf = new Genre { Name = "Science Fiction" };
             var compendium = new Book
@@ -116,8 +116,8 @@ public class AiQueryHandlerTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
-            var leGuin = new Author { Name = "Ursula K. Le Guin" };
+            var asimov = Author.Create("Isaac Asimov");
+            var leGuin = Author.Create("Ursula K. Le Guin");
             // Added out of name order: the gaps come back in GetSeriesGaps' name order.
             var zeta = new Series { Name = "Zeta", Type = SeriesType.Series, ExpectedCount = 2 };
             var foundation = new Series { Name = "Foundation", Author = "Isaac Asimov", Type = SeriesType.Series, ExpectedCount = 3 };

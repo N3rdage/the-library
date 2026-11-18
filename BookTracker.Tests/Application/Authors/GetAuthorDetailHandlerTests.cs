@@ -26,8 +26,8 @@ public class GetAuthorDetailHandlerTests
         int kingId;
         using (var db = _factory.CreateDbContext())
         {
-            var king = new Author { Name = "Stephen King" };
-            var bachman = new Author { Name = "Richard Bachman", CanonicalAuthor = king };
+            var king = Author.Create("Stephen King");
+            var bachman = TestAuthors.Alias("Richard Bachman", of: king);
             db.Authors.AddRange(king, bachman);
             db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] });
             db.Books.Add(new Book { Title = "Thinner", Works = [new Work { Title = "Thinner", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }] }] });
@@ -55,8 +55,8 @@ public class GetAuthorDetailHandlerTests
         int bachmanId;
         using (var db = _factory.CreateDbContext())
         {
-            var king = new Author { Name = "Stephen King" };
-            var bachman = new Author { Name = "Richard Bachman", CanonicalAuthor = king };
+            var king = Author.Create("Stephen King");
+            var bachman = TestAuthors.Alias("Richard Bachman", of: king);
             db.Authors.AddRange(king, bachman);
             db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] });
             db.Books.Add(new Book { Title = "Thinner", Works = [new Work { Title = "Thinner", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }] }] });
@@ -81,7 +81,7 @@ public class GetAuthorDetailHandlerTests
         int authorId;
         using (var db = _factory.CreateDbContext())
         {
-            var pratchett = new Author { Name = "Terry Pratchett" };
+            var pratchett = Author.Create("Terry Pratchett");
             db.Authors.Add(pratchett);
             var discworld = new Series { Name = "Discworld", Type = SeriesType.Collection };
             var bromeliad = new Series { Name = "Bromeliad", Type = SeriesType.Series };

@@ -14,7 +14,7 @@ public class GetEditionForEditHandlerTests
         new GetEditionForEditHandler(_factory).HandleAsync(new GetEditionForEdit(editionId));
 
     private static List<Work> OneWork() =>
-        [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Pratchett" }, Order = 0 }] }];
+        [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = Author.Create("Pratchett"), Order = 0 }] }];
 
     [Fact]
     public async Task MissingId_ReturnsNull()

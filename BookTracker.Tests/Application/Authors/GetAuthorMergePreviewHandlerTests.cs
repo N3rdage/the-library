@@ -38,12 +38,12 @@ public class GetAuthorMergePreviewHandlerTests
         // "Doug Preston" aliased to Z1; "Douglas Preston" aliased to Z2.
         // Directly merging these would silently drop one of the aliasings.
         using var db = _factory.CreateDbContext();
-        var z1 = new Author { Name = "Canonical A" };
-        var z2 = new Author { Name = "Canonical B" };
+        var z1 = Author.Create("Canonical A");
+        var z2 = Author.Create("Canonical B");
         db.Authors.AddRange(z1, z2);
         await db.SaveChangesAsync();
-        var d1 = new Author { Name = "Doug Preston", CanonicalAuthorId = z1.Id };
-        var d2 = new Author { Name = "Douglas Preston", CanonicalAuthorId = z2.Id };
+        var d1 = TestAuthors.Alias("Doug Preston", of: z1);
+        var d2 = TestAuthors.Alias("Douglas Preston", of: z2);
         db.Authors.AddRange(d1, d2);
         await db.SaveChangesAsync();
 
@@ -56,10 +56,10 @@ public class GetAuthorMergePreviewHandlerTests
     public async Task LoadAsync_permits_merge_when_loser_is_alias_of_winner()
     {
         using var db = _factory.CreateDbContext();
-        var canonical = new Author { Name = "Stephen King" };
+        var canonical = Author.Create("Stephen King");
         db.Authors.Add(canonical);
         await db.SaveChangesAsync();
-        var alias = new Author { Name = "Stephen King (dup)", CanonicalAuthorId = canonical.Id };
+        var alias = TestAuthors.Alias("Stephen King (dup)", of: canonical);
         db.Authors.Add(alias);
         await db.SaveChangesAsync();
 
@@ -74,7 +74,7 @@ public class GetAuthorMergePreviewHandlerTests
         var authors = new List<Author>();
         foreach (var (name, titles) in data)
         {
-            var author = new Author { Name = name };
+            var author = Author.Create(name);
             db.Authors.Add(author);
             foreach (var t in titles)
             {

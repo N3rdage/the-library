@@ -124,7 +124,7 @@ public class DuplicateCommandHandlersTests
     private async Task<(int, int)> SeedAuthorsAsync(params string[] names)
     {
         using var db = _factory.CreateDbContext();
-        var authors = names.Select(n => new Author { Name = n }).ToList();
+        var authors = names.Select(n => Author.Create(n)).ToList();
         db.Authors.AddRange(authors);
         await db.SaveChangesAsync();
         return (authors[0].Id, authors.Count > 1 ? authors[1].Id : 0);

@@ -28,7 +28,7 @@ public class SeriesCommandHandlersTests
         var work = new Work
         {
             Title = title,
-            WorkAuthors = { new WorkAuthor { Author = new Author { Name = $"Author of {title}" }, Order = 0, Role = AuthorRole.Author } },
+            WorkAuthors = { new WorkAuthor { Author = Author.Create($"Author of {title}"), Order = 0, Role = AuthorRole.Author } },
         };
         var book = new Book
         {

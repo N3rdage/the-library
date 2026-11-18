@@ -108,9 +108,9 @@ public class EditionFormatBackfillServiceTests
     {
         using var db = _factory.CreateDbContext();
         // Single shared Author across all books — Author.Name has a unique
-        // index, so creating `new Author { Name = "Test" }` per iteration
+        // index, so creating `Author.Create("Test")` per iteration
         // would conflict on the second insert under real SQL.
-        var sharedAuthor = new Author { Name = "Test" };
+        var sharedAuthor = Author.Create("Test");
         foreach (var (isbn, format) in editions)
         {
             db.Books.Add(new Book

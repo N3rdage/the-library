@@ -39,8 +39,8 @@ public class GetSeriesBookRowHandlerTests
                         Title = "Edgedancer",
                         WorkAuthors =
                         [
-                            new WorkAuthor { Author = new Author { Name = "Brandon Sanderson" }, Order = 0, Role = AuthorRole.Author },
-                            new WorkAuthor { Author = new Author { Name = "Ann Translator" }, Order = 0, Role = AuthorRole.Translator },
+                            new WorkAuthor { Author = Author.Create("Brandon Sanderson"), Order = 0, Role = AuthorRole.Author },
+                            new WorkAuthor { Author = Author.Create("Ann Translator"), Order = 0, Role = AuthorRole.Translator },
                         ],
                     },
                 ],
@@ -61,8 +61,8 @@ public class GetSeriesBookRowHandlerTests
         int bookId;
         using (var db = _factory.CreateDbContext())
         {
-            var king = new Author { Name = "Stephen King" };
-            var straub = new Author { Name = "Peter Straub" };
+            var king = Author.Create("Stephen King");
+            var straub = Author.Create("Peter Straub");
             var book = new Book
             {
                 Title = "Collection",
