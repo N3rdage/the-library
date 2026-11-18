@@ -34,8 +34,8 @@ public class GetBookMergePreviewHandlerTests
         int bookId, otherId, firstWorkId, secondWorkId;
         using (var db = _factory.CreateDbContext())
         {
-            var austen = new Author { Name = "Jane Austen" };
-            var dickens = new Author { Name = "Charles Dickens" };
+            var austen = Author.Create("Jane Austen");
+            var dickens = Author.Create("Charles Dickens");
             var book = new Book { Title = "Two-Author Anthology" };
             var emma = new Work { Title = "Emma", WorkAuthors = [new WorkAuthor { Author = austen, Order = 0 }] };
             var oliver = new Work { Title = "Oliver Twist", WorkAuthors = [new WorkAuthor { Author = dickens, Order = 0 }] };
@@ -64,7 +64,7 @@ public class GetBookMergePreviewHandlerTests
     private async Task<(int winnerId, int loserId)> SeedTwoBooksAsync()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "Shared" };
+        var author = Author.Create("Shared");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = new Book { Title = "B", Works = [work] };
         var loser = new Book { Title = "B", Works = [work] };

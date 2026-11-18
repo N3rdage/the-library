@@ -55,7 +55,7 @@ public class SearchWorksHandlerTests
     public async Task SearchAsync_excludes_works_already_attached_to_given_book()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "Tolkien" };
+        var author = Author.Create("Tolkien");
         var hobbit = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var fellowship = new Work { Title = "Fellowship", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         db.Books.Add(new Book { Title = "Compendium", Works = [hobbit] });
@@ -93,7 +93,7 @@ public class SearchWorksHandlerTests
         var authorsByName = data
             .Select(d => d.AuthorName)
             .Distinct()
-            .ToDictionary(name => name, name => new Author { Name = name });
+            .ToDictionary(name => name, name => Author.Create(name));
 
         foreach (var (title, authorName) in data)
         {

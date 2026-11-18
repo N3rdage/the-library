@@ -39,12 +39,12 @@ public class AuthorMergeHandlerTests
     public async Task Merge_reassigns_aliases_of_loser_to_winner()
     {
         using var db = _factory.CreateDbContext();
-        var winner = new Author { Name = "Stephen King" };
-        var loser = new Author { Name = "S. King" };
+        var winner = Author.Create("Stephen King");
+        var loser = Author.Create("S. King");
         db.Authors.AddRange(winner, loser);
         await db.SaveChangesAsync();
         // An existing pen name pointing at the loser — should reattach to winner.
-        var bachman = new Author { Name = "Richard Bachman", CanonicalAuthorId = loser.Id };
+        var bachman = TestAuthors.Alias("Richard Bachman", of: loser);
         db.Authors.Add(bachman);
         await db.SaveChangesAsync();
 
@@ -65,10 +65,10 @@ public class AuthorMergeHandlerTests
         // After merge, winner must be promoted to canonical — otherwise its
         // CanonicalAuthorId dangles at the deleted loser.
         using var db = _factory.CreateDbContext();
-        var loser = new Author { Name = "Steve King" };
+        var loser = Author.Create("Steve King");
         db.Authors.Add(loser);
         await db.SaveChangesAsync();
-        var winner = new Author { Name = "Stephen King", CanonicalAuthorId = loser.Id };
+        var winner = TestAuthors.Alias("Stephen King", of: loser);
         db.Authors.Add(winner);
         await db.SaveChangesAsync();
 
@@ -141,12 +141,12 @@ public class AuthorMergeHandlerTests
     public async Task Merge_rejects_incompatible_canonicals()
     {
         using var db = _factory.CreateDbContext();
-        var z1 = new Author { Name = "Canonical A" };
-        var z2 = new Author { Name = "Canonical B" };
+        var z1 = Author.Create("Canonical A");
+        var z2 = Author.Create("Canonical B");
         db.Authors.AddRange(z1, z2);
         await db.SaveChangesAsync();
-        var d1 = new Author { Name = "Doug Preston", CanonicalAuthorId = z1.Id };
-        var d2 = new Author { Name = "Douglas Preston", CanonicalAuthorId = z2.Id };
+        var d1 = TestAuthors.Alias("Doug Preston", of: z1);
+        var d2 = TestAuthors.Alias("Douglas Preston", of: z2);
         db.Authors.AddRange(d1, d2);
         await db.SaveChangesAsync();
 
@@ -166,8 +166,8 @@ public class AuthorMergeHandlerTests
         // roles on Work X — the loser's Translator credit should NOT be
         // dropped just because winner exists on that Work.
         using var db = _factory.CreateDbContext();
-        var winner = new Author { Name = "Winner" };
-        var loser = new Author { Name = "Loser" };
+        var winner = Author.Create("Winner");
+        var loser = Author.Create("Loser");
         db.Authors.AddRange(winner, loser);
         await db.SaveChangesAsync();
 
@@ -201,8 +201,8 @@ public class AuthorMergeHandlerTests
         // winner has exactly one Author row on Work X (no duplicate composite-
         // PK violation, no doubled-up credit).
         using var db = _factory.CreateDbContext();
-        var winner = new Author { Name = "Winner" };
-        var loser = new Author { Name = "Loser" };
+        var winner = Author.Create("Winner");
+        var loser = Author.Create("Loser");
         db.Authors.AddRange(winner, loser);
         await db.SaveChangesAsync();
 
@@ -237,7 +237,7 @@ public class AuthorMergeHandlerTests
         var authors = new List<Author>();
         foreach (var (name, titles) in data)
         {
-            var author = new Author { Name = name };
+            var author = Author.Create(name);
             db.Authors.Add(author);
             foreach (var t in titles)
             {

@@ -18,7 +18,7 @@ public class SearchAuthorNamesHandlerTests
     private async Task SeedAsync(params string[] names)
     {
         using var db = _factory.CreateDbContext();
-        db.Authors.AddRange(names.Select(n => new Author { Name = n }));
+        db.Authors.AddRange(names.Select(n => Author.Create(n)));
         await db.SaveChangesAsync();
     }
 

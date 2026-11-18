@@ -20,8 +20,8 @@ public class GetAuthorListHandlerTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            var king = new Author { Name = "Stephen King" };
-            var bachman = new Author { Name = "Richard Bachman", CanonicalAuthor = king };
+            var king = Author.Create("Stephen King");
+            var bachman = TestAuthors.Alias("Richard Bachman", of: king);
             db.Authors.AddRange(king, bachman);
             db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] });
             db.Books.Add(new Book { Title = "Thinner", Works = [new Work { Title = "Thinner", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }] }] });
@@ -47,8 +47,8 @@ public class GetAuthorListHandlerTests
         // should report just its own — 1 / 1 / 0.
         using (var db = _factory.CreateDbContext())
         {
-            var king = new Author { Name = "Stephen King" };
-            var bachman = new Author { Name = "Richard Bachman", CanonicalAuthor = king };
+            var king = Author.Create("Stephen King");
+            var bachman = TestAuthors.Alias("Richard Bachman", of: king);
             db.Authors.AddRange(king, bachman);
             db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] });
             db.Books.Add(new Book { Title = "It", Works = [new Work { Title = "It", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] });
@@ -75,7 +75,7 @@ public class GetAuthorListHandlerTests
         // Pratchett: Discworld + Bromeliad + a standalone. Series count = 2.
         using (var db = _factory.CreateDbContext())
         {
-            var pratchett = new Author { Name = "Terry Pratchett" };
+            var pratchett = Author.Create("Terry Pratchett");
             db.Authors.Add(pratchett);
             var discworld = new Series { Name = "Discworld", Type = SeriesType.Collection };
             var bromeliad = new Series { Name = "Bromeliad", Type = SeriesType.Series };

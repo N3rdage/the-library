@@ -20,7 +20,7 @@ public class FindOwnedWorkTests
         await using var db = _factory.CreateDbContext();
         // Author.Name is unique, so a second book by the same author reuses the row.
         var authorRow = await db.Authors.SingleOrDefaultAsync(a => a.Name == author)
-            ?? new Author { Name = author };
+            ?? Author.Create(author);
         var book = new Book
         {
             Title = bookTitle,

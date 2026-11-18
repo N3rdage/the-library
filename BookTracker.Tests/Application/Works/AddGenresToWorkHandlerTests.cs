@@ -27,7 +27,7 @@ public class AddGenresToWorkHandlerTests
                     new Work
                     {
                         Title = "Dune",
-                        WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Frank Herbert" }, Order = 0, Role = AuthorRole.Author }],
+                        WorkAuthors = [new WorkAuthor { Author = Author.Create("Frank Herbert"), Order = 0, Role = AuthorRole.Author }],
                         Genres = [new Genre { Name = "AIA Adventure" }],
                     },
                 ],

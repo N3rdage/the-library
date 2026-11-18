@@ -23,7 +23,7 @@ public class FindEditionByIsbnHandlerTests
             var book = new Book
             {
                 Title = "The Hobbit",
-                Works = [new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Tolkien" }, Order = 0 }] }],
+                Works = [new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = Author.Create("Tolkien"), Order = 0 }] }],
                 Editions = [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }],
             };
             db.Books.Add(book);
@@ -70,15 +70,15 @@ public class FindEditionByIsbnHandlerTests
                 Subtitle = "The Destroyer #54",
                 WorkAuthors =
                 [
-                    new WorkAuthor { Author = new Author { Name = "Richard Sapir" }, Order = 0 },
-                    new WorkAuthor { Author = new Author { Name = "Some Editor" }, Order = 0, Role = AuthorRole.Editor },
+                    new WorkAuthor { Author = Author.Create("Richard Sapir"), Order = 0 },
+                    new WorkAuthor { Author = Author.Create("Some Editor"), Order = 0, Role = AuthorRole.Editor },
                 ],
             });
             book.AttachWork(new Work
             {
                 Title = "Second Story",
                 Subtitle = "not the lead",
-                WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Warren Murphy" }, Order = 0 }],
+                WorkAuthors = [new WorkAuthor { Author = Author.Create("Warren Murphy"), Order = 0 }],
             });
             db.Books.Add(book);
             await db.SaveChangesAsync();
@@ -166,9 +166,9 @@ public class FindEditionByIsbnHandlerTests
         // once.
         await using (var db = _factory.CreateDbContext())
         {
-            var preston = new Author { Name = "Douglas Preston" };
-            var child = new Author { Name = "Lincoln Child" };
-            var editor = new Author { Name = "Some Editor" };
+            var preston = Author.Create("Douglas Preston");
+            var child = Author.Create("Lincoln Child");
+            var editor = Author.Create("Some Editor");
             var first = new Work
             {
                 Title = "Relic",
@@ -208,7 +208,7 @@ public class FindEditionByIsbnHandlerTests
             var work = new Work
             {
                 Title = "Concise Oxford English Dictionary",
-                WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Catherine Soanes" }, Order = 0, Role = AuthorRole.Editor }],
+                WorkAuthors = [new WorkAuthor { Author = Author.Create("Catherine Soanes"), Order = 0, Role = AuthorRole.Editor }],
             };
             var book = new Book
             {

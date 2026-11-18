@@ -29,7 +29,7 @@ public static class AuthorResolver
         var existing = await db.Authors.FirstOrDefaultAsync(a => a.Name == trimmed, ct);
         if (existing is not null) return existing;
 
-        var fresh = new Author { Name = trimmed };
+        var fresh = Author.Create(trimmed);
         db.Authors.Add(fresh);
         return fresh;
     }

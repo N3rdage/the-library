@@ -151,7 +151,7 @@ public class GetDuplicateReportHandlerTests
         // Two Books that share the same Work — the "captured twice, should
         // have been one Book with two Editions" case.
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "J.R.R. Tolkien" };
+        var author = Author.Create("J.R.R. Tolkien");
         var work = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         db.Books.Add(new Book { Title = "Hobbit HB", Works = [work] });
         db.Books.Add(new Book { Title = "Hobbit PB", Works = [work] });
@@ -168,7 +168,7 @@ public class GetDuplicateReportHandlerTests
     {
         // Same title AND same work-set: dedup so the pair appears once.
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "J.R.R. Tolkien" };
+        var author = Author.Create("J.R.R. Tolkien");
         var work = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         db.Books.Add(new Book { Title = "The Hobbit", Works = [work] });
         db.Books.Add(new Book { Title = "The Hobbit", Works = [work] });
@@ -185,7 +185,7 @@ public class GetDuplicateReportHandlerTests
     public async Task Editions_detects_no_isbn_same_format_publisher_date()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "Agatha Christie" };
+        var author = Author.Create("Agatha Christie");
         var work = new Work { Title = "Murder on the Orient Express", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var publisher = new Publisher { Name = "Collins Crime Club" };
         var book = new Book
@@ -210,7 +210,7 @@ public class GetDuplicateReportHandlerTests
     public async Task Editions_ignores_differing_format_on_no_isbn_match()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "Agatha Christie" };
+        var author = Author.Create("Agatha Christie");
         var work = new Work { Title = "Murder on the Orient Express", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var publisher = new Publisher { Name = "Collins Crime Club" };
         var book = new Book
@@ -236,7 +236,7 @@ public class GetDuplicateReportHandlerTests
     private async Task SeedAuthorsAsync(params string[] names)
     {
         using var db = _factory.CreateDbContext();
-        db.Authors.AddRange(names.Select(n => new Author { Name = n }));
+        db.Authors.AddRange(names.Select(n => Author.Create(n)));
         await db.SaveChangesAsync();
     }
 
@@ -246,7 +246,7 @@ public class GetDuplicateReportHandlerTests
         // Use existing author if same name to respect the real schema
         // (Author.Name is unique).
         var existing = db.Authors.FirstOrDefault(a => a.Name == authorName);
-        var author = existing ?? new Author { Name = authorName };
+        var author = existing ?? Author.Create(authorName);
         var book = new Book
         {
             Title = title,

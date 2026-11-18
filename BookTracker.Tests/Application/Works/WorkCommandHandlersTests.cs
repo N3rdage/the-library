@@ -19,7 +19,7 @@ public class WorkCommandHandlersTests
         var work = new Work
         {
             Title = title,
-            WorkAuthors = { new WorkAuthor { Author = new Author { Name = "Pratchett" }, Order = 0, Role = AuthorRole.Author } },
+            WorkAuthors = { new WorkAuthor { Author = Author.Create("Pratchett"), Order = 0, Role = AuthorRole.Author } },
         };
         var book = new Book { Title = "Book", Works = { work } };
         db.Books.Add(book);
@@ -79,7 +79,7 @@ public class WorkCommandHandlersTests
             var work = new Work
             {
                 Title = "Shared",
-                WorkAuthors = { new WorkAuthor { Author = new Author { Name = "A" }, Order = 0, Role = AuthorRole.Author } },
+                WorkAuthors = { new WorkAuthor { Author = Author.Create("A"), Order = 0, Role = AuthorRole.Author } },
             };
             var a = new Book { Title = "A", Works = { work } };
             var b = new Book { Title = "B", Works = { work } };
@@ -233,7 +233,7 @@ public class WorkCommandHandlersTests
     private async Task<(int bookId, List<int> workIds)> SeedMultiWorkBookAsync(params string[] titles)
     {
         await using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "Seed Author" };
+        var author = Author.Create("Seed Author");
         var book = new Book { Title = "Anthology" };
         foreach (var t in titles)
         {
@@ -319,7 +319,7 @@ public class WorkCommandHandlersTests
         int existingAuthorId;
         await using (var db = _factory.CreateDbContext())
         {
-            var existing = new Author { Name = "Terry Pratchett" };
+            var existing = Author.Create("Terry Pratchett");
             db.Authors.Add(existing);
             await db.SaveChangesAsync();
             existingAuthorId = existing.Id;

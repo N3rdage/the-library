@@ -22,7 +22,7 @@ public class GetCatalogSnapshotHandlerTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             db.Books.Add(new Book
             {
@@ -48,9 +48,9 @@ public class GetCatalogSnapshotHandlerTests
         // every credited contributor.
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
-            var king = new Author { Name = "Stephen King" };
-            var bradbury = new Author { Name = "Ray Bradbury" };
+            var asimov = Author.Create("Isaac Asimov");
+            var king = Author.Create("Stephen King");
+            var bradbury = Author.Create("Ray Bradbury");
             db.Authors.AddRange(asimov, king, bradbury);
             db.Books.Add(new Book
             {
@@ -84,11 +84,11 @@ public class GetCatalogSnapshotHandlerTests
         // count (2); alias row shows just its direct count (1).
         using (var db = _factory.CreateDbContext())
         {
-            var king = new Author { Name = "Stephen King" };
+            var king = Author.Create("Stephen King");
             db.Authors.Add(king);
             await db.SaveChangesAsync();
 
-            var bachman = new Author { Name = "Richard Bachman", CanonicalAuthorId = king.Id };
+            var bachman = TestAuthors.Alias("Richard Bachman", of: king);
             db.Authors.Add(bachman);
             db.Books.AddRange(
                 new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] },
@@ -120,11 +120,11 @@ public class GetCatalogSnapshotHandlerTests
         // real instance in ~2000 books is King's own-name Bachman omnibus.
         using (var db = _factory.CreateDbContext())
         {
-            var king = new Author { Name = "Stephen King" };
+            var king = Author.Create("Stephen King");
             db.Authors.Add(king);
             await db.SaveChangesAsync();
 
-            var bachman = new Author { Name = "Richard Bachman", CanonicalAuthorId = king.Id };
+            var bachman = TestAuthors.Alias("Richard Bachman", of: king);
             db.Authors.Add(bachman);
             db.Books.Add(new Book
             {
@@ -157,7 +157,7 @@ public class GetCatalogSnapshotHandlerTests
         // in BookSnapshot.Isbns. Empty / null ISBNs are filtered out.
         using (var db = _factory.CreateDbContext())
         {
-            var clarke = new Author { Name = "Arthur C. Clarke" };
+            var clarke = Author.Create("Arthur C. Clarke");
             db.Authors.Add(clarke);
             db.Books.Add(new Book
             {
@@ -202,7 +202,7 @@ public class GetCatalogSnapshotHandlerTests
         // card displays both.
         using (var db = _factory.CreateDbContext())
         {
-            var clarke = new Author { Name = "Arthur C. Clarke" };
+            var clarke = Author.Create("Arthur C. Clarke");
             db.Authors.Add(clarke);
             db.Books.Add(new Book
             {
@@ -231,7 +231,7 @@ public class GetCatalogSnapshotHandlerTests
         // seriesOrder straight off it (a book with no series ships nulls).
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             var foundationSeries = new Series { Name = "Foundation", Type = SeriesType.Series, ExpectedCount = 7 };
             db.Series.Add(foundationSeries);
@@ -279,7 +279,7 @@ public class GetCatalogSnapshotHandlerTests
         // mobile can render "4.5" and exclude it from numbered-slot ownership.
         using (var db = _factory.CreateDbContext())
         {
-            var sanderson = new Author { Name = "Brandon Sanderson" };
+            var sanderson = Author.Create("Brandon Sanderson");
             db.Authors.Add(sanderson);
             var stormlight = new Series { Name = "The Stormlight Archive", Type = SeriesType.Series, ExpectedCount = 5 };
             db.Series.Add(stormlight);
@@ -321,7 +321,7 @@ public class GetCatalogSnapshotHandlerTests
         int seriesId;
         using (var db = _factory.CreateDbContext())
         {
-            var author = new Author { Name = "Andrzej Sapkowski" };
+            var author = Author.Create("Andrzej Sapkowski");
             db.Authors.Add(author);
             var witcher = new Series { Name = "The Witcher", Type = SeriesType.Series, ExpectedCount = 8 };
             db.Series.Add(witcher);
@@ -363,7 +363,7 @@ public class GetCatalogSnapshotHandlerTests
         // KB on the wire for an empty-Series row.
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             var foundation = new Series { Name = "Foundation", Type = SeriesType.Series, ExpectedCount = 7 };
             var emptySeries = new Series { Name = "Empire of Light", Type = SeriesType.Series, ExpectedCount = 3 };
@@ -398,7 +398,7 @@ public class GetCatalogSnapshotHandlerTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             db.Books.AddRange(
                 new Book { Title = "Foundation", Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] },
@@ -421,7 +421,7 @@ public class GetCatalogSnapshotHandlerTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             db.Books.Add(new Book { Title = "Foundation", Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] });
             await db.SaveChangesAsync();
@@ -442,7 +442,7 @@ public class GetCatalogSnapshotHandlerTests
         DateTime mid;
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             db.Books.Add(new Book { Title = "Foundation", Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] });
             await db.SaveChangesAsync();
@@ -478,7 +478,7 @@ public class GetCatalogSnapshotHandlerTests
         DateTime mid;
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             db.Series.Add(new Series { Name = "Foundation", Type = SeriesType.Series, ExpectedCount = 7 });
             db.Books.Add(new Book { Title = "Foundation", Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] });
@@ -507,7 +507,7 @@ public class GetCatalogSnapshotHandlerTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            var clarke = new Author { Name = "Arthur C. Clarke" };
+            var clarke = Author.Create("Arthur C. Clarke");
             db.Authors.Add(clarke);
             db.Books.Add(new Book
             {
@@ -548,8 +548,8 @@ public class GetCatalogSnapshotHandlerTests
         // Order WorkAuthor, not the Book-level rollup.
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
-            var king = new Author { Name = "Stephen King" };
+            var asimov = Author.Create("Isaac Asimov");
+            var king = Author.Create("Stephen King");
             db.Authors.AddRange(asimov, king);
             db.Books.Add(new Book
             {
@@ -578,7 +578,7 @@ public class GetCatalogSnapshotHandlerTests
         int firstId, secondId, bookId;
         using (var db = _factory.CreateDbContext())
         {
-            var a = new Author { Name = "A" };
+            var a = Author.Create("A");
             var book = new Book { Title = "Anthology" };
             var first = new Work { Title = "First captured", WorkAuthors = [new WorkAuthor { Author = a, Order = 0 }] };
             var second = new Work { Title = "Second captured", WorkAuthors = [new WorkAuthor { Author = a, Order = 0 }] };
@@ -610,7 +610,7 @@ public class GetCatalogSnapshotHandlerTests
         // "(unknown)") so the by-line conveys "edited by X".
         using (var db = _factory.CreateDbContext())
         {
-            var editor = new Author { Name = "Catherine Soanes" };
+            var editor = Author.Create("Catherine Soanes");
             db.Authors.Add(editor);
             db.Books.Add(new Book
             {
@@ -648,7 +648,7 @@ public class GetCatalogSnapshotHandlerTests
         int bookIdToKeep, bookIdToDelete;
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             var keeper = new Book { Title = "Foundation", Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] };
             var doomed = new Book { Title = "Doomed", Works = [new Work { Title = "Doomed", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] };
@@ -680,7 +680,7 @@ public class GetCatalogSnapshotHandlerTests
         // code can iterate without null-checks.
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             var dead = new Book { Title = "Doomed", Works = [new Work { Title = "Doomed", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] };
             db.Books.Add(dead);
@@ -707,7 +707,7 @@ public class GetCatalogSnapshotHandlerTests
         DateTime midpoint;
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             db.Books.Add(new Book { Title = "Foundation", Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] });
             var doomed = new Book { Title = "Doomed", Works = [new Work { Title = "Doomed", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] };
@@ -753,7 +753,7 @@ public class GetCatalogSnapshotHandlerTests
         int doomedId;
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             var doomed = new Book { Title = "Doomed", Works = [new Work { Title = "Doomed", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }] };
             db.Books.Add(doomed);

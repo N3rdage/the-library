@@ -38,7 +38,7 @@ public class AuthorResolverTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            db.Authors.Add(new Author { Name = "Douglas Preston" });
+            db.Authors.Add(Author.Create("Douglas Preston"));
             await db.SaveChangesAsync();
         }
 

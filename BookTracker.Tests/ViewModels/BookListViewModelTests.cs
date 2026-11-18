@@ -16,12 +16,12 @@ public class BookListViewModelTests
         using var db = factory.CreateDbContext();
 
         // Authors: Stephen King canonical, Richard Bachman as alias.
-        var king = new Author { Name = "Stephen King" };
+        var king = Author.Create("Stephen King");
         db.Authors.Add(king);
         await db.SaveChangesAsync();
 
-        var bachman = new Author { Name = "Richard Bachman", CanonicalAuthorId = king.Id };
-        var christie = new Author { Name = "Agatha Christie" };
+        var bachman = TestAuthors.Alias("Richard Bachman", of: king);
+        var christie = Author.Create("Agatha Christie");
         db.Authors.AddRange(bachman, christie);
 
         var horror = new Genre { Name = "Horror" };
@@ -164,7 +164,7 @@ public class BookListViewModelTests
         int seriesId;
         using (var db = factory.CreateDbContext())
         {
-            var herbert = new Author { Name = "Frank Herbert" };
+            var herbert = Author.Create("Frank Herbert");
             db.Authors.Add(herbert);
             var dune = new Series { Name = "Dune", Type = SeriesType.Series };
             db.Series.Add(dune);
@@ -199,7 +199,7 @@ public class BookListViewModelTests
         int seriesId;
         using (var db = factory.CreateDbContext())
         {
-            var herbert = new Author { Name = "Frank Herbert" };
+            var herbert = Author.Create("Frank Herbert");
             var dune = new Series { Name = "Dune", Type = SeriesType.Series };
             db.Books.AddRange(
                 new Book { Title = "Dune Messiah", Series = dune, SeriesOrder = 2, Works = [new Work { Title = "Dune Messiah", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] }] },
@@ -231,7 +231,7 @@ public class BookListViewModelTests
         int seriesId;
         using (var db = factory.CreateDbContext())
         {
-            var herbert = new Author { Name = "Frank Herbert" };
+            var herbert = Author.Create("Frank Herbert");
             var dune = new Series { Name = "Dune", Type = SeriesType.Series };
             db.Books.Add(new Book
             {
@@ -308,7 +308,7 @@ public class BookListViewModelTests
         var factory = new TestDbContextFactory();
         using (var db = factory.CreateDbContext())
         {
-            var king = new Author { Name = "Stephen King" };
+            var king = Author.Create("Stephen King");
             db.Authors.Add(king);
 
             db.Books.AddRange(
@@ -359,9 +359,9 @@ public class BookListViewModelTests
         var factory = new TestDbContextFactory();
         using (var db = factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
-            var king = new Author { Name = "Stephen King" };
-            var bradbury = new Author { Name = "Ray Bradbury" };
+            var asimov = Author.Create("Isaac Asimov");
+            var king = Author.Create("Stephen King");
+            var bradbury = Author.Create("Ray Bradbury");
             db.Authors.AddRange(asimov, king, bradbury);
             await db.SaveChangesAsync();
 
@@ -430,9 +430,9 @@ public class BookListViewModelTests
         var factory = new TestDbContextFactory();
         using (var db = factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
-            var king = new Author { Name = "Stephen King" };
-            var bradbury = new Author { Name = "Ray Bradbury" };
+            var asimov = Author.Create("Isaac Asimov");
+            var king = Author.Create("Stephen King");
+            var bradbury = Author.Create("Ray Bradbury");
             db.Authors.AddRange(asimov, king, bradbury);
             await db.SaveChangesAsync();
 
@@ -471,8 +471,8 @@ public class BookListViewModelTests
         var factory = new TestDbContextFactory();
         using (var db = factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
-            var king = new Author { Name = "Stephen King" };
+            var asimov = Author.Create("Isaac Asimov");
+            var king = Author.Create("Stephen King");
             db.Authors.AddRange(asimov, king);
             await db.SaveChangesAsync();
 
@@ -533,7 +533,7 @@ public class BookListViewModelTests
         string? notes = null)
     {
         using var db = factory.CreateDbContext();
-        var author = new Author { Name = "Solo Author" };
+        var author = Author.Create("Solo Author");
         db.Authors.Add(author);
         var book = new Book
         {
@@ -554,7 +554,7 @@ public class BookListViewModelTests
         var factory = new TestDbContextFactory();
         using (var db = factory.CreateDbContext())
         {
-            var a = new Author { Name = "A" };
+            var a = Author.Create("A");
             db.Authors.Add(a);
             db.Books.AddRange(
                 new Book { Title = "Unread One", Status = BookStatus.Unread, Works = [new Work { Title = "Unread One", WorkAuthors = [new WorkAuthor { Author = a, Order = 0 }] }] },
