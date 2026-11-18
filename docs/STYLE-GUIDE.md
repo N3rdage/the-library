@@ -150,7 +150,7 @@ Recurring values across both surfaces. Use these rungs unless there's a specific
 | 6 | Inner spacing inside result cards (`ResultPage.xaml:59`) |
 | 8 | CornerRadius on Borders / buttons; small element gaps (`FindPage.xaml:53`) |
 | 12 | Standard component padding (the `Card` style, `Styles.xaml:486`; `ResultPage.xaml:42`); standard element spacing in stacks (`ResultPage.xaml:14`) |
-| 14 | Horizontal padding of code-built rows (`FindPage.xaml.cs:277`, `SeriesGapsPage.xaml.cs:150`) |
+| 14 | Horizontal padding of code-built rows (`FindPage.xaml.cs:272`, `SeriesGapsPage.xaml.cs:151`) |
 | 16 | Spacing between sections of a sheet (`StatusSheetPage.xaml:13`); top padding under a header (`FindPage.xaml:53`, `WishlistPage.xaml:26`) |
 | 20 | Page content padding (`StatusSheetPage.xaml:13`, `ResultPage.xaml:14`, `FindPage.xaml:120`) |
 | 24 | Header banner horizontal padding (`FindPage.xaml:32`) |
@@ -246,7 +246,7 @@ In-content header that replaces the Shell navigation bar. Espresso (`HeaderL`/`H
 
 Reference: `Pages/FindPage.xaml:29–50`. The page sets `Shell.NavBarIsVisible="False"` to hide the Shell bar, then renders this banner as the topmost grid row. Find is the only page with a banner.
 
-The other pages (Wishlist and Gaps tabs, `ResultPage`, `AuthorWorksPage`, the status sheet) keep the Shell navigation bar with a title; on the drill-down pages it carries the back button.
+The other pages (Wishlist and Gaps tabs, `ResultPage`, `AuthorWorksPage`) keep the Shell navigation bar with a title; on the drill-down pages it carries the back button. The status sheet is pushed modally (`PushModalAsync`) as a bare `ContentPage`, so it draws its own "Sync & account" heading and Close button instead of a navigation bar.
 
 ### Web nav bar (themed)
 

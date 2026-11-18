@@ -13,7 +13,7 @@ Two sections:
   assumption breaks.
 
 A paid-down item is deleted from this file. Code comments cite some ids that are
-not listed here (for example TD-2, TD-6, TD-10, TD-11, TD-15a, TD-15b, TD-16, TD-17):
+not listed here (for example TD-2, TD-6, TD-15a, TD-15b, TD-16, TD-17):
 an id not listed below is closed, and git history holds its entry.
 
 ## Open — to address
