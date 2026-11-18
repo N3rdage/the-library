@@ -97,6 +97,30 @@ public class AuthorAdminCommandsTests
     }
 
     [Fact]
+    public async Task MarkAuthorAsAliasOf_TargetAlreadyAliasOfThisRow_IsANoOp_AndNeverPointsAtItself()
+    {
+        // If B is an alias of A, marking A as an alias of B re-roots to A
+        // itself; the handler must leave A canonical and B pointing at A.
+        int aId, bId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var a = Author.Create("A");
+            var b = TestAuthors.Alias("B", of: a);
+            db.Authors.AddRange(a, b);
+            await db.SaveChangesAsync();
+            aId = a.Id;
+            bId = b.Id;
+        }
+
+        var result = await new MarkAuthorAsAliasOfHandler(_factory).HandleAsync(new MarkAuthorAsAliasOf(aId, bId));
+
+        Assert.False(result.Success);
+        using var db2 = _factory.CreateDbContext();
+        Assert.Null(db2.Authors.Single(x => x.Id == aId).CanonicalAuthorId);
+        Assert.Equal(aId, db2.Authors.Single(x => x.Id == bId).CanonicalAuthorId);
+    }
+
+    [Fact]
     public async Task PromoteAuthorToCanonical_DropsCanonicalLink()
     {
         int bachmanId;

@@ -28,6 +28,11 @@ public sealed class MarkAuthorAsAliasOfHandler(IDbContextFactory<BookTrackerDbCo
         // Re-root if the chosen "canonical" is itself an alias — avoids alias-of-alias chains.
         var root = canonical.CanonicalAuthor ?? canonical;
 
+        // The target is already an alias of this row (B → A, then "A is an
+        // alias of B"): re-rooting resolves to the row itself, and an author
+        // must never point at itself. The two are already linked, so no-op.
+        if (root.Id == alias.Id) return AuthorAdminResult.NoOp;
+
         alias.MarkAliasOf(root);
 
         // Re-point any prior aliases that targeted this row at the new root.
