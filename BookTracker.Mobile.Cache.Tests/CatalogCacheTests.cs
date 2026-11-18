@@ -691,6 +691,63 @@ public class CatalogCacheTests
     }
 
     [Fact]
+    public async Task InitAsync_BackfillsContributorsJsonForLegacyRowsWrittenBeforeTheColumnExisted()
+    {
+        // Same shape as the TitleLower backfill above. CreateTableAsync ALTERs
+        // book_works to add ContributorsJson but leaves existing rows NULL, and
+        // GetBookEnrichedDetailAsync's JsonSerializer.Deserialize would throw on
+        // them. InitAsync stamps '[]' on every NULL / empty row.
+        var path = Path.Combine(Path.GetTempPath(), $"booktracker-cache-backfill-{Guid.NewGuid():N}.db");
+
+        // Step 1 — populate a two-Work book, then null one row's column and
+        // blank the other via a parallel SQLite connection.
+        {
+            var cache = new CatalogCache();
+            await cache.InitAsync(path);
+            await cache.PopulateAsync(SampleSnapshot(
+                books:
+                [
+                    new(1, "Foundation Omnibus", "Asimov", ["Asimov"], "Read", 5, [],
+                        null, null, null,
+                        Editions: [],
+                        Works:
+                        [
+                            new WorkSnapshot(201, "Foundation", "Asimov",
+                                Contributors: [new AuthorContribution("Asimov", "Author")]),
+                            new WorkSnapshot(202, "Foundation and Empire", "Asimov",
+                                Contributors: [new AuthorContribution("Asimov", "Author")]),
+                        ]),
+                ]));
+
+            var parallel = new SQLite.SQLiteAsyncConnection(path);
+            await parallel.ExecuteAsync("UPDATE book_works SET ContributorsJson = NULL WHERE WorkId = 201");
+            await parallel.ExecuteAsync("UPDATE book_works SET ContributorsJson = '' WHERE WorkId = 202");
+            Assert.Equal(1, await parallel.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM book_works WHERE ContributorsJson IS NULL"));
+            await parallel.CloseAsync();
+        }
+
+        // Step 2 — re-open. The backfill turns both rows into '[]' and the
+        // enriched detail reads them as empty contributor lists.
+        {
+            var cache = new CatalogCache();
+            await cache.InitAsync(path);
+
+            var check = new SQLite.SQLiteAsyncConnection(path);
+            Assert.Equal(0, await check.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM book_works WHERE ContributorsJson IS NULL OR ContributorsJson = ''"));
+            Assert.Equal(2, await check.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM book_works WHERE ContributorsJson = '[]'"));
+            await check.CloseAsync();
+
+            var detail = await cache.GetBookEnrichedDetailAsync(1);
+            Assert.NotNull(detail);
+            Assert.Equal(2, detail!.Works.Count);
+            Assert.All(detail.Works, w => Assert.Empty(w.Contributors!));
+        }
+    }
+
+    [Fact]
     public async Task ApplyDeltaAsync_UpdatesTitleLowerOnUpsertSoSearchHitsNewTitle()
     {
         // Regression test for the TitleLower invariant. If ApplyDelta
