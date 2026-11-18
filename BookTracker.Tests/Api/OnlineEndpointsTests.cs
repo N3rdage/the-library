@@ -9,8 +9,9 @@ using NSubstitute;
 
 namespace BookTracker.Tests.Api;
 
-// The response shapes of GET /api/online/isbn/{isbn}. The owned-work query
-// itself is covered against the Testcontainer by FindOwnedWorkTests.
+// The response shapes of the online endpoints. The Application queries
+// behind them are covered against the Testcontainer by FindOwnedWorkTests and
+// GetOwnedWorksByAuthorTests.
 [Trait("Category", TestCategories.Unit)]
 public class OnlineEndpointsTests
 {
@@ -96,5 +97,66 @@ public class OnlineEndpointsTests
         await _dispatcher.Received(1).Query(
             new FindOwnedWork("055212475X", "The Colour of Magic", "Terry Pratchett"),
             Arg.Any<CancellationToken>());
+    }
+
+    // GET /api/online/author-works. The ownership query itself is covered
+    // against the Testcontainer by GetOwnedWorksByAuthorTests.
+    private Task<IResult> HandleAuthorWorksAsync(string? author) =>
+        OnlineEndpoints.HandleAuthorWorksAsync(author, _lookup, _dispatcher, CancellationToken.None);
+
+    private static OnlineAuthorWork Work(string key, string? title, int editions) =>
+        new(key, title, 1990, $"https://covers.openlibrary.org/b/id/{editions}-M.jpg", editions, null);
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task BlankAuthor_isABadRequest_andNothingIsCalled(string? author)
+    {
+        var result = await HandleAuthorWorksAsync(author);
+
+        var bad = Assert.IsType<BadRequest<string>>(result);
+        Assert.False(string.IsNullOrWhiteSpace(bad.Value));
+        await _lookup.DidNotReceive().GetAuthorWorksAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _dispatcher.DidNotReceive().Query(Arg.Any<GetOwnedWorksByAuthor>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProviderWorks_carryTheOwnedBookIdsTheQueryReturns()
+    {
+        _lookup.GetAuthorWorksAsync("Terry Pratchett", Arg.Any<CancellationToken>()).Returns(
+        [
+            Work("/works/OL1W", "The Colour of Magic", 90),
+            Work("/works/OL2W", "Small Gods", 60),
+            Work("/works/OL3W", null, 5),
+        ]);
+        _dispatcher.Query(Arg.Any<GetOwnedWorksByAuthor>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, int> { ["The Colour of Magic"] = 42 });
+
+        var result = await HandleAuthorWorksAsync("  Terry Pratchett ");
+
+        var ok = Assert.IsType<Ok<OnlineAuthorWorks>>(result);
+        Assert.Equal("Terry Pratchett", ok.Value!.Author);
+        Assert.Equal(new int?[] { 42, null, null }, ok.Value.Works.Select(w => w.OwnedBookId));
+        Assert.Equal(Work("/works/OL2W", "Small Gods", 60), ok.Value.Works[1]);
+        await _dispatcher.Received(1).Query(
+            Arg.Is<GetOwnedWorksByAuthor>(q =>
+                q != null
+                && q.Author == "Terry Pratchett"
+                && q.Titles.SequenceEqual(new[] { "The Colour of Magic", "Small Gods" })),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task EmptyProviderList_isOkWithNoWorks_andNoLibraryQuery()
+    {
+        _lookup.GetAuthorWorksAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns([]);
+
+        var result = await HandleAuthorWorksAsync("Nobody Atall");
+
+        var ok = Assert.IsType<Ok<OnlineAuthorWorks>>(result);
+        Assert.Equal("Nobody Atall", ok.Value!.Author);
+        Assert.Empty(ok.Value.Works);
+        await _dispatcher.DidNotReceive().Query(Arg.Any<GetOwnedWorksByAuthor>(), Arg.Any<CancellationToken>());
     }
 }

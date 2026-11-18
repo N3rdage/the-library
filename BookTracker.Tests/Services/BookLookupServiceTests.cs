@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using BookTracker.Shared.Online;
 using BookTracker.Web.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -378,6 +379,73 @@ public class BookLookupServiceTests
         Assert.Equal("Foundation series", name);
     }
 
+    [Fact]
+    public async Task GetAuthorWorksAsync_AsksOpenLibraryForTheAuthorPhrase_AndMapsTheDocs()
+    {
+        var handler = new FakeHandler
+        {
+            ["openlibrary.org/search.json"] = OkJson("""
+                {
+                  "docs": [
+                    { "key": "/works/OL2W", "title": "Small Gods", "first_publish_year": 1992, "edition_count": 60 },
+                    { "key": "/works/OL1W", "title": "The Colour of Magic", "first_publish_year": 1983, "edition_count": 90, "cover_i": 123 },
+                    { "title": "No key, so no work" }
+                  ]
+                }
+                """)
+        };
+
+        var svc = CreateService(handler, troveKey: "");
+        var works = await svc.GetAuthorWorksAsync("  Martin \"Doc\" Grant ", CancellationToken.None);
+
+        var request = Uri.UnescapeDataString(Assert.Single(handler.Requests));
+        Assert.Contains("q=author:\"Martin \\\"Doc\\\" Grant\"", request);
+        Assert.Contains("limit=100", request);
+        Assert.Contains("fields=key,title,first_publish_year,edition_count,cover_i", request);
+        Assert.Contains("sort=editions", request);
+        Assert.Equal(
+            new[]
+            {
+                new OnlineAuthorWork("/works/OL1W", "The Colour of Magic", 1983, "https://covers.openlibrary.org/b/id/123-M.jpg", 90, null),
+                new OnlineAuthorWork("/works/OL2W", "Small Gods", 1992, null, 60, null),
+            },
+            works);
+    }
+
+    [Fact]
+    public async Task GetAuthorWorksAsync_ProviderError_ReturnsEmpty()
+    {
+        var handler = new FakeHandler { ["openlibrary.org/search.json"] = new HttpResponseMessage(HttpStatusCode.InternalServerError) };
+
+        var works = await CreateService(handler, troveKey: "").GetAuthorWorksAsync("Terry Pratchett", CancellationToken.None);
+
+        Assert.Empty(works);
+    }
+
+    [Fact]
+    public async Task GetAuthorWorksAsync_TransportException_ReturnsEmpty()
+    {
+        var handler = new FakeHandler { Throws = new HttpRequestException("connection reset") };
+
+        var works = await CreateService(handler, troveKey: "").GetAuthorWorksAsync("Terry Pratchett", CancellationToken.None);
+
+        Assert.Empty(works);
+        Assert.Single(handler.Requests);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task GetAuthorWorksAsync_BlankAuthor_MakesNoRequest(string author)
+    {
+        var handler = new FakeHandler();
+
+        var works = await CreateService(handler, troveKey: "").GetAuthorWorksAsync(author, CancellationToken.None);
+
+        Assert.Empty(works);
+        Assert.Empty(handler.Requests);
+    }
+
     private static BookLookupService CreateService(FakeHandler handler, string troveKey)
     {
         var http = new HttpClient(handler);
@@ -395,6 +463,10 @@ public class BookLookupServiceTests
         private readonly Dictionary<string, HttpResponseMessage> _routes = new();
         public List<string> Requests { get; } = [];
 
+        // Set to make every request fail at the transport, as a dropped
+        // connection would, rather than with a status code.
+        public Exception? Throws { get; init; }
+
         public HttpResponseMessage this[string urlSubstring]
         {
             set => _routes[urlSubstring] = value;
@@ -404,6 +476,7 @@ public class BookLookupServiceTests
         {
             var url = request.RequestUri?.ToString() ?? "";
             Requests.Add(url);
+            if (Throws is not null) throw Throws;
             foreach (var (substring, response) in _routes)
             {
                 if (url.Contains(substring, StringComparison.OrdinalIgnoreCase))

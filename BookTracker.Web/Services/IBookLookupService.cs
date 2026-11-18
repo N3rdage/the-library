@@ -1,3 +1,5 @@
+using BookTracker.Shared.Online;
+
 namespace BookTracker.Web.Services;
 
 public interface IBookLookupService
@@ -10,4 +12,10 @@ public interface IBookLookupService
     // be non-empty.
     Task<IReadOnlyList<BookSearchCandidate>> SearchByTitleAuthorAsync(
         string? title, string? author, CancellationToken ct);
+
+    // Bookshelf's "Missing only": up to 100 of an author's works from Open
+    // Library, most editions first. OwnedBookId is always null here; the
+    // endpoint fills it from the library. Empty on a blank author or a
+    // provider failure.
+    Task<IReadOnlyList<OnlineAuthorWork>> GetAuthorWorksAsync(string author, CancellationToken ct);
 }

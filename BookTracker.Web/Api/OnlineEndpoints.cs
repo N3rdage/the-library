@@ -15,6 +15,7 @@ public static class OnlineEndpoints
     public static IEndpointRouteBuilder MapOnlineEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/online/isbn/{isbn}", HandleAsync);
+        app.MapGet("/api/online/author-works", HandleAuthorWorksAsync);
         return app;
     }
 
@@ -47,5 +48,38 @@ public static class OnlineEndpoints
             found.DatePrinted?.Year,
             found.Source,
             owned));
+    }
+
+    // Internal for the same reason as HandleAsync. The title match is the
+    // Application query's (its normaliser is internal there); this only
+    // copies the BookIds it returns onto Open Library's rows.
+    internal static async Task<IResult> HandleAuthorWorksAsync(
+        string? author,
+        IBookLookupService lookup,
+        IDispatcher dispatcher,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(author))
+            return Results.BadRequest("An author name is required.");
+
+        var name = author.Trim();
+        var works = await lookup.GetAuthorWorksAsync(name, ct);
+        if (works.Count == 0) return Results.Ok(new OnlineAuthorWorks(name, []));
+
+        var titles = works
+            .Select(w => w.Title)
+            .OfType<string>()
+            .Distinct()
+            .ToList();
+        var owned = await dispatcher.Query(new GetOwnedWorksByAuthor(name, titles), ct);
+
+        return Results.Ok(new OnlineAuthorWorks(
+            name,
+            works
+                .Select(w => w with
+                {
+                    OwnedBookId = w.Title is not null && owned.TryGetValue(w.Title, out var bookId) ? bookId : null,
+                })
+                .ToList()));
     }
 }
