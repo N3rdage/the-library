@@ -18,6 +18,9 @@ public class FindOwnedWorkTests
     private async Task<int> SeedBookAsync(string bookTitle, string workTitle, string author, string isbn)
     {
         await using var db = _factory.CreateDbContext();
+        // Author.Name is unique, so a second book by the same author reuses the row.
+        var authorRow = await db.Authors.SingleOrDefaultAsync(a => a.Name == author)
+            ?? new Author { Name = author };
         var book = new Book
         {
             Title = bookTitle,
@@ -26,7 +29,7 @@ public class FindOwnedWorkTests
         book.AttachWork(new Work
         {
             Title = workTitle,
-            WorkAuthors = [new WorkAuthor { Author = new Author { Name = author }, Order = 0, Role = AuthorRole.Author }],
+            WorkAuthors = [new WorkAuthor { Author = authorRow, Order = 0, Role = AuthorRole.Author }],
         });
         db.Books.Add(book);
         await db.SaveChangesAsync();
