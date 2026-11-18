@@ -178,7 +178,7 @@ public static class ProgramSetup
         builder.Services.AddScoped<AIProviderFactory>(sp =>
         {
             var factory = new AIProviderFactory(
-                sp.GetRequiredService<IDbContextFactory<BookTrackerDbContext>>(),
+                sp.GetRequiredService<IDispatcher>(),
                 sp.GetRequiredService<IOptions<AIOptions>>(),
                 sp.GetRequiredService<ILoggerFactory>());
             factory.Initialize();

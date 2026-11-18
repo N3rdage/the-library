@@ -1,14 +1,10 @@
 using System.Text.Json;
-using BookTracker.Application.Genres;
-using BookTracker.Data;
-using BookTracker.Data.Models;
-using BookTracker.Shared.Catalog;
-using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.Services;
 
 /// <summary>
-/// Shared JSON parsing and prompt building used by all AI provider implementations.
+/// Shared JSON parsing and prompt templates used by all AI provider implementations.
+/// The library text the templates carry comes from <see cref="AiPromptContext"/>.
 /// </summary>
 internal static class SharedParsers
 {
@@ -192,79 +188,4 @@ Rules:
 - Give a suitability score from 1 (poor fit) to 10 (perfect fit).
 - Mention similar books already in their library.
 - Respond with valid JSON: {{""verdict"": ""One sentence."", ""suitability_score"": 8, ""analysis"": ""Details."", ""pros"": [""Reason""], ""cons"": [""Reason""], ""similar_in_library"": [""Title""]}}";
-
-    public static async Task<string> BuildLibraryContextAsync(BookTrackerDbContext db, CancellationToken ct)
-    {
-        // Author stats: each WorkAuthor row contributes one tally to its Author.
-        // Co-authored Works contribute to BOTH credited authors (post-PR2);
-        // pen-names stay separate (no canonical rollup here — this is the
-        // AI-prompt context where preserving published author names matters).
-        var topAuthors = await db.WorkAuthors
-            .GroupBy(wa => wa.Author.Name)
-            .Select(g => new
-            {
-                Author = g.Key,
-                Count = g.Count(),
-                AvgRating = g.SelectMany(wa => wa.Work.Books).Average(b => (double?)b.Rating) ?? 0.0
-            })
-            .OrderByDescending(a => a.Count)
-            .Take(15)
-            .ToListAsync(ct);
-
-        var topGenres = await GenreReads.TopGenresAsync(db, 10, ct);
-
-        var highlyRated = await db.Books
-            .Include(b => b.Works)
-            .Where(b => b.Rating >= 4)
-            .OrderByDescending(b => b.Rating).ThenBy(b => b.Title)
-            .Take(20)
-            .Select(b => new
-            {
-                b.Title,
-                Author = string.Join(", ", b.Works.SelectMany(w => w.Authors.Select(a => a.Name)).Distinct()),
-                b.Rating
-            })
-            .ToListAsync(ct);
-
-        var incompleteSeries = await db.Series
-            .Include(s => s.Books)
-            .Where(s => s.Type == SeriesType.Series && s.ExpectedCount != null)
-            .ToListAsync(ct);
-
-        var gapsText = incompleteSeries
-            .Select(s =>
-            {
-                // Only true numbered volumes occupy a slot (shared rule —
-                // SeriesSlots.OccupiesNumberedSlot). A floored interquel ("4.5",
-                // SeriesOrderDisplay set) shares an int for sort adjacency but
-                // must NOT count as owning that slot, or it masks a genuinely-
-                // missing numbered volume.
-                var ownedSlots = s.Books
-                    .Where(b => SeriesSlots.OccupiesNumberedSlot(b.SeriesOrder, b.SeriesOrderDisplay))
-                    .Select(b => b.SeriesOrder!.Value)
-                    .Where(o => o <= s.ExpectedCount!.Value)
-                    .ToHashSet();
-                var missing = Enumerable.Range(1, s.ExpectedCount!.Value)
-                    .Where(i => !ownedSlots.Contains(i))
-                    .ToList();
-                return (s, OwnedCount: ownedSlots.Count, Missing: missing);
-            })
-            .Where(x => x.Missing.Count > 0)
-            .Select(x => $"- {x.s.Name} by {x.s.Author ?? "various"}: have {x.OwnedCount}/{x.s.ExpectedCount!.Value}, missing: {string.Join(", ", x.Missing)}")
-            .ToList();
-
-        return $@"Here's the reader's library profile:
-
-Top authors:
-{string.Join("\n", topAuthors.Select(a => $"- {a.Author}: {a.Count} books, avg rating {a.AvgRating:F1}/5"))}
-
-Top genres:
-{string.Join("\n", topGenres.Select(g => $"- {g.Name}: {g.Count} books"))}
-
-Highly rated books (4-5 stars):
-{string.Join("\n", highlyRated.Select(b => $"- \"{b.Title}\" by {b.Author} ({b.Rating}/5)"))}
-
-Incomplete series (gaps to fill):
-{(gapsText.Count > 0 ? string.Join("\n", gapsText) : "No incomplete series.")}";
-    }
 }
