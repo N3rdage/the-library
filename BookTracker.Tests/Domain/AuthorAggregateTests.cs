@@ -80,6 +80,20 @@ public class AuthorAggregateTests
     }
 
     [Fact]
+    public void MarkAliasOf_anUnsavedCanonical_setsTheNavigationAndLeavesTheKeyNull()
+    {
+        // EF fills the key from the navigation on insert; a 0 would be a real
+        // (wrong) key value.
+        var king = Author.Create("Stephen King");
+        var bachman = Author.Create("Richard Bachman");
+
+        bachman.MarkAliasOf(king);
+
+        Assert.Null(bachman.CanonicalAuthorId);
+        Assert.Same(king, bachman.CanonicalAuthor);
+    }
+
+    [Fact]
     public void PromoteToCanonical_clearsKeyAndNavigation()
     {
         var king = Author.Create("Stephen King");

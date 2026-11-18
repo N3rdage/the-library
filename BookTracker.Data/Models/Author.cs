@@ -64,7 +64,9 @@ public class Author
     public void MarkAliasOf(Author canonical)
     {
         CanonicalAuthor = canonical;
-        CanonicalAuthorId = canonical.Id;
+        // An unsaved canonical has no key yet; leaving the key null lets EF
+        // fill it from the navigation on insert instead of writing a 0.
+        CanonicalAuthorId = canonical.Id == 0 ? null : canonical.Id;
     }
 
     /// <summary>Makes this Author canonical (standalone) by clearing its alias pointer.</summary>
