@@ -1,4 +1,5 @@
 using BookTracker.Mobile.Cache;
+using BookTracker.Mobile.Cache.Presentation;
 using BookTracker.Mobile.Services;
 using BookTracker.Mobile.Theming;
 using BookTracker.Shared.Catalog;
@@ -123,7 +124,7 @@ public partial class FindPage : ContentPage
         // (e.g. a misread then the real read) must not stack a second ResultPage.
         if (Interlocked.Exchange(ref _scanHandled, 1) == 1) return;
 
-        var isbn = CleanIsbn(raw);
+        var isbn = IsbnInput.CleanIsbn(raw);
         await MainThread.InvokeOnMainThreadAsync(async () =>
         {
             // Confirm the read before the result renders: a haptic tick + a quick
@@ -143,7 +144,7 @@ public partial class FindPage : ContentPage
         _searchCts = new CancellationTokenSource();
         var ct = _searchCts.Token;
 
-        if (LooksLikeIsbn(query))
+        if (IsbnInput.LooksLikeIsbn(query))
         {
             // ISBN path — don't search authors/works; resolve on Enter/Search.
             ResultsLayout.Children.Clear();
@@ -186,15 +187,9 @@ public partial class FindPage : ContentPage
     private async void OnSearchCompleted(object? sender, EventArgs e)
     {
         var query = (SearchEntry.Text ?? "").Trim();
-        if (!LooksLikeIsbn(query)) return;
-        await Navigation.PushAsync(new ResultPage(_cache, _httpFactory, CleanIsbn(query)));
+        if (!IsbnInput.LooksLikeIsbn(query)) return;
+        await Navigation.PushAsync(new ResultPage(_cache, _httpFactory, IsbnInput.CleanIsbn(query)));
     }
-
-    // Strip to digits + a trailing ISBN-10 check 'X'. Shared by the typed path
-    // and the scanner so a noisy barcode payload normalises the same way a typed
-    // ISBN does before the cache lookup.
-    private static string CleanIsbn(string raw) =>
-        new string(raw.Where(c => char.IsDigit(c) || c is 'X' or 'x').ToArray());
 
     private void RenderResults()
     {
@@ -287,7 +282,7 @@ public partial class FindPage : ContentPage
     {
         var titleLabel = new Label { Text = book.Title, FontSize = 16, FontAttributes = FontAttributes.Bold, LineBreakMode = LineBreakMode.WordWrap };
         titleLabel.SetThemeColor(Label.TextColorProperty, "TextL", "TextD");
-        var metaLabel = new Label { Text = FormatBookMeta(book), FontSize = 13, LineBreakMode = LineBreakMode.WordWrap };
+        var metaLabel = new Label { Text = BookMetaFormatter.FormatBookMeta(book), FontSize = 13, LineBreakMode = LineBreakMode.WordWrap };
         metaLabel.SetThemeColor(Label.TextColorProperty, "TextMutedL", "TextMutedD");
 
         var coverPlaceholder = new Label { Text = "📖", FontSize = 24, HorizontalOptions = LayoutOptions.Center, VerticalOptions = LayoutOptions.Center };
@@ -315,35 +310,9 @@ public partial class FindPage : ContentPage
         return border;
     }
 
-    private static string FormatBookMeta(BookSnapshot book)
-    {
-        var parts = new List<string>();
-        if (book.Rating > 0)
-        {
-            var clamped = Math.Clamp(book.Rating, 0, 5);
-            parts.Add(new string('★', clamped) + new string('☆', 5 - clamped));
-        }
-        if (!string.IsNullOrWhiteSpace(book.Status)) parts.Add(book.Status);
-        return parts.Count == 0 ? "" : string.Join("  ·  ", parts);
-    }
-
     private async Task OpenInAppAsync(int bookId)
     {
         try { await Launcher.Default.OpenAsync(new Uri($"{AppConfig.ApiBaseUrl}/books/{bookId}")); }
         catch { /* best-effort */ }
-    }
-
-    // 10–13 chars, digits with an optional trailing X (ISBN-10 check digit).
-    private static bool LooksLikeIsbn(string q)
-    {
-        if (q.Length is < 10 or > 13) return false;
-        for (int i = 0; i < q.Length; i++)
-        {
-            var c = q[i];
-            if (char.IsDigit(c)) continue;
-            if ((c is 'X' or 'x') && i == q.Length - 1) continue;
-            return false;
-        }
-        return true;
     }
 }

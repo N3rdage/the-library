@@ -1,4 +1,5 @@
 using BookTracker.Mobile.Cache;
+using BookTracker.Mobile.Cache.Presentation;
 using BookTracker.Mobile.Services;
 using BookTracker.Mobile.Theming;
 using BookTracker.Shared.Wishlist;
@@ -70,45 +71,26 @@ public partial class WishlistPage : ContentPage
         {
             case Sort.Priority:
                 // High → Medium → Low(/other) buckets, each titled, rows by title.
-                foreach (var (label, inBucket) in PriorityBuckets)
+                foreach (var (label, rows) in WishlistOrdering.ByPriority(_items))
                 {
-                    var rows = _items.Where(inBucket)
-                        .OrderBy(i => i.Title, StringComparer.OrdinalIgnoreCase)
-                        .ToList();
-                    if (rows.Count == 0) continue;
                     ItemsLayout.Children.Add(GroupHeader(label));
                     foreach (var it in rows) ItemsLayout.Children.Add(BuildItemRow(it));
                 }
                 break;
 
             case Sort.Author:
-                foreach (var it in _items
-                    .OrderBy(i => i.Author, StringComparer.OrdinalIgnoreCase)
-                    .ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase))
+                foreach (var it in WishlistOrdering.ByAuthor(_items))
                     ItemsLayout.Children.Add(BuildItemRow(it));
                 break;
 
             case Sort.Series:
                 // Series members first, grouped by series and in reading order;
                 // standalone wishlist entries fall to the end, by title.
-                foreach (var it in _items
-                    .OrderBy(i => i.SeriesId is null)
-                    .ThenBy(i => i.SeriesId ?? int.MaxValue)
-                    .ThenBy(i => i.SeriesOrder ?? int.MaxValue)
-                    .ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase))
+                foreach (var it in WishlistOrdering.BySeries(_items))
                     ItemsLayout.Children.Add(BuildItemRow(it));
                 break;
         }
     }
-
-    // High / Medium / everything-else (Low). "Low" catches any other server
-    // priority string so no row is silently dropped.
-    private static readonly (string Label, Func<WishlistItemSnapshot, bool> InBucket)[] PriorityBuckets =
-    [
-        ("High", i => i.Priority == "High"),
-        ("Medium", i => i.Priority == "Medium"),
-        ("Low", i => i.Priority != "High" && i.Priority != "Medium"),
-    ];
 
     private Label GroupHeader(string text)
     {
