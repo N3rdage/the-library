@@ -94,9 +94,13 @@ We are taking the **spine** of DDD + CQRS, not the cathedral. Out of scope:
 > **A ViewModel, a page, or an API endpoint must never create or touch a `DbContext`.
 > They talk to `BookTracker.Application` and nothing below it.**
 
-With `BookTracker.Application` as a **separate project**, the Web project will not reference
-`BookTracker.Data`'s `DbContext` at all (except DI registration at the composition root). The
-compiler enforces the seam — an agent *cannot* accidentally reach across it.
+The compiler does not enforce the seam: Web references `BookTracker.Data` (the composition root
+and the Data enums need it). `BookTracker.Tests/Architecture/WebLayeringTests.cs` enforces it
+instead, so an agent that reaches across it fails the unit tests. Five Web types may hold
+a `DbContext`, its factory or a `DbSet<>`: `ProgramSetup` (the composition root),
+`WarmupEndpoints`, `CoverMirrorBackgroundService`, `CoverMirrorQueue` and
+`EditionFormatBackfillService`. The same test keeps Data entities out of ViewModels and
+components.
 
 ### Write side (commands)
 
@@ -165,7 +169,7 @@ These are binding for the whole arc.
 
 | # | Rule |
 |---|------|
-| C1 | ViewModels / pages / API endpoints never touch `DbContext`. They call Application handlers only. |
+| C1 | ViewModels / pages / API endpoints never touch `DbContext`. They call Application handlers only. `WebLayeringTests` (`BookTracker.Tests/Architecture/WebLayeringTests.cs`) enforces it; the exceptions are `ProgramSetup`, `WarmupEndpoints`, `CoverMirrorBackgroundService`, `CoverMirrorQueue` and `EditionFormatBackfillService`. |
 | C2 | One feature = one folder under `BookTracker.Application/<Feature>/`. Commands, queries, handlers, and read-model DTOs for that feature live together. |
 | C3 | Every cross-boundary contract is a `record` (commands, queries, read-model views). No EF entity crosses out of Application to the UI. |
 | C4 | One handler per file. File name = command/query name. Handlers are `sealed`. |
