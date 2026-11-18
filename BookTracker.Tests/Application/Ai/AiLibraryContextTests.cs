@@ -1,3 +1,4 @@
+using BookTracker.Application.Ai;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 
@@ -5,17 +6,16 @@ namespace BookTracker.Tests;
 
 // Pins the library-profile text the AI providers put in the shopping-list
 // prompt for a seeded library: top authors with credit count and average
-// rating, top genres, highly rated books, and the series gaps.
+// rating, top genres, highly rated books, and the series gaps. Runs the whole
+// path the providers take: dispatch GetAiLibraryProfile, render it with
+// AiPromptContext.
 [Trait("Category", TestCategories.Integration)]
 public class AiLibraryContextTests
 {
     private readonly TestDbContextFactory _factory = new();
 
-    private async Task<string> LibraryContext()
-    {
-        using var db = _factory.CreateDbContext();
-        return await SharedParsers.BuildLibraryContextAsync(db, CancellationToken.None);
-    }
+    private async Task<string> LibraryContext() =>
+        AiPromptContext.LibraryProfile(await TestDispatcher.For(_factory).Query(new GetAiLibraryProfile()));
 
     [Fact]
     public async Task SeededLibrary_RendersEveryProfileSection()

@@ -3,12 +3,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Application.Genres;
 
-// Shared genre read-models. TopGenresAsync was duplicated verbatim between
-// GetHomeDashboard (the / dashboard's top-genres card) and
-// SharedParsers.BuildLibraryContextAsync (the AI prompt's library profile) —
-// same `Genres → Works.Count, drop empties, order by count` shape, two copies
-// (the old TD-17 d). One owner now; both consumers map the tuples to their own
-// display/prompt shape.
+// Shared genre read-models. TopGenresAsync serves GetHomeDashboard (the /
+// dashboard's top-genres card) and GetAiLibraryProfile (the AI prompt's
+// library profile): `Genres → Works.Count, drop empties, order by count`, one
+// definition; both consumers map the tuples to their own display/prompt shape.
 public static class GenreReads
 {
     // Genres carrying at least one Work, most-used first (name as a stable

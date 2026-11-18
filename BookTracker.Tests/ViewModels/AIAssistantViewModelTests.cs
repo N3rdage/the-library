@@ -7,7 +7,6 @@ using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -23,10 +22,10 @@ public class AIAssistantViewModelTests
     private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
 
     // The paths under test never reach the AI service, so the provider factory
-    // is never asked for a context.
+    // never dispatches a query.
     private AIAssistantViewModel CreateVm() =>
         new(_dispatcher, new AIProviderFactory(
-            Substitute.For<IDbContextFactory<BookTrackerDbContext>>(), Options.Create(new AIOptions()), NullLoggerFactory.Instance));
+            _dispatcher, Options.Create(new AIOptions()), NullLoggerFactory.Instance));
 
     [Fact]
     public async Task LoadBooksNeedingGenres_copiesTheQueryRows()
