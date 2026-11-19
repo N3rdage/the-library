@@ -48,7 +48,8 @@ updates:
       # auto-applied.
       - dependency-name: "Microsoft.ApplicationInsights.AspNetCore"
         update-types: ["version-update:semver-major"]
-      # Both apps target net10.0, and the Microsoft.Extensions.* / EF Core /
+      # Both apps target net10.0, and the Microsoft.Extensions.* /
+      # Microsoft.AspNetCore.* (Mvc.Testing in the test projects) / EF Core /
       # System.Security.Cryptography.Pkcs packages ride the runtime's line:
       # their 11.x majors belong to .NET 11, and taking one ahead of the
       # runtime leaves a mixed graph where every later 10.x bump fails with
@@ -56,6 +57,8 @@ updates:
       # upgrade of both apps and the MAUI workload); lifting it is part of
       # that row. Minor / patch updates within 10.x stay auto-applied.
       - dependency-name: "Microsoft.Extensions.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.AspNetCore.*"
         update-types: ["version-update:semver-major"]
       - dependency-name: "Microsoft.EntityFrameworkCore*"
         update-types: ["version-update:semver-major"]
