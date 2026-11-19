@@ -265,16 +265,15 @@ public class Book
         Publisher? publisher,
         BookCondition firstCopyCondition)
     {
-        var edition = new Edition
-        {
-            Isbn = isbn.TrimToNull(),
-            Format = format,
-            EditionNumber = editionNumber,
-            DatePrinted = datePrinted,
-            DatePrintedPrecision = datePrintedPrecision,
-            Publisher = publisher,
-            CoverUrl = coverUrl.TrimToNull(),
-        };
+        var edition = new Edition(
+            isbn.TrimToNull(),
+            format,
+            editionNumber,
+            datePrinted,
+            datePrintedPrecision,
+            coverUrl.TrimToNull(),
+            isUserSupplied: false,
+            publisher);
         edition.AddCopy(firstCopyCondition, null, null);
         Editions.Add(edition);
         return edition;
