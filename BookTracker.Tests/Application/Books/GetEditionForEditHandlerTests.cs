@@ -28,16 +28,14 @@ public class GetEditionForEditHandlerTests
         int editionId, bookId;
         using (var db = _factory.CreateDbContext())
         {
-            var edition = new Edition
-            {
-                Isbn = "9780552131063",
-                Format = BookFormat.MassMarketPaperback,
-                Publisher = new Publisher { Name = "Corgi" },
-                DatePrinted = new DateOnly(1987, 1, 1),
-                DatePrintedPrecision = DatePrecision.Year,
-                CoverUrl = "https://example.com/mort.jpg",
-                Copies = [new Copy { Condition = BookCondition.Good }],
-            };
+            var edition = TestEditions.Edition(
+                isbn: "9780552131063",
+                format: BookFormat.MassMarketPaperback,
+                publisher: new Publisher { Name = "Corgi" },
+                datePrinted: new DateOnly(1987, 1, 1),
+                datePrintedPrecision: DatePrecision.Year,
+                coverUrl: "https://example.com/mort.jpg",
+                copies: [TestEditions.Copy(condition: BookCondition.Good)]);
             var book = TestBooks.Book("Mort", works: OneWork(), editions: [edition]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
@@ -64,7 +62,7 @@ public class GetEditionForEditHandlerTests
         int editionId;
         using (var db = _factory.CreateDbContext())
         {
-            var edition = new Edition { Format = BookFormat.Hardcover, Copies = [new Copy()] };
+            var edition = TestEditions.Edition(format: BookFormat.Hardcover, copies: [TestEditions.Copy()]);
             db.Books.Add(TestBooks.Book("Mort", works: OneWork(), editions: [edition]));
             await db.SaveChangesAsync();
             editionId = edition.Id;

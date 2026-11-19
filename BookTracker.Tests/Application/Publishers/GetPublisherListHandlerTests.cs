@@ -23,8 +23,8 @@ public class GetPublisherListHandlerTests
                 "Foo",
                 editions:
                 [
-                    new Edition { Publisher = tor, Format = BookFormat.Hardcover },
-                    new Edition { Publisher = tor, Format = BookFormat.TradePaperback }
+                    TestEditions.Edition(publisher: tor, format: BookFormat.Hardcover),
+                    TestEditions.Edition(publisher: tor, format: BookFormat.TradePaperback)
                 ]));
             await db.SaveChangesAsync();
         }
@@ -46,8 +46,8 @@ public class GetPublisherListHandlerTests
             var tor = new Publisher { Name = "Tor" };
             db.Publishers.Add(tor);
             db.Books.AddRange(
-                TestBooks.Book("Zebra", editions: [new Edition { Publisher = tor, Format = BookFormat.Hardcover, Copies = [new Copy()] }]),
-                TestBooks.Book("Apple", editions: [new Edition { Publisher = tor, Format = BookFormat.TradePaperback }]));
+                TestBooks.Book("Zebra", editions: [TestEditions.Edition(publisher: tor, format: BookFormat.Hardcover, copies: [TestEditions.Copy()])]),
+                TestBooks.Book("Apple", editions: [TestEditions.Edition(publisher: tor, format: BookFormat.TradePaperback)]));
             await db.SaveChangesAsync();
             torId = tor.Id;
         }

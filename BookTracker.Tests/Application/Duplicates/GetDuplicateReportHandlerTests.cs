@@ -193,8 +193,8 @@ public class GetDuplicateReportHandlerTests
             works: [work],
             editions:
             [
-                new Edition { Isbn = null, Format = BookFormat.Hardcover, Publisher = publisher, DatePrinted = new DateOnly(1934, 1, 1) },
-                new Edition { Isbn = null, Format = BookFormat.Hardcover, Publisher = publisher, DatePrinted = new DateOnly(1934, 1, 1) }
+                TestEditions.Edition(isbn: null, format: BookFormat.Hardcover, publisher: publisher, datePrinted: new DateOnly(1934, 1, 1)),
+                TestEditions.Edition(isbn: null, format: BookFormat.Hardcover, publisher: publisher, datePrinted: new DateOnly(1934, 1, 1))
             ]);
         db.Books.Add(book);
         await db.SaveChangesAsync();
@@ -216,8 +216,8 @@ public class GetDuplicateReportHandlerTests
             works: [work],
             editions:
             [
-                new Edition { Isbn = null, Format = BookFormat.Hardcover, Publisher = publisher, DatePrinted = new DateOnly(1934, 1, 1) },
-                new Edition { Isbn = null, Format = BookFormat.TradePaperback, Publisher = publisher, DatePrinted = new DateOnly(1934, 1, 1) }
+                TestEditions.Edition(isbn: null, format: BookFormat.Hardcover, publisher: publisher, datePrinted: new DateOnly(1934, 1, 1)),
+                TestEditions.Edition(isbn: null, format: BookFormat.TradePaperback, publisher: publisher, datePrinted: new DateOnly(1934, 1, 1))
             ]);
         db.Books.Add(book);
         await db.SaveChangesAsync();

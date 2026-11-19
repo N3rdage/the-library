@@ -23,7 +23,7 @@ public class FindOwnedWorkTests
             ?? Author.Create(author);
         var book = TestBooks.Book(
             bookTitle,
-            editions: [new Edition { Isbn = isbn, Copies = [new Copy { Condition = BookCondition.Good }] }]);
+            editions: [TestEditions.Edition(isbn: isbn, copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
         book.AttachWork(new Work
         {
             Title = workTitle,

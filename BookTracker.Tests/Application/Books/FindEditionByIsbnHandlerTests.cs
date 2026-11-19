@@ -23,7 +23,7 @@ public class FindEditionByIsbnHandlerTests
             var book = TestBooks.Book(
                 "The Hobbit",
                 works: [new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = Author.Create("Tolkien"), Order = 0 }] }],
-                editions: [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }]);
+                editions: [TestEditions.Edition(isbn: "9780345391803", copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -50,15 +50,13 @@ public class FindEditionByIsbnHandlerTests
                 coverUrl: "https://example.test/funny-money.jpg",
                 editions:
                 [
-                    new Edition
-                    {
-                        Isbn = "055210617X",
-                        Format = BookFormat.MassMarketPaperback,
-                        DatePrinted = new DateOnly(1983, 1, 1),
-                        DatePrintedPrecision = DatePrecision.Year,
-                        Publisher = new Publisher { Name = "Pinnacle" },
-                        Copies = [new Copy { Condition = BookCondition.Good }],
-                    },
+                    TestEditions.Edition(
+                        isbn: "055210617X",
+                        format: BookFormat.MassMarketPaperback,
+                        datePrinted: new DateOnly(1983, 1, 1),
+                        datePrintedPrecision: DatePrecision.Year,
+                        publisher: new Publisher { Name = "Pinnacle" },
+                        copies: [TestEditions.Copy(condition: BookCondition.Good)]),
                 ]);
             book.AttachWork(new Work
             {
@@ -101,7 +99,7 @@ public class FindEditionByIsbnHandlerTests
             db.Books.Add(TestBooks.Book(
                 "Loose Edition",
                 coverUrl: "https://example.test/book.jpg",
-                editions: [new Edition { Isbn = "9780000000002", CoverUrl = "https://example.test/edition.jpg", Copies = [new Copy()] }]));
+                editions: [TestEditions.Edition(isbn: "9780000000002", coverUrl: "https://example.test/edition.jpg", copies: [TestEditions.Copy()])]));
             await db.SaveChangesAsync();
         }
 
@@ -121,7 +119,7 @@ public class FindEditionByIsbnHandlerTests
         {
             db.Books.Add(TestBooks.Book(
                 "The Hobbit",
-                editions: [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }]));
+                editions: [TestEditions.Edition(isbn: "9780345391803", copies: [TestEditions.Copy(condition: BookCondition.Good)])]));
             await db.SaveChangesAsync();
         }
 
@@ -137,8 +135,8 @@ public class FindEditionByIsbnHandlerTests
                 "Dune",
                 editions:
                 [
-                    new Edition { Isbn = "9780441172719", Copies = [new Copy(), new Copy()] },
-                    new Edition { Isbn = "9780340960196", Copies = [new Copy()] },
+                    TestEditions.Edition(isbn: "9780441172719", copies: [TestEditions.Copy(), TestEditions.Copy()]),
+                    TestEditions.Edition(isbn: "9780340960196", copies: [TestEditions.Copy()]),
                 ]));
             await db.SaveChangesAsync();
         }
@@ -176,7 +174,7 @@ public class FindEditionByIsbnHandlerTests
             };
             var book = TestBooks.Book(
                 "Relic & Reliquary",
-                editions: [new Edition { Isbn = "9780000000001", Copies = [new Copy()] }]);
+                editions: [TestEditions.Edition(isbn: "9780000000001", copies: [TestEditions.Copy()])]);
             book.AttachWork(first);
             book.AttachWork(second);
             db.Books.Add(book);
@@ -200,7 +198,7 @@ public class FindEditionByIsbnHandlerTests
             };
             var book = TestBooks.Book(
                 "Concise Oxford English Dictionary",
-                editions: [new Edition { Isbn = "9780199601080", Copies = [new Copy()] }]);
+                editions: [TestEditions.Edition(isbn: "9780199601080", copies: [TestEditions.Copy()])]);
             book.AttachWork(work);
             db.Books.Add(book);
             await db.SaveChangesAsync();
