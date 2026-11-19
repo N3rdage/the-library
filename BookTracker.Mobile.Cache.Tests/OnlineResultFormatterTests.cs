@@ -13,7 +13,7 @@ public class OnlineResultFormatterTests
         string? author = "Isaac Asimov",
         string? publisher = "Gollancz",
         int? year = 1951) =>
-        new("9780586010808", title, subtitle, author, publisher, null, year, "OpenLibrary", owned);
+        new("9780586010808", title, subtitle, author, publisher, null, year, "OpenLibrary", owned, WorkKey: null);
 
     [Fact]
     public void Offline_IsUnknown_WithTheCacheNotFoundHeadline()

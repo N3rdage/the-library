@@ -119,7 +119,8 @@ public class CoverMirrorBackgroundService(
                 }
                 if (fresh is not null)
                 {
-                    fresh.CoverUrl = result.Url;
+                    // The URL alone: IsUserSupplied stays as it is (SetCover would write it).
+                    fresh.ReplaceCoverUrl(result.Url);
                     await db.SaveChangesAsync(ct);
                     logger.LogInformation("Mirrored cover for Edition {EditionId}.", item.Id);
                 }

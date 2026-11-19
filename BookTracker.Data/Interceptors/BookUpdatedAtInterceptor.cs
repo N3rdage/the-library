@@ -8,8 +8,8 @@ namespace BookTracker.Data.Interceptors;
 /// <summary>
 /// EF Core SaveChangesInterceptor that bumps <see cref="Book.UpdatedAt"/>
 /// whenever any entity in the Book aggregate is added, modified, or
-/// deleted. Aggregate = Book itself + Edition + Copy + Work + WorkAuthor
-/// + the BookWork join (with its Order) + the BookTag join.
+/// deleted. Aggregate = Book itself + Edition + Copy + Loan + Work +
+/// WorkAuthor + the BookWork join (with its Order) + the BookTag join.
 ///
 /// Drives the <c>GET /api/catalog-snapshot?since=&lt;token&gt;</c> delta
 /// query so Bookshelf refreshes can ship only changed Books instead of
@@ -22,6 +22,7 @@ namespace BookTracker.Data.Interceptors;
 /// - <see cref="Edition"/> change → bump Edition.Book (resolved via the
 ///   tracked navigation, or by BookId if the nav isn't loaded).
 /// - <see cref="Copy"/> change → bump Copy.Edition.Book.
+/// - <see cref="Loan"/> change (lend / return) → bump Loan.Copy.Edition.Book.
 /// - <see cref="Work"/> change (or skip-nav add/remove on Work.Books) →
 ///   bump every Book the Work is attached to.
 /// - <see cref="WorkAuthor"/> change → bump every Book of the parent
@@ -99,6 +100,9 @@ public class BookUpdatedAtInterceptor : SaveChangesInterceptor
                 case Copy copy:
                     AddOwningBookForCopy(context, copy, entry, booksToBump);
                     break;
+                case Loan loan:
+                    AddOwningBookForLoan(context, loan, booksToBump);
+                    break;
                 case Work work:
                     AddOwningBooksForWork(context, work, booksToBump);
                     break;
@@ -157,6 +161,18 @@ public class BookUpdatedAtInterceptor : SaveChangesInterceptor
             ?? context.Set<Book>().Local.FirstOrDefault(b => b.Id == edition.BookId)
             ?? context.Set<Book>().Find(edition.BookId);
         if (book is not null) sink.Add(book);
+    }
+
+    private static void AddOwningBookForLoan(DbContext context, Loan loan, HashSet<Book> sink)
+    {
+        // Loan → Copy, then the Copy walk. A lend adds the Loan without
+        // touching the Copy's own state, so the Copy case alone misses it.
+        var copy = loan.Copy
+            ?? context.Set<Copy>().Local.FirstOrDefault(c => c.Id == loan.CopyId)
+            ?? context.Set<Copy>().Find(loan.CopyId);
+        if (copy is null) return;
+
+        AddOwningBookForCopy(context, copy, context.Entry(copy), sink);
     }
 
     private static void AddOwningBooksForWork(DbContext context, Work work, HashSet<Book> sink)

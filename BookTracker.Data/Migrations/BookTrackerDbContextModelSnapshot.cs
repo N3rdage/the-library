@@ -358,6 +358,41 @@ namespace BookTracker.Data.Migrations
                     b.ToTable("IgnoredDuplicates");
                 });
 
+            modelBuilder.Entity("BookTracker.Data.Models.Loan", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BorrowerName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("CopyId")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly?>("DueOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("LentOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("ReturnedOn")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CopyId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Loans_CopyId_Open")
+                        .HasFilter("[ReturnedOn] IS NULL");
+
+                    b.ToTable("Loans");
+                });
+
             modelBuilder.Entity("BookTracker.Data.Models.MaintenanceLog", b =>
                 {
                     b.Property<int>("Id")
@@ -713,6 +748,17 @@ namespace BookTracker.Data.Migrations
                     b.Navigation("ParentGenre");
                 });
 
+            modelBuilder.Entity("BookTracker.Data.Models.Loan", b =>
+                {
+                    b.HasOne("BookTracker.Data.Models.Copy", "Copy")
+                        .WithMany("Loans")
+                        .HasForeignKey("CopyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Copy");
+                });
+
             modelBuilder.Entity("BookTracker.Data.Models.WishlistItem", b =>
                 {
                     b.HasOne("BookTracker.Data.Models.Series", "Series")
@@ -780,6 +826,11 @@ namespace BookTracker.Data.Migrations
                     b.Navigation("BookWorks");
 
                     b.Navigation("Editions");
+                });
+
+            modelBuilder.Entity("BookTracker.Data.Models.Copy", b =>
+                {
+                    b.Navigation("Loans");
                 });
 
             modelBuilder.Entity("BookTracker.Data.Models.Edition", b =>
