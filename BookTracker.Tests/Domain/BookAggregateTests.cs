@@ -295,6 +295,33 @@ public class BookAggregateTests
     }
 
     [Fact]
+    public void SoftDelete_withCopyLentOut_throws_andLeavesBookUntouched()
+    {
+        var copy = TestEditions.Copy();
+        copy.LendTo("Sam", new DateOnly(2026, 11, 1), null);
+        var book = TestBooks.Book("X", editions: [TestEditions.Edition(copies: [copy])]);
+
+        var ex = Assert.Throws<DomainRuleException>(() => book.SoftDelete());
+
+        Assert.Contains("Return the loan first", ex.Message);
+        Assert.Single(book.Editions);
+        Assert.Null(book.DeletedAt);
+    }
+
+    [Fact]
+    public void SoftDelete_withOnlyReturnedLoans_deletes()
+    {
+        var copy = TestEditions.Copy();
+        var loan = copy.LendTo("Sam", new DateOnly(2026, 11, 1), null);
+        copy.MarkReturned(loan.Id, new DateOnly(2026, 11, 2));
+        var book = TestBooks.Book("X", editions: [TestEditions.Edition(copies: [copy])]);
+
+        book.SoftDelete();
+
+        Assert.NotNull(book.DeletedAt);
+    }
+
+    [Fact]
     public void Edition_AddCopy_appendsAndTrimsNotes()
     {
         var edition = new Edition();
