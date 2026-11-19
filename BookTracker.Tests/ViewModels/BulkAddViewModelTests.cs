@@ -6,7 +6,9 @@ using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace BookTracker.Tests.ViewModels;
 
@@ -14,7 +16,9 @@ namespace BookTracker.Tests.ViewModels;
 // SeriesMatchService) GetSeriesMatchCandidates, and writes through
 // AddScannedCopy, CreateBook and EnsureSeries; a substituted dispatcher stands
 // in for all of them. What those persist is covered by AddScannedCopyHandlerTests,
-// CreateBookHandlerTests and FindEditionByIsbnHandlerTests.
+// CreateBookHandlerTests and FindEditionByIsbnHandlerTests. The AI provider is
+// reached through AIProviderFactory.GetService(), substituted here so the
+// "Ask AI for genres" path never leaves the process.
 [Trait("Category", TestCategories.Unit)]
 public class BulkAddViewModelTests
 {
@@ -22,6 +26,17 @@ public class BulkAddViewModelTests
 
     private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
     private readonly IBookLookupService _lookup = Substitute.For<IBookLookupService>();
+    private readonly IAIAssistantService _ai = Substitute.For<IAIAssistantService>();
+    private readonly AIProviderFactory _providerFactory;
+
+    // Options arrive name-ordered; the first match is taken in id order.
+    private static readonly GenrePickerOption[] Taxonomy =
+    [
+        new(5, "Fantasy", null, null),
+        new(1, "High Fantasy", 5, "Fantasy"),
+        new(3, "Mystery", null, null),
+        new(2, "Mystery", null, null),
+    ];
 
     public BulkAddViewModelTests()
     {
@@ -36,14 +51,47 @@ public class BulkAddViewModelTests
         _dispatcher.Send(Arg.Is<CreateBook>(c => c != null), Arg.Any<CancellationToken>())
             .Returns(NewBookId);
         GivenScannedCopyResults((int?)null);
+
+        _providerFactory = Substitute.For<AIProviderFactory>(_dispatcher, Options.Create(new AIOptions()), NullLoggerFactory.Instance);
+        _providerFactory.GetService().Returns(_ai);
     }
 
     private BulkAddViewModel CreateVm() =>
-        new(_lookup, new SeriesMatchService(_dispatcher), NullLogger<BulkAddViewModel>.Instance, _dispatcher);
+        new(_lookup, new SeriesMatchService(_dispatcher), _providerFactory, NullLogger<BulkAddViewModel>.Instance, _dispatcher);
 
     private void GivenScannedCopyResults(int? first, params int?[] rest) =>
         _dispatcher.Send(Arg.Is<AddScannedCopy>(c => c != null), Arg.Any<CancellationToken>())
             .Returns(first, rest);
+
+    private void GivenTaxonomy() =>
+        _dispatcher.Query(Arg.Any<GetGenreOptions>(), Arg.Any<CancellationToken>()).Returns(Taxonomy);
+
+    private void GivenLookupFinds(string isbn, string title, string author, params string[] genreCandidates) =>
+        _lookup.LookupByIsbnAsync(isbn, Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(isbn, title, "There and Back Again", author, null, genreCandidates, null, null, "Open Library"));
+
+    private void GivenAiSuggests(params string[] names) =>
+        _ai.SuggestGenresAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new GenreSuggestionResult(names, "reasoning"));
+
+    // LookupRowAsync is fire-and-forget from AddIsbnAsync and OnStateChanged is
+    // its last step, so the callback doubles as the completion signal.
+    private static async Task<BulkAddViewModel.DiscoveryRow> AddAndAwaitLookupAsync(BulkAddViewModel vm, string isbn)
+    {
+        var lookedUp = new TaskCompletionSource();
+        vm.OnStateChanged = () =>
+        {
+            lookedUp.TrySetResult();
+            return Task.CompletedTask;
+        };
+        vm.IsbnInput = isbn;
+        await vm.AddIsbnAsync();
+        await lookedUp.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        return Assert.Single(vm.Rows);
+    }
+
+    private static (string Name, bool FromAi)[] NamesOf(BulkAddViewModel.DiscoveryRow row) =>
+        row.Genres.Select(g => (g.Name, g.FromAi)).ToArray();
 
     private List<T> Sent<T>() =>
         _dispatcher.ReceivedCalls()
@@ -268,28 +316,133 @@ public class BulkAddViewModelTests
     }
 
     [Fact]
-    public async Task AcceptRowAsync_FuzzyMatchesGenres_WithParents_InIdOrder_Once()
+    public async Task LookupRow_FuzzyMatchesGenres_WithParents_InIdOrder_Once_AndTheSaveSendsThem()
     {
-        // Options arrive name-ordered; the first match is taken in id order.
-        _dispatcher.Query(Arg.Any<GetGenreOptions>(), Arg.Any<CancellationToken>())
-            .Returns(new[]
-            {
-                new GenrePickerOption(5, "Fantasy", null, null),
-                new GenrePickerOption(1, "High Fantasy", 5, "Fantasy"),
-                new GenrePickerOption(3, "Mystery", null, null),
-                new GenrePickerOption(2, "Mystery", null, null),
-            });
+        GivenTaxonomy();
+        GivenLookupFinds("111", "The Hobbit", "J.R.R. Tolkien",
+            "High Fantasy", "Detective and mystery stories, English", "Fantasy fiction", "Cookery");
         var vm = CreateVm();
-        var row = FoundRow("111", "The Hobbit", "J.R.R. Tolkien");
-        row.GenreCandidates = ["High Fantasy", "Detective and mystery stories, English", "Fantasy fiction", "Cookery"];
 
-        await vm.AcceptRowAsync(row);
+        var row = await AddAndAwaitLookupAsync(vm, "111");
 
         // "High Fantasy" (id 1) brings its parent Fantasy (5); the mystery
         // subject takes the lower-id "Mystery" (2); "Fantasy fiction" hits
-        // Fantasy again and adds nothing; "Cookery" matches nothing.
+        // Fantasy again and adds nothing; "Cookery" matches nothing. None of
+        // it came from the AI, which the default-off switch never reached.
+        Assert.Equal([("High Fantasy", false), ("Fantasy", false), ("Mystery", false)], NamesOf(row));
+        await _ai.DidNotReceiveWithAnyArgs().SuggestGenresAsync(default!, default!, default, default!, default);
+
+        await vm.AcceptRowAsync(row);
+
         var work = Assert.IsType<SingleWork>(Assert.Single(Sent<CreateBook>()).Works);
         Assert.Equal([1, 5, 2], work.GenreIds);
+    }
+
+    [Fact]
+    public async Task LookupRow_SwitchOff_NeverAsksAi_EvenWhenNothingMatched()
+    {
+        GivenTaxonomy();
+        GivenLookupFinds("111", "The Hobbit", "J.R.R. Tolkien", "Cookery");
+        var vm = CreateVm();
+
+        var row = await AddAndAwaitLookupAsync(vm, "111");
+
+        Assert.False(vm.AskAiForGenres);
+        Assert.Empty(row.Genres);
+        Assert.Equal(BulkAddViewModel.RowStatus.Found, row.Status);
+        await _ai.DidNotReceiveWithAnyArgs().SuggestGenresAsync(default!, default!, default, default!, default);
+    }
+
+    [Fact]
+    public async Task LookupRow_SwitchOn_AsksAiWhenNothingMatched_AndMarksItsGenres()
+    {
+        GivenTaxonomy();
+        GivenLookupFinds("111", "The Hobbit", "J.R.R. Tolkien", "Cookery");
+        GivenAiSuggests("High Fantasy");
+        var vm = CreateVm();
+        vm.AskAiForGenres = true;
+
+        var row = await AddAndAwaitLookupAsync(vm, "111");
+
+        // The AI gets the row as the user sees it, with the (empty) rule-based
+        // names; its child match brings the parent, both marked AI-sourced.
+        await _ai.Received(1).SuggestGenresAsync(
+            "The Hobbit", "J.R.R. Tolkien", "There and Back Again",
+            Arg.Is<IReadOnlyList<string>>(g => g!.Count == 0), Arg.Any<CancellationToken>());
+        Assert.Equal([("High Fantasy", true), ("Fantasy", true)], NamesOf(row));
+
+        await vm.AcceptRowAsync(row);
+
+        var work = Assert.IsType<SingleWork>(Assert.Single(Sent<CreateBook>()).Works);
+        Assert.Equal([1, 5], work.GenreIds);
+    }
+
+    [Fact]
+    public async Task LookupRow_SwitchOn_AsksAiWhenOnlyTopLevelMatched_AndAddsParentsOnce()
+    {
+        GivenTaxonomy();
+        GivenLookupFinds("111", "The Hobbit", "J.R.R. Tolkien", "Fantasy fiction");
+        GivenAiSuggests("High Fantasy", "Fantasy", "high fantasy");
+        var vm = CreateVm();
+        vm.AskAiForGenres = true;
+
+        var row = await AddAndAwaitLookupAsync(vm, "111");
+
+        // The rule-based Fantasy goes to the AI as a current genre and stays
+        // rule-based; the AI's High Fantasy is added once and its parent is
+        // already there, so nothing is duplicated.
+        await _ai.Received(1).SuggestGenresAsync(
+            "The Hobbit", "J.R.R. Tolkien", "There and Back Again",
+            Arg.Is<IReadOnlyList<string>>(g => g!.SequenceEqual(new[] { "Fantasy" })), Arg.Any<CancellationToken>());
+        Assert.Equal([("Fantasy", false), ("High Fantasy", true)], NamesOf(row));
+    }
+
+    [Fact]
+    public async Task LookupRow_SwitchOn_SkipsAiWhenAChildGenreMatched()
+    {
+        GivenTaxonomy();
+        GivenLookupFinds("111", "The Hobbit", "J.R.R. Tolkien", "High Fantasy");
+        var vm = CreateVm();
+        vm.AskAiForGenres = true;
+
+        var row = await AddAndAwaitLookupAsync(vm, "111");
+
+        Assert.Equal([("High Fantasy", false), ("Fantasy", false)], NamesOf(row));
+        await _ai.DidNotReceiveWithAnyArgs().SuggestGenresAsync(default!, default!, default, default!, default);
+    }
+
+    [Fact]
+    public async Task LookupRow_SwitchOn_DropsAiNamesOutsideTheTaxonomy()
+    {
+        GivenTaxonomy();
+        GivenLookupFinds("111", "The Hobbit", "J.R.R. Tolkien");
+        GivenAiSuggests("Cookery", "Mystery", "Fantasy Fiction");
+        var vm = CreateVm();
+        vm.AskAiForGenres = true;
+
+        var row = await AddAndAwaitLookupAsync(vm, "111");
+
+        // Only an exact taxonomy name counts (the lower-id Mystery); the AI's
+        // free-form names are not fuzzy-matched the way subject strings are.
+        Assert.Equal([("Mystery", true)], NamesOf(row));
+        Assert.Equal([2], row.Genres.Select(g => g.Id));
+    }
+
+    [Fact]
+    public async Task LookupRow_SwitchOn_ThrowingAi_LeavesRuleBasedGenres_AndTheRowCompletes()
+    {
+        GivenTaxonomy();
+        GivenLookupFinds("111", "The Hobbit", "J.R.R. Tolkien", "Fantasy fiction");
+        _ai.SuggestGenresAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new HttpRequestException("provider down"));
+        var vm = CreateVm();
+        vm.AskAiForGenres = true;
+
+        var row = await AddAndAwaitLookupAsync(vm, "111");
+
+        Assert.Equal(BulkAddViewModel.RowStatus.Found, row.Status);
+        Assert.Equal("The Hobbit", row.Title);
+        Assert.Equal([("Fantasy", false)], NamesOf(row));
     }
 
     [Fact]
