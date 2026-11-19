@@ -84,7 +84,9 @@ public class BookUpdatedAtInterceptorTests
         using (var db = _factory.CreateDbContext())
         {
             var edition = await db.Editions.Include(e => e.Book).FirstAsync();
-            edition.Isbn = "9780553293358";
+            edition.UpdateDetails(
+                "9780553293358", edition.Format, edition.DatePrinted,
+                edition.DatePrintedPrecision, edition.CoverUrl, edition.Publisher);
             await db.SaveChangesAsync();
         }
 
@@ -124,7 +126,7 @@ public class BookUpdatedAtInterceptorTests
             var copy = await db.Copies
                 .Include(c => c.Edition).ThenInclude(e => e.Book)
                 .FirstAsync();
-            copy.Condition = BookCondition.VeryGood;
+            copy.UpdateDetails(BookCondition.VeryGood, copy.DateAcquired, copy.Notes);
             await db.SaveChangesAsync();
         }
 

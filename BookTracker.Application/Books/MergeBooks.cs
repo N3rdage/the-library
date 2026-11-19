@@ -125,7 +125,7 @@ public sealed class MergeBooksHandler(IDbContextFactory<BookTrackerDbContext> db
         var editionsReassigned = 0;
         foreach (var edition in loser.Editions.ToList())
         {
-            edition.BookId = winner.Id;
+            edition.MoveToBook(winner.Id);
             editionsReassigned++;
         }
         loser.Editions.Clear();

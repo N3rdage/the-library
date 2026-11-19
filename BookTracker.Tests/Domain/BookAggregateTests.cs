@@ -245,7 +245,7 @@ public class BookAggregateTests
     public void RemoveCopy_notLast_keepsEdition()
     {
         var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
-        var edition = new Edition { Id = 1, Copies = { new Copy { Id = 10 }, new Copy { Id = 11 } } };
+        var edition = EditionWithCopies(1, 10, 11);
         book.Editions.Add(edition);
 
         book.RemoveCopy(10);
@@ -259,7 +259,7 @@ public class BookAggregateTests
     public void RemoveCopy_last_removesEdition()
     {
         var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
-        book.Editions.Add(new Edition { Id = 1, Copies = { new Copy { Id = 10 } } });
+        book.Editions.Add(EditionWithCopies(1, 10));
 
         book.RemoveCopy(10);
 
@@ -270,7 +270,7 @@ public class BookAggregateTests
     public void RemoveCopy_unknownCopy_throws()
     {
         var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
-        book.Editions.Add(new Edition { Id = 1, Copies = { new Copy { Id = 10 } } });
+        book.Editions.Add(EditionWithCopies(1, 10));
 
         Assert.Throws<DomainRuleException>(() => book.RemoveCopy(999));
     }
@@ -282,7 +282,7 @@ public class BookAggregateTests
             "X",
             works: [new Work { Title = "W" }],
             tags: [new Tag { Name = "t" }],
-            editions: [new Edition { Copies = { new Copy() } }]);
+            editions: [TestEditions.Edition(copies: [TestEditions.Copy()])]);
 
         book.SoftDelete();
 
@@ -324,7 +324,7 @@ public class BookAggregateTests
     [Fact]
     public void Edition_AddCopy_appendsAndTrimsNotes()
     {
-        var edition = new Edition();
+        var edition = TestEditions.Edition();
         var copy = edition.AddCopy(BookCondition.Good, null, "  note  ");
 
         Assert.Single(edition.Copies);
@@ -339,5 +339,18 @@ public class BookAggregateTests
 
         Assert.Equal(BookCondition.Poor, copy.Condition);
         Assert.Null(copy.Notes);
+    }
+
+    private static Edition EditionWithCopies(int editionId, params int[] copyIds)
+    {
+        var copies = copyIds.Select(id =>
+        {
+            var copy = TestEditions.Copy();
+            copy.Id = id;
+            return copy;
+        });
+        var edition = TestEditions.Edition(copies: copies);
+        edition.Id = editionId;
+        return edition;
     }
 }
