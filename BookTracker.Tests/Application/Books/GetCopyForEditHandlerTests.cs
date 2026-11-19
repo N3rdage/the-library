@@ -32,12 +32,10 @@ public class GetCopyForEditHandlerTests
                 Notes = "From a charity shop",
             };
             var edition = new Edition { Isbn = "x", Copies = [copy] };
-            db.Books.Add(new Book
-            {
-                Title = "B",
-                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
-                Editions = [edition],
-            });
+            db.Books.Add(TestBooks.Book(
+                "B",
+                works: [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
+                editions: [edition]));
             await db.SaveChangesAsync();
             copyId = copy.Id;
             editionId = edition.Id;

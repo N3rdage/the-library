@@ -60,7 +60,7 @@ public class CreateBookHandlerTests
             Title = workTitle,
             WorkAuthors = [new WorkAuthor { Author = Author.Create(author), Order = 0 }],
         };
-        db.Books.Add(new Book { Title = "Other Anthology", Works = [existing] });
+        db.Books.Add(TestBooks.Book("Other Anthology", works: [existing]));
         await db.SaveChangesAsync();
         return existing.Id;
     }

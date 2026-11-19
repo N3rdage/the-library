@@ -33,8 +33,8 @@ public class GetEditionMergePreviewHandlerTests
         var author = Author.Create("A");
         var w1 = new Work { Title = "A1", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var w2 = new Work { Title = "A2", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        var b1 = new Book { Title = "B1", Works = [w1] };
-        var b2 = new Book { Title = "B2", Works = [w2] };
+        var b1 = TestBooks.Book("B1", works: [w1]);
+        var b2 = TestBooks.Book("B2", works: [w2]);
         var e1 = new Edition { Book = b1, Isbn = "9780000000001", Format = BookFormat.Hardcover };
         var e2 = new Edition { Book = b2, Isbn = "9780000000002", Format = BookFormat.Hardcover };
         db.Books.AddRange(b1, b2);
@@ -51,7 +51,7 @@ public class GetEditionMergePreviewHandlerTests
         using var db = _factory.CreateDbContext();
         var author = Author.Create("Shared");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        var book = new Book { Title = "B", Works = [work] };
+        var book = TestBooks.Book("B", works: [work]);
         var winner = new Edition { Book = book, Isbn = "9780000000001", Format = BookFormat.Hardcover };
         var loser = new Edition { Book = book, Isbn = "9780000000002", Format = BookFormat.Hardcover };
         db.Books.Add(book);
