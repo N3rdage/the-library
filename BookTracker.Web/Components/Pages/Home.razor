@@ -114,6 +114,52 @@
         </MudItem>
     </MudGrid>
 
+    @if (VM.ShowDueBack)
+    {
+        @* Loans with a return date, soonest first; open-ended loans are a count.
+           The calendar links are plain downloads (the download attribute keeps
+           Blazor's router from intercepting them). *@
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Due back</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudLink Href="/loans" Typo="Typo.body2">See all</MudLink>
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudStack Spacing="1">
+                    @foreach (var row in VM.DueBack)
+                    {
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                            <MudLink Href="@($"/books/{row.BookId}")" Underline="Underline.Hover" Color="Color.Inherit"
+                                     Typo="Typo.body2" Class="flex-grow-1"
+                                     Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                @row.Title · @row.BorrowerName · due @row.DueOn.ToString("d MMM")
+                            </MudLink>
+                            @if (VM.IsOverdue(row))
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">Overdue</MudChip>
+                            }
+                            <MudTooltip Text="Add to calendar">
+                                <MudIconButton Href="@($"/api/loans/{row.LoanId}/calendar.ics")"
+                                               download="@($"loan-{row.LoanId}.ics")"
+                                               Icon="@Icons.Material.Filled.Event"
+                                               Size="Size.Small"
+                                               aria-label="@($"Add the return of {row.Title} to your calendar")" />
+                            </MudTooltip>
+                        </MudStack>
+                    }
+                    @if (VM.OpenEndedLoanCount > 0)
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@VM.OpenEndedLoanCount more out, no return date</MudText>
+                    }
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    }
+
     <MudGrid Spacing="4">
         <MudItem xs="12" md="6">
             <MudCard Elevation="2" Class="h-100">

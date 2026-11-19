@@ -54,46 +54,12 @@ public sealed class MergeEditionsHandler(IDbContextFactory<BookTrackerDbContext>
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-        // Auto-fill empty winner fields from loser. Never overwrites a value
-        // winner already has. Date+Precision move as a pair.
-        var fieldsAutoFilled = 0;
-
-        if (winner.DatePrinted is null && loser.DatePrinted is not null)
-        {
-            winner.DatePrinted = loser.DatePrinted;
-            winner.DatePrintedPrecision = loser.DatePrintedPrecision;
-            fieldsAutoFilled++;
-        }
-
-        if (string.IsNullOrWhiteSpace(winner.CoverUrl) && !string.IsNullOrWhiteSpace(loser.CoverUrl))
-        {
-            winner.CoverUrl = loser.CoverUrl;
-            fieldsAutoFilled++;
-        }
-
-        if (winner.PublisherId is null && loser.PublisherId is not null)
-        {
-            winner.PublisherId = loser.PublisherId;
-            fieldsAutoFilled++;
-        }
-
-        if (string.IsNullOrWhiteSpace(winner.Isbn) && !string.IsNullOrWhiteSpace(loser.Isbn))
-        {
-            winner.Isbn = loser.Isbn;
-            fieldsAutoFilled++;
-        }
-
-        // Reassign copies from loser to winner.
-        var copiesReassigned = 0;
-        foreach (var copy in loser.Copies.ToList())
-        {
-            copy.EditionId = winner.Id;
-            copiesReassigned++;
-        }
-
-        // Reload nav collection so loser.Copies doesn't hold references EF
-        // can't resolve at delete time.
-        loser.Copies.Clear();
+        // Auto-fill empty winner fields from loser (never overwrites a value the
+        // winner already has), then move the loser's copies to the winner; the
+        // loser's Copies collection is left empty so its delete cannot cascade
+        // to them.
+        var fieldsAutoFilled = winner.FillBlanksFrom(loser);
+        var copiesReassigned = winner.AdoptCopiesFrom(loser);
 
         var staleIgnores = await db.IgnoredDuplicates
             .Where(d => d.EntityType == DuplicateEntityType.Edition

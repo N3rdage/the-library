@@ -2,19 +2,15 @@ using BookTracker.Data.Models;
 
 namespace BookTracker.Tests;
 
-// Seed builder for Edition and Copy rows. Their scalar setters (Isbn, Format,
-// DatePrinted, CoverUrl, Publisher, Condition, Notes, ...) go private in the
-// Edition/Copy slice (E2b), so every seed that wrote them through an object
-// initialiser builds through here instead; when the entity's public surface
-// moves, only these two bodies change, and no other test file has to move
-// again.
+// Seed builder for Edition and Copy rows. Their scalar setters are private, so
+// every seed builds through here; when the entities' surface moves, only these
+// two bodies change.
 //
-// Until E2b the bodies are plain object initialisers: there is no
-// Edition.Create yet (Book.AddEdition constructs one, but also attaches it to
-// the book and seeds a Copy, which not every seed wants), so a seed gets
-// exactly what it passes, nothing trimmed or normalised, and an omitted
-// argument leaves the entity default (a seed that passes nothing gets exactly
-// `new Edition()` / `new Copy()`).
+// The bodies use the entities' internal constructors (InternalsVisibleTo), not
+// Book.AddEdition, which also attaches the edition to a book and seeds a Copy
+// that not every seed wants. The constructors store exactly what they are given,
+// nothing trimmed or normalised, and an omitted argument leaves the entity
+// default.
 public static class TestEditions
 {
     public static Edition Edition(
@@ -32,24 +28,16 @@ public static class TestEditions
         IEnumerable<Copy>? copies = null)
     {
         // Fully qualified: inside this class the simple name Edition is the method.
-        var edition = new global::BookTracker.Data.Models.Edition
-        {
-            Isbn = isbn,
-            Format = format,
-            EditionNumber = editionNumber,
-            DatePrinted = datePrinted,
-            DatePrintedPrecision = datePrintedPrecision,
-            CoverUrl = coverUrl,
-            IsUserSupplied = isUserSupplied,
-        };
+        var edition = new global::BookTracker.Data.Models.Edition(
+            isbn, format, editionNumber, datePrinted, datePrintedPrecision,
+            coverUrl, isUserSupplied, publisher);
 
         // Navigations and keys only when given, so an unset one stays the
         // entity default (null / 0) rather than being written as such.
-        if (publisher is not null) edition.Publisher = publisher;
-        if (publisherId is not null) edition.PublisherId = publisherId;
+        if (publisherId is not null) edition.ReassignPublisher(publisherId.Value);
         if (book is not null) edition.Book = book;
-        if (bookId is not null) edition.BookId = bookId.Value;
-        if (copies is not null) edition.Copies = copies.ToList();
+        if (bookId is not null) edition.MoveToBook(bookId.Value);
+        if (copies is not null) edition.Copies.AddRange(copies);
 
         return edition;
     }
@@ -62,15 +50,10 @@ public static class TestEditions
         int? editionId = null)
     {
         // Fully qualified: inside this class the simple name Copy is the method.
-        var copy = new global::BookTracker.Data.Models.Copy
-        {
-            Condition = condition,
-            DateAcquired = dateAcquired,
-            Notes = notes,
-        };
+        var copy = new global::BookTracker.Data.Models.Copy(condition, dateAcquired, notes);
 
         if (edition is not null) copy.Edition = edition;
-        if (editionId is not null) copy.EditionId = editionId.Value;
+        if (editionId is not null) copy.MoveToEdition(editionId.Value);
 
         return copy;
     }

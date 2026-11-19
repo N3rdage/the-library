@@ -32,7 +32,7 @@ public sealed class MergePublishersHandler(IDbContextFactory<BookTrackerDbContex
 
         foreach (var edition in source.Editions)
         {
-            edition.PublisherId = command.TargetId;
+            edition.ReassignPublisher(command.TargetId);
         }
         db.Publishers.Remove(source);
 

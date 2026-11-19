@@ -67,6 +67,13 @@ public sealed class GetLibraryBooksHandler(IDbContextFactory<BookTrackerDbContex
                     Genres = w.Genres.Select(g => g.Name).ToList(),
                 }).ToList(),
                 Tags = b.Tags.Select(t => t.Name).ToList(),
+                LentTo = b.Editions
+                    .SelectMany(e => e.Copies)
+                    .SelectMany(c => c.Loans)
+                    .Where(l => l.ReturnedOn == null)
+                    .OrderBy(l => l.Id)
+                    .Select(l => l.BorrowerName)
+                    .FirstOrDefault(),
             })
             .ToListAsync(ct);
 
@@ -85,7 +92,8 @@ public sealed class GetLibraryBooksHandler(IDbContextFactory<BookTrackerDbContex
             b.Rating,
             b.WorksCount,
             b.Works.SelectMany(w => w.Genres).Distinct().ToList(),
-            b.Tags)).ToList();
+            b.Tags,
+            b.LentTo)).ToList();
 
         return new LibraryBooksResult(items, totalCount, totalPages, page);
     }
