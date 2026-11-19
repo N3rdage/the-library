@@ -19,15 +19,13 @@ public class GetPublisherListHandlerTests
             var tor = new Publisher { Name = "Tor" };
             var unused = new Publisher { Name = "Unused Press" };
             db.Publishers.AddRange(tor, unused);
-            db.Books.Add(new Book
-            {
-                Title = "Foo",
-                Editions =
+            db.Books.Add(TestBooks.Book(
+                "Foo",
+                editions:
                 [
                     new Edition { Publisher = tor, Format = BookFormat.Hardcover },
                     new Edition { Publisher = tor, Format = BookFormat.TradePaperback }
-                ]
-            });
+                ]));
             await db.SaveChangesAsync();
         }
 
@@ -48,8 +46,8 @@ public class GetPublisherListHandlerTests
             var tor = new Publisher { Name = "Tor" };
             db.Publishers.Add(tor);
             db.Books.AddRange(
-                new Book { Title = "Zebra", Editions = [new Edition { Publisher = tor, Format = BookFormat.Hardcover, Copies = [new Copy()] }] },
-                new Book { Title = "Apple", Editions = [new Edition { Publisher = tor, Format = BookFormat.TradePaperback }] });
+                TestBooks.Book("Zebra", editions: [new Edition { Publisher = tor, Format = BookFormat.Hardcover, Copies = [new Copy()] }]),
+                TestBooks.Book("Apple", editions: [new Edition { Publisher = tor, Format = BookFormat.TradePaperback }]));
             await db.SaveChangesAsync();
             torId = tor.Id;
         }

@@ -14,14 +14,12 @@ public class GetSeriesGapsHandlerTests
     private Task<SeriesGapsResult> Load() =>
         new GetSeriesGapsHandler(_factory).HandleAsync(new GetSeriesGaps());
 
-    private static Book NewBook(Series series, string title, int? order, string? orderDisplay = null) => new()
-    {
-        Title = title,
-        Series = series,
-        SeriesOrder = order,
-        SeriesOrderDisplay = orderDisplay,
-        Works = [new Work { Title = title }],
-    };
+    private static Book NewBook(Series series, string title, int? order, string? orderDisplay = null) => TestBooks.Book(
+        title,
+        series: series,
+        seriesOrder: order,
+        seriesOrderDisplay: orderDisplay,
+        works: [new Work { Title = title }]);
 
     [Fact]
     public async Task StructuredSeries_ReportsMissingSlots_OwnedCount_AndOwnedBooksInSeriesOrder()
