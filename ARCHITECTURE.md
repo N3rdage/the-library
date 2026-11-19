@@ -271,6 +271,8 @@ Multi-provider architecture with runtime switching via `AIProviderFactory`.
 
 **Shared logic:** `AiPromptContext` renders those read models into the prompt text, and `SharedParsers` holds the prompt templates and the JSON parsing; all three providers use both.
 
+**Usage and cost:** after every successful call each provider dispatches `RecordAiUsage` (`Application/Ai/`), which writes one `AiUsage` row: provider name, model (the model id for Anthropic, the deployment name for Azure OpenAI and Microsoft Foundry), operation (`SuggestGenres`, `SuggestCollections`, `SuggestShoppingList`, `AssessBook`, `ExtractIsbn`) and the input and output token counts the provider reported, stamped with the UTC time. A response with no usage block records nothing (one warning per service instance), and a failure while recording is logged and never fails the AI call. `GetAiUsageSummary` groups the rows in SQL by provider and model, once for the current UTC month and once for all time, and prices each line from `AI:Prices` (US dollars per million input and output tokens, keyed by model string, case-insensitive; `AiUsageCost.Compute`); a model with no price shows its tokens with a null cost. `/assistant` shows one line of this month's totals across providers ("This month: 12 calls, 84,210 in / 6,120 out tokens, about $0.35", plus a count of models without a price), loaded with the page and refreshed after each AI action; the per-circuit `CallCount` chip in `AIProviderToggle` is unchanged. `AiUsage` is bookkeeping outside every aggregate, so a usage row never bumps `Book.UpdatedAt`.
+
 | Method | Speed | Purpose |
 |--------|-------|---------|
 | `ExtractIsbnFromImageAsync` | Fast | OCR ISBN from photo (vision API) |
@@ -357,6 +359,7 @@ A family of read-only Claude Code skills that flag patterns of interest in speci
 | `AI:AzureOpenAI:Endpoint` | Bicep output | Azure OpenAI endpoint URL |
 | `AI:AzureOpenAI:ApiKey` | Key Vault ref (written by Bicep via `listKeys()`) | Azure OpenAI key |
 | `AI:AzureOpenAI:Deployment` | Bicep output | GPT-4o deployment name |
+| `AI:Prices` | appsettings (see `appsettings.Example.json`) | US dollars per million tokens per model (`InputPerMillion` / `OutputPerMillion`), keyed by the model id (Anthropic) or deployment name (Azure OpenAI, Foundry) the usage rows carry; prices the `/assistant` usage line |
 | `Trove:ApiKey` | Key Vault ref (prod) / appsettings (dev) | National Library of Australia API key — optional third-line ISBN lookup provider |
 
 In prod, secret App Settings resolve via `@Microsoft.KeyVault(SecretUri=…)` references — the App Service's managed identity has `Key Vault Secrets User` on the vault. `deploy.ps1` writes `AuthClientSecret` + optionally `AIAnthropicApiKey` and `TroveApiKey` to the vault; `ai-services.bicep` writes `AIAzureOpenAIApiKey` via `listKeys()` against the newly-created OpenAI account.

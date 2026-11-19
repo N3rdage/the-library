@@ -21,6 +21,7 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
     public DbSet<WorkAuthor> WorkAuthors => Set<WorkAuthor>();
     public DbSet<IgnoredDuplicate> IgnoredDuplicates => Set<IgnoredDuplicate>();
     public DbSet<CoverMirrorState> CoverMirrorStates => Set<CoverMirrorState>();
+    public DbSet<AiUsage> AiUsages => Set<AiUsage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -260,6 +261,15 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .HasConversion(UtcOnRead);
         modelBuilder.Entity<CoverMirrorState>()
             .Property(s => s.NextAttemptUtc)
+            .HasConversion(UtcOnRead);
+
+        // AiUsage: the summary query filters on OccurredAt (this month vs all
+        // time), so it is indexed; same Kind=Utc-on-read converter so the
+        // month boundary is compared in one kind.
+        modelBuilder.Entity<AiUsage>()
+            .HasIndex(u => u.OccurredAt);
+        modelBuilder.Entity<AiUsage>()
+            .Property(u => u.OccurredAt)
             .HasConversion(UtcOnRead);
     }
 

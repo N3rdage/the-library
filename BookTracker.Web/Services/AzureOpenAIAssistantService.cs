@@ -12,9 +12,11 @@ namespace BookTracker.Web.Services;
 /// </summary>
 public class AzureOpenAIAssistantService(
     IDispatcher dispatcher,
-    AzureOpenAIOptions options) : IAIAssistantService
+    AzureOpenAIOptions options,
+    ILogger<AzureOpenAIAssistantService> logger) : IAIAssistantService
 {
     private ChatClient? _client;
+    private bool _usageMissingWarned;
 
     public int CallCount { get; private set; }
 
@@ -43,7 +45,7 @@ public class AzureOpenAIAssistantService(
             new UserChatMessage(imageContent, textContent)
         };
 
-        var response = await CallAsync(messages, 50, ct);
+        var response = await CallAsync(messages, 50, "ExtractIsbn", ct);
         var responseText = response.Trim();
 
         if (responseText.Equals("NONE", StringComparison.OrdinalIgnoreCase))
@@ -81,7 +83,7 @@ Rules:
 
         var userMessage = $"Suggest genres for this book:\n{bookDescription}\n\n{currentGenresText}\n\nRespond with JSON only.";
 
-        var responseText = await CallWithSystemAsync(systemPrompt, userMessage, options.MaxTokens, ct);
+        var responseText = await CallWithSystemAsync(systemPrompt, userMessage, options.MaxTokens, "SuggestGenres", ct);
         return SharedParsers.ParseGenreSuggestion(responseText, allGenres.Select(g => g.Name).ToHashSet());
     }
 
@@ -98,7 +100,7 @@ Rules:
         var seriesText = AiPromptContext.ExistingSeries(existingSeries);
 
         var responseText = await CallWithSystemAsync(SharedParsers.BuildCollectionSystemPrompt(seriesText),
-            $"Here are the books not in any series:\n\n{booksText}\n\nSuggest groupings. Respond with JSON only.", 2048, ct);
+            $"Here are the books not in any series:\n\n{booksText}\n\nSuggest groupings. Respond with JSON only.", 2048, "SuggestCollections", ct);
         return SharedParsers.ParseCollectionSuggestion(responseText);
     }
 
@@ -107,7 +109,7 @@ Rules:
         var context = AiPromptContext.LibraryProfile(await dispatcher.Query(new GetAiLibraryProfile(), ct));
 
         var responseText = await CallWithSystemAsync(SharedParsers.ShoppingSystemPrompt,
-            $"{context}\n\nSuggest 5-10 books to look for. Respond with JSON only.", 2048, ct);
+            $"{context}\n\nSuggest 5-10 books to look for. Respond with JSON only.", 2048, "SuggestShoppingList", ct);
         return SharedParsers.ParseShoppingSuggestion(responseText);
     }
 
@@ -116,19 +118,20 @@ Rules:
         var booksText = AiPromptContext.AdvisorBooks(await dispatcher.Query(new GetLibraryProfileForAdvisor(), ct));
 
         var responseText = await CallWithSystemAsync(SharedParsers.BuildAdvisorSystemPrompt(booksText),
-            $"I'm considering: {query}\n\nShould I get it? Respond with JSON only.", 2048, ct);
+            $"I'm considering: {query}\n\nShould I get it? Respond with JSON only.", 2048, "AssessBook", ct);
         return SharedParsers.ParseBookAdvisor(responseText);
     }
 
-    private async Task<string> CallAsync(List<ChatMessage> messages, int maxTokens, CancellationToken ct)
+    private async Task<string> CallAsync(List<ChatMessage> messages, int maxTokens, string operation, CancellationToken ct)
     {
         var chatOptions = new ChatCompletionOptions { MaxOutputTokenCount = maxTokens };
         var response = await GetClient().CompleteChatAsync(messages, chatOptions, ct);
         CallCount++;
+        await RecordUsageAsync(operation, response.Value, ct);
         return response.Value.Content[0].Text ?? "";
     }
 
-    private async Task<string> CallWithSystemAsync(string systemPrompt, string userMessage, int maxTokens, CancellationToken ct)
+    private async Task<string> CallWithSystemAsync(string systemPrompt, string userMessage, int maxTokens, string operation, CancellationToken ct)
     {
         var messages = new List<ChatMessage>
         {
@@ -136,6 +139,34 @@ Rules:
             new UserChatMessage(userMessage)
         };
 
-        return await CallAsync(messages, maxTokens, ct);
+        return await CallAsync(messages, maxTokens, operation, ct);
+    }
+
+    private async Task RecordUsageAsync(string operation, ChatCompletion completion, CancellationToken ct)
+    {
+        if (completion.Usage is null)
+        {
+            if (!_usageMissingWarned)
+            {
+                _usageMissingWarned = true;
+                logger.LogWarning("Azure OpenAI response for {Operation} carried no usage block; token usage is not recorded for this service instance's calls without one", operation);
+            }
+            return;
+        }
+
+        try
+        {
+            // The deployment name stands in for the model: it is what the
+            // call is addressed to and what Azure bills by.
+            await dispatcher.Send(new RecordAiUsage(
+                nameof(AIProvider.AzureOpenAI), options.Deployment, operation,
+                completion.Usage.InputTokenCount, completion.Usage.OutputTokenCount), ct);
+        }
+        catch (Exception ex)
+        {
+            // Swallowed on purpose: the AI call already succeeded and its
+            // answer is in hand, so a bookkeeping failure must not fail it.
+            logger.LogWarning(ex, "Recording AI usage for {Operation} on {Deployment} failed; the call's result is unaffected", operation, options.Deployment);
+        }
     }
 }

@@ -43,8 +43,8 @@ public class AIProviderFactory(
     private IAIAssistantService CreateService(AIProvider provider) => provider switch
     {
         AIProvider.Anthropic => new AnthropicAIAssistantService(dispatcher, _options.Anthropic, loggerFactory.CreateLogger<AnthropicAIAssistantService>()),
-        AIProvider.MicrosoftFoundry => new MicrosoftFoundryAIAssistantService(dispatcher, _options.MicrosoftFoundry),
-        AIProvider.AzureOpenAI => new AzureOpenAIAssistantService(dispatcher, _options.AzureOpenAI),
+        AIProvider.MicrosoftFoundry => new MicrosoftFoundryAIAssistantService(dispatcher, _options.MicrosoftFoundry, loggerFactory.CreateLogger<MicrosoftFoundryAIAssistantService>()),
+        AIProvider.AzureOpenAI => new AzureOpenAIAssistantService(dispatcher, _options.AzureOpenAI, loggerFactory.CreateLogger<AzureOpenAIAssistantService>()),
         _ => throw new ArgumentOutOfRangeException(nameof(provider))
     };
 
