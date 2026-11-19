@@ -22,6 +22,7 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
     public DbSet<IgnoredDuplicate> IgnoredDuplicates => Set<IgnoredDuplicate>();
     public DbSet<CoverMirrorState> CoverMirrorStates => Set<CoverMirrorState>();
     public DbSet<AiUsage> AiUsages => Set<AiUsage>();
+    public DbSet<Loan> Loans => Set<Loan>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -103,6 +104,24 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .WithMany(e => e.Copies)
             .HasForeignKey(c => c.EditionId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // Loan: part of the Book aggregate through Copy, so it goes when the
+        // Copy goes. The filtered unique index allows any number of returned
+        // loans per copy but at most one open one (ReturnedOn IS NULL).
+        modelBuilder.Entity<Loan>()
+            .HasOne(l => l.Copy)
+            .WithMany(c => c.Loans)
+            .HasForeignKey(l => l.CopyId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<Loan>()
+            .HasIndex(l => l.CopyId)
+            .IsUnique()
+            .HasFilter("[ReturnedOn] IS NULL")
+            .HasDatabaseName("IX_Loans_CopyId_Open");
+        modelBuilder.Entity<Copy>()
+            .Ignore(c => c.OpenLoan);
+        modelBuilder.Entity<Loan>()
+            .Ignore(l => l.IsOpen);
 
         modelBuilder.Entity<Genre>()
             .HasIndex(g => g.Name)
