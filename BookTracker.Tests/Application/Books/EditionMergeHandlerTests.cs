@@ -45,7 +45,7 @@ public class EditionMergeHandlerTests
     public async Task Merge_auto_fills_empty_winner_fields_from_loser()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "A" };
+        var author = Author.Create("A");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var publisher = new Publisher { Name = "Acme Press" };
         var book = new Book { Title = "B", Works = [work] };
@@ -84,7 +84,7 @@ public class EditionMergeHandlerTests
     public async Task Merge_preserves_populated_winner_fields()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "A" };
+        var author = Author.Create("A");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var pubA = new Publisher { Name = "Keep" };
         var pubB = new Publisher { Name = "Ignored" };
@@ -170,7 +170,7 @@ public class EditionMergeHandlerTests
     public async Task Merge_rejects_cross_book_merge()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "A" };
+        var author = Author.Create("A");
         var w1 = new Work { Title = "A1", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var w2 = new Work { Title = "A2", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var b1 = new Book { Title = "B1", Works = [w1] };
@@ -191,7 +191,7 @@ public class EditionMergeHandlerTests
     private async Task<(int winnerId, int loserId, int bookId)> SeedTwoEditionsOnSameBookAsync()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "Shared" };
+        var author = Author.Create("Shared");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var book = new Book { Title = "B", Works = [work] };
         var winner = new Edition { Book = book, Isbn = "9780000000001", Format = BookFormat.Hardcover };

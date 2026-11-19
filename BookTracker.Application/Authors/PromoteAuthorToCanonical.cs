@@ -18,7 +18,7 @@ public sealed class PromoteAuthorToCanonicalHandler(IDbContextFactory<BookTracke
         var alias = await db.Authors.FirstOrDefaultAsync(a => a.Id == command.AuthorId, ct);
         if (alias is null || alias.CanonicalAuthorId is null) return AuthorAdminResult.NoOp;
 
-        alias.CanonicalAuthorId = null;
+        alias.PromoteToCanonical();
         await db.SaveChangesAsync(ct);
         return AuthorAdminResult.Ok($"\"{alias.Name}\" is now its own canonical author.");
     }

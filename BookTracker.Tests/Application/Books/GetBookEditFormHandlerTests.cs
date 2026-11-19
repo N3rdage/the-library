@@ -14,7 +14,7 @@ public class GetBookEditFormHandlerTests
         new GetBookEditFormHandler(_factory).HandleAsync(new GetBookEditForm(bookId));
 
     private static List<Work> OneWork() =>
-        [new Work { Title = "w", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "a" }, Order = 0 }] }];
+        [new Work { Title = "w", WorkAuthors = [new WorkAuthor { Author = Author.Create("a"), Order = 0 }] }];
 
     [Fact]
     public async Task MissingId_ReturnsNull()

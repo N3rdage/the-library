@@ -7,8 +7,10 @@ namespace BookTracker.Web.Services.Covers;
 
 // Single Azure.Storage.Blobs implementation used by both prod and local-dev.
 // Local connects to Azurite via the well-known dev connection string from
-// appsettings.Development.json; prod consumes the real Storage Account
-// connection string via Key Vault.
+// appsettings.Development.json. In Azure the client authenticates with the
+// Storage Account connection string from Key Vault when one is set, and
+// otherwise with the slot's managed identity against CoverStorage:ServiceUri
+// (see CoverBlobServiceClientFactory).
 //
 // Cache-Control: public, max-age=31536000 is set per blob so browsers cache
 // covers for a year — minimises egress and gives near-instant subsequent
@@ -38,7 +40,7 @@ public class BlobBookCoverStorage : IBookCoverStorage
     }
 
     // Test seam: supplies the blob container directly instead of building it
-    // from the connection string.
+    // from the configured options.
     internal BlobBookCoverStorage(
         IOptions<CoverStorageOptions> options,
         HttpClient http,
@@ -152,7 +154,7 @@ public class BlobBookCoverStorage : IBookCoverStorage
     {
         if (!IsEnabled)
         {
-            _logger.LogWarning("Cover upload requested but storage is disabled — no connection string configured.");
+            _logger.LogWarning("Cover upload requested but storage is disabled — no connection string or service URI configured.");
             throw new InvalidOperationException("Cover storage is not configured.");
         }
 
@@ -258,7 +260,7 @@ public class BlobBookCoverStorage : IBookCoverStorage
     {
         try
         {
-            var service = new BlobServiceClient(_options.ConnectionString);
+            var service = CoverBlobServiceClientFactory.Create(_options);
             var container = service.GetBlobContainerClient(_options.ContainerName);
             await container.CreateIfNotExistsAsync(PublicAccessType.Blob);
             return container;
@@ -280,7 +282,7 @@ public class BlobBookCoverStorage : IBookCoverStorage
 
         // Last resort — derive from the BlobServiceClient. Slightly more
         // expensive (re-allocates), so kept as a fallback.
-        var service = new BlobServiceClient(_options.ConnectionString);
+        var service = CoverBlobServiceClientFactory.Create(_options);
         return service.GetBlobContainerClient(_options.ContainerName).GetBlobClient(blobName).Uri.ToString();
     }
 
@@ -294,7 +296,7 @@ public class BlobBookCoverStorage : IBookCoverStorage
 
         try
         {
-            var service = new BlobServiceClient(_options.ConnectionString);
+            var service = CoverBlobServiceClientFactory.Create(_options);
             return service.GetBlobContainerClient(_options.ContainerName).Uri.ToString();
         }
         catch

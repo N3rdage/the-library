@@ -17,7 +17,7 @@ public class AuthorAdminCommandsTests
         int authorId;
         using (var db = _factory.CreateDbContext())
         {
-            var a = new Author { Name = "Old Name" };
+            var a = Author.Create("Old Name");
             db.Authors.Add(a);
             await db.SaveChangesAsync();
             authorId = a.Id;
@@ -37,7 +37,7 @@ public class AuthorAdminCommandsTests
         int aliceId;
         using (var db = _factory.CreateDbContext())
         {
-            db.Authors.AddRange(new Author { Name = "Alice" }, new Author { Name = "Bob" });
+            db.Authors.AddRange(Author.Create("Alice"), Author.Create("Bob"));
             await db.SaveChangesAsync();
             aliceId = db.Authors.Single(a => a.Name == "Alice").Id;
         }
@@ -56,8 +56,8 @@ public class AuthorAdminCommandsTests
         int kingId, bachmanId;
         using (var db = _factory.CreateDbContext())
         {
-            var king = new Author { Name = "Stephen King" };
-            var bachman = new Author { Name = "Richard Bachman" };
+            var king = Author.Create("Stephen King");
+            var bachman = Author.Create("Richard Bachman");
             db.Authors.AddRange(king, bachman);
             await db.SaveChangesAsync();
             kingId = king.Id;
@@ -79,9 +79,9 @@ public class AuthorAdminCommandsTests
         int aId, bId, cId;
         using (var db = _factory.CreateDbContext())
         {
-            var b = new Author { Name = "B" };
-            var a = new Author { Name = "A", CanonicalAuthor = b };
-            var c = new Author { Name = "C" };
+            var b = Author.Create("B");
+            var a = TestAuthors.Alias("A", of: b);
+            var c = Author.Create("C");
             db.Authors.AddRange(b, a, c);
             await db.SaveChangesAsync();
             aId = a.Id;
@@ -97,13 +97,37 @@ public class AuthorAdminCommandsTests
     }
 
     [Fact]
+    public async Task MarkAuthorAsAliasOf_TargetAlreadyAliasOfThisRow_IsANoOp_AndNeverPointsAtItself()
+    {
+        // If B is an alias of A, marking A as an alias of B re-roots to A
+        // itself; the handler must leave A canonical and B pointing at A.
+        int aId, bId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var a = Author.Create("A");
+            var b = TestAuthors.Alias("B", of: a);
+            db.Authors.AddRange(a, b);
+            await db.SaveChangesAsync();
+            aId = a.Id;
+            bId = b.Id;
+        }
+
+        var result = await new MarkAuthorAsAliasOfHandler(_factory).HandleAsync(new MarkAuthorAsAliasOf(aId, bId));
+
+        Assert.False(result.Success);
+        using var db2 = _factory.CreateDbContext();
+        Assert.Null(db2.Authors.Single(x => x.Id == aId).CanonicalAuthorId);
+        Assert.Equal(aId, db2.Authors.Single(x => x.Id == bId).CanonicalAuthorId);
+    }
+
+    [Fact]
     public async Task PromoteAuthorToCanonical_DropsCanonicalLink()
     {
         int bachmanId;
         using (var db = _factory.CreateDbContext())
         {
-            var king = new Author { Name = "Stephen King" };
-            var bachman = new Author { Name = "Richard Bachman", CanonicalAuthor = king };
+            var king = Author.Create("Stephen King");
+            var bachman = TestAuthors.Alias("Richard Bachman", of: king);
             db.Authors.AddRange(king, bachman);
             await db.SaveChangesAsync();
             bachmanId = bachman.Id;

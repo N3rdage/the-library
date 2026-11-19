@@ -34,10 +34,10 @@ public class GetBooksNeedingGenresHandlerTests
             var fantasy = new Genre { Name = "AIA Fantasy" };
             var comedy = new Genre { Name = "AIA Comedy" };
             db.Books.AddRange(
-                NewBook("Zeta", new Author { Name = "Author Z" }),
-                NewBook("Alpha", new Author { Name = "Author A" }),
-                NewBook("Mort", new Author { Name = "Terry Pratchett" }, fantasy, comedy),
-                NewBook("Beta", new Author { Name = "Author B" }, fantasy));
+                NewBook("Zeta", Author.Create("Author Z")),
+                NewBook("Alpha", Author.Create("Author A")),
+                NewBook("Mort", Author.Create("Terry Pratchett"), fantasy, comedy),
+                NewBook("Beta", Author.Create("Author B"), fantasy));
             await db.SaveChangesAsync();
         }
 
@@ -54,7 +54,7 @@ public class GetBooksNeedingGenresHandlerTests
     {
         await using (var db = _factory.CreateDbContext())
         {
-            var someone = new Author { Name = "Someone" };
+            var someone = Author.Create("Someone");
             for (var i = 0; i < 52; i++) db.Books.Add(NewBook($"Book {i:D2}", someone));
             await db.SaveChangesAsync();
         }

@@ -40,7 +40,7 @@ public class CreateSeriesFromSuggestionHandlerTests
             b.AssignToSeries(other.Id, 4, null);
             db.Books.Add(b);
 
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             db.Books.AddRange(
                 NewBook("Foundation", asimov),
                 NewBook("Foundation and Empire", asimov));
@@ -70,7 +70,7 @@ public class CreateSeriesFromSuggestionHandlerTests
         await using (var db = _factory.CreateDbContext())
         {
             db.Series.Add(new Series { Name = "AIA Dup", Type = SeriesType.Collection });
-            db.Books.Add(NewBook("Lonely", new Author { Name = "Someone" }));
+            db.Books.Add(NewBook("Lonely", Author.Create("Someone")));
             await db.SaveChangesAsync();
         }
 
@@ -92,7 +92,7 @@ public class CreateSeriesFromSuggestionHandlerTests
         await using (var db = _factory.CreateDbContext())
         {
             db.Series.Add(new Series { Name = "AIA Dup", Type = SeriesType.Collection });
-            db.Books.Add(NewBook("Lonely", new Author { Name = "Someone" }));
+            db.Books.Add(NewBook("Lonely", Author.Create("Someone")));
             await db.SaveChangesAsync();
         }
 
@@ -110,7 +110,7 @@ public class CreateSeriesFromSuggestionHandlerTests
     {
         await using (var db = _factory.CreateDbContext())
         {
-            db.Books.Add(NewBook("Lonely", new Author { Name = "Someone" }));
+            db.Books.Add(NewBook("Lonely", Author.Create("Someone")));
             await db.SaveChangesAsync();
         }
 
@@ -129,8 +129,8 @@ public class CreateSeriesFromSuggestionHandlerTests
         await using (var db = _factory.CreateDbContext())
         {
             db.Books.AddRange(
-                NewBook("Anthology A", new Author { Name = "Writer One" }),
-                NewBook("Anthology B", new Author { Name = "Writer Two" }));
+                NewBook("Anthology A", Author.Create("Writer One")),
+                NewBook("Anthology B", Author.Create("Writer Two")));
             await db.SaveChangesAsync();
         }
 

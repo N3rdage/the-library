@@ -203,6 +203,7 @@ public static class ProgramSetup
         builder.Services.AddTransient<BulkAddViewModel>();
         builder.Services.AddTransient<SeriesListViewModel>();
         builder.Services.AddTransient<SeriesEditViewModel>();
+        builder.Services.AddTransient<ShelfOrderViewModel>();
         builder.Services.AddTransient<AuthorListViewModel>();
         builder.Services.AddTransient<AuthorDetailViewModel>();
         builder.Services.AddTransient<PublisherListViewModel>();
@@ -266,11 +267,12 @@ public static class ProgramSetup
             .AddInteractiveServerRenderMode();
 
         // API endpoints (Minimal API). Each domain gets its own
-        // *Endpoints.cs class + Map* call here. Both endpoints are
+        // *Endpoints.cs class + Map* call here. These endpoints are
         // gated by Easy Auth at the platform layer (SECURITY-AUDIT.md
         // §SEC-006).
         app.MapCatalogEndpoints();
         app.MapWishlistEndpoints();
+        app.MapOnlineEndpoints();
         // /warmup is anonymous (excluded from Easy Auth) by design —
         // see WarmupEndpoints.cs and infra/modules/app-config.bicep's
         // `publicPaths` list. Used by Azure's slot-swap warmup probe.

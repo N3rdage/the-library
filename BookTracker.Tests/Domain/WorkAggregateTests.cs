@@ -16,7 +16,7 @@ public class WorkAggregateTests
     public void Create_bornAttachedToFirstBook_withFieldsAndAuthorship()
     {
         var book = new Book { Id = 1, Title = "B" };
-        var author = new Author { Name = "Le Guin" };
+        var author = Author.Create("Le Guin");
 
         var work = Work.Create(book, "  A Wizard of Earthsea  ", "  ", new DateOnly(1968, 1, 1), DatePrecision.Year, [author]);
 
@@ -37,7 +37,7 @@ public class WorkAggregateTests
     {
         var book = new Book { Id = 1 };
         Assert.Throws<DomainRuleException>(() =>
-            Work.Create(book, "  ", null, null, DatePrecision.Day, [new Author { Name = "A" }]));
+            Work.Create(book, "  ", null, null, DatePrecision.Day, [Author.Create("A")]));
     }
 
     [Fact]
@@ -53,7 +53,7 @@ public class WorkAggregateTests
     {
         var b1 = new Book { Id = 1 };
         var b2 = new Book { Id = 2 };
-        var work = Work.Create(b1, "T", null, null, DatePrecision.Day, [new Author { Name = "A" }]);
+        var work = Work.Create(b1, "T", null, null, DatePrecision.Day, [Author.Create("A")]);
 
         Assert.True(work.AppearsIn(b2));
         Assert.Equal(2, work.BookWorks.Count);
@@ -67,7 +67,7 @@ public class WorkAggregateTests
     public void RemoveFrom_lastBook_reportsOrphaned()
     {
         var b1 = new Book { Id = 1 };
-        var work = Work.Create(b1, "T", null, null, DatePrecision.Day, [new Author { Name = "A" }]);
+        var work = Work.Create(b1, "T", null, null, DatePrecision.Day, [Author.Create("A")]);
 
         var orphaned = work.RemoveFrom(b1);
 
@@ -80,7 +80,7 @@ public class WorkAggregateTests
     {
         var b1 = new Book { Id = 1 };
         var b2 = new Book { Id = 2 };
-        var work = Work.Create(b1, "T", null, null, DatePrecision.Day, [new Author { Name = "A" }]);
+        var work = Work.Create(b1, "T", null, null, DatePrecision.Day, [Author.Create("A")]);
         work.AppearsIn(b2);
 
         var orphaned = work.RemoveFrom(b1);
@@ -115,8 +115,8 @@ public class WorkAggregateTests
     public void AssignAuthorship_writesAuthorsWithOrder()
     {
         var work = new Work { Title = "Relic" };
-        var preston = new Author { Name = "Preston" };
-        var child = new Author { Name = "Child" };
+        var preston = Author.Create("Preston");
+        var child = Author.Create("Child");
 
         work.AssignAuthorship([preston, child]);
 
@@ -139,7 +139,7 @@ public class WorkAggregateTests
     public void AssignAuthorship_editorOnly_isValid()
     {
         var work = new Work { Title = "Oxford Companion to Wine" };
-        var robinson = new Author { Name = "Jancis Robinson" };
+        var robinson = Author.Create("Jancis Robinson");
 
         work.AssignAuthorship([], [(robinson, AuthorRole.Editor)]);
 
@@ -153,9 +153,9 @@ public class WorkAggregateTests
     public void AssignAuthorship_contributorsGetPerRoleOrderFromZero()
     {
         var work = new Work { Title = "The Hobbit" };
-        var tolkien = new Author { Name = "Tolkien" };
-        var sergio = new Author { Name = "Sergio Cariello" };
-        var mauss = new Author { Name = "Doug Mauss" };
+        var tolkien = Author.Create("Tolkien");
+        var sergio = Author.Create("Sergio Cariello");
+        var mauss = Author.Create("Doug Mauss");
 
         work.AssignAuthorship([tolkien], [(sergio, AuthorRole.Illustrator), (mauss, AuthorRole.Editor)]);
 
@@ -169,7 +169,7 @@ public class WorkAggregateTests
     public void AssignAuthorship_allowsSamePersonInMultipleRoles()
     {
         var work = new Work { Title = "The Hobbit" };
-        var tolkien = new Author { Name = "Tolkien" };
+        var tolkien = Author.Create("Tolkien");
 
         work.AssignAuthorship([tolkien], [(tolkien, AuthorRole.Illustrator)]);
 
@@ -182,8 +182,8 @@ public class WorkAggregateTests
     public void AssignAuthorship_dedupsContributorPairsWithinRole_andSkipsAuthorRole()
     {
         var work = new Work { Title = "x" };
-        var asimov = new Author { Name = "Asimov" };
-        var pohl = new Author { Name = "Pohl" };
+        var asimov = Author.Create("Asimov");
+        var pohl = Author.Create("Pohl");
 
         work.AssignAuthorship([asimov],
         [

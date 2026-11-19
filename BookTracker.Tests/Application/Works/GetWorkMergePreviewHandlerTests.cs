@@ -34,8 +34,8 @@ public class GetWorkMergePreviewHandlerTests
     public async Task LoadAsync_reports_different_authors_as_incompatibility()
     {
         using var db = _factory.CreateDbContext();
-        var tolkien = new Author { Name = "J.R.R. Tolkien" };
-        var notTolkien = new Author { Name = "Imposter" };
+        var tolkien = Author.Create("J.R.R. Tolkien");
+        var notTolkien = Author.Create("Imposter");
         var w1 = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = tolkien, Order = 0 }] };
         var w2 = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = notTolkien, Order = 0 }] };
         db.Books.Add(new Book { Title = "A", Works = [w1] });
@@ -53,7 +53,7 @@ public class GetWorkMergePreviewHandlerTests
         // A compendium book attaches both works; the LoadAsync preview must
         // flag that so the merge confirmation surfaces the overlap.
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "Agatha Christie" };
+        var author = Author.Create("Agatha Christie");
         var w1 = new Work { Title = "A", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var w2 = new Work { Title = "A", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         db.Books.Add(new Book { Title = "Solo W1", Works = [w1] });
@@ -71,7 +71,7 @@ public class GetWorkMergePreviewHandlerTests
         string loserTitle, string[] loserBooks)
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "Shared Author" };
+        var author = Author.Create("Shared Author");
         var winner = new Work { Title = winnerTitle, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var loser = new Work { Title = loserTitle, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         foreach (var t in winnerBooks)

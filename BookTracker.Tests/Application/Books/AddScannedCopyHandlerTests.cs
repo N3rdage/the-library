@@ -28,7 +28,7 @@ public class AddScannedCopyHandlerTests
         book.AttachWork(new Work
         {
             Title = "The Hobbit",
-            WorkAuthors = [new WorkAuthor { Author = new Author { Name = "J.R.R. Tolkien" }, Order = 0 }],
+            WorkAuthors = [new WorkAuthor { Author = Author.Create("J.R.R. Tolkien"), Order = 0 }],
         });
         db.Books.Add(book);
         await db.SaveChangesAsync();

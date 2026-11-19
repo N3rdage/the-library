@@ -65,7 +65,7 @@ public class GetSeriesMatchCandidatesHandlerTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            var author = new Author { Name = "Some Author" };
+            var author = Author.Create("Some Author");
             var series = new Series { Name = "Existing Series", Type = SeriesType.Series };
             db.Books.AddRange(
                 new Book { Title = "Book A", Works = [new Work { Title = "Book A", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }] },
@@ -88,8 +88,8 @@ public class GetSeriesMatchCandidatesHandlerTests
         // books count as the translator's own (reported on #265, not fixed here).
         using (var db = _factory.CreateDbContext())
         {
-            var translator = new Author { Name = "Ann Translator" };
-            var lead = new Author { Name = "Lead Author" };
+            var translator = Author.Create("Ann Translator");
+            var lead = Author.Create("Lead Author");
             db.Books.Add(new Book
             {
                 Title = "Translated",

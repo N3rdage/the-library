@@ -35,7 +35,7 @@ public class GetCopyForEditHandlerTests
             db.Books.Add(new Book
             {
                 Title = "B",
-                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
+                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
                 Editions = [edition],
             });
             await db.SaveChangesAsync();

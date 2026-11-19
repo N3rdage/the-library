@@ -1,0 +1,60 @@
+@page "/shelf-order"
+@using BookTracker.Application.Shelf
+@inject ShelfOrderViewModel VM
+
+<PageTitle>Shelf order - Bookcase</PageTitle>
+
+@* A plain list to read at the bookcase or print: one heading per top-level
+   genre, rows in shelving order. No virtualisation so the whole list prints. *@
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="py-3">
+    <MudText Typo="Typo.h4" Class="mb-2">Shelf order</MudText>
+
+    @if (VM.Loading || VM.View is null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else
+    {
+        <MudText Typo="Typo.body2" Class="mb-1">
+            Books sit under the top-level genre of their first work; a book with several top-level genres sits under the alphabetically first
+            (@VM.View.BooksWithSeveralGenres of @VM.View.TotalBooks books, marked "also").
+        </MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Within a genre: author surname, then series and number, then year first published, then title.
+        </MudText>
+
+        @if (VM.View.Groups.Count == 0)
+        {
+            <MudText Typo="Typo.body1">No books yet.</MudText>
+        }
+
+        @foreach (var group in VM.View.Groups)
+        {
+            <section class="mb-4">
+                <MudText Typo="Typo.h6" Class="mb-1">@group.Genre (@group.Books.Count)</MudText>
+                <ol class="ps-4 mb-0">
+                    @foreach (var book in group.Books)
+                    {
+                        <li class="mb-1">
+                            @if (book.ShelvedAs is not null)
+                            {
+                                <span>@book.ShelvedAs — </span>
+                            }
+                            <a href="@($"/books/{book.BookId}")" class="fw-semibold">@book.Title</a>
+                            <span class="text-muted"> @ShelfOrderViewModel.Detail(book)</span>
+                            @if (book.AlsoIn.Count > 0)
+                            {
+                                <span class="text-muted small"> also @string.Join(", ", book.AlsoIn)</span>
+                            }
+                        </li>
+                    }
+                </ol>
+            </section>
+        }
+    }
+</MudContainer>
+
+@code {
+    protected override async Task OnInitializedAsync() => await VM.InitializeAsync();
+}

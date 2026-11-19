@@ -24,4 +24,7 @@ public record BookLookupResult(
     // case is tracked as a follow-up TODO ("Support non-integer SeriesOrder").
     string? Series = null,
     int? SeriesNumber = null,
-    string? SeriesNumberRaw = null);
+    string? SeriesNumberRaw = null,
+    // Open Library's work key (e.g. "/works/OL45804W") from the edition's
+    // `works` in the `jscmd=details` view; null from the other providers.
+    string? WorkKey = null);

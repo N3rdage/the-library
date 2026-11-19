@@ -103,7 +103,12 @@ Web project do, and they are the named exceptions in C1:
 - `Services/EditionFormatBackfillService.cs` — the one-shot startup backfill of Edition formats.
 
 The compiler does not enforce the rule: `BookTracker.Web.csproj` references `BookTracker.Data`
-directly, so a new `IDbContextFactory<BookTrackerDbContext>` injection in Web compiles.
+directly (the composition root and the Data enums need it), so a new
+`IDbContextFactory<BookTrackerDbContext>` injection in Web compiles.
+`BookTracker.Tests/Architecture/WebLayeringTests.cs` enforces it instead, so an agent that
+reaches across the seam fails the unit tests: only those five Web types may hold a `DbContext`,
+its factory or a `DbSet<>`, and the same test keeps Data entities out of ViewModels and
+components.
 
 ### Write side (commands)
 
@@ -183,7 +188,7 @@ must not widen it.
 
 | # | Rule |
 |---|------|
-| C1 | ViewModels / pages / components / API endpoints never touch `DbContext`. They call Application handlers only. In `BookTracker.Web` exactly five files may touch it: `ProgramSetup.cs` (composition root), `Api/WarmupEndpoints.cs`, `Services/Covers/CoverMirrorBackgroundService.cs`, `Services/Covers/CoverMirrorQueue.cs` and `Services/EditionFormatBackfillService.cs`. |
+| C1 | ViewModels / pages / components / API endpoints never touch `DbContext`. They call Application handlers only. `WebLayeringTests` (`BookTracker.Tests/Architecture/WebLayeringTests.cs`) enforces it. In `BookTracker.Web` exactly five files may touch it: `ProgramSetup.cs` (composition root), `Api/WarmupEndpoints.cs`, `Services/Covers/CoverMirrorBackgroundService.cs`, `Services/Covers/CoverMirrorQueue.cs` and `Services/EditionFormatBackfillService.cs`. |
 | C2 | One feature = one folder under `BookTracker.Application/<Feature>/`. Commands, queries, handlers, and read-model DTOs for that feature live together. |
 | C3 | Every cross-boundary contract is a `record` (commands, queries, read-model views). No EF entity crosses out of Application to the UI. |
 | C4 | One handler per file. File name = command/query name. Handlers are `sealed`. |

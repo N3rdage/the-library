@@ -96,7 +96,7 @@ public class WishlistViewModelTests
         int bookId;
         using (var db = _factory.CreateDbContext())
         {
-            var author = new Author { Name = "Tolkien" };
+            var author = Author.Create("Tolkien");
             var book = new Book
             {
                 Title = "The Hobbit",
@@ -557,7 +557,7 @@ public class WishlistViewModelTests
         int seriesId;
         using (var db = _factory.CreateDbContext())
         {
-            var author = new Author { Name = "Brandon Sanderson" };
+            var author = Author.Create("Brandon Sanderson");
             var series = new Series { Name = "The Stormlight Archive", Author = "Brandon Sanderson", Type = SeriesType.Series, ExpectedCount = 5 };
             foreach (var (order, display) in new (int?, string?)[] { (1, null), (2, null), (3, null), (5, null), (4, "4.5") })
             {
@@ -598,7 +598,7 @@ public class WishlistViewModelTests
         int seriesId;
         using (var db = _factory.CreateDbContext())
         {
-            var author = new Author { Name = "Andrzej Sapkowski" };
+            var author = Author.Create("Andrzej Sapkowski");
             var witcher = new Series { Name = "The Witcher", Author = "Andrzej Sapkowski", Type = SeriesType.Series, ExpectedCount = 3 };
             db.Series.Add(witcher);
             await db.SaveChangesAsync();
@@ -640,7 +640,7 @@ public class WishlistViewModelTests
         // Surfaces in OpenSeriesList for the "Add next N" flow.
         using (var db = _factory.CreateDbContext())
         {
-            var author = new Author { Name = "Terry Pratchett" };
+            var author = Author.Create("Terry Pratchett");
             var discworld = new Series { Name = "Discworld", Author = "Terry Pratchett", Type = SeriesType.Series, ExpectedCount = null };
             db.Series.Add(discworld);
             await db.SaveChangesAsync();

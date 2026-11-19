@@ -232,6 +232,7 @@ module appConfig './app-config.bicep' = {
     coverStorageStagingContainerName: coverStorage.outputs.stagingContainerName
     coverStorageProdPublicBaseUrl: coverStorage.outputs.prodPublicContainerUrl
     coverStorageStagingPublicBaseUrl: coverStorage.outputs.stagingPublicContainerUrl
+    coverStorageServiceUri: coverStorage.outputs.blobEndpoint
   }
   // Wait for KV (so KV refs resolve). Storage is implicit via the
   // `coverStoragePublicBaseUrl` output reference above.

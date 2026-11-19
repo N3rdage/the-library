@@ -28,7 +28,7 @@ public sealed class RenameAuthorHandler(IDbContextFactory<BookTrackerDbContext> 
                 $"An author named \"{trimmed}\" already exists. Use the alias dropdown to merge.");
         }
 
-        author.Name = trimmed;
+        author.Rename(trimmed);
         await db.SaveChangesAsync(ct);
         return AuthorAdminResult.Ok($"Renamed to \"{trimmed}\".");
     }

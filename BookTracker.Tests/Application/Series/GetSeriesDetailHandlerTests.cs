@@ -31,7 +31,7 @@ public class GetSeriesDetailHandlerTests
                 Name = "Foundation", Author = "Isaac Asimov", Type = SeriesType.Series,
                 ExpectedCount = 7, Description = "Psychohistory",
             };
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             Book B(string title, int? order, string? display = null) => new()
             {
                 Title = title, Series = series, SeriesOrder = order, SeriesOrderDisplay = display,
@@ -73,9 +73,9 @@ public class GetSeriesDetailHandlerTests
         using (var db = _factory.CreateDbContext())
         {
             var series = new Series { Name = "Pendergast", Type = SeriesType.Series };
-            var preston = new Author { Name = "Douglas Preston" };
-            var child = new Author { Name = "Lincoln Child" };
-            var editor = new Author { Name = "Ed Itor" };
+            var preston = Author.Create("Douglas Preston");
+            var child = Author.Create("Lincoln Child");
+            var editor = Author.Create("Ed Itor");
             db.Books.Add(new Book
             {
                 Title = "Relic",

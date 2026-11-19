@@ -29,7 +29,7 @@ public class GetWorkForEditHandlerTests
             {
                 Title = "Mort",
                 Subtitle = "A Discworld Novel",
-                WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Terry Pratchett" }, Order = 0 }],
+                WorkAuthors = [new WorkAuthor { Author = Author.Create("Terry Pratchett"), Order = 0 }],
                 FirstPublishedDate = new DateOnly(1987, 11, 12),
                 FirstPublishedDatePrecision = DatePrecision.Day,
             };
@@ -63,11 +63,11 @@ public class GetWorkForEditHandlerTests
                 Title = "Good Omens",
                 WorkAuthors =
                 [
-                    new WorkAuthor { Author = new Author { Name = "Neil Gaiman" }, Order = 1 },
-                    new WorkAuthor { Author = new Author { Name = "Terry Pratchett" }, Order = 0 },
-                    new WorkAuthor { Author = new Author { Name = "Ann Translator" }, Role = AuthorRole.Translator, Order = 0 },
-                    new WorkAuthor { Author = new Author { Name = "Zed Editor" }, Role = AuthorRole.Editor, Order = 1 },
-                    new WorkAuthor { Author = new Author { Name = "Amy Editor" }, Role = AuthorRole.Editor, Order = 0 },
+                    new WorkAuthor { Author = Author.Create("Neil Gaiman"), Order = 1 },
+                    new WorkAuthor { Author = Author.Create("Terry Pratchett"), Order = 0 },
+                    new WorkAuthor { Author = Author.Create("Ann Translator"), Role = AuthorRole.Translator, Order = 0 },
+                    new WorkAuthor { Author = Author.Create("Zed Editor"), Role = AuthorRole.Editor, Order = 1 },
+                    new WorkAuthor { Author = Author.Create("Amy Editor"), Role = AuthorRole.Editor, Order = 0 },
                 ],
             };
             db.Books.Add(new Book { Title = "Good Omens", Works = [work] });
@@ -100,7 +100,7 @@ public class GetWorkForEditHandlerTests
             var work = new Work
             {
                 Title = "w",
-                WorkAuthors = [new WorkAuthor { Author = new Author { Name = "a" }, Order = 0 }],
+                WorkAuthors = [new WorkAuthor { Author = Author.Create("a"), Order = 0 }],
                 Genres = [fantasy, horror],
             };
             db.Books.Add(new Book { Title = "B", Works = [work] });
