@@ -1,17 +1,39 @@
 namespace BookTracker.Data.Models;
 
+// The physical item you own; part of the Book aggregate through its Edition.
+// The scalar fields are written only through the methods below (private
+// setters; EF materialises through them), and the compiler enforces it. A Copy
+// is created through Edition.AddCopy; the internal constructor serves that and
+// the tests' seed builder (InternalsVisibleTo). Id stays public for EF and the
+// tests' in-memory graphs.
 public class Copy
 {
+    // EF materialisation.
+    private Copy() { }
+
+    /// <summary>Stores exactly the values given (<see cref="Edition.AddCopy"/>
+    /// trims the notes before calling).</summary>
+    internal Copy(BookCondition condition, DateTime? dateAcquired, string? notes)
+    {
+        Condition = condition;
+        DateAcquired = dateAcquired;
+        Notes = notes;
+    }
+
     public int Id { get; set; }
 
-    public int EditionId { get; set; }
-    public Edition Edition { get; set; } = null!;
+    public int EditionId { get; private set; }
 
-    public BookCondition Condition { get; set; } = BookCondition.Good;
+    /// <summary>The owning Edition. EF fixes it up from <see cref="Edition.Copies"/>
+    /// and <see cref="EditionId"/>; the setter is internal so the tests can attach
+    /// a detached seed to its Edition (InternalsVisibleTo).</summary>
+    public Edition Edition { get; internal set; } = null!;
 
-    public DateTime? DateAcquired { get; set; }
+    public BookCondition Condition { get; private set; } = BookCondition.Good;
 
-    public string? Notes { get; set; }
+    public DateTime? DateAcquired { get; private set; }
+
+    public string? Notes { get; private set; }
 
     /// <summary>Every loan of this copy, open and returned. Written only through
     /// <see cref="LendTo"/> and <see cref="MarkReturned"/>; callers that lend or
@@ -28,6 +50,11 @@ public class Copy
         DateAcquired = dateAcquired;
         Notes = notes.TrimToNull();
     }
+
+    /// <summary>Re-points this Copy at Edition <paramref name="editionId"/> by key.
+    /// Internal: <see cref="Edition.AdoptCopiesFrom"/> is the write path, and the
+    /// tests' seed builder reaches it (InternalsVisibleTo).</summary>
+    internal void MoveToEdition(int editionId) => EditionId = editionId;
 
     /// <summary>Lends this copy to <paramref name="borrowerName"/> (trimmed, at
     /// most 200 characters) from <paramref name="lentOn"/>, optionally due back
