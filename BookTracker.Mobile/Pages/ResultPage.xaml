@@ -8,8 +8,8 @@
     <!-- The scan/search result destination: "do I own this?" at the
          (this-)edition level. Found → cover + title + authors + status +
          editions/works. Not-found → neutral card + add-in-app. Wishlist flag
-         shows in both. v1 is offline (this exact ISBN); the work-level /
-         online-edition answer is the online-layer arc (TODO #54). -->
+         shows in both. Found is offline (this exact ISBN). Online, a miss is
+         then asked of Bookcase and OnlineFrame gives the work-level answer. -->
     <ScrollView>
         <VerticalStackLayout Padding="20" Spacing="12">
 
@@ -99,6 +99,76 @@
                            TextColor="{AppThemeBinding Light={StaticResource TextMutedL}, Dark={StaticResource TextMutedD}}" />
                     <Button x:Name="AddToLibraryButton" Text="Add in app →" Clicked="OnAddToLibraryClicked"
                             Style="{StaticResource PrimaryButton}" HorizontalOptions="Start" Padding="16,0" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Shown under the cache "not found" answer while Bookcase is
+                 asked about the ISBN; the answer is never blocked on it. -->
+            <Label x:Name="OnlineCheckingLabel"
+                   IsVisible="False"
+                   Text="Checking online…"
+                   FontSize="13"
+                   HorizontalOptions="Center"
+                   TextColor="{AppThemeBinding Light={StaticResource TextMutedL}, Dark={StaticResource TextMutedD}}" />
+
+            <!-- Online answer (replaces "not found" when Bookcase knows the
+                 ISBN): the provider's printing, at work level. Copy comes from
+                 OnlineResultFormatter; empty lines are hidden. -->
+            <Border x:Name="OnlineFrame"
+                    IsVisible="False"
+                    Stroke="{AppThemeBinding Light={StaticResource MissBorderL}, Dark={StaticResource MissBorderD}}"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource MissBgL}, Dark={StaticResource MissBgD}}"
+                    Padding="12">
+                <Border.StrokeShape><RoundRectangle CornerRadius="8" /></Border.StrokeShape>
+                <VerticalStackLayout Spacing="12">
+                    <Label x:Name="OnlineHeadline" FontAttributes="Bold" FontSize="16"
+                           TextColor="{AppThemeBinding Light={StaticResource TextL}, Dark={StaticResource TextD}}" />
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                        <Grid Grid.Column="0"
+                              WidthRequest="80"
+                              HeightRequest="120"
+                              VerticalOptions="Start"
+                              BackgroundColor="{AppThemeBinding Light={StaticResource CoverMissL}, Dark={StaticResource CoverMissD}}">
+                            <Label x:Name="OnlineCoverPlaceholder"
+                                   FontFamily="Tabler"
+                                   FontSize="32"
+                                   HorizontalOptions="Center"
+                                   VerticalOptions="Center"
+                                   TextColor="{AppThemeBinding Light={StaticResource BrassTextL}, Dark={StaticResource BrassTextD}}" />
+                            <Image x:Name="OnlineCover" IsVisible="False" Aspect="AspectFit" />
+                        </Grid>
+                        <VerticalStackLayout Grid.Column="1" Spacing="6">
+                            <Label x:Name="OnlineTitle" FontAttributes="Bold" FontSize="18" LineBreakMode="WordWrap"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextL}, Dark={StaticResource TextD}}" />
+                            <Label x:Name="OnlineByline" FontSize="14"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextMutedL}, Dark={StaticResource TextMutedD}}" />
+                            <Label x:Name="OnlineDetails" FontSize="13"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextL}, Dark={StaticResource TextD}}" />
+                            <Label x:Name="OnlineIsbn" FontSize="12" FontFamily="Courier New"
+                                   TextColor="{AppThemeBinding Light={StaticResource TextMutedL}, Dark={StaticResource TextMutedD}}" />
+                        </VerticalStackLayout>
+                    </Grid>
+
+                    <Label x:Name="OnlineNote" FontSize="13" LineBreakMode="WordWrap"
+                           TextColor="{AppThemeBinding Light={StaticResource TextL}, Dark={StaticResource TextD}}" />
+
+                    <VerticalStackLayout x:Name="OnlineEditionsSection" IsVisible="False" Spacing="4">
+                        <Label Text="Editions you own" FontSize="12" FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Light={StaticResource BrassTextL}, Dark={StaticResource BrassTextD}}" />
+                        <VerticalStackLayout x:Name="OnlineEditionsLayout" Spacing="6" />
+                    </VerticalStackLayout>
+
+                    <HorizontalStackLayout Spacing="8">
+                        <Button x:Name="OnlineOpenInAppButton" Text="Open in app →" Clicked="OnOpenInAppClicked"
+                                IsVisible="False"
+                                Style="{StaticResource PrimaryButton}" Padding="16,0" />
+                        <Button x:Name="OnlineSyncButton" Text="Sync" Clicked="OnSyncClicked"
+                                IsVisible="False"
+                                Style="{StaticResource PrimaryButton}" Padding="16,0" />
+                        <Button x:Name="OnlineAddButton" Text="Add in app →" Clicked="OnAddToLibraryClicked"
+                                IsVisible="False"
+                                Style="{StaticResource PrimaryButton}" Padding="16,0" />
+                    </HorizontalStackLayout>
                 </VerticalStackLayout>
             </Border>
 

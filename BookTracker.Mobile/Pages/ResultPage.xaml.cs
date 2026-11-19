@@ -1,28 +1,35 @@
 using BookTracker.Mobile.Cache;
 using BookTracker.Mobile.Cache.Presentation;
+using BookTracker.Mobile.Services;
 using BookTracker.Mobile.Theming;
 using BookTracker.Shared.Catalog;
+using Microsoft.Maui.Networking;
 
 namespace BookTracker.Mobile.Pages;
 
 // "Do I own this?" result for an ISBN, resolved against the offline cache.
 // Self-contained: constructed with the ISBN, does the lookup in OnAppearing.
-// Token-based + dark. v1 answers at the (this-)edition level — the work-level /
-// online-edition answer is the online-layer arc (TODO #54).
+// Token-based + dark. A cache hit answers at the (this-)edition level. On a
+// miss the offline "not found" answer renders at once; when the phone is
+// online, Bookcase's GET /api/online/isbn/{isbn} is then asked and its
+// work-level answer (OnlineResultFormatter) replaces the "not found" card.
 public partial class ResultPage : ContentPage
 {
     private readonly ICatalogCache _cache;
     private readonly IHttpClientFactory _httpFactory;
+    private readonly IApiClient _api;
     private readonly string _isbn;
     private bool _loaded;
     private CancellationTokenSource? _coverCts;
 
-    public ResultPage(ICatalogCache cache, IHttpClientFactory httpFactory, string isbn)
+    public ResultPage(ICatalogCache cache, IHttpClientFactory httpFactory, IApiClient api, string isbn)
     {
         InitializeComponent();
         _cache = cache;
         _httpFactory = httpFactory;
+        _api = api;
         _isbn = isbn;
+        OnlineCoverPlaceholder.Text = TablerIcons.Book;
     }
 
     protected override async void OnAppearing()
@@ -66,6 +73,14 @@ public partial class ResultPage : ContentPage
             MissingIsbn.Text = $"ISBN: {_isbn}";
             MissingFrame.IsVisible = true;
             _ = MissingFrame.InAsync(); // answer + motion land together
+
+            // The offline answer is already on screen; the online one only
+            // ever replaces it, never delays it.
+            if (Connectivity.Current.NetworkAccess == NetworkAccess.Internet)
+            {
+                _coverCts = new CancellationTokenSource();
+                _ = LookupOnlineAsync(_coverCts.Token);
+            }
             return;
         }
 
@@ -111,6 +126,59 @@ public partial class ResultPage : ContentPage
                 EditionsSection.IsVisible = true;
             }
         });
+    }
+
+    private async Task LookupOnlineAsync(CancellationToken ct)
+    {
+        OnlineCheckingLabel.IsVisible = true;
+        var lookup = await _api.LookupIsbnOnlineAsync(_isbn, ct); // null on any failure
+        var answer = OnlineResultFormatter.Decide(lookup, wasOnline: true);
+
+        BookEnrichedDetail? owned = null;
+        if (answer.OwnedBookId is int bookId && !ct.IsCancellationRequested)
+        {
+            try { owned = await _cache.GetBookEnrichedDetailAsync(bookId); }
+            catch { /* the owned editions are gravy; the answer still renders */ }
+        }
+
+        await MainThread.InvokeOnMainThreadAsync(() =>
+        {
+            if (ct.IsCancellationRequested) return;
+            OnlineCheckingLabel.IsVisible = false;
+            if (answer.State == OnlineResultState.Unknown) return; // "not found" stays
+
+            OnlineHeadline.Text = answer.Headline;
+            SetLine(OnlineTitle, answer.Title);
+            SetLine(OnlineByline, answer.Byline);
+            SetLine(OnlineDetails, answer.Details);
+            OnlineIsbn.Text = $"ISBN: {_isbn}";
+            SetLine(OnlineNote, answer.Note);
+
+            if (owned is not null && owned.Editions.Count > 0)
+            {
+                foreach (var edition in owned.Editions)
+                    OnlineEditionsLayout.Children.Add(BuildEditionRow(edition));
+                OnlineEditionsSection.IsVisible = true;
+            }
+
+            OnlineOpenInAppButton.IsVisible = answer.OwnedBookId is not null;
+            OnlineOpenInAppButton.CommandParameter = answer.OwnedBookId;
+            OnlineSyncButton.IsVisible = answer.State == OnlineResultState.OwnedSameEdition;
+            OnlineAddButton.IsVisible = answer.State == OnlineResultState.NotOwned;
+
+            MissingFrame.IsVisible = false;
+            OnlineFrame.IsVisible = true;
+            _ = OnlineFrame.InAsync();
+        });
+
+        if (lookup is not null && !ct.IsCancellationRequested && answer.State != OnlineResultState.Unknown)
+            _ = LoadEditionCoverAsync(lookup.CoverUrl, OnlineCover, OnlineCoverPlaceholder);
+    }
+
+    private static void SetLine(Label label, string text)
+    {
+        label.Text = text;
+        label.IsVisible = text.Length > 0;
     }
 
     private static View BuildWorkRow(WorkSnapshot work)
@@ -211,6 +279,12 @@ public partial class ResultPage : ContentPage
             try { await Launcher.Default.OpenAsync(new Uri($"{AppConfig.ApiBaseUrl}/books/{bookId}")); }
             catch (Exception ex) { StatusLabel.Text = $"Couldn't open browser: {ex.Message}"; }
         }
+    }
+
+    private async void OnSyncClicked(object? sender, EventArgs e)
+    {
+        try { await StatusSheetPage.OpenAsync(Navigation); }
+        catch (Exception ex) { StatusLabel.Text = $"Couldn't open sync: {ex.Message}"; }
     }
 
     private async void OnAddToLibraryClicked(object? sender, EventArgs e)

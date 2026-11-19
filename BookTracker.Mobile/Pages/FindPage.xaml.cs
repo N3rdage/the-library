@@ -21,6 +21,7 @@ public partial class FindPage : ContentPage
     private readonly ICatalogCache _cache;
     private readonly IHttpClientFactory _httpFactory;
     private readonly ISyncService _sync;
+    private readonly IApiClient _api; // handed to ResultPage for its online lookup
 
     private CancellationTokenSource? _searchCts;
     private IReadOnlyList<AuthorSnapshot> _authors = [];
@@ -36,12 +37,13 @@ public partial class FindPage : ContentPage
     private bool _cameraExpanded;
     private int _scanHandled; // 0 = ready, 1 = a scan already navigated (Interlocked)
 
-    public FindPage(ICatalogCache cache, IHttpClientFactory httpFactory, ISyncService sync)
+    public FindPage(ICatalogCache cache, IHttpClientFactory httpFactory, ISyncService sync, IApiClient api)
     {
         InitializeComponent();
         _cache = cache;
         _httpFactory = httpFactory;
         _sync = sync;
+        _api = api;
         _sync.StateChanged += (_, _) => MainThread.BeginInvokeOnMainThread(RefreshSyncChip);
         RefreshSyncChip();
         UpdateScopeButtons();
@@ -132,7 +134,7 @@ public partial class FindPage : ContentPage
             try { HapticFeedback.Default.Perform(HapticFeedbackType.Click); } catch { /* no haptic motor */ }
             await ReticleBox.PulseAsync();
             CollapseCamera();
-            await Navigation.PushAsync(new ResultPage(_cache, _httpFactory, isbn));
+            await Navigation.PushAsync(new ResultPage(_cache, _httpFactory, _api, isbn));
         });
     }
 
@@ -188,7 +190,7 @@ public partial class FindPage : ContentPage
     {
         var query = (SearchEntry.Text ?? "").Trim();
         if (!IsbnInput.LooksLikeIsbn(query)) return;
-        await Navigation.PushAsync(new ResultPage(_cache, _httpFactory, IsbnInput.CleanIsbn(query)));
+        await Navigation.PushAsync(new ResultPage(_cache, _httpFactory, _api, IsbnInput.CleanIsbn(query)));
     }
 
     private void RenderResults()

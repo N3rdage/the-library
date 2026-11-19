@@ -16,10 +16,11 @@ public static class TablerIcons
 {
     private static string G(int codepoint) => char.ConvertFromUtf32(codepoint);
 
-    // Only the three tab-bar glyphs are in use — the redesign settled on text
-    // and emoji affordances elsewhere. The full font is bundled, so add a line
-    // here (with its upstream \eXXXX codepoint) when a surface actually needs one.
+    // In use: the three tab-bar glyphs and the Result page's online-answer
+    // cover placeholder. The full font is bundled, so add a line here (with
+    // its upstream \eXXXX codepoint) when a surface actually needs one.
     public static readonly string Search = G(0xEB1C);
     public static readonly string Star = G(0xEB2E);
     public static readonly string Books = G(0xEFF2);
+    public static readonly string Book = G(0xEA39);
 }
