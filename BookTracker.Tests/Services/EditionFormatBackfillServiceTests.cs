@@ -113,12 +113,10 @@ public class EditionFormatBackfillServiceTests
         var sharedAuthor = Author.Create("Test");
         foreach (var (isbn, format) in editions)
         {
-            db.Books.Add(new Book
-            {
-                Title = "Test",
-                Works = [new Work { Title = "Test", WorkAuthors = [new WorkAuthor { Author = sharedAuthor, Order = 0 }] }],
-                Editions = [new Edition { Isbn = isbn, Format = format, Copies = [new Copy { Condition = BookCondition.Good }] }]
-            });
+            db.Books.Add(TestBooks.Book(
+                "Test",
+                works: [new Work { Title = "Test", WorkAuthors = [new WorkAuthor { Author = sharedAuthor, Order = 0 }] }],
+                editions: [new Edition { Isbn = isbn, Format = format, Copies = [new Copy { Condition = BookCondition.Good }] }]));
         }
         await db.SaveChangesAsync();
     }

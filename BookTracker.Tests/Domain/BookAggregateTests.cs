@@ -13,7 +13,7 @@ public class BookAggregateTests
     [Fact]
     public void Rate_validValue_sets()
     {
-        var book = new Book { Title = "X" };
+        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
         book.Rate(4);
         Assert.Equal(4, book.Rating);
     }
@@ -21,7 +21,7 @@ public class BookAggregateTests
     [Fact]
     public void AttachWork_appendsWithIncreasingOrder()
     {
-        var book = new Book { Title = "Anthology" };
+        var book = Book.Create("Anthology", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
         var first = new Work { Title = "First" };
         var second = new Work { Title = "Second" };
         var third = new Work { Title = "Third" };
@@ -39,7 +39,7 @@ public class BookAggregateTests
     [Fact]
     public void AttachWork_alreadyAttached_isNoOp()
     {
-        var book = new Book { Title = "Anthology" };
+        var book = Book.Create("Anthology", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
         var work = new Work { Title = "Only" };
 
         Assert.True(book.AttachWork(work));
@@ -53,21 +53,21 @@ public class BookAggregateTests
     [InlineData(6)]
     public void Rate_outOfRange_throws(int rating)
     {
-        var book = new Book { Title = "X" };
+        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
         Assert.Throws<DomainRuleException>(() => book.Rate(rating));
     }
 
     [Fact]
     public void UpdateDetails_blankTitle_throws()
     {
-        var book = new Book { Title = "X" };
+        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
         Assert.Throws<DomainRuleException>(() => book.UpdateDetails("   ", BookCategory.Fiction, null));
     }
 
     [Fact]
     public void UpdateDetails_trimsTitleAndCover_andSetsCategory()
     {
-        var book = new Book { Title = "X" };
+        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
         book.UpdateDetails("  Dune  ", BookCategory.NonFiction, "  http://c  ");
         Assert.Equal("Dune", book.Title);
         Assert.Equal(BookCategory.NonFiction, book.Category);
@@ -77,7 +77,7 @@ public class BookAggregateTests
     [Fact]
     public void UpdateDetails_blankCover_setsNull()
     {
-        var book = new Book { Title = "X", DefaultCoverArtUrl = "old" };
+        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, "old");
         book.UpdateDetails("Dune", BookCategory.Fiction, "   ");
         Assert.Null(book.DefaultCoverArtUrl);
     }
@@ -85,7 +85,7 @@ public class BookAggregateTests
     [Fact]
     public void UpdateNotes_trimsThenNullsBlank()
     {
-        var book = new Book { Title = "X" };
+        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
         book.UpdateNotes("  hi  ");
         Assert.Equal("hi", book.Notes);
         book.UpdateNotes("   ");
@@ -95,7 +95,7 @@ public class BookAggregateTests
     [Fact]
     public void MarkRead_setsStatusRatingAndNotes_inOneGesture()
     {
-        var book = new Book { Title = "X" };
+        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
         book.MarkRead(5, "  loved it  ");
 
         Assert.Equal(BookStatus.Read, book.Status);
@@ -106,7 +106,7 @@ public class BookAggregateTests
     [Fact]
     public void MarkRead_nullNotes_leavesExistingNotesIntact()
     {
-        var book = new Book { Title = "X", Notes = "keep me", Status = BookStatus.Unread };
+        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, "keep me", null);
         book.MarkRead(4, null);
 
         Assert.Equal(BookStatus.Read, book.Status);
@@ -117,7 +117,7 @@ public class BookAggregateTests
     [Fact]
     public void MarkRead_blankNotes_clearsExistingNotes()
     {
-        var book = new Book { Title = "X", Notes = "old" };
+        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, "old", null);
         book.MarkRead(3, "   ");
         Assert.Null(book.Notes);
     }
@@ -125,7 +125,7 @@ public class BookAggregateTests
     [Fact]
     public void MarkRead_invalidRating_throws_andLeavesBookUntouched()
     {
-        var book = new Book { Title = "X", Status = BookStatus.Unread };
+        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
 
         Assert.Throws<DomainRuleException>(() => book.MarkRead(7, "note"));
 
@@ -136,7 +136,7 @@ public class BookAggregateTests
     [Fact]
     public void AddEdition_createsEditionWithSingleFirstCopy_andTrimsIsbn()
     {
-        var book = new Book { Title = "X" };
+        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
         var edition = book.AddEdition("  978-1  ", BookFormat.Hardcover, null, null, DatePrecision.Day, null, null, BookCondition.Fine);
 
         Assert.Single(book.Editions);
@@ -149,7 +149,7 @@ public class BookAggregateTests
     [Fact]
     public void AddEdition_setsEditionNumber()
     {
-        var book = new Book { Title = "Joy of Cooking" };
+        var book = Book.Create("Joy of Cooking", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
         var edition = book.AddEdition(null, BookFormat.Hardcover, 3, null, DatePrecision.Day, null, null, BookCondition.Good);
 
         Assert.Equal(3, edition.EditionNumber);
@@ -158,7 +158,7 @@ public class BookAggregateTests
     [Fact]
     public void AddEdition_nullEditionNumber_leavesItNull()
     {
-        var book = new Book { Title = "Foundation" };
+        var book = Book.Create("Foundation", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
         var edition = book.AddEdition(null, BookFormat.MassMarketPaperback, null, null, DatePrecision.Day, null, null, BookCondition.Good);
 
         Assert.Null(edition.EditionNumber);
@@ -167,7 +167,7 @@ public class BookAggregateTests
     [Fact]
     public void AddEdition_isbnIsTrimmedOnly_notNormalised()
     {
-        var book = new Book { Title = "X" };
+        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
         var edition = book.AddEdition(" 978-0-345-39180-3 ", BookFormat.Hardcover, null, null, DatePrecision.Day, null, null, BookCondition.Good);
 
         Assert.Equal("978-0-345-39180-3", edition.Isbn);
@@ -219,7 +219,7 @@ public class BookAggregateTests
     [Fact]
     public void RemoveCopy_notLast_keepsEdition()
     {
-        var book = new Book { Title = "X" };
+        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
         var edition = new Edition { Id = 1, Copies = { new Copy { Id = 10 }, new Copy { Id = 11 } } };
         book.Editions.Add(edition);
 
@@ -233,7 +233,7 @@ public class BookAggregateTests
     [Fact]
     public void RemoveCopy_last_removesEdition()
     {
-        var book = new Book { Title = "X" };
+        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
         book.Editions.Add(new Edition { Id = 1, Copies = { new Copy { Id = 10 } } });
 
         book.RemoveCopy(10);
@@ -244,7 +244,7 @@ public class BookAggregateTests
     [Fact]
     public void RemoveCopy_unknownCopy_throws()
     {
-        var book = new Book { Title = "X" };
+        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
         book.Editions.Add(new Edition { Id = 1, Copies = { new Copy { Id = 10 } } });
 
         Assert.Throws<DomainRuleException>(() => book.RemoveCopy(999));
@@ -253,13 +253,11 @@ public class BookAggregateTests
     [Fact]
     public void SoftDelete_clearsTagsAndEditionsAndStampsTombstone_butLeavesWorksToTheHandler()
     {
-        var book = new Book
-        {
-            Title = "X",
-            Works = { new Work { Title = "W" } },
-            Tags = { new Tag { Name = "t" } },
-            Editions = { new Edition { Copies = { new Copy() } } },
-        };
+        var book = TestBooks.Book(
+            "X",
+            works: [new Work { Title = "W" }],
+            tags: [new Tag { Name = "t" }],
+            editions: [new Edition { Copies = { new Copy() } }]);
 
         book.SoftDelete();
 

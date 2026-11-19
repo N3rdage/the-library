@@ -34,11 +34,9 @@ public class BookUpdatedAtInterceptorTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
-            var book = new Book
-            {
-                Title = "Foundation",
-                Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }],
-            };
+            var book = TestBooks.Book(
+                "Foundation",
+                works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -71,12 +69,10 @@ public class BookUpdatedAtInterceptorTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
-            var book = new Book
-            {
-                Title = "Foundation",
-                Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }],
-                Editions = [new Edition { Isbn = "9780553293357" }],
-            };
+            var book = TestBooks.Book(
+                "Foundation",
+                works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }],
+                editions: [new Edition { Isbn = "9780553293357" }]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -109,16 +105,14 @@ public class BookUpdatedAtInterceptorTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
-            var book = new Book
-            {
-                Title = "Foundation",
-                Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }],
-                Editions = [new Edition
+            var book = TestBooks.Book(
+                "Foundation",
+                works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }],
+                editions: [new Edition
                 {
                     Isbn = "9780553293357",
                     Copies = [new Copy { Condition = BookCondition.Good }],
-                }],
-            };
+                }]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -161,8 +155,8 @@ public class BookUpdatedAtInterceptorTests
                 Title = "The Call of Cthulhu",
                 WorkAuthors = [new WorkAuthor { Author = lovecraft, Order = 0 }],
             };
-            var bookA = new Book { Title = "Anthology A", Works = [sharedWork] };
-            var bookB = new Book { Title = "Anthology B", Works = [sharedWork] };
+            var bookA = TestBooks.Book("Anthology A", works: [sharedWork]);
+            var bookB = TestBooks.Book("Anthology B", works: [sharedWork]);
             db.Books.AddRange(bookA, bookB);
             await db.SaveChangesAsync();
             bookAId = bookA.Id;
@@ -202,10 +196,9 @@ public class BookUpdatedAtInterceptorTests
             var preston = Author.Create("Douglas Preston");
             var child = Author.Create("Lincoln Child");
             db.Authors.AddRange(preston, child);
-            var book = new Book
-            {
-                Title = "Relic",
-                Works =
+            var book = TestBooks.Book(
+                "Relic",
+                works:
                 [
                     new Work
                     {
@@ -216,8 +209,7 @@ public class BookUpdatedAtInterceptorTests
                             new WorkAuthor { Author = child, Order = 1 },
                         ],
                     },
-                ],
-            };
+                ]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -257,11 +249,9 @@ public class BookUpdatedAtInterceptorTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
-            var book = new Book
-            {
-                Title = "Foundation",
-                Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }],
-            };
+            var book = TestBooks.Book(
+                "Foundation",
+                works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]);
             db.Books.Add(book);
             db.Tags.Add(new Tag { Name = "favourites" });
             await db.SaveChangesAsync();
@@ -306,12 +296,10 @@ public class BookUpdatedAtInterceptorTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
-            var book = new Book
-            {
-                Title = "Foundation",
-                Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }],
-                DeletedAt = DateTime.UtcNow, // populate so we can assert Kind on the nullable property too
-            };
+            var book = TestBooks.Book(
+                "Foundation",
+                works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }],
+                deletedAt: DateTime.UtcNow); // populate so we can assert Kind on the nullable property too
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;

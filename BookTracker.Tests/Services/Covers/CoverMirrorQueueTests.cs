@@ -213,12 +213,10 @@ public class CoverMirrorQueueTests
     {
         await using var db = _factory.CreateDbContext();
         var edition = new Edition { Isbn = isbn, CoverUrl = editionCoverUrl };
-        var book = new Book
-        {
-            Title = "Foundation",
-            DefaultCoverArtUrl = bookCoverUrl,
-            Editions = [edition],
-        };
+        var book = TestBooks.Book(
+            "Foundation",
+            coverUrl: bookCoverUrl,
+            editions: [edition]);
         db.Books.Add(book);
         await db.SaveChangesAsync();
         return (book.Id, edition.Id);
