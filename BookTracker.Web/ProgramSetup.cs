@@ -213,7 +213,6 @@ public static class ProgramSetup
         builder.Services.AddTransient<PublisherListViewModel>();
         builder.Services.AddTransient<WishlistViewModel>();
         builder.Services.AddTransient<LoansViewModel>();
-        builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddTransient<DuplicatesViewModel>();
         builder.Services.AddTransient<AuthorMergeViewModel>();
         builder.Services.AddTransient<WorkMergeViewModel>();
