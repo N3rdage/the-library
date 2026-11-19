@@ -28,31 +28,39 @@ public enum BookCategory
 // series — TODO #56 moved this Work→Book), and one or more Editions / Copies.
 // Authorship, subtitle, and genres belong to the contained Works. For
 // single-Work books (the common case) Book.Title mirrors the sole Work's title.
+//
+// The scalar fields are written only through the methods below (private
+// setters; EF materialises through them regardless of accessibility), so a
+// handler cannot bypass an invariant and the compiler enforces it. Id stays
+// public for EF and the tests' in-memory graphs.
 public class Book
 {
     public int Id { get; set; }
 
     [Required, MaxLength(300)]
-    public string Title { get; set; } = string.Empty;
+    public string Title { get; private set; } = string.Empty;
 
-    public BookCategory Category { get; set; } = BookCategory.Fiction;
+    public BookCategory Category { get; private set; } = BookCategory.Fiction;
 
-    public BookStatus Status { get; set; } = BookStatus.Unread;
+    public BookStatus Status { get; private set; } = BookStatus.Unread;
 
     [Range(0, 5)]
-    public int Rating { get; set; }
+    public int Rating { get; private set; }
 
-    public string? Notes { get; set; }
+    public string? Notes { get; private set; }
 
-    public DateTime DateAdded { get; set; } = DateTime.UtcNow;
+    /// <summary>Stamped once, at creation; nothing in the app moves it.</summary>
+    public DateTime DateAdded { get; private set; } = DateTime.UtcNow;
 
     /// <summary>UTC stamp updated whenever this Book OR any entity in
     /// its aggregate (Edition, Copy, Work, WorkAuthor, BookTag) changes.
     /// Backs the `GET /api/catalog-snapshot?since=<token>` delta query
     /// so Bookshelf refreshes can ship only changed Books instead of
     /// the full ~150KB snapshot. Bumped via BookUpdatedAtInterceptor at
-    /// SaveChanges time — save sites don't need to set it explicitly.</summary>
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    /// SaveChanges time — save sites don't need to set it explicitly.
+    /// The setter is internal for that interceptor (same assembly); the
+    /// tests reach it through InternalsVisibleTo to seed a watermark.</summary>
+    public DateTime UpdatedAt { get; internal set; } = DateTime.UtcNow;
 
     /// <summary>Soft-delete tombstone. Non-null = the Book is "deleted"
     /// from the user's perspective; a global EF query filter
@@ -62,12 +70,17 @@ public class Book
     /// endpoint can emit it as a tombstone in <c>deletedIds[]</c> for
     /// Bookshelf clients to drop from their local cache. Children
     /// (Editions, Copies, BookTag join, BookWork join) are
-    /// hard-removed at delete time — the husk has no aggregate.</summary>
-    public DateTime? DeletedAt { get; set; }
+    /// hard-removed at delete time — the husk has no aggregate.
+    /// Stamped by <see cref="SoftDelete"/>; the setter is internal so the
+    /// tests can seed a tombstone directly (InternalsVisibleTo).</summary>
+    public DateTime? DeletedAt { get; internal set; }
 
     [MaxLength(500)]
-    public string? DefaultCoverArtUrl { get; set; }
+    public string? DefaultCoverArtUrl { get; private set; }
 
+    // Collection setters stay public until the collections slice (C7):
+    // seeds assign them wholesale, and AttachWork / AddEdition / SoftDelete
+    // are the ordered write paths in the meantime.
     public List<Edition> Editions { get; set; } = [];
 
     public List<Tag> Tags { get; set; } = [];
@@ -94,11 +107,11 @@ public class Book
     // carry no series of their own. (Pre-Work-refactor this lived on Book;
     // it briefly moved to Work, then came back here once a series of
     // short-story-collection books proved unmanageable at Work grain.)
-    public int? SeriesId { get; set; }
-    public Series? Series { get; set; }
+    public int? SeriesId { get; private set; }
+    public Series? Series { get; private set; }
 
     /// <summary>Position in a Series (1-based). Defaults to publication order for Collections.</summary>
-    public int? SeriesOrder { get; set; }
+    public int? SeriesOrder { get; private set; }
 
     /// <summary>
     /// Optional human-facing order label that overrides <see cref="SeriesOrder"/>
@@ -109,13 +122,13 @@ public class Book
     /// <see cref="SeriesOrder"/> (floored from the display value on capture).
     /// </summary>
     [MaxLength(50)]
-    public string? SeriesOrderDisplay { get; set; }
+    public string? SeriesOrderDisplay { get; private set; }
 
     // --- Aggregate behaviour -------------------------------------------------
     // Invariant-bearing operations live here so the rules are enforced in one
     // place and are unit-testable without EF. See docs/BACKEND-REFACTOR-DESIGN.md.
-    // (Collection setters stay public for now — the C7 encapsulation lock-down
-    // is deferred until every writer routes through these methods.)
+    // Every scalar write goes through these methods; the collections are the
+    // remaining public surface (see the note above Editions).
 
     /// <summary>Creates a Book from the Add page's book fields. Title is required
     /// and trimmed; notes and cover trim to null. The rating is stored as given,
@@ -179,6 +192,11 @@ public class Book
         Category = category;
         DefaultCoverArtUrl = coverUrl.TrimToNull();
     }
+
+    /// <summary>Sets the default cover on its own — the cover mirror swapping an
+    /// upstream URL for the blob URL, and a merge carrying the loser's cover to a
+    /// coverless winner. Trims to null, as <see cref="UpdateDetails"/> does.</summary>
+    public void SetCover(string? url) => DefaultCoverArtUrl = url.TrimToNull();
 
     public void AssignToSeries(int seriesId, int? order, string? orderDisplay)
     {
