@@ -187,6 +187,9 @@ public static class ProgramSetup
         builder.Services.AddScoped<IAIAssistantService>(sp =>
             sp.GetRequiredService<AIProviderFactory>().GetService());
 
+        // The clock ViewModels take "today" from (LoanDates.Today); tests pin it.
+        builder.Services.AddSingleton(TimeProvider.System);
+
         // ViewModels — transient so each component instance gets its own VM.
         builder.Services.AddTransient<HomeViewModel>();
         builder.Services.AddTransient<BookFormViewModel>();
@@ -196,6 +199,7 @@ public static class ProgramSetup
         builder.Services.AddTransient<BookListViewModel>();
         builder.Services.AddTransient<BookAddViewModel>();
         builder.Services.AddTransient<BookDetailViewModel>();
+        builder.Services.AddTransient<LendDialogViewModel>();
         builder.Services.AddTransient<BookEditDialogViewModel>();
         builder.Services.AddTransient<WorkEditDialogViewModel>();
         builder.Services.AddTransient<EditionFormDialogViewModel>();
