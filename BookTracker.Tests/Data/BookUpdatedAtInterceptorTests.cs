@@ -48,7 +48,7 @@ public class BookUpdatedAtInterceptorTests
         using (var db = _factory.CreateDbContext())
         {
             var book = await db.Books.FirstAsync(b => b.Id == bookId);
-            book.Title = "Foundation (revised)";
+            book.UpdateDetails("Foundation (revised)", book.Category, book.DefaultCoverArtUrl);
             await db.SaveChangesAsync();
         }
 

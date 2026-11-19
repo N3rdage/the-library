@@ -83,6 +83,31 @@ public class BookAggregateTests
     }
 
     [Fact]
+    public void SetCover_trimsUrl_andLeavesOtherDetailsAlone()
+    {
+        var book = Book.Create("Dune", BookCategory.NonFiction, BookStatus.Reading, 3, "note", "old");
+        book.SetCover("  https://blob/covers/books/1.jpg  ");
+
+        Assert.Equal("https://blob/covers/books/1.jpg", book.DefaultCoverArtUrl);
+        Assert.Equal("Dune", book.Title);
+        Assert.Equal(BookCategory.NonFiction, book.Category);
+        Assert.Equal(BookStatus.Reading, book.Status);
+        Assert.Equal(3, book.Rating);
+        Assert.Equal("note", book.Notes);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void SetCover_blank_setsNull(string? url)
+    {
+        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, "old");
+        book.SetCover(url);
+        Assert.Null(book.DefaultCoverArtUrl);
+    }
+
+    [Fact]
     public void UpdateNotes_trimsThenNullsBlank()
     {
         var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);

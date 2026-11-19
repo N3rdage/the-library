@@ -56,7 +56,7 @@ public class AiQueryHandlerTests
                 "Good Omens",
                 works: [new Work { Title = "Good Omens", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }, new WorkAuthor { Author = gaiman, Order = 1 }] }]);
             var deleted = NewBook("Tombstoned", gaiman);
-            deleted.DeletedAt = DateTime.UtcNow;
+            deleted.SoftDelete();
             db.Books.AddRange(
                 NewBook("Stardust", gaiman),
                 omens,
@@ -92,7 +92,7 @@ public class AiQueryHandlerTests
                     new Work { Title = "Two", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Genres = [fantasy, sf] },
                 ]);
             var deleted = NewBook("Tombstoned", author, 5);
-            deleted.DeletedAt = DateTime.UtcNow;
+            deleted.SoftDelete();
             db.Books.AddRange(compendium, NewBook("A Wizard of Earthsea", author, 5, genres: fantasy), deleted);
             await db.SaveChangesAsync();
         }
@@ -117,7 +117,7 @@ public class AiQueryHandlerTests
             var foundation = new Series { Name = "Foundation", Author = "Isaac Asimov", Type = SeriesType.Series, ExpectedCount = 3 };
             db.Series.AddRange(zeta, foundation);
             var interquel = NewBook("Interlude", asimov, 2, foundation, 2);
-            interquel.SeriesOrderDisplay = "2.5";
+            interquel.SetSeriesOrder(2, "2.5");
             db.Books.AddRange(
                 NewBook("Foundation", asimov, 5, foundation, 1),
                 interquel,
