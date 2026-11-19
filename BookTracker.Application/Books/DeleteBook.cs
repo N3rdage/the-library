@@ -19,7 +19,8 @@ public sealed class DeleteBookHandler(IDbContextFactory<BookTrackerDbContext> db
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var book = await db.Books
-            .Include(b => b.Editions)
+            // Copies and their Loans so SoftDelete can refuse while a copy is lent out.
+            .Include(b => b.Editions).ThenInclude(e => e.Copies).ThenInclude(c => c.Loans)
             .Include(b => b.Tags)
             // BookWorks is the canonical membership; ThenInclude each Work's own
             // BookWorks so RemoveFrom can ref-count it across its other books.
