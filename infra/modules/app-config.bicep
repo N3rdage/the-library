@@ -31,6 +31,10 @@ param coverStorageProdContainerName string = 'book-covers'
 param coverStorageStagingContainerName string = 'book-covers-staging'
 param coverStorageProdPublicBaseUrl string = ''
 param coverStorageStagingPublicBaseUrl string = ''
+// The account's blob endpoint, for the managed-identity path: the app uses it
+// with the slot's identity when CoverStorage__ConnectionString is empty (a
+// connection string, while present, wins). Same account for both slots.
+param coverStorageServiceUri string = ''
 
 // Key Vault reference helpers. App Service resolves these via its managed
 // identity (which has Key Vault Secrets User role) and caches the resolved
@@ -91,6 +95,7 @@ var commonAppSettings = {
   AI__Anthropic__ApiKey: anthropicKeyRef
   Trove__ApiKey: troveKeyRef
   CoverStorage__ConnectionString: coverStorageConnRef
+  CoverStorage__ServiceUri: coverStorageServiceUri
 }
 
 var prodAppSettingsValues = union(commonAppSettings, {
@@ -124,6 +129,7 @@ var slotStickyAppSettingNames = [
   // the just-promoted slot's cover URLs.
   'CoverStorage__ContainerName'
   'CoverStorage__PublicBaseUrl'
+  'CoverStorage__ServiceUri'
 ]
 
 // Paths served publicly (without Easy Auth). Two distinct shapes:

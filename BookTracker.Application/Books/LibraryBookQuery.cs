@@ -14,7 +14,7 @@ internal static class LibraryBookQuery
 {
     public static IQueryable<Book> Filtered(BookTrackerDbContext db, LibraryFilter f)
     {
-        IQueryable<Book> query = db.Books;
+        IQueryable<Book> query = db.Books.AsNoTracking();
 
         if (!string.IsNullOrWhiteSpace(f.SearchTerm))
         {

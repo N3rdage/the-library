@@ -19,11 +19,13 @@ public static class BookCovers
         // falls back to any candidate — so a single-Work book with no cover still
         // defers to a covered compendium.
         var singleWorkCover = await candidates
+            .AsNoTracking()
             .Where(b => b.Works.Count == 1)
             .Select(b => b.DefaultCoverArtUrl)
             .FirstOrDefaultAsync(ct);
 
         return singleWorkCover ?? await candidates
+            .AsNoTracking()
             .Select(b => b.DefaultCoverArtUrl)
             .FirstOrDefaultAsync(ct);
     }

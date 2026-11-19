@@ -31,8 +31,8 @@ public class GetHomeDashboardHandlerTests
         using (var db = _factory.CreateDbContext())
         {
             // Two Works by Author 1 share the same Author row (Name is unique).
-            var author1 = new Author { Name = "Author 1" };
-            var author2 = new Author { Name = "Author 2" };
+            var author1 = Author.Create("Author 1");
+            var author2 = Author.Create("Author 2");
             db.Books.AddRange(
                 new Book { Title = "Book A", Works = [new Work { Title = "Book A", WorkAuthors = [new WorkAuthor { Author = author1, Order = 0 }] }] },
                 new Book { Title = "Book B", Works = [new Work { Title = "Book B", WorkAuthors = [new WorkAuthor { Author = author1, Order = 0 }] }] },
@@ -58,11 +58,11 @@ public class GetHomeDashboardHandlerTests
         // King's tally on the home dashboard.
         using (var db = _factory.CreateDbContext())
         {
-            var king = new Author { Name = "Stephen King" };
+            var king = Author.Create("Stephen King");
             db.Authors.Add(king);
             await db.SaveChangesAsync();
 
-            var bachman = new Author { Name = "Richard Bachman", CanonicalAuthorId = king.Id };
+            var bachman = TestAuthors.Alias("Richard Bachman", of: king);
             db.Authors.Add(bachman);
 
             db.Books.Add(new Book { Title = "Carrie", Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }] });
@@ -87,8 +87,8 @@ public class GetHomeDashboardHandlerTests
         // such authors are dropped from the top-authors list.
         using (var db = _factory.CreateDbContext())
         {
-            var live = new Author { Name = "Live Author" };
-            var ghost = new Author { Name = "Ghost Author" };
+            var live = Author.Create("Live Author");
+            var ghost = Author.Create("Ghost Author");
             db.Books.Add(new Book { Title = "Live Book", Works = [new Work { Title = "Live Book", WorkAuthors = [new WorkAuthor { Author = live, Order = 0 }] }] });
             db.Books.Add(new Book { Title = "Deleted Book", DeletedAt = DateTime.UtcNow, Works = [new Work { Title = "Deleted Book", WorkAuthors = [new WorkAuthor { Author = ghost, Order = 0 }] }] });
             await db.SaveChangesAsync();
@@ -108,9 +108,9 @@ public class GetHomeDashboardHandlerTests
         {
             var fantasy = new Genre { Name = "Fantasy" };
             var sciFi = new Genre { Name = "Science Fiction" };
-            var a = new Author { Name = "A" };
-            var b = new Author { Name = "B" };
-            var c = new Author { Name = "C" };
+            var a = Author.Create("A");
+            var b = Author.Create("B");
+            var c = Author.Create("C");
 
             db.Books.AddRange(
                 new Book { Title = "Book A", Works = [new Work { Title = "Book A", WorkAuthors = [new WorkAuthor { Author = a, Order = 0 }], Genres = [fantasy] }] },

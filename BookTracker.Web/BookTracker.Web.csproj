@@ -13,6 +13,9 @@
   <ItemGroup>
     <PackageReference Include="Anthropic.SDK" Version="5.10.0" />
     <PackageReference Include="Azure.AI.OpenAI" Version="2.1.0" />
+    <!-- Azure.Identity: DefaultAzureCredential for cover storage over the slot's
+         managed identity when CoverStorage:ServiceUri is set without a connection string. -->
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
     <PackageReference Include="Azure.Storage.Blobs" Version="12.30.1" />
     <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.23.0" />
     <!-- SkiaSharp: cover image decode/resize/encode (replaces SixLabors.ImageSharp,

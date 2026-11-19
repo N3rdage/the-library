@@ -45,7 +45,7 @@ public class WorkMergeHandlerTests
         // Book C contains both works. Post-merge it should contain only the
         // winner — the loser-side BookWork row gets dropped. No PK violation.
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "Agatha Christie" };
+        var author = Author.Create("Agatha Christie");
         var winner = new Work { Title = "Style", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var loser = new Work { Title = "Style", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         db.Books.Add(new Book { Title = "Solo W2", Works = [loser] });
@@ -123,8 +123,8 @@ public class WorkMergeHandlerTests
     public async Task Merge_rejects_different_authors()
     {
         using var db = _factory.CreateDbContext();
-        var tolkien = new Author { Name = "J.R.R. Tolkien" };
-        var notTolkien = new Author { Name = "Imposter" };
+        var tolkien = Author.Create("J.R.R. Tolkien");
+        var notTolkien = Author.Create("Imposter");
         var w1 = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = tolkien, Order = 0 }] };
         var w2 = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = notTolkien, Order = 0 }] };
         db.Books.Add(new Book { Title = "A", Works = [w1] });
@@ -142,7 +142,7 @@ public class WorkMergeHandlerTests
     public async Task Merge_auto_fills_empty_winner_fields_from_loser()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "Shared" };
+        var author = Author.Create("Shared");
         var horror = new Genre { Name = "Horror" };
         var fantasy = new Genre { Name = "Fantasy" };
         db.Genres.AddRange(horror, fantasy);
@@ -183,7 +183,7 @@ public class WorkMergeHandlerTests
     public async Task Merge_preserves_populated_winner_fields_during_auto_fill()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "Shared" };
+        var author = Author.Create("Shared");
 
         var winner = new Work
         {
@@ -217,7 +217,7 @@ public class WorkMergeHandlerTests
     public async Task Merge_unions_genres_without_duplicates()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "Shared" };
+        var author = Author.Create("Shared");
         var horror = new Genre { Name = "Horror" };
         var fantasy = new Genre { Name = "Fantasy" };
         var mystery = new Genre { Name = "Mystery" };
@@ -247,7 +247,7 @@ public class WorkMergeHandlerTests
         // distinct author set is {Tolkien} on both sides — the merge should
         // proceed, not be rejected as "different authors".
         using var db = _factory.CreateDbContext();
-        var tolkien = new Author { Name = "Tolkien" };
+        var tolkien = Author.Create("Tolkien");
         db.Authors.Add(tolkien);
         await db.SaveChangesAsync();
 
@@ -281,7 +281,7 @@ public class WorkMergeHandlerTests
         string loserTitle, string[] loserBooks)
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "Shared Author" };
+        var author = Author.Create("Shared Author");
         var winner = new Work { Title = winnerTitle, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var loser = new Work { Title = loserTitle, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         foreach (var t in winnerBooks)
@@ -299,7 +299,7 @@ public class WorkMergeHandlerTests
     private async Task<(int winnerId, int loserId, int otherId)> SeedThreeWorksAsync()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "Shared Author" };
+        var author = Author.Create("Shared Author");
         var winner = new Work { Title = "W", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var loser = new Work { Title = "L", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var other = new Work { Title = "O", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };

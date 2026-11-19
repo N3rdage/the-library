@@ -1,21 +1,24 @@
+using BookTracker.Application.Works;
 using BookTracker.Data.Models;
-using BookTracker.Web.Services;
 
-namespace BookTracker.Tests.Services;
+namespace BookTracker.Tests;
 
+// Integration tests for the existing-Work typeahead read (moved out of Web's
+// WorkSearchService, #265).
 [Trait("Category", TestCategories.Integration)]
-public class WorkSearchServiceTests
+public class SearchWorksHandlerTests
 {
     private readonly TestDbContextFactory _factory = new();
 
-    private WorkSearchService CreateService() => new(_factory);
+    private Task<IReadOnlyList<WorkSearchResult>> Search(string query, int? excludeBookId = null, int max = 20) =>
+        new SearchWorksHandler(_factory).HandleAsync(new SearchWorks(query, excludeBookId, max));
 
     [Fact]
     public async Task SearchAsync_returns_empty_when_query_too_short()
     {
         await SeedWorksAsync(("The Hobbit", "Tolkien"), ("Hamlet", "Shakespeare"));
 
-        var result = await CreateService().SearchAsync("h");
+        var result = await Search("h");
 
         Assert.Empty(result);
     }
@@ -28,7 +31,7 @@ public class WorkSearchServiceTests
             ("A Hobbit's Tale", "Other"),
             ("Macbeth", "Shakespeare"));
 
-        var result = await CreateService().SearchAsync("hobbit");
+        var result = await Search("hobbit");
 
         Assert.Equal(2, result.Count);
         Assert.All(result, r => Assert.Contains("Hobbit", r.Title, StringComparison.OrdinalIgnoreCase));
@@ -41,7 +44,7 @@ public class WorkSearchServiceTests
             ("The Hobbit", "A"),
             ("Hobbit Encyclopaedia", "B"));
 
-        var result = await CreateService().SearchAsync("hobbit");
+        var result = await Search("hobbit");
 
         // "Hobbit Encyclopaedia" starts with "hobbit" → should come first.
         Assert.Equal("Hobbit Encyclopaedia", result[0].Title);
@@ -52,7 +55,7 @@ public class WorkSearchServiceTests
     public async Task SearchAsync_excludes_works_already_attached_to_given_book()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "Tolkien" };
+        var author = Author.Create("Tolkien");
         var hobbit = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var fellowship = new Work { Title = "Fellowship", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         db.Books.Add(new Book { Title = "Compendium", Works = [hobbit] });
@@ -61,7 +64,7 @@ public class WorkSearchServiceTests
 
         var compendiumId = db.Books.Single(b => b.Title == "Compendium").Id;
 
-        var result = await CreateService().SearchAsync("the hobbit", excludeBookId: compendiumId);
+        var result = await Search("the hobbit", excludeBookId: compendiumId);
 
         Assert.Empty(result);
     }
@@ -75,7 +78,7 @@ public class WorkSearchServiceTests
             ("Hobbit 3", "A"),
             ("Hobbit 4", "A"));
 
-        var result = await CreateService().SearchAsync("hobbit", maxResults: 2);
+        var result = await Search("hobbit", max: 2);
 
         Assert.Equal(2, result.Count);
     }
@@ -90,7 +93,7 @@ public class WorkSearchServiceTests
         var authorsByName = data
             .Select(d => d.AuthorName)
             .Distinct()
-            .ToDictionary(name => name, name => new Author { Name = name });
+            .ToDictionary(name => name, name => Author.Create(name));
 
         foreach (var (title, authorName) in data)
         {

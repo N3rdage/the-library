@@ -2,7 +2,7 @@
    the per-entity info panels; footer shows either [Dismiss] for active pairs
    or [Un-ignore] for dismissed pairs (discriminated by the Dismissed param). *@
 
-@using BookTracker.Web.Services
+@using BookTracker.Application.Duplicates
 
 <div class="card mb-3 @(Dismissed is not null ? "border-secondary" : "")">
     <div class="card-header py-2 small text-muted">

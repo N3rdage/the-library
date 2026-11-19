@@ -15,7 +15,6 @@
 @using BookTracker.Application
 @using BookTracker.Application.Authors
 @using Microsoft.Extensions.Logging
-@inject IDbContextFactory<BookTrackerDbContext> DbFactory
 @inject IDispatcher Dispatcher
 @inject ILogger<MudContributorPicker> Logger
 
@@ -94,22 +93,11 @@
         AuthorRole.Contributor,
     ];
 
-    private async Task<IEnumerable<string>> SearchAsync(string query, CancellationToken ct)
-    {
-        // Mirror MudAuthorPicker's case-insensitive substring match.
-        var q = (query ?? "").Trim().ToLower();
-        await using var db = await DbFactory.CreateDbContextAsync();
-        var matches = db.Authors.AsQueryable();
-        if (!string.IsNullOrEmpty(q))
-        {
-            matches = matches.Where(a => a.Name.ToLower().Contains(q));
-        }
-        return await matches
-            .OrderBy(a => a.Name)
-            .Select(a => a.Name)
-            .Take(20)
-            .ToListAsync(ct);
-    }
+    // Same case-insensitive substring match as MudAuthorPicker, but nothing
+    // excluded: one person can hold several roles on a Work.
+    // internal so the bUnit test can invoke it directly.
+    internal async Task<IEnumerable<string>> SearchAsync(string query, CancellationToken ct) =>
+        await Dispatcher.Query(new SearchAuthorNames(query, []), ct);
 
     private async Task AddAsync()
     {

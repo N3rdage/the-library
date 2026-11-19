@@ -1,12 +1,16 @@
+using BookTracker.Application;
+using BookTracker.Application.Books;
+using BookTracker.Application.Series;
+using BookTracker.Application.Wishlist;
+using BookTracker.Application.Works;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
-using Microsoft.EntityFrameworkCore;
 
 namespace BookTracker.Web.ViewModels;
 
 public class AIAssistantViewModel(
-    IDbContextFactory<BookTrackerDbContext> dbFactory,
+    IDispatcher dispatcher,
     AIProviderFactory providerFactory)
 {
     private IAIAssistantService AiService => providerFactory.GetService();
@@ -28,31 +32,7 @@ public class AIAssistantViewModel(
 
     public async Task LoadBooksNeedingGenresAsync()
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-
-        // Genre suggestions operate on the book's primary work — single-work
-        // books are the common case. Compendium support (per-work AI suggestions)
-        // is tracked in TODO.md. The "first Work" here is a best-effort
-        // representative for that heuristic, so it stays on the plain Works
-        // skip-nav rather than the ordered BookWorks projection the reorder
-        // feature added — order is immaterial to a single-work-focused prompt.
-        BooksNeedingGenres = await db.Books
-            .Include(b => b.Works).ThenInclude(w => w.Genres)
-            .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .OrderBy(b => b.Works.SelectMany(w => w.Genres).Count())
-            .ThenBy(b => b.Title)
-            .Take(50)
-            .Select(b => new BookGenreRow(
-                b.Id,
-                b.Title,
-                b.Works.FirstOrDefault()!.Subtitle,
-                // Lead author name only — the AI prompt context is per-Work, and
-                // the genre suggestion service still takes a single author string.
-                // Multi-author surfaces use the formatter; this row is internal.
-                b.Works.FirstOrDefault()!.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.Author.Name).FirstOrDefault() ?? "",
-                b.Works.SelectMany(w => w.Genres).Select(g => g.Name).Distinct().ToList()))
-            .ToListAsync();
-
+        BooksNeedingGenres = await dispatcher.Query(new GetBooksNeedingGenres());
         GenresLoaded = true;
     }
 
@@ -83,35 +63,15 @@ public class AIAssistantViewModel(
 
     public async Task AcceptGenreSuggestionsAsync(int bookId, IReadOnlyList<string> genreNames)
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-
-        var book = await db.Books
-            .Include(b => b.Works).ThenInclude(w => w.Genres)
-            .FirstOrDefaultAsync(b => b.Id == bookId);
-        if (book is null) return;
-
-        var primaryWork = book.Works.FirstOrDefault();
-        if (primaryWork is null) return;
-
-        var genresToAdd = await db.Genres
-            .Where(g => genreNames.Contains(g.Name))
-            .ToListAsync();
-
-        foreach (var genre in genresToAdd)
-        {
-            if (!primaryWork.Genres.Any(g => g.Id == genre.Id))
-                primaryWork.Genres.Add(genre);
-        }
-
-        await db.SaveChangesAsync();
+        var updatedGenres = await dispatcher.Send(new AddGenresToWork(bookId, genreNames));
+        if (updatedGenres is null) return;
 
         // Update the local list
         var row = BooksNeedingGenres.FirstOrDefault(b => b.Id == bookId);
         if (row is not null)
         {
             var idx = BooksNeedingGenres.IndexOf(row);
-            var updatedGenres = primaryWork.Genres.Select(g => g.Name).ToList();
-            BooksNeedingGenres[idx] = row with { CurrentGenres = updatedGenres };
+            BooksNeedingGenres[idx] = row with { CurrentGenres = [.. updatedGenres] };
         }
 
         CurrentSuggestion = null;
@@ -129,11 +89,16 @@ public class AIAssistantViewModel(
     public bool SuggestingCollections { get; private set; }
     public string? CollectionError { get; private set; }
 
+    /// <summary>The domain error from the last Create on a suggested grouping
+    /// (blank or duplicate name), shown above the groupings.</summary>
+    public string? CreateCollectionError { get; private set; }
+
     public async Task SuggestCollectionsAsync()
     {
         SuggestingCollections = true;
         CollectionSuggestion = null;
         CollectionError = null;
+        CreateCollectionError = null;
 
         try
         {
@@ -151,54 +116,29 @@ public class AIAssistantViewModel(
 
     public async Task CreateCollectionFromSuggestionAsync(CollectionGrouping grouping)
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-
         var seriesType = grouping.Type.Equals("Series", StringComparison.OrdinalIgnoreCase)
             ? SeriesType.Series
             : SeriesType.Collection;
 
-        // Check if series already exists
-        var existing = await db.Series.FirstOrDefaultAsync(s => s.Name == grouping.SuggestedName);
-        if (existing is not null) return;
-
-        var series = new Series
+        CreateCollectionError = null;
+        try
         {
-            Name = grouping.SuggestedName,
-            Type = seriesType,
-            Description = grouping.Reasoning
-        };
-
-        // Try to set the author if all matched books' works share one
-        var matchedBooks = await db.Books
-            .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .Where(b => grouping.BookTitles.Contains(b.Title))
-            .ToListAsync();
-
-        var authorNames = matchedBooks
-            .SelectMany(b => b.Works.SelectMany(w => w.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author).OrderBy(wa => wa.Order).Select(wa => wa.Author.Name)))
-            .Distinct()
-            .ToList();
-        if (authorNames.Count == 1)
-            series.Author = authorNames[0];
-
-        db.Series.Add(series);
-        await db.SaveChangesAsync();
-
-        // Assign each matched book to the series — series membership is a per-Book
-        // concept (the book is installment N). Skip any book already in a series.
-        var order = 1;
-        foreach (var book in matchedBooks)
-        {
-            if (book.SeriesId is not null) continue;
-            book.AssignToSeries(series.Id, order++, orderDisplay: null);
+            await dispatcher.Send(new CreateSeriesFromSuggestion(
+                grouping.SuggestedName, seriesType, grouping.Reasoning, grouping.BookTitles));
         }
-        await db.SaveChangesAsync();
+        catch (DomainRuleException ex)
+        {
+            // Blank or clashing name — surface the friendly message and keep the
+            // suggestions on screen.
+            CreateCollectionError = ex.Message;
+        }
     }
 
     public void DismissCollections()
     {
         CollectionSuggestion = null;
         CollectionError = null;
+        CreateCollectionError = null;
     }
 
     // Shopping suggestions
@@ -228,19 +168,12 @@ public class AIAssistantViewModel(
 
     public async Task AddRecommendationToWishlistAsync(BookRecommendation rec)
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-
-        // Check if already on wishlist
-        if (await db.WishlistItems.AnyAsync(w => w.Title == rec.Title && w.Author == rec.Author))
+        // Already on the wishlist (same Title + Author) → nothing to do.
+        if (await dispatcher.Query(new GetWishlistItemExists(rec.Title, rec.Author)))
             return;
 
-        db.WishlistItems.Add(new WishlistItem
-        {
-            Title = rec.Title,
-            Author = rec.Author,
-            Priority = WishlistPriority.Medium
-        });
-        await db.SaveChangesAsync();
+        await dispatcher.Send(new AddWishlistItem(
+            rec.Title, rec.Author, WishlistPriority.Medium, Isbns: [], CoverUrl: null));
     }
 
     public void DismissShoppingSuggestions()
@@ -283,8 +216,4 @@ public class AIAssistantViewModel(
         AdvisorError = null;
         BookAdvisorQuery = "";
     }
-
-    public record BookGenreRow(
-        int Id, string Title, string? Subtitle, string Author,
-        List<string> CurrentGenres);
 }

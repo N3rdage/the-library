@@ -17,7 +17,6 @@ public class BookDetailViewModelTests
 {
     private static BookDetailViewModel CreateVm(TestDbContextFactory factory, IBookCoverStorage? coverStorage = null) =>
         new(coverStorage ?? Substitute.For<IBookCoverStorage>(),
-            new WorkSearchService(factory),
             NullLogger<BookDetailViewModel>.Instance,
             BuildDispatcher(factory));
 
@@ -51,7 +50,7 @@ public class BookDetailViewModelTests
         int bookId;
         using (var db = factory.CreateDbContext())
         {
-            var author = new Author { Name = "Ursula K. Le Guin" };
+            var author = Author.Create("Ursula K. Le Guin");
             var genre = new Genre { Name = "Fantasy" };
             var book = new Book
             {
@@ -96,7 +95,7 @@ public class BookDetailViewModelTests
         int bookId;
         using (var db = factory.CreateDbContext())
         {
-            var author = new Author { Name = "William Shakespeare" };
+            var author = Author.Create("William Shakespeare");
             // Series membership is a per-Book concept — the compendium sits in the
             // collection as one installment; its Works carry no series of their own.
             var series = new Series { Name = "Shakespeare's Plays", Type = SeriesType.Collection };
@@ -130,7 +129,7 @@ public class BookDetailViewModelTests
         int bookId;
         using (var db = factory.CreateDbContext())
         {
-            var author = new Author { Name = "Terry Pratchett" };
+            var author = Author.Create("Terry Pratchett");
             var book = new Book
             {
                 Title = "Mort",
@@ -294,7 +293,7 @@ public class BookDetailViewModelTests
             var book = new Book
             {
                 Title = "T",
-                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
+                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
             };
             db.Books.Add(book);
             await db.SaveChangesAsync();
@@ -325,7 +324,7 @@ public class BookDetailViewModelTests
             var book = new Book
             {
                 Title = "T",
-                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
+                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
             };
             db.Books.Add(book);
             await db.SaveChangesAsync();
@@ -359,7 +358,7 @@ public class BookDetailViewModelTests
             var book = new Book
             {
                 Title = "T",
-                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
+                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
                 Tags = [tag],
             };
             db.Books.Add(book);
@@ -387,7 +386,7 @@ public class BookDetailViewModelTests
             var book = new Book
             {
                 Title = "T",
-                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
+                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
                 Tags = [tag],
             };
             db.Books.Add(book);
@@ -428,7 +427,7 @@ public class BookDetailViewModelTests
             var book = new Book
             {
                 Title = "B",
-                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
+                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
                 Editions = [edition],
             };
             db.Books.Add(book);
@@ -460,7 +459,7 @@ public class BookDetailViewModelTests
             var book = new Book
             {
                 Title = "B",
-                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
+                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
                 Editions = [edition],
             };
             db.Books.Add(book);
@@ -492,7 +491,7 @@ public class BookDetailViewModelTests
             var book = new Book
             {
                 Title = "T",
-                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "A" }, Order = 0 }] }],
+                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
                 Tags = [assigned],
             };
             db.Books.Add(book);
@@ -522,7 +521,7 @@ public class BookDetailViewModelTests
             Status = status,
             Rating = rating,
             Notes = notes,
-            Works = [new Work { Title = "Seed", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Seed Author" }, Order = 0 }] }],
+            Works = [new Work { Title = "Seed", WorkAuthors = [new WorkAuthor { Author = Author.Create("Seed Author"), Order = 0 }] }],
         };
         db.Books.Add(book);
         await db.SaveChangesAsync();
@@ -537,7 +536,7 @@ public class BookDetailViewModelTests
         int bookId;
         using (var db = factory.CreateDbContext())
         {
-            var author = new Author { Name = "Author" };
+            var author = Author.Create("Author");
             var book = new Book
             {
                 Title = "Tagged",
@@ -568,7 +567,7 @@ public class BookDetailViewModelTests
         int bookId, editionId;
         using (var db = factory.CreateDbContext())
         {
-            var author = new Author { Name = "A" };
+            var author = Author.Create("A");
             var book = new Book
             {
                 Title = "B",
@@ -619,7 +618,7 @@ public class BookDetailViewModelTests
         int bookId, editionId;
         using (var db = factory.CreateDbContext())
         {
-            var author = new Author { Name = "A" };
+            var author = Author.Create("A");
             var book = new Book
             {
                 Title = "B",
@@ -657,7 +656,7 @@ public class BookDetailViewModelTests
         int bookId, editionId;
         using (var db = factory.CreateDbContext())
         {
-            var author = new Author { Name = "A" };
+            var author = Author.Create("A");
             var book = new Book
             {
                 Title = "B",
@@ -689,14 +688,14 @@ public class BookDetailViewModelTests
     public async Task SearchAttachableWorksAsync_ExcludesWorksAlreadyOnThisBook()
     {
         // The dialog's search shouldn't offer up Works the user has already
-        // attached — the underlying WorkSearchService already excludes by
+        // attached — the underlying SearchWorks query already excludes by
         // bookId, so this verifies the VM is wiring that excludeBookId
         // through correctly.
         var factory = new TestDbContextFactory();
         int bookId;
         using (var db = factory.CreateDbContext())
         {
-            var author = new Author { Name = "H.P. Lovecraft" };
+            var author = Author.Create("H.P. Lovecraft");
             var cthulhu = new Work
             {
                 Title = "The Call of Cthulhu",
@@ -734,7 +733,7 @@ public class BookDetailViewModelTests
         int bookId, dunwichId;
         using (var db = factory.CreateDbContext())
         {
-            var author = new Author { Name = "H.P. Lovecraft" };
+            var author = Author.Create("H.P. Lovecraft");
             var cthulhu = new Work
             {
                 Title = "The Call of Cthulhu",
@@ -779,7 +778,7 @@ public class BookDetailViewModelTests
         int bookId, fantasyId;
         using (var db = factory.CreateDbContext())
         {
-            var author = new Author { Name = "Existing Author" };
+            var author = Author.Create("Existing Author");
             var fantasy = new Genre { Name = "Fantasy" };
             db.Books.Add(new Book
             {
@@ -834,7 +833,7 @@ public class BookDetailViewModelTests
         int bookId;
         using (var db = factory.CreateDbContext())
         {
-            var author = new Author { Name = "Author" };
+            var author = Author.Create("Author");
             db.Books.Add(new Book
             {
                 Title = "Book",
@@ -868,7 +867,7 @@ public class BookDetailViewModelTests
         int bookId;
         using (var db = factory.CreateDbContext())
         {
-            var author = new Author { Name = "Author" };
+            var author = Author.Create("Author");
             db.Books.Add(new Book
             {
                 Title = "Anthology",
@@ -911,7 +910,7 @@ public class BookDetailViewModelTests
         int bookId;
         using (var db = factory.CreateDbContext())
         {
-            var author = new Author { Name = "Stephen King" };
+            var author = Author.Create("Stephen King");
             db.Books.Add(new Book
             {
                 Title = "Different Seasons",
@@ -952,7 +951,7 @@ public class BookDetailViewModelTests
         int bookId;
         using (var db = factory.CreateDbContext())
         {
-            var seed = new Author { Name = "Seed" };
+            var seed = Author.Create("Seed");
             db.Books.Add(new Book
             {
                 Title = "Christie Mysteries",
@@ -999,7 +998,7 @@ public class BookDetailViewModelTests
         int targetBookId, existingWorkId;
         using (var db = factory.CreateDbContext())
         {
-            var king = new Author { Name = "Stephen King" };
+            var king = Author.Create("Stephen King");
             var existing = new Work
             {
                 Title = "Apt Pupil",
@@ -1048,7 +1047,7 @@ public class BookDetailViewModelTests
         int bookId;
         using (var db = factory.CreateDbContext())
         {
-            var seed = new Author { Name = "Seed" };
+            var seed = Author.Create("Seed");
             db.Books.Add(new Book
             {
                 Title = "Some Compendium",
@@ -1082,7 +1081,7 @@ public class BookDetailViewModelTests
         int bookId;
         using (var db = factory.CreateDbContext())
         {
-            var seed = new Author { Name = "Seed" };
+            var seed = Author.Create("Seed");
             db.Books.Add(new Book
             {
                 Title = "X",
@@ -1117,7 +1116,7 @@ public class BookDetailViewModelTests
         int bookId, existingWorkId;
         using (var db = factory.CreateDbContext())
         {
-            var king = new Author { Name = "King" };
+            var king = Author.Create("King");
             var existing = new Work
             {
                 Title = "Already On Book",
@@ -1159,7 +1158,7 @@ public class BookDetailViewModelTests
         int currentBookId, otherBookId, workId;
         using (var db = factory.CreateDbContext())
         {
-            var author = new Author { Name = "Lovecraft" };
+            var author = Author.Create("Lovecraft");
             var shared = new Work
             {
                 Title = "The Call of Cthulhu",
@@ -1204,7 +1203,7 @@ public class BookDetailViewModelTests
         int bookId, keeperWorkId, orphanWorkId;
         using (var db = factory.CreateDbContext())
         {
-            var author = new Author { Name = "Author" };
+            var author = Author.Create("Author");
             var keeper = new Work { Title = "Anchor", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
             var orphan = new Work { Title = "Outlier", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
             db.Books.Add(new Book { Title = "Solo", Works = [keeper, orphan] });
@@ -1238,7 +1237,7 @@ public class BookDetailViewModelTests
         int bookId;
         using (var db = factory.CreateDbContext())
         {
-            var author = new Author { Name = "Author" };
+            var author = Author.Create("Author");
             db.Books.Add(new Book
             {
                 Title = "Doomed",
@@ -1285,7 +1284,7 @@ public class BookDetailViewModelTests
         int bookId, workId;
         using (var db = factory.CreateDbContext())
         {
-            var author = new Author { Name = "H.P. Lovecraft" };
+            var author = Author.Create("H.P. Lovecraft");
             var work = new Work
             {
                 Title = "The Call of Cthulhu",

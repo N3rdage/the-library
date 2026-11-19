@@ -19,7 +19,7 @@ public class GetSeriesListHandlerTests
     private async Task SeedAsync()
     {
         using var db = _factory.CreateDbContext();
-        var pratchett = new Author { Name = "Terry Pratchett" };
+        var pratchett = Author.Create("Terry Pratchett");
         db.Authors.Add(pratchett);
         var discworld = new Series { Name = "Discworld", Author = "Terry Pratchett", Type = SeriesType.Collection, ExpectedCount = 41 };
         var foundation = new Series { Name = "Foundation", Author = "Isaac Asimov", Type = SeriesType.Series, ExpectedCount = 7 };

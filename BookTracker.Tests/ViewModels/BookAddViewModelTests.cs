@@ -1,20 +1,79 @@
+using BookTracker.Application;
+using BookTracker.Application.Books;
+using BookTracker.Application.Series;
+using BookTracker.Application.Works;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace BookTracker.Tests.ViewModels;
 
-[Trait("Category", TestCategories.Integration)]
+// The Add page reads through GetSeriesOptions, FindEditionByIsbn and (via
+// SeriesMatchService) GetSeriesMatchCandidates, and writes through CreateBook,
+// AddCopyToEdition and EnsureSeries; a substituted dispatcher stands in for all
+// of them. What CreateBook persists is covered by CreateBookHandlerTests, the
+// existing-edition read by FindEditionByIsbnHandlerTests, and the series and
+// copy commands by their own handler tests.
+[Trait("Category", TestCategories.Unit)]
 public class BookAddViewModelTests
 {
-    private readonly TestDbContextFactory _factory = new();
+    private const int NewBookId = 99;
+
+    private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
     private readonly IBookLookupService _lookup = Substitute.For<IBookLookupService>();
 
+    public BookAddViewModelTests()
+    {
+        _dispatcher.Query(Arg.Any<GetSeriesMatchCandidates>(), Arg.Any<CancellationToken>())
+            .Returns(new SeriesMatchCandidates(null, [], 0));
+        _dispatcher.Query(Arg.Any<FindEditionByIsbn>(), Arg.Any<CancellationToken>())
+            .Returns((ExistingBookMatch?)null);
+        _dispatcher.Query(Arg.Any<GetSeriesOptions>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<SeriesPickerOption>());
+        // Non-null rather than Arg.Any: NSubstitute matches a Send<int> spec
+        // against Send<int?> calls (int converts to int?), and the null argument
+        // of a later EnsureSeries setup call would otherwise hit this stub.
+        _dispatcher.Send(Arg.Is<CreateBook>(c => c != null), Arg.Any<CancellationToken>())
+            .Returns(NewBookId);
+    }
+
     private BookAddViewModel CreateVm() =>
-        new(_factory, _lookup, new SeriesMatchService(_factory), new WorkSearchService(_factory), TestDispatcher.For(_factory), NullLogger<BookAddViewModel>.Instance);
+        new(_lookup, new SeriesMatchService(_dispatcher), _dispatcher, NullLogger<BookAddViewModel>.Instance);
+
+    private static ExistingBookMatch HobbitMatch() =>
+        new(BookId: 4, EditionId: 5, Title: "The Hobbit", Authors: "Tolkien", CopyCount: 1,
+            LeadWorkSubtitle: null, LeadWorkAuthorship: "Tolkien", CoverUrl: null, Publisher: null,
+            DatePrinted: null, DatePrintedPrecision: DatePrecision.Day, Format: BookFormat.TradePaperback);
+
+    private void GivenSeriesOptions(params SeriesPickerOption[] options) =>
+        _dispatcher.Query(Arg.Any<GetSeriesOptions>(), Arg.Any<CancellationToken>()).Returns(options);
+
+    private void GivenEnsureSeries(string name, int id) =>
+        _dispatcher.Send(Arg.Is<EnsureSeries>(c => c!.Name == name), Arg.Any<CancellationToken>())
+            .Returns((int?)id);
+
+    private void GivenLookup(string isbn, string title, string author, string? series, int? seriesNumber) =>
+        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new BookLookupResult(
+                Isbn: isbn, Title: title, Subtitle: null,
+                Author: author, Publisher: null,
+                GenreCandidates: [], DatePrinted: null, CoverUrl: null,
+                Source: "Open Library",
+                Series: series, SeriesNumber: seriesNumber, SeriesNumberRaw: seriesNumber?.ToString()));
+
+    private CreateBook SentCreateBook() =>
+        _dispatcher.ReceivedCalls()
+            .Select(c => c.GetArguments()[0])
+            .OfType<CreateBook>()
+            .Single();
+
+    private IEnumerable<EnsureSeries> SentEnsureSeries() =>
+        _dispatcher.ReceivedCalls()
+            .Select(c => c.GetArguments()[0])
+            .OfType<EnsureSeries>();
 
     [Fact]
     public void AddCollectionWorkRow_StartsEmpty_RegardlessOfPreviousRowAuthors()
@@ -198,12 +257,11 @@ public class BookAddViewModelTests
     }
 
     [Fact]
-    public async Task SaveAsync_EditionNumberPersistsOnEdition()
+    public async Task SaveAsync_SendsEditionNumber_AndReturnsTheNewBookId()
     {
         // Capture flow lock: typing "3" into the Edition # field on
-        // EditionCopyForm must round-trip onto Edition.EditionNumber.
-        // Backs the Joy of Cooking 3rd ed. vs 9th ed. disambiguation
-        // that motivated the column.
+        // EditionCopyForm must reach the command's edition. Backs the Joy of
+        // Cooking 3rd ed. vs 9th ed. disambiguation that motivated the column.
         var vm = CreateVm();
         vm.BookInput.Title = "Joy of Cooking";
         vm.WorkInput.Title = "Joy of Cooking";
@@ -213,38 +271,34 @@ public class BookAddViewModelTests
 
         var bookId = await vm.SaveAsync(selectedGenreIds: []);
 
-        Assert.NotNull(bookId);
-        await using var db = _factory.CreateDbContext();
-        var edition = await db.Editions.SingleAsync(e => e.BookId == bookId);
+        Assert.Equal(NewBookId, bookId);
+        var edition = SentCreateBook().Edition;
         Assert.Equal(3, edition.EditionNumber);
+        Assert.Equal(BookFormat.Hardcover, edition.Format);
+        Assert.False(vm.Saving);
     }
 
     [Fact]
-    public async Task SaveAsync_NullEditionNumberLeavesColumnNull()
+    public async Task SaveAsync_NullEditionNumber_SendsNull()
     {
         // The common case — fiction reprints, mass-market paperbacks
-        // where the edition number isn't on the cover. Field stays blank,
-        // column stays null.
+        // where the edition number isn't on the cover. Field stays blank.
         var vm = CreateVm();
         vm.BookInput.Title = "Foundation";
         vm.WorkInput.Title = "Foundation";
         vm.WorkInput.Authors = ["Isaac Asimov"];
         vm.EditionInput.Format = BookFormat.MassMarketPaperback;
-        // EditionInput.EditionNumber left as default (null).
 
-        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+        await vm.SaveAsync(selectedGenreIds: []);
 
-        Assert.NotNull(bookId);
-        await using var db = _factory.CreateDbContext();
-        var edition = await db.Editions.SingleAsync(e => e.BookId == bookId);
-        Assert.Null(edition.EditionNumber);
+        Assert.Null(SentCreateBook().Edition.EditionNumber);
     }
 
     [Fact]
-    public async Task SaveAsync_SingleAuthorMode_AppliesSharedAuthorsToEveryWork()
+    public async Task SaveAsync_SingleAuthorMode_SendsSharedAuthorsWithEveryRow()
     {
-        // Single-Author mode is the "King's Different Seasons" shape —
-        // user enters the author once at the top; save applies it to
+        // Single-Author mode is the "King's Different Seasons" shape — the
+        // user enters the author once at the top; the handler applies it to
         // every Work row.
         var vm = CreateVm();
         vm.BookInput.Title = "Different Seasons";
@@ -260,32 +314,23 @@ public class BookAddViewModelTests
             new() { Title = "The Breathing Method" },
         ];
 
-        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+        await vm.SaveAsync(selectedGenreIds: []);
 
-        Assert.NotNull(bookId);
-        await using var db = _factory.CreateDbContext();
-        var saved = await db.Books
-            .Include(b => b.Works)
-                .ThenInclude(w => w.WorkAuthors)
-                .ThenInclude(wa => wa.Author)
-            .FirstAsync(b => b.Id == bookId);
-
-        Assert.Equal(4, saved.Works.Count);
-        Assert.All(saved.Works, w =>
-        {
-            Assert.Single(w.WorkAuthors);
-            Assert.Equal("Stephen King", w.WorkAuthors[0].Author.Name);
-        });
+        var collection = Assert.IsType<WorkCollection>(SentCreateBook().Works);
+        Assert.True(collection.SingleAuthor);
+        Assert.Equal(["Stephen King"], collection.SharedAuthors);
+        Assert.Equal(
+            ["Rita Hayworth and Shawshank Redemption", "Apt Pupil", "The Body", "The Breathing Method"],
+            collection.Rows.Select(r => r.Title));
     }
 
     [Fact]
-    public async Task SaveAsync_Collection_AttachesBookLevelSeries()
+    public async Task SaveAsync_Collection_SendsBookLevelSeries()
     {
         // Series membership is a per-Book concept (the book is installment N
         // of a publication series), so a collection can belong to a series
-        // just like a single-work book. The Add page now renders the series
-        // picker in both modes; this guards that the collection save path
-        // actually persists the chosen series onto the Book.
+        // just like a single-work book; the collection save carries it too.
+        GivenEnsureSeries("The Sandman", 11);
         var vm = CreateVm();
         vm.BookInput.Title = "The Sandman: Season of Mists";
         vm.EditionInput.Format = BookFormat.TradePaperback;
@@ -300,36 +345,33 @@ public class BookAddViewModelTests
         await vm.OnSeriesChosenAsync("The Sandman");
         vm.AcceptedSeriesOrderLabel = "4";
 
-        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+        await vm.SaveAsync(selectedGenreIds: []);
 
-        Assert.NotNull(bookId);
-        await using var db = _factory.CreateDbContext();
-        var saved = await db.Books
-            .Include(b => b.Series)
-            .FirstAsync(b => b.Id == bookId);
-
-        Assert.NotNull(saved.Series);
-        Assert.Equal("The Sandman", saved.Series!.Name);
-        Assert.Equal(4, saved.SeriesOrder);
+        var command = SentCreateBook();
+        Assert.IsType<WorkCollection>(command.Works);
+        Assert.Equal(new SeriesChoice(11, "The Sandman", "4"), command.Series);
     }
 
     [Fact]
-    public async Task SaveAsync_SingleAuthorMode_NoSharedAuthors_Throws()
+    public async Task SaveAsync_HandlerValidationError_PropagatesAndClearsSaving()
     {
-        // Save in Single-Author mode with no shared authors set should
-        // fail with a clear message rather than silently produce zero
-        // works.
+        // The handler owns the user-facing validation throws (no contributor,
+        // no usable collection row, Single-Author mode with no shared author).
+        // The Add page shows an InvalidOperationException's message as-is, so
+        // the VM must let it through unchanged.
+        _dispatcher.Send(Arg.Any<CreateBook>(), Arg.Any<CancellationToken>())
+            .Throws(new InvalidOperationException("A collection in Single-Author mode needs at least one work with a title, plus at least one shared author. (Or attach an existing work.)"));
         var vm = CreateVm();
         vm.BookInput.Title = "Untitled Collection";
-        vm.EditionInput.Format = BookFormat.TradePaperback;
         vm.IsCollection = true;
         vm.SingleAuthor = true;
         vm.SharedAuthors = [];
         vm.CollectionWorks = [new() { Title = "Story A" }];
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => vm.SaveAsync(selectedGenreIds: []));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => vm.SaveAsync(selectedGenreIds: []));
+
         Assert.Contains("Single-Author", ex.Message);
+        Assert.False(vm.Saving);
     }
 
     [Fact]
@@ -348,27 +390,17 @@ public class BookAddViewModelTests
     }
 
     [Fact]
-    public async Task SaveAsync_SingleGenreMode_AppliesSharedGenresToEveryWork()
+    public async Task SaveAsync_SingleGenreMode_SendsSharedGenreIds()
     {
         // Single-Genre mode is Drew's order-of-magnitude case — pick the
-        // genre once at the top; save applies it to every Work row.
-        int sfId;
-        using (var db = _factory.CreateDbContext())
-        {
-            var sf = new Genre { Name = "Science Fiction" };
-            db.Genres.Add(sf);
-            await db.SaveChangesAsync();
-            sfId = sf.Id;
-        }
-
+        // genre once at the top; the handler applies it to every Work row.
         var vm = CreateVm();
         vm.BookInput.Title = "The Mammoth Book of SF";
-        vm.EditionInput.Format = BookFormat.TradePaperback;
         vm.IsCollection = true;
         vm.SingleAuthor = true;
         vm.SharedAuthors = new List<string> { "Various" };
         vm.SingleGenre = true;
-        vm.SharedGenreIds = new List<int> { sfId };
+        vm.SharedGenreIds = new List<int> { 12 };
         vm.CollectionWorks =
         [
             new() { Title = "Story A" },
@@ -376,95 +408,35 @@ public class BookAddViewModelTests
             new() { Title = "Story C" },
         ];
 
-        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+        await vm.SaveAsync(selectedGenreIds: []);
 
-        Assert.NotNull(bookId);
-        await using var db2 = _factory.CreateDbContext();
-        var saved = await db2.Books
-            .Include(b => b.Works).ThenInclude(w => w.Genres)
-            .FirstAsync(b => b.Id == bookId);
-
-        Assert.Equal(3, saved.Works.Count);
-        Assert.All(saved.Works, w =>
-        {
-            var genre = Assert.Single(w.Genres);
-            Assert.Equal(sfId, genre.Id);
-        });
+        var collection = Assert.IsType<WorkCollection>(SentCreateBook().Works);
+        Assert.True(collection.SingleGenre);
+        Assert.Equal([12], collection.SharedGenreIds);
+        Assert.Equal(3, collection.Rows.Count);
     }
 
     [Fact]
-    public async Task SaveAsync_PerRowGenres_AttachesEachWorksOwnList()
+    public async Task SaveAsync_PerRowGenres_SendsEachRowsOwnList()
     {
-        // Single-Genre OFF: each row carries its own GenreIds. The save
-        // path applies them per Work. This is the "mostly SF + one
-        // outlier" shape after the user has overridden the inherited
-        // genre on the odd row.
-        int sfId, horrorId;
-        using (var db = _factory.CreateDbContext())
-        {
-            var sf = new Genre { Name = "Science Fiction" };
-            var horror = new Genre { Name = "Horror" };
-            db.Genres.AddRange(sf, horror);
-            await db.SaveChangesAsync();
-            sfId = sf.Id;
-            horrorId = horror.Id;
-        }
-
+        // Single-Genre OFF: each row carries its own GenreIds.
         var vm = CreateVm();
         vm.BookInput.Title = "Mostly SF, One Horror";
-        vm.EditionInput.Format = BookFormat.TradePaperback;
         vm.IsCollection = true;
         vm.SingleGenre = false;
         vm.CollectionWorks =
         [
-            new() { Title = "SF One", Authors = ["Author A"], GenreIds = [sfId] },
-            new() { Title = "SF Two", Authors = ["Author A"], GenreIds = [sfId] },
-            new() { Title = "Horror One", Authors = ["Author A"], GenreIds = [horrorId] },
+            new() { Title = "SF One", Authors = ["Author A"], GenreIds = [1] },
+            new() { Title = "SF Two", Authors = ["Author A"], GenreIds = [1] },
+            new() { Title = "Horror One", Authors = ["Author A"], GenreIds = [2] },
         ];
 
-        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+        await vm.SaveAsync(selectedGenreIds: []);
 
-        Assert.NotNull(bookId);
-        await using var db2 = _factory.CreateDbContext();
-        var saved = await db2.Books
-            .Include(b => b.Works).ThenInclude(w => w.Genres)
-            .FirstAsync(b => b.Id == bookId);
-
-        Assert.Equal(3, saved.Works.Count);
-        var sfOne = saved.Works.Single(w => w.Title == "SF One");
-        Assert.Equal(sfId, Assert.Single(sfOne.Genres).Id);
-        var horrorOne = saved.Works.Single(w => w.Title == "Horror One");
-        Assert.Equal(horrorId, Assert.Single(horrorOne.Genres).Id);
-    }
-
-    [Fact]
-    public async Task SaveAsync_SingleGenreMode_EmptySharedList_LeavesWorksGenreless()
-    {
-        // Single-Genre on but nothing picked — collection still saves; the
-        // works just land with no genres (same shape as a non-collection
-        // save with selectedGenreIds=[]). User can tag genres later.
-        var vm = CreateVm();
-        vm.BookInput.Title = "Untagged Collection";
-        vm.EditionInput.Format = BookFormat.TradePaperback;
-        vm.IsCollection = true;
-        vm.SingleAuthor = true;
-        vm.SharedAuthors = new List<string> { "Various" };
-        vm.SingleGenre = true;
-        vm.SharedGenreIds = [];
-        vm.CollectionWorks =
-        [
-            new() { Title = "Story A" },
-            new() { Title = "Story B" },
-        ];
-
-        var bookId = await vm.SaveAsync(selectedGenreIds: []);
-
-        Assert.NotNull(bookId);
-        await using var db = _factory.CreateDbContext();
-        var saved = await db.Books
-            .Include(b => b.Works).ThenInclude(w => w.Genres)
-            .FirstAsync(b => b.Id == bookId);
-        Assert.All(saved.Works, w => Assert.Empty(w.Genres));
+        var collection = Assert.IsType<WorkCollection>(SentCreateBook().Works);
+        Assert.False(collection.SingleGenre);
+        Assert.Equal(new[] { new[] { 1 }, new[] { 1 }, new[] { 2 } }, collection.Rows.Select(r => r.GenreIds.ToArray()));
+        Assert.All(collection.Rows, r => Assert.Equal(["Author A"], r.Authors));
     }
 
     [Fact]
@@ -572,67 +544,35 @@ public class BookAddViewModelTests
     }
 
     [Fact]
-    public async Task SaveAsync_BlankIsbnPersistsAsNull()
+    public async Task SaveAsync_SendsIsbnAsEntered()
     {
+        // The VM passes the ISBN through untouched; the Edition aggregate
+        // trims it (blank → null). Normalisation is not part of the save.
         var vm = CreateVm();
         vm.BookInput.Title = "And Then There Were None";
         vm.WorkInput.Title = "And Then There Were None";
         vm.WorkInput.Authors = ["Agatha Christie"];
-        vm.EditionInput.Isbn = "";
+        vm.EditionInput.Isbn = " 978-0-00-713683-4 ";
 
-        var ok = await vm.SaveAsync(new List<int>());
+        await vm.SaveAsync(new List<int>());
 
-        Assert.NotNull(ok);
-        using var db = _factory.CreateDbContext();
-        var edition = db.Editions.Single();
-        Assert.Null(edition.Isbn);
-    }
-
-    [Fact]
-    public async Task SaveAsync_TwoNoIsbnEditions_CoexistWithoutCollision()
-    {
-        // Verifies the filtered unique index actually permits multiple null
-        // ISBNs. With an unfiltered unique index this would throw on the
-        // second save.
-        var vm1 = CreateVm();
-        vm1.BookInput.Title = "Book A";
-        vm1.WorkInput.Title = "Book A";
-        vm1.WorkInput.Authors = ["Author A"];
-        Assert.NotNull(await vm1.SaveAsync(new List<int>()));
-
-        var vm2 = CreateVm();
-        vm2.BookInput.Title = "Book B";
-        vm2.WorkInput.Title = "Book B";
-        vm2.WorkInput.Authors = ["Author B"];
-        Assert.NotNull(await vm2.SaveAsync(new List<int>()));
-
-        using var db = _factory.CreateDbContext();
-        Assert.Equal(2, db.Editions.Count(e => e.Isbn == null));
+        Assert.Equal(" 978-0-00-713683-4 ", SentCreateBook().Edition.Isbn);
     }
 
     [Fact]
     public async Task LookupAsync_ExistingIsbn_FlagsExistingBookInsteadOfPrefilling()
     {
-        // Seed an existing book with the ISBN we're about to look up.
-        using (var db = _factory.CreateDbContext())
-        {
-            db.Books.Add(new Book
-            {
-                Title = "The Hobbit",
-                Works = [new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Tolkien" }, Order = 0 }] }],
-                Editions = [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }]
-            });
-            await db.SaveChangesAsync();
-        }
-
+        var match = HobbitMatch();
+        _dispatcher.Query(Arg.Is<FindEditionByIsbn>(q => q!.Isbn == "9780345391803"), Arg.Any<CancellationToken>())
+            .Returns(match);
         var vm = CreateVm();
         vm.LookupIsbn = "9780345391803";
 
         await vm.LookupAsync();
 
-        Assert.NotNull(vm.ExistingBook);
-        Assert.Equal("The Hobbit", vm.ExistingBook!.Title);
-        Assert.Equal(1, vm.ExistingBook.CopyCount);
+        Assert.Equal(match, vm.ExistingBook);
+        Assert.Null(vm.LookupMessage);
+        Assert.False(vm.LookingUp);
         // Form fields stay empty — the prefill path is skipped because the
         // user is being told "you already own this book" instead.
         Assert.Null(vm.BookInput.Title);
@@ -642,53 +582,102 @@ public class BookAddViewModelTests
     }
 
     [Fact]
-    public async Task AddCopyToExistingAsync_AppendsCopyToFlaggedEdition()
+    public async Task LookupAsync_QueriesTheCleanedIsbn()
     {
-        int editionId;
-        using (var db = _factory.CreateDbContext())
-        {
-            var book = new Book
-            {
-                Title = "The Hobbit",
-                Works = [new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = new Author { Name = "Tolkien" }, Order = 0 }] }],
-                Editions = [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }]
-            };
-            db.Books.Add(book);
-            await db.SaveChangesAsync();
-            editionId = book.Editions[0].Id;
-        }
-
+        // The existing-edition check strips separators and upper-cases the
+        // check digit before matching; the upstream lookup still gets the
+        // ISBN as typed.
         var vm = CreateVm();
-        vm.LookupIsbn = "9780345391803";
+        vm.LookupIsbn = " 0-345-39180-x ";
+
         await vm.LookupAsync();
 
-        var bookId = await vm.AddCopyToExistingAsync();
-
-        Assert.NotNull(bookId);
-        using var db2 = _factory.CreateDbContext();
-        Assert.Equal(2, db2.Copies.Count(c => c.EditionId == editionId));
+        await _dispatcher.Received(1).Query(
+            Arg.Is<FindEditionByIsbn>(q => q!.Isbn == "034539180X"), Arg.Any<CancellationToken>());
+        await _lookup.Received(1).LookupByIsbnAsync(" 0-345-39180-x ", Arg.Any<CancellationToken>());
+        Assert.Null(vm.ExistingBook);
     }
 
     [Fact]
-    public async Task SaveAsync_CreatesBookAndWorkTogether()
+    public async Task LookupAsync_BlankIsbn_AsksForOneWithoutQuerying()
+    {
+        var vm = CreateVm();
+        vm.LookupIsbn = "  ";
+
+        await vm.LookupAsync();
+
+        Assert.Equal("Enter an ISBN to look up.", vm.LookupMessage);
+        Assert.Empty(_dispatcher.ReceivedCalls());
+    }
+
+    [Fact]
+    public async Task AddCopyToExistingAsync_SendsAddCopyToFlaggedEdition()
+    {
+        _dispatcher.Query(Arg.Any<FindEditionByIsbn>(), Arg.Any<CancellationToken>())
+            .Returns(HobbitMatch());
+        var vm = CreateVm();
+        vm.LookupIsbn = "9780345391803";
+        await vm.LookupAsync();
+        vm.CopyInput.Condition = BookCondition.Fine;
+
+        var bookId = await vm.AddCopyToExistingAsync();
+
+        Assert.Equal(4, bookId);
+        Assert.False(vm.AddingCopy);
+        await _dispatcher.Received(1).Send(
+            Arg.Is<AddCopyToEdition>(c => c!.EditionId == 5
+                && c.Condition == BookCondition.Fine
+                && c.DateAcquired == null
+                && c.Notes == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AddCopyToExistingAsync_NoExistingBook_ReturnsNullWithoutSending()
+    {
+        var vm = CreateVm();
+
+        var bookId = await vm.AddCopyToExistingAsync();
+
+        Assert.Null(bookId);
+        Assert.Empty(_dispatcher.ReceivedCalls());
+    }
+
+    [Fact]
+    public async Task SaveAsync_SingleWork_SendsWorkFieldsWithParsedDate()
     {
         var vm = CreateVm();
         vm.BookInput.Title = "The Hobbit";
         vm.WorkInput.Title = "The Hobbit";
+        vm.WorkInput.Subtitle = "There and Back Again";
         vm.WorkInput.Authors = ["J.R.R. Tolkien"];
         vm.WorkInput.FirstPublishedDate = "21 Sep 1937";
         vm.EditionInput.Isbn = "9780345391803";
 
-        var ok = await vm.SaveAsync(new List<int>());
+        await vm.SaveAsync([3, 4]);
 
-        Assert.NotNull(ok);
-        using var db = _factory.CreateDbContext();
-        var book = db.Books.Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author).Single();
-        var work = Assert.Single(book.Works);
+        var command = SentCreateBook();
+        var work = Assert.IsType<SingleWork>(command.Works);
         Assert.Equal("The Hobbit", work.Title);
-        Assert.Equal("J.R.R. Tolkien", work.WorkAuthors.OrderBy(wa => wa.Order).First().Author.Name);
-        Assert.Equal(new DateOnly(1937, 9, 21), work.FirstPublishedDate);
-        Assert.Equal(DatePrecision.Day, work.FirstPublishedDatePrecision);
+        Assert.Equal("There and Back Again", work.Subtitle);
+        Assert.Equal(["J.R.R. Tolkien"], work.Authors);
+        Assert.Equal(new DateOnly(1937, 9, 21), work.FirstPublished);
+        Assert.Equal(DatePrecision.Day, work.Precision);
+        // The page's genre picker selection belongs to the single Work.
+        Assert.Equal([3, 4], work.GenreIds);
+        Assert.Equal("9780345391803", command.Edition.Isbn);
+    }
+
+    [Fact]
+    public async Task SaveAsync_SingleWorkWithoutTitle_FallsBackToBookTitle()
+    {
+        var vm = CreateVm();
+        vm.BookInput.Title = "The Hobbit";
+        vm.WorkInput.Authors = ["J.R.R. Tolkien"];
+
+        await vm.SaveAsync([]);
+
+        Assert.Equal("The Hobbit", Assert.IsType<SingleWork>(SentCreateBook().Works).Title);
     }
 
     [Fact]
@@ -696,76 +685,73 @@ public class BookAddViewModelTests
     {
         // New books default to Unread (the user marks Read as they actually
         // read them). The Add form never touches BookInput.Status here, so
-        // this asserts the BookFormInput default carries through SaveAsync.
+        // this asserts the BookFormInput default reaches the command.
         var vm = CreateVm();
         vm.BookInput.Title = "The Hobbit";
         vm.WorkInput.Title = "The Hobbit";
         vm.WorkInput.Authors = ["J.R.R. Tolkien"];
 
-        var ok = await vm.SaveAsync(new List<int>());
+        await vm.SaveAsync(new List<int>());
 
-        Assert.NotNull(ok);
-        using var db = _factory.CreateDbContext();
-        var book = db.Books.Single();
-        Assert.Equal(BookStatus.Unread, book.Status);
+        Assert.Equal(BookStatus.Unread, SentCreateBook().Book.Status);
     }
 
     [Fact]
-    public async Task SaveAsync_MultipleAuthors_DualWritesLeadAndJoin()
+    public async Task SaveAsync_SendsBookEditionCopyAndPublisherFields()
     {
-        // Multi-author cutover PR1: save path sets Work.Author = lead chip
-        // (legacy AuthorId for backwards compat) AND populates Work.WorkAuthors
-        // with all chips, Order ascending. Co-author becomes a real Author row
-        // via find-or-create.
+        var vm = CreateVm();
+        vm.BookInput.Title = "Mort";
+        vm.BookInput.Category = BookCategory.NonFiction;
+        vm.BookInput.Status = BookStatus.Read;
+        vm.BookInput.Rating = 4;
+        vm.BookInput.Notes = "signed";
+        vm.BookInput.DefaultCoverArtUrl = "https://covers.example.org/mort.jpg";
+        vm.WorkInput.Authors = ["Terry Pratchett"];
+        vm.EditionInput.Publisher = "Gollancz";
+        vm.EditionInput.DatePrinted = "Oct 1987";
+        vm.EditionInput.CoverUrl = "https://covers.example.org/mort-ed.jpg";
+        vm.CopyInput.Condition = BookCondition.Fair;
+
+        await vm.SaveAsync([]);
+
+        var command = SentCreateBook();
+        Assert.Equal(
+            new NewBook("Mort", BookCategory.NonFiction, BookStatus.Read, 4, "signed", "https://covers.example.org/mort.jpg"),
+            command.Book);
+        Assert.Equal("Gollancz", command.Edition.PublisherName);
+        Assert.Equal(new DateOnly(1987, 10, 1), command.Edition.DatePrinted);
+        Assert.Equal(DatePrecision.Month, command.Edition.DatePrintedPrecision);
+        Assert.Equal("https://covers.example.org/mort-ed.jpg", command.Edition.CoverUrl);
+        Assert.Equal(BookCondition.Fair, command.CopyCondition);
+    }
+
+    [Fact]
+    public async Task SaveAsync_MultipleAuthors_SendsAuthorsInChipOrder()
+    {
         var vm = CreateVm();
         vm.BookInput.Title = "Relic";
         vm.WorkInput.Title = "Relic";
         vm.WorkInput.Authors = ["Douglas Preston", "Lincoln Child"];
         vm.EditionInput.Isbn = "9780812543261";
 
-        var ok = await vm.SaveAsync(new List<int>());
+        await vm.SaveAsync(new List<int>());
 
-        Assert.NotNull(ok);
-        using var db = _factory.CreateDbContext();
-        var work = db.Works
-            .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .Single();
-        Assert.Equal(2, work.WorkAuthors.Count);
-        var ordered = work.WorkAuthors.OrderBy(wa => wa.Order).ToList();
-        Assert.Equal("Douglas Preston", ordered[0].Author.Name);
-        Assert.Equal(0, ordered[0].Order);
-        Assert.Equal("Lincoln Child", ordered[1].Author.Name);
-        Assert.Equal(1, ordered[1].Order);
-        // Both authors exist as canonical Author rows.
-        Assert.Equal(2, db.Authors.Count(a => a.Name == "Douglas Preston" || a.Name == "Lincoln Child"));
+        Assert.Equal(["Douglas Preston", "Lincoln Child"], Assert.IsType<SingleWork>(SentCreateBook().Works).Authors);
     }
 
     [Fact]
-    public async Task SaveAsync_WithAcceptedExistingSeries_AttachesWorkBySeriesId()
+    public async Task SaveAsync_WithAcceptedExistingSeries_SendsSeriesIdAndOrder()
     {
-        // Seed a Series so the lookup-driven match returns ApiMatchExisting.
-        int seededSeriesId;
-        using (var db = _factory.CreateDbContext())
-        {
-            var series = new Series { Name = "Discworld", Type = SeriesType.Series };
-            db.Series.Add(series);
-            await db.SaveChangesAsync();
-            seededSeriesId = series.Id;
-        }
-
-        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new BookLookupResult(
-                Isbn: "9780552134613", Title: "Sourcery", Subtitle: null,
-                Author: "Terry Pratchett", Publisher: null,
-                GenreCandidates: [], DatePrinted: null, CoverUrl: null,
-                Source: "Open Library",
-                Series: "Discworld", SeriesNumber: 5, SeriesNumberRaw: "5"));
+        // The lookup names a series that already exists locally →
+        // ApiMatchExisting; accepting it pins the existing id (no create).
+        GivenLookup("9780552134613", "Sourcery", "Terry Pratchett", "Discworld", 5);
+        _dispatcher.Query(Arg.Is<GetSeriesMatchCandidates>(q => q!.SeriesName == "Discworld"), Arg.Any<CancellationToken>())
+            .Returns(new SeriesMatchCandidates(new SeriesCandidate(7, "Discworld", SeriesType.Series), [], 0));
 
         var vm = CreateVm();
         vm.LookupIsbn = "9780552134613";
         await vm.LookupAsync();
 
-        // Sanity: suggestion should be the existing-series flavour.
         Assert.NotNull(vm.SeriesSuggestion);
         Assert.Equal(MatchReason.ApiMatchExisting, vm.SeriesSuggestion!.Reason);
 
@@ -774,12 +760,8 @@ public class BookAddViewModelTests
 
         await vm.SaveAsync(new List<int>());
 
-        using var db2 = _factory.CreateDbContext();
-        var book = db2.Books.Include(b => b.Series).Single();
-        Assert.Equal(seededSeriesId, book.SeriesId);
-        Assert.Equal(5, book.SeriesOrder);
-        // No new Series row created — attached to the existing one.
-        Assert.Equal(1, db2.Series.Count());
+        Assert.Equal(new SeriesChoice(7, "Discworld", "5"), SentCreateBook().Series);
+        Assert.Empty(SentEnsureSeries()); // attached to the existing one, nothing created
     }
 
     [Fact]
@@ -788,40 +770,27 @@ public class BookAddViewModelTests
         // TD-15a: accepting a "new series" suggestion creates the Series row at
         // the accept gesture (not deferred to save) and pins its id, so the save
         // attaches by id rather than find-or-creating.
-        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new BookLookupResult(
-                Isbn: "9780765326355", Title: "The Way of Kings", Subtitle: null,
-                Author: "Brandon Sanderson", Publisher: null,
-                GenreCandidates: [], DatePrinted: null, CoverUrl: null,
-                Source: "Open Library",
-                Series: "The Stormlight Archive", SeriesNumber: 1, SeriesNumberRaw: "1"));
+        GivenLookup("9780765326355", "The Way of Kings", "Brandon Sanderson", "The Stormlight Archive", 1);
+        GivenEnsureSeries("The Stormlight Archive", 21);
 
         var vm = CreateVm();
         vm.LookupIsbn = "9780765326355";
         await vm.LookupAsync();
         Assert.Equal(MatchReason.ApiMatchNewSeries, vm.SeriesSuggestion!.Reason);
         Assert.Null(vm.AcceptedSeriesId); // nothing created yet
+        Assert.Empty(SentEnsureSeries());
 
         await vm.AcceptSeriesSuggestion();
 
-        Assert.NotNull(vm.AcceptedSeriesId); // pinned by the eager create
-        using var db = _factory.CreateDbContext();
-        var series = Assert.Single(db.Series); // the row exists BEFORE any save
-        Assert.Equal("The Stormlight Archive", series.Name);
-        Assert.Equal(vm.AcceptedSeriesId, series.Id);
+        Assert.Equal(21, vm.AcceptedSeriesId); // pinned by the eager create
+        Assert.Equal("The Stormlight Archive", Assert.Single(SentEnsureSeries()).Name);
     }
 
     [Fact]
-    public async Task SaveAsync_WithAcceptedNewSeries_FindOrCreatesSeriesAndAttaches()
+    public async Task SaveAsync_WithAcceptedNewSeries_SendsThePinnedSeries()
     {
-        // No Series rows seeded — lookup-driven match returns ApiMatchNewSeries.
-        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new BookLookupResult(
-                Isbn: "9780765326355", Title: "The Way of Kings", Subtitle: null,
-                Author: "Brandon Sanderson", Publisher: null,
-                GenreCandidates: [], DatePrinted: null, CoverUrl: null,
-                Source: "Open Library",
-                Series: "The Stormlight Archive", SeriesNumber: 1, SeriesNumberRaw: "1"));
+        GivenLookup("9780765326355", "The Way of Kings", "Brandon Sanderson", "The Stormlight Archive", 1);
+        GivenEnsureSeries("The Stormlight Archive", 21);
 
         var vm = CreateVm();
         vm.LookupIsbn = "9780765326355";
@@ -830,44 +799,50 @@ public class BookAddViewModelTests
         Assert.Equal(MatchReason.ApiMatchNewSeries, vm.SeriesSuggestion!.Reason);
         await vm.AcceptSeriesSuggestion();
 
-        // SaveAsync needs the form filled enough to construct the Work.
         // LookupAsync prefills WorkInput from the result, so we just save.
         await vm.SaveAsync(new List<int>());
 
-        using var db = _factory.CreateDbContext();
-        var series = Assert.Single(db.Series);
-        Assert.Equal("The Stormlight Archive", series.Name);
-        Assert.Equal(SeriesType.Series, series.Type); // Q1 default — not Collection.
-
-        var book = db.Books.Include(b => b.Series).Single();
-        Assert.Equal(series.Id, book.SeriesId);
-        Assert.Equal(1, book.SeriesOrder);
+        var command = SentCreateBook();
+        Assert.Equal(new SeriesChoice(21, "The Stormlight Archive", "1"), command.Series);
+        var work = Assert.IsType<SingleWork>(command.Works);
+        Assert.Equal("The Way of Kings", work.Title);
+        Assert.Equal(["Brandon Sanderson"], work.Authors);
     }
 
     [Fact]
-    public async Task SaveAsync_WithoutAcceptedSuggestion_DoesNotAttachSeries()
+    public async Task SaveAsync_EagerSeriesCreateFailed_SendsTheNameForTheSaveToCreate()
+    {
+        // A swallowed eager-create fault leaves the id null; the save still
+        // carries the name so the handler's find-or-create net makes the row.
+        GivenLookup("9780765326355", "The Way of Kings", "Brandon Sanderson", "The Stormlight Archive", 1);
+        _dispatcher.Send(Arg.Any<EnsureSeries>(), Arg.Any<CancellationToken>())
+            .Throws(new InvalidOperationException("transient"));
+
+        var vm = CreateVm();
+        vm.LookupIsbn = "9780765326355";
+        await vm.LookupAsync();
+        await vm.AcceptSeriesSuggestion();
+
+        Assert.Null(vm.AcceptedSeriesId);
+        await vm.SaveAsync(new List<int>());
+
+        Assert.Equal(new SeriesChoice(null, "The Stormlight Archive", "1"), SentCreateBook().Series);
+    }
+
+    [Fact]
+    public async Task SaveAsync_WithoutAcceptedSuggestion_SendsNoSeries()
     {
         // Same setup as the new-series test, but DON'T call Accept.
-        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new BookLookupResult(
-                Isbn: "9780765326355", Title: "The Way of Kings", Subtitle: null,
-                Author: "Brandon Sanderson", Publisher: null,
-                GenreCandidates: [], DatePrinted: null, CoverUrl: null,
-                Source: "Open Library",
-                Series: "The Stormlight Archive", SeriesNumber: 1, SeriesNumberRaw: "1"));
+        GivenLookup("9780765326355", "The Way of Kings", "Brandon Sanderson", "The Stormlight Archive", 1);
 
         var vm = CreateVm();
         vm.LookupIsbn = "9780765326355";
         await vm.LookupAsync();
 
-        // No Accept call.
         await vm.SaveAsync(new List<int>());
 
-        using var db = _factory.CreateDbContext();
-        Assert.Empty(db.Series);
-        var book = db.Books.Single();
-        Assert.Null(book.SeriesId);
-        Assert.Null(book.SeriesOrder);
+        Assert.Equal(new SeriesChoice(null, null, null), SentCreateBook().Series);
+        Assert.Empty(SentEnsureSeries());
     }
 
     // --- Manual series entry on single Add Book (the typeahead, not the
@@ -876,20 +851,20 @@ public class BookAddViewModelTests
     // path as the suggestion-accept flow. ---
 
     [Fact]
-    public async Task InitializeAsync_CachesExistingSeriesOrderedByName()
+    public async Task InitializeAsync_CachesExistingSeriesInQueryOrder()
     {
-        using (var db = _factory.CreateDbContext())
-        {
-            db.Series.AddRange(
-                new Series { Name = "Mistborn", Type = SeriesType.Series },
-                new Series { Name = "Discworld", Type = SeriesType.Series });
-            await db.SaveChangesAsync();
-        }
+        // GetSeriesOptions returns the series ordered by name
+        // (GetSeriesOptionsHandlerTests); the cache keeps that order.
+        GivenSeriesOptions(
+            new SeriesPickerOption(2, "Discworld", SeriesType.Series),
+            new SeriesPickerOption(1, "Mistborn", SeriesType.Series));
 
         var vm = CreateVm();
         await vm.InitializeAsync();
 
-        Assert.Equal(["Discworld", "Mistborn"], vm.ExistingSeries.Select(s => s.Name));
+        Assert.Equal(
+            [new BookAddViewModel.SeriesOption(2, "Discworld"), new BookAddViewModel.SeriesOption(1, "Mistborn")],
+            vm.ExistingSeries);
     }
 
     [Fact]
@@ -897,45 +872,36 @@ public class BookAddViewModelTests
     {
         // Selecting the "Add …" row is the explicit create gesture — the Series
         // row is created and pinned at the selection, not deferred to save.
+        GivenEnsureSeries("The Stormlight Archive", 31);
         var vm = CreateVm();
         await vm.InitializeAsync(); // empty cache
 
         await vm.OnSeriesChosenAsync("The Stormlight Archive");
 
-        Assert.NotNull(vm.AcceptedSeriesId); // eager-created + pinned
-        using var db = _factory.CreateDbContext();
-        var series = Assert.Single(db.Series); // row exists at the gesture
-        Assert.Equal("The Stormlight Archive", series.Name);
-        Assert.Equal(vm.AcceptedSeriesId, series.Id);
+        Assert.Equal(31, vm.AcceptedSeriesId); // eager-created + pinned
+        Assert.Equal("The Stormlight Archive", Assert.Single(SentEnsureSeries()).Name);
         // Appended to the cache so a re-pick is a no-op.
-        Assert.Contains(vm.ExistingSeries, s => s.Name == "The Stormlight Archive");
+        Assert.Contains(vm.ExistingSeries, s => s.Name == "The Stormlight Archive" && s.Id == 31);
     }
 
     [Fact]
-    public async Task OnSeriesChosenAsync_ExistingCachedName_PinsIdWithNoDuplicate()
+    public async Task OnSeriesChosenAsync_ExistingCachedName_PinsIdWithNoCreate()
     {
-        int seededId;
-        using (var db = _factory.CreateDbContext())
-        {
-            var series = new Series { Name = "Discworld", Type = SeriesType.Series };
-            db.Series.Add(series);
-            await db.SaveChangesAsync();
-            seededId = series.Id;
-        }
+        GivenSeriesOptions(new SeriesPickerOption(5, "Discworld", SeriesType.Series));
 
         var vm = CreateVm();
         await vm.InitializeAsync();
 
         await vm.OnSeriesChosenAsync("discworld"); // case clash
 
-        Assert.Equal(seededId, vm.AcceptedSeriesId); // resolved from the cache
-        using var db2 = _factory.CreateDbContext();
-        Assert.Equal(1, db2.Series.Count()); // no duplicate created
+        Assert.Equal(5, vm.AcceptedSeriesId); // resolved from the cache
+        Assert.Empty(SentEnsureSeries());       // no create round-trip
     }
 
     [Fact]
     public async Task OnSeriesChosenAsync_Blank_ClearsSelection()
     {
+        GivenEnsureSeries("Mistborn", 1);
         var vm = CreateVm();
         await vm.InitializeAsync();
         await vm.OnSeriesChosenAsync("Mistborn");
@@ -955,25 +921,26 @@ public class BookAddViewModelTests
         // order belonged to the previous series and must not bleed onto the new
         // one. This is the structural fix for the old carryover bug: there is no
         // free-edit of a committed name, so a stale order can't survive a swap.
+        GivenEnsureSeries("Mistborn", 1);
+        GivenEnsureSeries("Elantris", 2);
         var vm = CreateVm();
         await vm.InitializeAsync();
         await vm.OnSeriesChosenAsync("Mistborn");
-        var firstId = vm.AcceptedSeriesId;
-        Assert.NotNull(firstId);
+        Assert.Equal(1, vm.AcceptedSeriesId);
         vm.AcceptedSeriesOrderLabel = "3";
 
         await vm.OnSeriesChosenAsync("Elantris");
 
         Assert.Equal("Elantris", vm.AcceptedSeriesName);
-        Assert.NotNull(vm.AcceptedSeriesId);
-        Assert.NotEqual(firstId, vm.AcceptedSeriesId); // a different series row
-        Assert.Null(vm.AcceptedSeriesOrderLabel);       // the "3" did not carry over
+        Assert.Equal(2, vm.AcceptedSeriesId);      // a different series row
+        Assert.Null(vm.AcceptedSeriesOrderLabel);  // the "3" did not carry over
     }
 
     [Fact]
     public async Task OnSeriesChosenAsync_SameName_KeepsOrder()
     {
         // Re-confirming the same series (no change) must not wipe a set order.
+        GivenEnsureSeries("Mistborn", 1);
         var vm = CreateVm();
         await vm.InitializeAsync();
         await vm.OnSeriesChosenAsync("Mistborn");
@@ -988,15 +955,11 @@ public class BookAddViewModelTests
     public async Task SaveAsync_AcceptThenChooseDifferentSeries_DoesNotCarryStaleOrder()
     {
         // End-to-end carryover guard: "Use this" fills Mistborn #3, then the user
-        // picks a different series in the typeahead. The work must attach to the
+        // picks a different series in the typeahead. The book must attach to the
         // new series with NO order — the "3" was Mistborn's.
-        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new BookLookupResult(
-                Isbn: "9780765326355", Title: "The Way of Kings", Subtitle: null,
-                Author: "Brandon Sanderson", Publisher: null,
-                GenreCandidates: [], DatePrinted: null, CoverUrl: null,
-                Source: "Open Library",
-                Series: "Mistborn", SeriesNumber: 3, SeriesNumberRaw: "3"));
+        GivenLookup("9780765326355", "The Way of Kings", "Brandon Sanderson", "Mistborn", 3);
+        GivenEnsureSeries("Mistborn", 1);
+        GivenEnsureSeries("Discworld", 2);
 
         var vm = CreateVm();
         await vm.InitializeAsync();
@@ -1009,24 +972,15 @@ public class BookAddViewModelTests
 
         await vm.SaveAsync(new List<int>());
 
-        using var db = _factory.CreateDbContext();
-        var discworld = await db.Series.SingleAsync(s => s.Name == "Discworld");
-        var book = db.Books.Include(b => b.Series).Single();
-        Assert.Equal(discworld.Id, book.SeriesId);
-        Assert.Null(book.SeriesOrder); // NOT 3 — that order was Mistborn's
+        Assert.Equal(new SeriesChoice(2, "Discworld", null), SentCreateBook().Series);
     }
 
     [Fact]
-    public async Task SaveAsync_WithManualSeries_AttachesWorkToEagerCreatedSeries()
+    public async Task SaveAsync_WithManualSeries_SendsTheEagerCreatedSeries()
     {
         // Lookup carries no series; the user picks/creates one manually.
-        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new BookLookupResult(
-                Isbn: "9780765326355", Title: "The Way of Kings", Subtitle: null,
-                Author: "Brandon Sanderson", Publisher: null,
-                GenreCandidates: [], DatePrinted: null, CoverUrl: null,
-                Source: "Open Library",
-                Series: null, SeriesNumber: null, SeriesNumberRaw: null));
+        GivenLookup("9780765326355", "The Way of Kings", "Brandon Sanderson", null, null);
+        GivenEnsureSeries("The Stormlight Archive", 21);
 
         var vm = CreateVm();
         await vm.InitializeAsync();
@@ -1038,102 +992,33 @@ public class BookAddViewModelTests
 
         await vm.SaveAsync(new List<int>());
 
-        using var db = _factory.CreateDbContext();
-        var series = Assert.Single(db.Series);
-        Assert.Equal("The Stormlight Archive", series.Name);
-        var book = db.Books.Include(b => b.Series).Single();
-        Assert.Equal(series.Id, book.SeriesId);
-        Assert.Equal(1, book.SeriesOrder);
+        Assert.Equal(new SeriesChoice(21, "The Stormlight Archive", "1"), SentCreateBook().Series);
     }
 
     [Fact]
-    public async Task SaveAsync_CollectionMode_MixedNewAndAttachedRows_AttachesExistingAndCreatesNew()
+    public async Task SaveAsync_CollectionMode_SendsRowsInOrderWithAttachedWorkIds()
     {
         // Drew's Lovecraft "complete works" case during initial capture: a
-        // brand-new anthology where some stories are new and some are
-        // already in the library from previous anthologies. Save creates
-        // the new Works and attaches the existing ones to the same Book,
-        // preserving the user-entered row order.
-        var factory = new TestDbContextFactory();
-        int existingId;
-        using (var db = factory.CreateDbContext())
-        {
-            var author = new Author { Name = "H.P. Lovecraft" };
-            var existing = new Work
-            {
-                Title = "The Call of Cthulhu",
-                WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
-            };
-            db.Books.Add(new Book { Title = "Other Anthology", Works = [existing] });
-            await db.SaveChangesAsync();
-            existingId = existing.Id;
-        }
-
-        var vm = new BookAddViewModel(factory, _lookup, new SeriesMatchService(factory), new WorkSearchService(factory), TestDispatcher.For(factory), NullLogger<BookAddViewModel>.Instance);
+        // brand-new anthology where some stories are new and some are already
+        // in the library. Every row goes to the handler in on-screen order;
+        // attach rows carry the picked Work's id.
+        var vm = CreateVm();
         vm.BookInput.Title = "Mixed Anthology";
-        vm.EditionInput.Format = BookFormat.TradePaperback;
         vm.IsCollection = true;
         vm.CollectionWorks =
         [
             new() { Title = "New Story A", Authors = ["H.P. Lovecraft"] },
-            new() { AttachedWorkId = existingId, Title = "The Call of Cthulhu" },
+            new() { AttachedWorkId = 42, Title = "The Call of Cthulhu" },
             new() { Title = "New Story B", Authors = ["H.P. Lovecraft"] },
         ];
 
         var bookId = await vm.SaveAsync(selectedGenreIds: []);
 
-        Assert.NotNull(bookId);
-        await using var db2 = factory.CreateDbContext();
-        var book = await db2.Books
-            .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .FirstAsync(b => b.Id == bookId);
-
-        Assert.Equal(3, book.Works.Count);
-        Assert.Contains(book.Works, w => w.Id == existingId);
-        Assert.Contains(book.Works, w => w.Title == "New Story A");
-        Assert.Contains(book.Works, w => w.Title == "New Story B");
-        // Existing Work still has its original anthology attached too — N:N preserved.
-        var cthulhu = await db2.Works.Include(w => w.Books).FirstAsync(w => w.Id == existingId);
-        Assert.Equal(2, cthulhu.Books.Count);
-    }
-
-    [Fact]
-    public async Task SaveAsync_CollectionMode_AttachOnlyRow_DoesNotRequireTitleOrAuthorOnThatRow()
-    {
-        // An attach-existing row carries no editable fields; validation
-        // must skip the "title + at least one author" check for it. A
-        // collection with a single attach-only row should save cleanly.
-        var factory = new TestDbContextFactory();
-        int existingId;
-        using (var db = factory.CreateDbContext())
-        {
-            var author = new Author { Name = "Author" };
-            var existing = new Work
-            {
-                Title = "Existing",
-                WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
-            };
-            db.Books.Add(new Book { Title = "Other", Works = [existing] });
-            await db.SaveChangesAsync();
-            existingId = existing.Id;
-        }
-
-        var vm = new BookAddViewModel(factory, _lookup, new SeriesMatchService(factory), new WorkSearchService(factory), TestDispatcher.For(factory), NullLogger<BookAddViewModel>.Instance);
-        vm.BookInput.Title = "Attach-only book";
-        vm.EditionInput.Format = BookFormat.TradePaperback;
-        vm.IsCollection = true;
-        vm.CollectionWorks =
-        [
-            new() { AttachedWorkId = existingId, Title = "Existing" },
-        ];
-
-        var bookId = await vm.SaveAsync(selectedGenreIds: []);
-
-        Assert.NotNull(bookId);
-        using var db2 = factory.CreateDbContext();
-        var book = db2.Books.Include(b => b.Works).Single(b => b.Id == bookId);
-        Assert.Single(book.Works);
-        Assert.Equal(existingId, book.Works[0].Id);
+        Assert.Equal(NewBookId, bookId);
+        var collection = Assert.IsType<WorkCollection>(SentCreateBook().Works);
+        Assert.Equal(["New Story A", "The Call of Cthulhu", "New Story B"], collection.Rows.Select(r => r.Title));
+        Assert.Equal(new int?[] { null, 42, null }, collection.Rows.Select(r => r.AttachedWorkId));
+        Assert.Equal(["H.P. Lovecraft"], collection.Rows[0].Authors);
     }
 
     [Fact]
@@ -1176,7 +1061,7 @@ public class BookAddViewModelTests
     }
 
     [Fact]
-    public async Task SaveAsync_CollectionMode_CreatesBookWithMultipleWorks()
+    public async Task SaveAsync_CollectionMode_SendsParsedRowFields()
     {
         var vm = CreateVm();
         vm.IsCollection = true;
@@ -1185,91 +1070,30 @@ public class BookAddViewModelTests
         vm.CollectionWorks =
         [
             new() { Title = "Rage", Authors = ["Richard Bachman"] },
-            new() { Title = "The Long Walk", Authors = ["Richard Bachman"] },
-            new() { Title = "Roadwork", Authors = ["Richard Bachman"], FirstPublishedDate = "1981" },
-        ];
-
-        var ok = await vm.SaveAsync(new List<int>());
-
-        Assert.NotNull(ok);
-        using var db = _factory.CreateDbContext();
-        var book = db.Books
-            .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .Single();
-        Assert.Equal("The Bachman Books", book.Title);
-        Assert.Equal(3, book.Works.Count);
-        // Each row's authors land in WorkAuthors. No designated "primary" Work.
-        var rage = book.Works.Single(w => w.Title == "Rage");
-        Assert.Equal("Richard Bachman", rage.WorkAuthors.Single().Author.Name);
-        var roadwork = book.Works.Single(w => w.Title == "Roadwork");
-        Assert.Equal(new DateOnly(1981, 1, 1), roadwork.FirstPublishedDate);
-        Assert.Equal(DatePrecision.Year, roadwork.FirstPublishedDatePrecision);
-    }
-
-    [Fact]
-    public async Task SaveAsync_CollectionMode_SkipsEmptyRows()
-    {
-        // The Add page seeds two empty rows by default; users may add more
-        // and never fill them. Empty rows (no title or no authors) should be
-        // dropped silently rather than throwing.
-        var vm = CreateVm();
-        vm.IsCollection = true;
-        vm.BookInput.Title = "Two Stories";
-        vm.CollectionWorks =
-        [
-            new() { Title = "First Story", Authors = ["Author A"] },
-            new() { Title = "", Authors = ["Author B"] },
-            new() { Title = "Second Story", Authors = ["Author B"] },
-            new() { Title = "Third Story", Authors = [] },
+            new() { Title = "The Long Walk", Authors = ["Richard Bachman"], Subtitle = "A novel" },
+            new() { Title = "Roadwork", Authors = ["Richard Bachman"], FirstPublishedDate = "1981",
+                Contributors = [new ContributorEntry("Someone", AuthorRole.Illustrator)] },
         ];
 
         await vm.SaveAsync(new List<int>());
 
-        using var db = _factory.CreateDbContext();
-        var book = db.Books.Include(b => b.Works).Single();
-        Assert.Equal(2, book.Works.Count);
-        Assert.Contains(book.Works, w => w.Title == "First Story");
-        Assert.Contains(book.Works, w => w.Title == "Second Story");
+        var command = SentCreateBook();
+        Assert.Equal("The Bachman Books", command.Book.Title);
+        Assert.Equal("9780451178121", command.Edition.Isbn);
+        var collection = Assert.IsType<WorkCollection>(command.Works);
+        Assert.Equal(3, collection.Rows.Count);
+        Assert.Equal("A novel", collection.Rows[1].Subtitle);
+        var roadwork = collection.Rows[2];
+        Assert.Equal(new DateOnly(1981, 1, 1), roadwork.FirstPublished);
+        Assert.Equal(DatePrecision.Year, roadwork.Precision);
+        Assert.Equal([new ContributorInput("Someone", AuthorRole.Illustrator)], roadwork.Contributors);
+        Assert.Null(collection.Rows[0].FirstPublished);
     }
 
     [Fact]
-    public async Task SaveAsync_CollectionMode_AllRowsEmpty_Throws()
+    public async Task SaveAsync_NonCollection_EditorOnly_SendsContributorsWithRoles()
     {
-        var vm = CreateVm();
-        vm.IsCollection = true;
-        vm.BookInput.Title = "Empty Collection";
-        vm.CollectionWorks = [new(), new()];
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => vm.SaveAsync(new List<int>()));
-    }
-
-    [Fact]
-    public async Task SaveAsync_NonCollection_NoContributors_ThrowsWithUserFacingMessage()
-    {
-        // Drew's 2026-05-12 testing-feedback bug repro: Enter on the ISBN
-        // field submits the EditForm before lookup runs, which calls SaveAsync
-        // on an empty/sparse form. The non-collection branch throws
-        // InvalidOperationException with a user-facing message — the Add page
-        // catch block relies on that exception type to distinguish
-        // validation-style errors (show .Message) from genuine crashes
-        // (log + generic message). Lock the contract. Post-2026-05-24 the
-        // check is "at least one contributor of any role" so editor-only
-        // Works save (see SaveAsync_NonCollection_EditorOnly_Saves below).
-        var vm = CreateVm();
-        vm.BookInput.Title = "Untitled";
-        // No authors AND no contributors on WorkInput.
-
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => vm.SaveAsync(new List<int>()));
-        Assert.Contains("contributor", ex.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task SaveAsync_NonCollection_EditorOnly_Saves()
-    {
-        // Dictionary / Oxford Companion case — Work has an editor but no
-        // author. Should save successfully; the resulting Work carries one
-        // WorkAuthor row with Role=Editor and no Author-role row.
+        // Dictionary / Oxford Companion case — Work has an editor but no author.
         var vm = CreateVm();
         vm.BookInput.Title = "Concise Oxford English Dictionary";
         vm.WorkInput.Title = "Concise Oxford English Dictionary";
@@ -1279,17 +1103,11 @@ public class BookAddViewModelTests
             new ContributorEntry { Name = "Catherine Soanes", Role = AuthorRole.Editor },
         ];
 
-        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+        await vm.SaveAsync(selectedGenreIds: []);
 
-        Assert.NotNull(bookId);
-        await using var verify = _factory.CreateDbContext();
-        var book = await verify.Books
-            .Include(b => b.Works).ThenInclude(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
-            .FirstAsync(b => b.Id == bookId);
-        var work = Assert.Single(book.Works);
-        var sole = Assert.Single(work.WorkAuthors);
-        Assert.Equal(AuthorRole.Editor, sole.Role);
-        Assert.Equal("Catherine Soanes", sole.Author.Name);
+        var work = Assert.IsType<SingleWork>(SentCreateBook().Works);
+        Assert.Empty(work.Authors);
+        Assert.Equal([new ContributorInput("Catherine Soanes", AuthorRole.Editor)], work.Contributors);
     }
 
     [Fact]
@@ -1325,25 +1143,12 @@ public class BookAddViewModelTests
     [Fact]
     public async Task AcceptSeriesSuggestion_OnLocalFallbackReason_IsNoOp()
     {
-        // Seed: an author with 2+ ungrouped works → MatchReason.AuthorHasMultipleBooks
+        // An author with 2+ ungrouped books → MatchReason.AuthorHasMultipleBooks
         // (a local fallback). Accept should be ignored on this reason because
         // the suggestion names no concrete series to attach to.
-        using (var db = _factory.CreateDbContext())
-        {
-            var author = new Author { Name = "Some Author" };
-            db.Books.AddRange(
-                new Book { Title = "Book A", Works = [new Work { Title = "Book A", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }] },
-                new Book { Title = "Book B", Works = [new Work { Title = "Book B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }] });
-            await db.SaveChangesAsync();
-        }
-
-        _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new BookLookupResult(
-                Isbn: "9780000000000", Title: "Book C", Subtitle: null,
-                Author: "Some Author", Publisher: null,
-                GenreCandidates: [], DatePrinted: null, CoverUrl: null,
-                Source: "Open Library",
-                Series: null, SeriesNumber: null, SeriesNumberRaw: null));
+        _dispatcher.Query(Arg.Is<GetSeriesMatchCandidates>(q => q!.Author == "Some Author"), Arg.Any<CancellationToken>())
+            .Returns(new SeriesMatchCandidates(null, [], 2));
+        GivenLookup("9780000000000", "Book C", "Some Author", null, null);
 
         var vm = CreateVm();
         vm.LookupIsbn = "9780000000000";
@@ -1355,5 +1160,6 @@ public class BookAddViewModelTests
         // Accept is a no-op on a local-fallback reason — nothing chosen.
         Assert.Null(vm.AcceptedSeriesId);
         Assert.Null(vm.AcceptedSeriesName);
+        Assert.Empty(SentEnsureSeries());
     }
 }

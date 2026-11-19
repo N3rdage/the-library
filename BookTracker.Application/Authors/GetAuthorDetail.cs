@@ -56,11 +56,18 @@ public sealed class GetAuthorDetailHandler(IDbContextFactory<BookTrackerDbContex
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
+        // Projected (C5): the header scalars plus the aliases' id / name — the
+        // ids widen the canonical drill-down, the names fill AliasNames.
         var author = await db.Authors
             .AsNoTracking()
-            .Include(a => a.CanonicalAuthor)
-            .Include(a => a.Aliases)
-            .FirstOrDefaultAsync(a => a.Id == query.AuthorId, ct);
+            .Where(a => a.Id == query.AuthorId)
+            .Select(a => new AuthorSource(
+                a.Id,
+                a.Name,
+                a.CanonicalAuthorId,
+                a.CanonicalAuthor == null ? null : a.CanonicalAuthor.Name,
+                a.Aliases.Select(al => new AliasRef(al.Id, al.Name)).ToList()))
+            .FirstOrDefaultAsync(ct);
 
         if (author is null) return null;
 
@@ -68,7 +75,7 @@ public sealed class GetAuthorDetailHandler(IDbContextFactory<BookTrackerDbContex
             author.Id,
             author.Name,
             author.CanonicalAuthorId,
-            author.CanonicalAuthor?.Name);
+            author.CanonicalName);
 
         var detail = await LoadDetailAsync(db, author, ct);
 
@@ -85,7 +92,13 @@ public sealed class GetAuthorDetailHandler(IDbContextFactory<BookTrackerDbContex
         return new AuthorDetailResult(header, detail, candidates);
     }
 
-    private static async Task<AuthorDetail> LoadDetailAsync(BookTrackerDbContext db, Author author, CancellationToken ct)
+    // The projected author the handler reads in place of the Author entity.
+    private sealed record AuthorSource(
+        int Id, string Name, int? CanonicalAuthorId, string? CanonicalName, List<AliasRef> Aliases);
+
+    private sealed record AliasRef(int Id, string Name);
+
+    private static async Task<AuthorDetail> LoadDetailAsync(BookTrackerDbContext db, AuthorSource author, CancellationToken ct)
     {
         bool isCanonical = author.CanonicalAuthorId is null;
 

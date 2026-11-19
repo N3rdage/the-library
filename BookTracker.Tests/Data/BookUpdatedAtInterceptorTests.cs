@@ -32,7 +32,7 @@ public class BookUpdatedAtInterceptorTests
         DateTime initial;
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             var book = new Book
             {
@@ -69,7 +69,7 @@ public class BookUpdatedAtInterceptorTests
         DateTime initial;
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             var book = new Book
             {
@@ -107,7 +107,7 @@ public class BookUpdatedAtInterceptorTests
         DateTime initial;
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             var book = new Book
             {
@@ -154,7 +154,7 @@ public class BookUpdatedAtInterceptorTests
         DateTime initialA, initialB;
         using (var db = _factory.CreateDbContext())
         {
-            var lovecraft = new Author { Name = "H.P. Lovecraft" };
+            var lovecraft = Author.Create("H.P. Lovecraft");
             db.Authors.Add(lovecraft);
             var sharedWork = new Work
             {
@@ -199,8 +199,8 @@ public class BookUpdatedAtInterceptorTests
         DateTime initial;
         using (var db = _factory.CreateDbContext())
         {
-            var preston = new Author { Name = "Douglas Preston" };
-            var child = new Author { Name = "Lincoln Child" };
+            var preston = Author.Create("Douglas Preston");
+            var child = Author.Create("Lincoln Child");
             db.Authors.AddRange(preston, child);
             var book = new Book
             {
@@ -255,7 +255,7 @@ public class BookUpdatedAtInterceptorTests
         DateTime initial;
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             var book = new Book
             {
@@ -304,7 +304,7 @@ public class BookUpdatedAtInterceptorTests
         int bookId;
         using (var db = _factory.CreateDbContext())
         {
-            var asimov = new Author { Name = "Isaac Asimov" };
+            var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             var book = new Book
             {

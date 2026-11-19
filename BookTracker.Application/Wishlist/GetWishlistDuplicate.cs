@@ -20,11 +20,13 @@ public sealed class GetWishlistDuplicateHandler(IDbContextFactory<BookTrackerDbC
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
         var ownedBookId = await db.Editions
+            .AsNoTracking()
             .Where(e => e.Isbn == query.Isbn)
             .Select(e => (int?)e.BookId)
             .FirstOrDefaultAsync(ct);
 
         var wishlistedItemId = await db.WishlistItems
+            .AsNoTracking()
             .Where(w => w.Isbn == query.Isbn || w.Isbns.Any(i => i.Isbn == query.Isbn))
             .Select(w => (int?)w.Id)
             .FirstOrDefaultAsync(ct);

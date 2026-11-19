@@ -22,25 +22,32 @@ public class BookMergeHandlerTests
     public async Task Merge_reassigns_editions_and_copies()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "A" };
+        var author = Author.Create("A");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = new Book { Title = "B", Works = [work] };
         var loser = new Book { Title = "B", Works = [work] };
-        var loserEdition = new Edition
+        var hardcover = new Edition
         {
             Book = loser,
             Isbn = "9780000000001",
             Format = BookFormat.Hardcover,
+            Copies = [new Copy { Condition = BookCondition.Good }, new Copy { Condition = BookCondition.Fair }]
+        };
+        var paperback = new Edition
+        {
+            Book = loser,
+            Isbn = "9780000000002",
+            Format = BookFormat.TradePaperback,
             Copies = [new Copy { Condition = BookCondition.Good }]
         };
         db.Books.AddRange(winner, loser);
-        db.Editions.Add(loserEdition);
+        db.Editions.AddRange(hardcover, paperback);
         await db.SaveChangesAsync();
 
         var result = await Merge(winner.Id, loser.Id);
 
         Assert.True(result.Success);
-        Assert.Equal(1, result.EditionsReassigned);
+        Assert.Equal(2, result.EditionsReassigned);
 
         using var verify = _factory.CreateDbContext();
         // Loser invisible to normal queries (soft-deleted) ...
@@ -51,16 +58,24 @@ public class BookMergeHandlerTests
             .FirstOrDefaultAsync(b => b.Id == loser.Id);
         Assert.NotNull(husk);
         Assert.NotNull(husk!.DeletedAt);
-        var winnerEditions = verify.Editions.Where(e => e.BookId == winner.Id).ToList();
-        Assert.Single(winnerEditions);
-        Assert.Equal("9780000000001", winnerEditions[0].Isbn);
+        // The same Edition rows (not replacements) now belong to the winner,
+        // each still holding its Copies.
+        var moved = verify.Editions.Include(e => e.Copies)
+            .Where(e => e.Id == hardcover.Id || e.Id == paperback.Id)
+            .ToDictionary(e => e.Id);
+        Assert.Equal(2, moved.Count);
+        Assert.Equal(winner.Id, moved[hardcover.Id].BookId);
+        Assert.Equal(winner.Id, moved[paperback.Id].BookId);
+        Assert.Equal(2, moved[hardcover.Id].Copies.Count);
+        Assert.Single(moved[paperback.Id].Copies);
+        Assert.Equal(2, verify.Editions.Count(e => e.BookId == winner.Id));
     }
 
     [Fact]
     public async Task Merge_unions_works_without_duplicating()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "A" };
+        var author = Author.Create("A");
         var sharedWork = new Work { Title = "Shared", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var loserOnlyWork = new Work { Title = "LoserOnly", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = new Book { Title = "B", Works = [sharedWork] };
@@ -81,7 +96,7 @@ public class BookMergeHandlerTests
     public async Task Merge_unions_tags_without_duplicating()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "A" };
+        var author = Author.Create("A");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var tagA = new Tag { Name = "tag-a" };
         var tagB = new Tag { Name = "tag-b" };
@@ -104,7 +119,7 @@ public class BookMergeHandlerTests
     public async Task Merge_auto_fills_empty_fields()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "A" };
+        var author = Author.Create("A");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = new Book
         {
@@ -144,7 +159,7 @@ public class BookMergeHandlerTests
         // field now, so a book merge must carry it explicitly — pre-move it rode
         // along on the unioned Works. A series-less winner takes the loser's series.
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "A" };
+        var author = Author.Create("A");
         var series = new Series { Name = "Dune Chronicles", Type = SeriesType.Series };
         db.Series.Add(series);
         var winner = new Book { Title = "Dune", Works = [new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }] };
@@ -170,7 +185,7 @@ public class BookMergeHandlerTests
     public async Task Merge_preserves_populated_winner_fields()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "A" };
+        var author = Author.Create("A");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = new Book
         {
@@ -200,7 +215,7 @@ public class BookMergeHandlerTests
     public async Task Merge_treats_winner_rating_zero_as_unrated()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "A" };
+        var author = Author.Create("A");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = new Book { Title = "B", Works = [work], Rating = 0 };
         var loser = new Book { Title = "B", Works = [work], Rating = 3 };
@@ -217,7 +232,7 @@ public class BookMergeHandlerTests
     public async Task Merge_keeps_winner_rating_when_loser_also_unrated()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "A" };
+        var author = Author.Create("A");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = new Book { Title = "B", Works = [work], Rating = 0 };
         var loser = new Book { Title = "B", Works = [work], Rating = 0 };
@@ -276,7 +291,7 @@ public class BookMergeHandlerTests
     private async Task<(int winnerId, int loserId)> SeedTwoBooksAsync()
     {
         using var db = _factory.CreateDbContext();
-        var author = new Author { Name = "Shared" };
+        var author = Author.Create("Shared");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = new Book { Title = "B", Works = [work] };
         var loser = new Book { Title = "B", Works = [work] };

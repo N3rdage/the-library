@@ -298,8 +298,8 @@ public class BookCommandHandlersTests
         int bookA, exclusiveId, sharedId;
         await using (var db = _factory.CreateDbContext())
         {
-            var exclusive = new Work { Title = "Exclusive", WorkAuthors = { new WorkAuthor { Author = new Author { Name = "X" }, Order = 0, Role = AuthorRole.Author } } };
-            var shared = new Work { Title = "Shared", WorkAuthors = { new WorkAuthor { Author = new Author { Name = "Y" }, Order = 0, Role = AuthorRole.Author } } };
+            var exclusive = new Work { Title = "Exclusive", WorkAuthors = { new WorkAuthor { Author = Author.Create("X"), Order = 0, Role = AuthorRole.Author } } };
+            var shared = new Work { Title = "Shared", WorkAuthors = { new WorkAuthor { Author = Author.Create("Y"), Order = 0, Role = AuthorRole.Author } } };
             var a = new Book { Title = "A", Works = { exclusive, shared } };
             var b = new Book { Title = "B", Works = { shared } };
             db.Books.AddRange(a, b);
@@ -328,5 +328,63 @@ public class BookCommandHandlersTests
         var edition = await db.Editions.FindAsync(editionId);
         Assert.Equal("http://cover", edition!.CoverUrl);
         Assert.True(edition.IsUserSupplied);
+    }
+
+    // The four below carry the persistence assertions the edit-dialog VM tests
+    // made against SQL before they moved to a substituted dispatcher (#264).
+
+    [Fact]
+    public async Task UpdateBookDetails_trimsTitle()
+    {
+        var id = await SeedBookAsync();
+
+        await new UpdateBookDetailsHandler(_factory).HandleAsync(
+            new UpdateBookDetails(id, "  New title  ", BookCategory.Fiction, null, null, null, null));
+
+        await using var db = _factory.CreateDbContext();
+        Assert.Equal("New title", (await db.Books.FindAsync(id))!.Title);
+    }
+
+    [Fact]
+    public async Task AddEditionToBook_blankIsbn_persistsNull()
+    {
+        var id = await SeedBookAsync();
+
+        var editionId = await new AddEditionToBookHandler(_factory).HandleAsync(
+            new AddEditionToBook(id, "   ", BookFormat.Hardcover, null, DatePrecision.Day, null, null, BookCondition.Good));
+
+        await using var db = _factory.CreateDbContext();
+        Assert.Null((await db.Editions.FindAsync(editionId))!.Isbn);
+    }
+
+    [Fact]
+    public async Task AddCopyToEdition_trimsNotes()
+    {
+        var id = await SeedBookAsync();
+        var editionId = await SeedEditionAsync(id);
+
+        var copyId = await new AddCopyToEditionHandler(_factory).HandleAsync(
+            new AddCopyToEdition(editionId, BookCondition.Fine, null, "  signed  "));
+
+        await using var db = _factory.CreateDbContext();
+        Assert.Equal("signed", (await db.Copies.FindAsync(copyId))!.Notes);
+    }
+
+    [Fact]
+    public async Task UpdateCopy_blankNotes_persistsNull()
+    {
+        var id = await SeedBookAsync();
+        var editionId = await SeedEditionAsync(id);
+        int copyId;
+        await using (var seed = _factory.CreateDbContext())
+            copyId = (await seed.Copies.FirstAsync(c => c.EditionId == editionId)).Id;
+        await new UpdateCopyHandler(_factory).HandleAsync(new UpdateCopy(copyId, BookCondition.Good, null, "old"));
+
+        await new UpdateCopyHandler(_factory).HandleAsync(new UpdateCopy(copyId, BookCondition.Fair, null, ""));
+
+        await using var db = _factory.CreateDbContext();
+        var copy = await db.Copies.FindAsync(copyId);
+        Assert.Equal(BookCondition.Fair, copy!.Condition);
+        Assert.Null(copy.Notes);
     }
 }
