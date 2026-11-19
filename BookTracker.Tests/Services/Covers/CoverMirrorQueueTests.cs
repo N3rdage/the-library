@@ -212,7 +212,7 @@ public class CoverMirrorQueueTests
         string isbn = "9780553293357")
     {
         await using var db = _factory.CreateDbContext();
-        var edition = new Edition { Isbn = isbn, CoverUrl = editionCoverUrl };
+        var edition = TestEditions.Edition(isbn: isbn, coverUrl: editionCoverUrl);
         var book = TestBooks.Book(
             "Foundation",
             coverUrl: bookCoverUrl,

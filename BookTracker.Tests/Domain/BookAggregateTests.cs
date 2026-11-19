@@ -307,7 +307,7 @@ public class BookAggregateTests
     [Fact]
     public void Copy_UpdateDetails_setsFields_andNullsBlankNotes()
     {
-        var copy = new Copy { Condition = BookCondition.Good, Notes = "old" };
+        var copy = TestEditions.Copy(condition: BookCondition.Good, notes: "old");
         copy.UpdateDetails(BookCondition.Poor, null, "  ");
 
         Assert.Equal(BookCondition.Poor, copy.Condition);

@@ -116,7 +116,7 @@ public class EditionFormatBackfillServiceTests
             db.Books.Add(TestBooks.Book(
                 "Test",
                 works: [new Work { Title = "Test", WorkAuthors = [new WorkAuthor { Author = sharedAuthor, Order = 0 }] }],
-                editions: [new Edition { Isbn = isbn, Format = format, Copies = [new Copy { Condition = BookCondition.Good }] }]));
+                editions: [TestEditions.Edition(isbn: isbn, format: format, copies: [TestEditions.Copy(condition: BookCondition.Good)])]));
         }
         await db.SaveChangesAsync();
     }

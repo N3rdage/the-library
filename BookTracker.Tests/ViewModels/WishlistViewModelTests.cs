@@ -100,7 +100,7 @@ public class WishlistViewModelTests
             var book = TestBooks.Book(
                 "The Hobbit",
                 works: [new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
-                editions: [new Edition { Isbn = "9780261103252", Format = BookFormat.Hardcover }]);
+                editions: [TestEditions.Edition(isbn: "9780261103252", format: BookFormat.Hardcover)]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;

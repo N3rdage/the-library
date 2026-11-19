@@ -133,22 +133,18 @@ public class BookDetailViewModelTests
                 works: [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
                 editions:
                 [
-                    new Edition
-                    {
-                        Isbn = "9780552131063",
-                        Format = BookFormat.MassMarketPaperback,
-                        Copies =
+                    TestEditions.Edition(
+                        isbn: "9780552131063",
+                        format: BookFormat.MassMarketPaperback,
+                        copies:
                         [
-                            new Copy { Condition = BookCondition.Good },
-                            new Copy { Condition = BookCondition.Fair },
-                        ],
-                    },
-                    new Edition
-                    {
-                        Isbn = "9780061020681",
-                        Format = BookFormat.Hardcover,
-                        Copies = [new Copy { Condition = BookCondition.Fine }],
-                    },
+                            TestEditions.Copy(condition: BookCondition.Good),
+                            TestEditions.Copy(condition: BookCondition.Fair),
+                        ]),
+                    TestEditions.Edition(
+                        isbn: "9780061020681",
+                        format: BookFormat.Hardcover,
+                        copies: [TestEditions.Copy(condition: BookCondition.Fine)]),
                 ]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
@@ -404,14 +400,12 @@ public class BookDetailViewModelTests
         int editionId;
         using (var db = factory.CreateDbContext())
         {
-            var edition = new Edition
-            {
-                Isbn = "x",
-                Copies = [
-                    new Copy { Condition = BookCondition.Good },
-                    new Copy { Condition = BookCondition.Fair },
-                ],
-            };
+            var edition = TestEditions.Edition(
+                isbn: "x",
+                copies: [
+                    TestEditions.Copy(condition: BookCondition.Good),
+                    TestEditions.Copy(condition: BookCondition.Fair),
+                ]);
             var book = TestBooks.Book(
                 "B",
                 works: [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
@@ -441,7 +435,7 @@ public class BookDetailViewModelTests
         int editionId;
         using (var db = factory.CreateDbContext())
         {
-            var edition = new Edition { Isbn = "x", Copies = [new Copy { Condition = BookCondition.Good }] };
+            var edition = TestEditions.Edition(isbn: "x", copies: [TestEditions.Copy(condition: BookCondition.Good)]);
             var book = TestBooks.Book(
                 "B",
                 works: [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
@@ -549,7 +543,7 @@ public class BookDetailViewModelTests
             var book = TestBooks.Book(
                 "B",
                 works: [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
-                editions: [new Edition { Isbn = "1", Format = BookFormat.TradePaperback, Copies = [new Copy { Condition = BookCondition.Good }] }]);
+                editions: [TestEditions.Edition(isbn: "1", format: BookFormat.TradePaperback, copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -598,7 +592,7 @@ public class BookDetailViewModelTests
             var book = TestBooks.Book(
                 "B",
                 works: [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
-                editions: [new Edition { Format = BookFormat.TradePaperback, Copies = [new Copy { Condition = BookCondition.Good }] }]);
+                editions: [TestEditions.Edition(format: BookFormat.TradePaperback, copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -634,7 +628,7 @@ public class BookDetailViewModelTests
             var book = TestBooks.Book(
                 "B",
                 works: [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
-                editions: [new Edition { Format = BookFormat.TradePaperback, Copies = [new Copy { Condition = BookCondition.Good }] }]);
+                editions: [TestEditions.Edition(format: BookFormat.TradePaperback, copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -1197,11 +1191,9 @@ public class BookDetailViewModelTests
                 works: [new Work { Title = "Work", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
                 editions:
                 [
-                    new Edition
-                    {
-                        Isbn = "9780000000001",
-                        Copies = [new Copy { Condition = BookCondition.Good }, new Copy { Condition = BookCondition.AsNew }],
-                    }
+                    TestEditions.Edition(
+                        isbn: "9780000000001",
+                        copies: [TestEditions.Copy(condition: BookCondition.Good), TestEditions.Copy(condition: BookCondition.AsNew)])
                 ]));
             await db.SaveChangesAsync();
             bookId = db.Books.Single().Id;

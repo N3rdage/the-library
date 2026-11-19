@@ -99,7 +99,7 @@ public class CoverMirrorBackgroundServiceTests
     private async Task<(int BookId, int EditionId)> SeedAsync(string? editionCoverUrl, string? bookCoverUrl)
     {
         await using var db = _factory.CreateDbContext();
-        var edition = new Edition { Isbn = "9780553293357", CoverUrl = editionCoverUrl };
+        var edition = TestEditions.Edition(isbn: "9780553293357", coverUrl: editionCoverUrl);
         var book = TestBooks.Book(
             "Foundation",
             coverUrl: bookCoverUrl,
