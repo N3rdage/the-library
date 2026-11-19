@@ -24,11 +24,7 @@ public class FindOwnedWorkTests
         var book = TestBooks.Book(
             bookTitle,
             editions: [TestEditions.Edition(isbn: isbn, copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
-        book.AttachWork(new Work
-        {
-            Title = workTitle,
-            WorkAuthors = [new WorkAuthor { Author = authorRow, Order = 0, Role = AuthorRole.Author }],
-        });
+        book.AttachWork(TestWorks.Work(workTitle, authorRow));
         db.Books.Add(book);
         await db.SaveChangesAsync();
         return book.Id;

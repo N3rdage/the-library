@@ -23,12 +23,7 @@ public class AddGenresToWorkHandlerTests
                 "Dune",
                 works:
                 [
-                    new Work
-                    {
-                        Title = "Dune",
-                        WorkAuthors = [new WorkAuthor { Author = Author.Create("Frank Herbert"), Order = 0, Role = AuthorRole.Author }],
-                        Genres = [new Genre { Name = "AIA Adventure" }],
-                    },
+                    TestWorks.Work("Dune", Author.Create("Frank Herbert"), genres: [new Genre { Name = "AIA Adventure" }]),
                 ]);
             db.Books.Add(book);
             await db.SaveChangesAsync();

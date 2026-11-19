@@ -99,7 +99,7 @@ public class WishlistViewModelTests
             var author = Author.Create("Tolkien");
             var book = TestBooks.Book(
                 "The Hobbit",
-                works: [new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+                works: [TestWorks.Work("The Hobbit", author)],
                 editions: [TestEditions.Edition(isbn: "9780261103252", format: BookFormat.Hardcover)]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
@@ -559,11 +559,7 @@ public class WishlistViewModelTests
             var series = new Series { Name = "The Stormlight Archive", Author = "Brandon Sanderson", Type = SeriesType.Series, ExpectedCount = 5 };
             foreach (var (order, display) in new (int?, string?)[] { (1, null), (2, null), (3, null), (5, null), (4, "4.5") })
             {
-                var work = new Work
-                {
-                    Title = $"Work {display ?? order?.ToString()}",
-                    WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
-                };
+                var work = TestWorks.Work($"Work {display ?? order?.ToString()}", author);
                 db.Books.Add(TestBooks.Book(
                     $"Book {display ?? order?.ToString()}",
                     series: series,
@@ -606,14 +602,14 @@ public class WishlistViewModelTests
                 seriesOrder: 1,
                 works:
                 [
-                    new Work { Title = "The Witcher", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] },
-                    new Work { Title = "A Grain of Truth", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] },
+                    TestWorks.Work("The Witcher", author),
+                    TestWorks.Work("A Grain of Truth", author),
                 ]));
             db.Books.Add(TestBooks.Book(
                 "Blood of Elves",
                 seriesId: witcher.Id,
                 seriesOrder: 3,
-                works: [new Work { Title = "Blood of Elves", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]));
+                works: [TestWorks.Work("Blood of Elves", author)]));
             await db.SaveChangesAsync();
         }
 
@@ -641,11 +637,7 @@ public class WishlistViewModelTests
                 "Mort",
                 seriesId: discworld.Id,
                 seriesOrder: 4,
-                works: [new Work
-                {
-                    Title = "Mort",
-                    WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
-                }]);
+                works: [TestWorks.Work("Mort", author)]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
         }
