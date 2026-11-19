@@ -19,10 +19,9 @@ public class AddGenresToWorkHandlerTests
         {
             var parent = new Genre { Name = "AIA Speculative" };
             db.Genres.Add(new Genre { Name = "AIA Space Opera", ParentGenre = parent });
-            var book = new Book
-            {
-                Title = "Dune",
-                Works =
+            var book = TestBooks.Book(
+                "Dune",
+                works:
                 [
                     new Work
                     {
@@ -30,8 +29,7 @@ public class AddGenresToWorkHandlerTests
                         WorkAuthors = [new WorkAuthor { Author = Author.Create("Frank Herbert"), Order = 0, Role = AuthorRole.Author }],
                         Genres = [new Genre { Name = "AIA Adventure" }],
                     },
-                ],
-            };
+                ]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;

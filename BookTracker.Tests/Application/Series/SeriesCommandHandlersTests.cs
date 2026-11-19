@@ -30,14 +30,12 @@ public class SeriesCommandHandlersTests
             Title = title,
             WorkAuthors = { new WorkAuthor { Author = Author.Create($"Author of {title}"), Order = 0, Role = AuthorRole.Author } },
         };
-        var book = new Book
-        {
-            Title = title,
-            Works = { work },
-            SeriesId = seriesId,
-            SeriesOrder = order,
-            SeriesOrderDisplay = orderDisplay,
-        };
+        var book = TestBooks.Book(
+            title,
+            works: [work],
+            seriesId: seriesId,
+            seriesOrder: order,
+            seriesOrderDisplay: orderDisplay);
         db.Books.Add(book);
         await db.SaveChangesAsync();
         return book.Id;

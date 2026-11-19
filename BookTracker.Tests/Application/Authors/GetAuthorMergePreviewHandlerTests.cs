@@ -78,11 +78,9 @@ public class GetAuthorMergePreviewHandlerTests
             db.Authors.Add(author);
             foreach (var t in titles)
             {
-                db.Books.Add(new Book
-                {
-                    Title = t,
-                    Works = [new Work { Title = t, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]
-                });
+                db.Books.Add(TestBooks.Book(
+                    t,
+                    works: [new Work { Title = t, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]));
             }
             authors.Add(author);
         }

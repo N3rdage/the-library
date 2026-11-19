@@ -25,8 +25,8 @@ public class GetSeriesListHandlerTests
         var foundation = new Series { Name = "Foundation", Author = "Isaac Asimov", Type = SeriesType.Series, ExpectedCount = 7 };
         db.Series.AddRange(discworld, foundation);
         db.Books.AddRange(
-            new Book { Title = "Mort", Series = discworld, SeriesOrder = 4, Works = [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }] }] },
-            new Book { Title = "Reaper Man", Series = discworld, SeriesOrder = 11, Works = [new Work { Title = "Reaper Man", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }] }] });
+            TestBooks.Book("Mort", series: discworld, seriesOrder: 4, works: [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }] }]),
+            TestBooks.Book("Reaper Man", series: discworld, seriesOrder: 11, works: [new Work { Title = "Reaper Man", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }] }]));
         await db.SaveChangesAsync();
     }
 

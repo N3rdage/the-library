@@ -38,8 +38,8 @@ public class GetWorkMergePreviewHandlerTests
         var notTolkien = Author.Create("Imposter");
         var w1 = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = tolkien, Order = 0 }] };
         var w2 = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = notTolkien, Order = 0 }] };
-        db.Books.Add(new Book { Title = "A", Works = [w1] });
-        db.Books.Add(new Book { Title = "B", Works = [w2] });
+        db.Books.Add(TestBooks.Book("A", works: [w1]));
+        db.Books.Add(TestBooks.Book("B", works: [w2]));
         await db.SaveChangesAsync();
 
         var result = await Preview(w1.Id, w2.Id);
@@ -56,9 +56,9 @@ public class GetWorkMergePreviewHandlerTests
         var author = Author.Create("Agatha Christie");
         var w1 = new Work { Title = "A", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var w2 = new Work { Title = "A", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        db.Books.Add(new Book { Title = "Solo W1", Works = [w1] });
-        db.Books.Add(new Book { Title = "Solo W2", Works = [w2] });
-        db.Books.Add(new Book { Title = "Compendium", Works = [w1, w2] });
+        db.Books.Add(TestBooks.Book("Solo W1", works: [w1]));
+        db.Books.Add(TestBooks.Book("Solo W2", works: [w2]));
+        db.Books.Add(TestBooks.Book("Compendium", works: [w1, w2]));
         await db.SaveChangesAsync();
 
         var result = await Preview(w1.Id, w2.Id);
@@ -76,11 +76,11 @@ public class GetWorkMergePreviewHandlerTests
         var loser = new Work { Title = loserTitle, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         foreach (var t in winnerBooks)
         {
-            db.Books.Add(new Book { Title = t, Works = [winner] });
+            db.Books.Add(TestBooks.Book(t, works: [winner]));
         }
         foreach (var t in loserBooks)
         {
-            db.Books.Add(new Book { Title = t, Works = [loser] });
+            db.Books.Add(TestBooks.Book(t, works: [loser]));
         }
         await db.SaveChangesAsync();
         return (winner.Id, loser.Id, 0);
