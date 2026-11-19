@@ -155,7 +155,7 @@ public class CoverMirrorBackgroundService(
                 }
                 if (fresh is not null)
                 {
-                    fresh.DefaultCoverArtUrl = result.Url;
+                    fresh.SetCover(result.Url);
                     await db.SaveChangesAsync(ct);
                     logger.LogInformation("Mirrored default cover for Book {BookId}.", item.Id);
                 }

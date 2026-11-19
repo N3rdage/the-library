@@ -29,8 +29,15 @@ public static class SeriesResolver
         BookTrackerDbContext db, string? name, CancellationToken ct = default)
     {
         var trimmed = name.TrimToNull();
-        if (trimmed is null) return null;
+        return trimmed is null ? null : await FindOrCreateAsync(db, trimmed, ct);
+    }
 
+    /// <summary>The find-or-create behind <see cref="ResolveAsync"/> for a name
+    /// already known to be non-blank, so a caller that has checked the name gets
+    /// a non-null series back.</summary>
+    private static async Task<SeriesAggregate> FindOrCreateAsync(
+        BookTrackerDbContext db, string trimmed, CancellationToken ct)
+    {
         // Case-insensitive matching is delegated to the DB's (CI) collation
         // rather than an explicit `Name.ToLower() == name.ToLower()`: it keeps
         // this consistent with AuthorResolver/PublisherResolver and stays
@@ -71,10 +78,10 @@ public static class SeriesResolver
         {
             // No resolved id — find-or-create by name (covers an eager-create that
             // was skipped/failed). New series default to SeriesType.Series; flip to
-            // Collection on /series/{id} later.
-            book.Series = await ResolveAsync(db, acceptedSeriesName, ct);
-            book.SeriesOrder = order;
-            book.SeriesOrderDisplay = orderDisplay;
+            // Collection on /series/{id} later. The navigation overload lets a
+            // series created here land in the same save as the book.
+            var series = await FindOrCreateAsync(db, acceptedSeriesName.Trim(), ct);
+            book.AssignToSeries(series, order, orderDisplay);
         }
     }
 }
