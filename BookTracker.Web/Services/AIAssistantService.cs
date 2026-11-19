@@ -15,6 +15,7 @@ public class AnthropicAIAssistantService(
     ILogger<AnthropicAIAssistantService> logger) : IAIAssistantService
 {
     private AnthropicClient? _client;
+    private bool _usageMissingWarned;
 
     public int CallCount { get; private set; }
 
@@ -65,7 +66,7 @@ public class AnthropicAIAssistantService(
             }
         };
 
-        var response = await CallAsync(messages, options.FastModel, 50, ct);
+        var response = await CallAsync(messages, options.FastModel, 50, "ExtractIsbn", ct);
         var responseText = (response.Message?.ToString() ?? "").Trim();
 
         if (responseText.Equals("NONE", StringComparison.OrdinalIgnoreCase))
@@ -116,7 +117,7 @@ Rules:
 
         var userMessage = $"Suggest genres for this book:\n{bookDescription}\n\n{currentGenresText}\n\nRespond with JSON only.";
 
-        var response = await CallWithSystemAsync(systemPrompt, userMessage, options.FastModel, options.MaxTokens, ct);
+        var response = await CallWithSystemAsync(systemPrompt, userMessage, options.FastModel, options.MaxTokens, "SuggestGenres", ct);
         return SharedParsers.ParseGenreSuggestion(response.Message?.ToString() ?? "", allGenres.Select(g => g.Name).ToHashSet());
     }
 
@@ -135,7 +136,7 @@ Rules:
         var systemPrompt = SharedParsers.BuildCollectionSystemPrompt(seriesText);
         var userMessage = $"Here are the books not currently in any series or collection:\n\n{booksText}\n\nSuggest how these could be grouped. Respond with JSON only.";
 
-        var response = await CallWithSystemAsync(systemPrompt, userMessage, options.FastModel, 2048, ct);
+        var response = await CallWithSystemAsync(systemPrompt, userMessage, options.FastModel, 2048, "SuggestCollections", ct);
         return SharedParsers.ParseCollectionSuggestion(response.Message?.ToString() ?? "");
     }
 
@@ -143,7 +144,7 @@ Rules:
     {
         var context = AiPromptContext.LibraryProfile(await dispatcher.Query(new GetAiLibraryProfile(), ct));
 
-        var response = await CallWithSystemAsync(SharedParsers.ShoppingSystemPrompt, $"{context}\n\nSuggest 5-10 books to look for. Respond with JSON only.", options.FastModel, 2048, ct);
+        var response = await CallWithSystemAsync(SharedParsers.ShoppingSystemPrompt, $"{context}\n\nSuggest 5-10 books to look for. Respond with JSON only.", options.FastModel, 2048, "SuggestShoppingList", ct);
         return SharedParsers.ParseShoppingSuggestion(response.Message?.ToString() ?? "");
     }
 
@@ -152,19 +153,20 @@ Rules:
         var booksText = AiPromptContext.AdvisorBooks(await dispatcher.Query(new GetLibraryProfileForAdvisor(), ct));
 
         var systemPrompt = SharedParsers.BuildAdvisorSystemPrompt(booksText);
-        var response = await CallWithSystemAsync(systemPrompt, $"I'm considering: {query}\n\nShould I get it? Respond with JSON only.", options.DeepModel, 2048, ct);
+        var response = await CallWithSystemAsync(systemPrompt, $"I'm considering: {query}\n\nShould I get it? Respond with JSON only.", options.DeepModel, 2048, "AssessBook", ct);
         return SharedParsers.ParseBookAdvisor(response.Message?.ToString() ?? "");
     }
 
-    private async Task<MessageResponse> CallAsync(List<Message> messages, string model, int maxTokens, CancellationToken ct)
+    private async Task<MessageResponse> CallAsync(List<Message> messages, string model, int maxTokens, string operation, CancellationToken ct)
     {
         var parameters = new MessageParameters { Messages = messages, MaxTokens = maxTokens, Model = model, Stream = false };
         var response = await GetClient().Messages.GetClaudeMessageAsync(parameters, ct);
         CallCount++;
+        await RecordUsageAsync(model, operation, response, ct);
         return response;
     }
 
-    private async Task<MessageResponse> CallWithSystemAsync(string systemPrompt, string userMessage, string model, int maxTokens, CancellationToken ct)
+    private async Task<MessageResponse> CallWithSystemAsync(string systemPrompt, string userMessage, string model, int maxTokens, string operation, CancellationToken ct)
     {
         var parameters = new MessageParameters
         {
@@ -177,6 +179,32 @@ Rules:
         };
         var response = await GetClient().Messages.GetClaudeMessageAsync(parameters, ct);
         CallCount++;
+        await RecordUsageAsync(model, operation, response, ct);
         return response;
+    }
+
+    private async Task RecordUsageAsync(string model, string operation, MessageResponse response, CancellationToken ct)
+    {
+        if (response.Usage is null)
+        {
+            if (!_usageMissingWarned)
+            {
+                _usageMissingWarned = true;
+                logger.LogWarning("Anthropic response for {Operation} carried no usage block; token usage is not recorded for this service instance's calls without one", operation);
+            }
+            return;
+        }
+
+        try
+        {
+            await dispatcher.Send(new RecordAiUsage(
+                nameof(AIProvider.Anthropic), model, operation, response.Usage.InputTokens, response.Usage.OutputTokens), ct);
+        }
+        catch (Exception ex)
+        {
+            // Swallowed on purpose: the AI call already succeeded and its
+            // answer is in hand, so a bookkeeping failure must not fail it.
+            logger.LogWarning(ex, "Recording AI usage for {Operation} on {Model} failed; the call's result is unaffected", operation, model);
+        }
     }
 }
