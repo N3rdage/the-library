@@ -24,7 +24,10 @@ public class AIProviderFactory(
         _activeProvider = _options.DefaultProvider;
     }
 
-    public IAIAssistantService GetService()
+    /// <summary>The service for the active provider, created on first use and
+    /// after each <see cref="SwitchProvider"/>. Virtual so a ViewModel test can
+    /// stand in a substituted <see cref="IAIAssistantService"/>.</summary>
+    public virtual IAIAssistantService GetService()
     {
         if (_currentService is null || GetProviderForService(_currentService) != _activeProvider)
         {

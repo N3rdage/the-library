@@ -63,8 +63,17 @@
             </MudButton>
         </div>
 
-        <div class="mt-2">
+        <div class="mt-2 d-flex flex-wrap align-center gap-4">
             <AIProviderToggle />
+            @* Off by default. With it on, a row whose rule-based genre match
+               finds nothing or only top-level genres asks the active provider
+               during its lookup; those names carry an "AI" marker in the grid. *@
+            <MudSwitch T="bool"
+                       @bind-Value="VM.AskAiForGenres"
+                       Disabled="@(AIFactory.AvailableProviders.Count == 0)"
+                       Color="Color.Primary"
+                       Label="Ask AI for genres" />
+            @* Disabled with no configured provider: there is nobody to ask. *@
         </div>
 
         @if (!string.IsNullOrEmpty(scannerError))
@@ -176,6 +185,7 @@
                         {
                             @(context.Title ?? "—")
                         }
+                        @RenderGenres(context)
                         @RenderSeriesSuggestion(context)
                     </MudTd>
                     <MudTd>
@@ -246,6 +256,7 @@
                                                   Margin="Margin.Dense"
                                                   Class="mb-1" />
                                     <div class="font-monospace text-muted" style="font-size: 0.7rem;">@row.Isbn</div>
+                                    @RenderGenres(row)
                                 </div>
                                 <MudIconButton Size="Size.Small"
                                                Icon="@Icons.Material.Filled.Close"
@@ -516,6 +527,30 @@
                     break;
             }
         }
+    };
+
+    private RenderFragment RenderGenres(BulkAddViewModel.DiscoveryRow row) => __builder =>
+    {
+        if (row.Genres.Count == 0) return;
+
+        @* Comma-separated names; an AI-sourced one carries an "AI" marker so a
+           wrong suggestion is visible before Accept. *@
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block text-break">
+            <strong>Genres:</strong>
+            @for (var i = 0; i < row.Genres.Count; i++)
+            {
+                var genre = row.Genres[i];
+                if (i > 0)
+                {
+                    <text>, </text>
+                }
+                <span>@genre.Name</span>
+                if (genre.FromAi)
+                {
+                    <sup class="text-info" title="Suggested by AI">AI</sup>
+                }
+            }
+        </MudText>
     };
 
     private RenderFragment RenderSeriesSuggestion(BulkAddViewModel.DiscoveryRow row) => __builder =>
