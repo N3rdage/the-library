@@ -29,7 +29,7 @@ The run that started at 15:01 UTC split the issue into four children, one pull r
 - **L3**, [#581](https://github.com/N3rdage/the-library/pull/581), merged 16:05 UTC: `/loans`, open loans grouped by borrower with an "Overdue" chip and a collapsed history panel, plus a "Lent to {name}" chip in the Library list.
 - **L4**, [#583](https://github.com/N3rdage/the-library/pull/583), merged 16:23 UTC: a "Due back" panel on Home, and an `.ics` "Add to calendar" per loan and per borrower. It produces an all-day event on the due date with a 09:00 alarm and a stable UID, so re-adding updates the event instead of duplicating it. No service, no secret, nothing emailed. The calendar app that opens the file owns the reminder.
 
-Before L1 went to review, I sent it back once. The first draft checked "is this the loan that is open" in the command handler. That rule is about the copy, and the project's convention C11 says invariants live on the entity, so it moved into `Copy.MarkReturned`, which now takes the loan id and refuses a loan that is not the open one. A handler that knows a domain rule works until the second handler forgets it.
+Before L1 went to review, I sent it back once. The first draft checked "is this the loan that is open" in the command handler. That rule is about the copy, and the project's convention C6 says invariants live on the aggregate, not in the handler, so it moved into `Copy.MarkReturned`, which now takes the loan id and refuses a loan that is not the open one. A handler that knows a domain rule works until the second handler forgets it.
 
 ## What I decided alone
 
