@@ -34,7 +34,7 @@ public class CoverMirrorBackgroundServiceTests
         {
             await using var db = _factory.CreateDbContext();
             var edition = await db.Editions.SingleAsync(e => e.Id == editionId);
-            edition.CoverUrl = UserUrl;
+            edition.ReplaceCoverUrl(UserUrl);
             await db.SaveChangesAsync();
         });
 
@@ -82,6 +82,28 @@ public class CoverMirrorBackgroundServiceTests
         Assert.Equal(BlobUrl, stored.CoverUrl);
         Assert.False(await check.CoverMirrorStates.AnyAsync(
             s => s.Target == CoverMirrorTarget.Edition && s.TargetId == editionId));
+    }
+
+    [Fact]
+    public async Task EditionMirror_SwapsOnlyTheUrl_AndLeavesIsUserSuppliedAlone()
+    {
+        int editionId;
+        await using (var db = _factory.CreateDbContext())
+        {
+            var edition = TestEditions.Edition(
+                isbn: "9780553293357", coverUrl: UpstreamUrl, isUserSupplied: true);
+            db.Books.Add(TestBooks.Book("Foundation", editions: [edition]));
+            await db.SaveChangesAsync();
+            editionId = edition.Id;
+        }
+        MirrorReturnsBlobAfter(() => Task.CompletedTask);
+
+        await RunTickAsync();
+
+        await using var check = _factory.CreateDbContext();
+        var stored = await check.Editions.SingleAsync(e => e.Id == editionId);
+        Assert.Equal(BlobUrl, stored.CoverUrl);
+        Assert.True(stored.IsUserSupplied);
     }
 
     private void MirrorReturnsBlobAfter(Func<Task> duringDownload) =>

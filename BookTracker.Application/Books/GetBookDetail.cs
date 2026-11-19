@@ -53,7 +53,12 @@ public record EditionDetail(
     IReadOnlyList<CopyDetail> Copies,
     int? EditionNumber = null);
 
-public record CopyDetail(int Id, BookCondition Condition, DateTime? DateAcquired, string? Notes);
+public record CopyDetail(
+    int Id, BookCondition Condition, DateTime? DateAcquired, string? Notes,
+    // The loan not yet returned; null when the copy is on the shelf.
+    CopyLoanDetail? OpenLoan = null);
+
+public record CopyLoanDetail(int LoanId, string BorrowerName, DateOnly LentOn, DateOnly? DueOn);
 
 public record TagDetail(int Id, string Name);
 
@@ -125,6 +130,10 @@ public sealed class GetBookDetailHandler(IDbContextFactory<BookTrackerDbContext>
                         c.Condition,
                         c.DateAcquired,
                         c.Notes,
+                        OpenLoan = c.Loans
+                            .Where(l => l.ReturnedOn == null)
+                            .Select(l => new { l.Id, l.BorrowerName, l.LentOn, l.DueOn })
+                            .FirstOrDefault(),
                     }).ToList(),
                 }).ToList(),
                 Tags = b.Tags.Select(t => new { t.Id, t.Name }).ToList(),
@@ -171,7 +180,10 @@ public sealed class GetBookDetailHandler(IDbContextFactory<BookTrackerDbContext>
                 e.Copies
                     .OrderBy(c => c.DateAcquired ?? DateTime.MaxValue)
                     .ThenBy(c => c.Id)
-                    .Select(c => new CopyDetail(c.Id, c.Condition, c.DateAcquired, c.Notes))
+                    .Select(c => new CopyDetail(c.Id, c.Condition, c.DateAcquired, c.Notes,
+                        c.OpenLoan is null
+                            ? null
+                            : new CopyLoanDetail(c.OpenLoan.Id, c.OpenLoan.BorrowerName, c.OpenLoan.LentOn, c.OpenLoan.DueOn)))
                     .ToList(),
                 e.EditionNumber))
             .ToList();

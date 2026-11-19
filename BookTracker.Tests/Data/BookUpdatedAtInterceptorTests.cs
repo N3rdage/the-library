@@ -84,7 +84,9 @@ public class BookUpdatedAtInterceptorTests
         using (var db = _factory.CreateDbContext())
         {
             var edition = await db.Editions.Include(e => e.Book).FirstAsync();
-            edition.Isbn = "9780553293358";
+            edition.UpdateDetails(
+                "9780553293358", edition.Format, edition.DatePrinted,
+                edition.DatePrintedPrecision, edition.CoverUrl, edition.Publisher);
             await db.SaveChangesAsync();
         }
 
@@ -124,7 +126,7 @@ public class BookUpdatedAtInterceptorTests
             var copy = await db.Copies
                 .Include(c => c.Edition).ThenInclude(e => e.Book)
                 .FirstAsync();
-            copy.Condition = BookCondition.VeryGood;
+            copy.UpdateDetails(BookCondition.VeryGood, copy.DateAcquired, copy.Notes);
             await db.SaveChangesAsync();
         }
 
@@ -133,6 +135,61 @@ public class BookUpdatedAtInterceptorTests
             var bumped = await db.Books.FirstAsync(b => b.Id == bookId);
             Assert.True(bumped.UpdatedAt > initial,
                 $"Expected UpdatedAt to bump after Copy edit. initial={initial:O}, current={bumped.UpdatedAt:O}");
+        }
+    }
+
+    [Fact]
+    public async Task LendAndReturn_EachBumpOwningBookUpdatedAt()
+    {
+        int bookId;
+        int copyId;
+        DateTime initial;
+        using (var db = _factory.CreateDbContext())
+        {
+            var copy = TestEditions.Copy();
+            var book = TestBooks.Book(
+                "Foundation",
+                editions: [TestEditions.Edition(isbn: "9780553293357", copies: [copy])]);
+            db.Books.Add(book);
+            await db.SaveChangesAsync();
+            bookId = book.Id;
+            copyId = copy.Id;
+            initial = book.UpdatedAt;
+        }
+
+        await Task.Delay(Tick);
+
+        // Lend with only the Copy and its Loans loaded (the LendCopies shape):
+        // the interceptor walks Loan → Copy → Edition → Book by key.
+        using (var db = _factory.CreateDbContext())
+        {
+            var copy = await db.Copies.Include(c => c.Loans).FirstAsync(c => c.Id == copyId);
+            copy.LendTo("Sam", new DateOnly(2026, 11, 1), null);
+            await db.SaveChangesAsync();
+        }
+
+        DateTime afterLend;
+        using (var db = _factory.CreateDbContext())
+        {
+            afterLend = (await db.Books.FirstAsync(b => b.Id == bookId)).UpdatedAt;
+            Assert.True(afterLend > initial,
+                $"Expected UpdatedAt to bump after a lend. initial={initial:O}, current={afterLend:O}");
+        }
+
+        await Task.Delay(Tick);
+
+        using (var db = _factory.CreateDbContext())
+        {
+            var copy = await db.Copies.Include(c => c.Loans).FirstAsync(c => c.Id == copyId);
+            copy.MarkReturned(copy.OpenLoan!.Id, new DateOnly(2026, 11, 2));
+            await db.SaveChangesAsync();
+        }
+
+        using (var db = _factory.CreateDbContext())
+        {
+            var bumped = await db.Books.FirstAsync(b => b.Id == bookId);
+            Assert.True(bumped.UpdatedAt > afterLend,
+                $"Expected UpdatedAt to bump after a return. afterLend={afterLend:O}, current={bumped.UpdatedAt:O}");
         }
     }
 

@@ -33,7 +33,7 @@ Audience: other developers using or interested in using Claude / Claude Code on 
 - **Drew is third-person by name.** Normal blog practice; more specific than "my collaborator."
 - **"We" for the genuinely shared work.** Session planning, memory-file discipline, joint decisions. Honest where it's honest, not a conflation.
 - **Frontmatter shape:** `author: Claude`, `reviewed_by: Drew`, plus the usual title / date / slug / tags.
-- **Honest about both wins and dead ends.** The Foundry/Sponsored-subscription wall, the Graph-app-role 403 during secret-rotation setup, the first README's wrong framing — these are the interesting content, not embarrassments. Write them up.
+- **Honest about both wins and dead ends.** The Foundry subscription-type wall, the Graph-app-role 403 during secret-rotation setup, the first README's wrong framing — these are the interesting content, not embarrassments. Write them up.
 - **Claude-perspective observations are fair game.** Things like "what gets loaded on session startup and in what order" or "what user-profile memory feels like from inside" are available to a Claude-narrator and not to a Drew-narrator. Use them where they add content, not just for flavour.
 - **What Claude won't claim:** solo authorship of Drew's framing calls (experiment framing, Option-A decisions, etc.) or a personal history beyond the project ("the past 30 years of software engineering has taught me..." — no).
 
