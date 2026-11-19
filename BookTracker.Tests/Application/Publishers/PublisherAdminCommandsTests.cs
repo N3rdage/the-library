@@ -81,7 +81,7 @@ public class PublisherAdminCommandsTests
             db.Publishers.Add(p);
             db.Books.Add(TestBooks.Book(
                 "Foo",
-                editions: [new Edition { Publisher = p, Format = BookFormat.Hardcover }]));
+                editions: [TestEditions.Edition(publisher: p, format: BookFormat.Hardcover)]));
             await db.SaveChangesAsync();
             publisherId = p.Id;
         }
@@ -107,8 +107,8 @@ public class PublisherAdminCommandsTests
                 "Foo",
                 editions:
                 [
-                    new Edition { Publisher = source, Format = BookFormat.Hardcover },
-                    new Edition { Publisher = source, Format = BookFormat.TradePaperback }
+                    TestEditions.Edition(publisher: source, format: BookFormat.Hardcover),
+                    TestEditions.Edition(publisher: source, format: BookFormat.TradePaperback)
                 ]));
             await db.SaveChangesAsync();
             sourceId = source.Id;
@@ -134,7 +134,7 @@ public class PublisherAdminCommandsTests
             db.Publishers.Add(p);
             db.Books.Add(TestBooks.Book(
                 "Foo",
-                editions: [new Edition { Publisher = p, Format = BookFormat.Hardcover }]));
+                editions: [TestEditions.Edition(publisher: p, format: BookFormat.Hardcover)]));
             await db.SaveChangesAsync();
             publisherId = p.Id;
         }

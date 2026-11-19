@@ -21,7 +21,7 @@ public class FindOwnedEditionsTests
         var book = TestBooks.Book(
             title,
             editions: isbns
-                .Select(isbn => new Edition { Isbn = isbn, Copies = [new Copy { Condition = BookCondition.Good }] }));
+                .Select(isbn => TestEditions.Edition(isbn: isbn, copies: [TestEditions.Copy(condition: BookCondition.Good)])));
         db.Books.Add(book);
         await db.SaveChangesAsync();
         return book.Id;

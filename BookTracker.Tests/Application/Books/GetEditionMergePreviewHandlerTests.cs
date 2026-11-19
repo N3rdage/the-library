@@ -35,8 +35,8 @@ public class GetEditionMergePreviewHandlerTests
         var w2 = new Work { Title = "A2", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var b1 = TestBooks.Book("B1", works: [w1]);
         var b2 = TestBooks.Book("B2", works: [w2]);
-        var e1 = new Edition { Book = b1, Isbn = "9780000000001", Format = BookFormat.Hardcover };
-        var e2 = new Edition { Book = b2, Isbn = "9780000000002", Format = BookFormat.Hardcover };
+        var e1 = TestEditions.Edition(book: b1, isbn: "9780000000001", format: BookFormat.Hardcover);
+        var e2 = TestEditions.Edition(book: b2, isbn: "9780000000002", format: BookFormat.Hardcover);
         db.Books.AddRange(b1, b2);
         db.Editions.AddRange(e1, e2);
         await db.SaveChangesAsync();
@@ -52,8 +52,8 @@ public class GetEditionMergePreviewHandlerTests
         var author = Author.Create("Shared");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var book = TestBooks.Book("B", works: [work]);
-        var winner = new Edition { Book = book, Isbn = "9780000000001", Format = BookFormat.Hardcover };
-        var loser = new Edition { Book = book, Isbn = "9780000000002", Format = BookFormat.Hardcover };
+        var winner = TestEditions.Edition(book: book, isbn: "9780000000001", format: BookFormat.Hardcover);
+        var loser = TestEditions.Edition(book: book, isbn: "9780000000002", format: BookFormat.Hardcover);
         db.Books.Add(book);
         db.Editions.AddRange(winner, loser);
         await db.SaveChangesAsync();

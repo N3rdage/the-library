@@ -22,7 +22,7 @@ public class GetOwnedWorksByAuthorTests
             ?? Author.Create(author);
         var book = TestBooks.Book(
             title,
-            editions: [new Edition { Copies = [new Copy { Condition = BookCondition.Good }] }]);
+            editions: [TestEditions.Edition(copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
         book.AttachWork(new Work
         {
             Title = title,

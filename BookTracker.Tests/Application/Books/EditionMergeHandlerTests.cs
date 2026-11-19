@@ -26,8 +26,8 @@ public class EditionMergeHandlerTests
         // Add a copy on each side.
         using (var db = _factory.CreateDbContext())
         {
-            db.Copies.Add(new Copy { EditionId = winnerId, Condition = BookCondition.Good });
-            db.Copies.Add(new Copy { EditionId = loserId, Condition = BookCondition.Fair });
+            db.Copies.Add(TestEditions.Copy(editionId: winnerId, condition: BookCondition.Good));
+            db.Copies.Add(TestEditions.Copy(editionId: loserId, condition: BookCondition.Fair));
             await db.SaveChangesAsync();
         }
 
@@ -50,18 +50,16 @@ public class EditionMergeHandlerTests
         var publisher = new Publisher { Name = "Acme Press" };
         var book = TestBooks.Book("B", works: [work]);
         // Winner has no date, no cover, no publisher, no ISBN.
-        var winner = new Edition { Book = book, Format = BookFormat.Hardcover };
+        var winner = TestEditions.Edition(book: book, format: BookFormat.Hardcover);
         // Loser has all of them.
-        var loser = new Edition
-        {
-            Book = book,
-            Format = BookFormat.Hardcover,
-            Isbn = "9780000000099",
-            DatePrinted = new DateOnly(1984, 6, 1),
-            DatePrintedPrecision = DatePrecision.Month,
-            CoverUrl = "https://example.com/cover.jpg",
-            Publisher = publisher
-        };
+        var loser = TestEditions.Edition(
+            book: book,
+            format: BookFormat.Hardcover,
+            isbn: "9780000000099",
+            datePrinted: new DateOnly(1984, 6, 1),
+            datePrintedPrecision: DatePrecision.Month,
+            coverUrl: "https://example.com/cover.jpg",
+            publisher: publisher);
         db.Books.Add(book);
         db.Editions.AddRange(winner, loser);
         await db.SaveChangesAsync();
@@ -90,22 +88,18 @@ public class EditionMergeHandlerTests
         var pubB = new Publisher { Name = "Ignored" };
         var book = TestBooks.Book("B", works: [work]);
         // Winner already has everything.
-        var winner = new Edition
-        {
-            Book = book, Format = BookFormat.Hardcover,
-            Isbn = "9780000000111",
-            DatePrinted = new DateOnly(1990, 1, 1),
-            CoverUrl = "https://example.com/winner.jpg",
-            Publisher = pubA
-        };
-        var loser = new Edition
-        {
-            Book = book, Format = BookFormat.Hardcover,
-            Isbn = "9780000000222",  // different, but winner wins
-            DatePrinted = new DateOnly(1985, 1, 1),
-            CoverUrl = "https://example.com/loser.jpg",
-            Publisher = pubB
-        };
+        var winner = TestEditions.Edition(
+            book: book, format: BookFormat.Hardcover,
+            isbn: "9780000000111",
+            datePrinted: new DateOnly(1990, 1, 1),
+            coverUrl: "https://example.com/winner.jpg",
+            publisher: pubA);
+        var loser = TestEditions.Edition(
+            book: book, format: BookFormat.Hardcover,
+            isbn: "9780000000222",  // different, but winner wins
+            datePrinted: new DateOnly(1985, 1, 1),
+            coverUrl: "https://example.com/loser.jpg",
+            publisher: pubB);
         db.Books.Add(book);
         db.Editions.AddRange(winner, loser);
         await db.SaveChangesAsync();
@@ -175,8 +169,8 @@ public class EditionMergeHandlerTests
         var w2 = new Work { Title = "A2", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var b1 = TestBooks.Book("B1", works: [w1]);
         var b2 = TestBooks.Book("B2", works: [w2]);
-        var e1 = new Edition { Book = b1, Isbn = "9780000000001", Format = BookFormat.Hardcover };
-        var e2 = new Edition { Book = b2, Isbn = "9780000000002", Format = BookFormat.Hardcover };
+        var e1 = TestEditions.Edition(book: b1, isbn: "9780000000001", format: BookFormat.Hardcover);
+        var e2 = TestEditions.Edition(book: b2, isbn: "9780000000002", format: BookFormat.Hardcover);
         db.Books.AddRange(b1, b2);
         db.Editions.AddRange(e1, e2);
         await db.SaveChangesAsync();
@@ -194,8 +188,8 @@ public class EditionMergeHandlerTests
         var author = Author.Create("Shared");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var book = TestBooks.Book("B", works: [work]);
-        var winner = new Edition { Book = book, Isbn = "9780000000001", Format = BookFormat.Hardcover };
-        var loser = new Edition { Book = book, Isbn = "9780000000002", Format = BookFormat.Hardcover };
+        var winner = TestEditions.Edition(book: book, isbn: "9780000000001", format: BookFormat.Hardcover);
+        var loser = TestEditions.Edition(book: book, isbn: "9780000000002", format: BookFormat.Hardcover);
         db.Books.Add(book);
         db.Editions.AddRange(winner, loser);
         await db.SaveChangesAsync();

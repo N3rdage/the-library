@@ -27,20 +27,16 @@ public class BookMergeHandlerTests
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = TestBooks.Book("B", works: [work]);
         var loser = TestBooks.Book("B", works: [work]);
-        var hardcover = new Edition
-        {
-            Book = loser,
-            Isbn = "9780000000001",
-            Format = BookFormat.Hardcover,
-            Copies = [new Copy { Condition = BookCondition.Good }, new Copy { Condition = BookCondition.Fair }]
-        };
-        var paperback = new Edition
-        {
-            Book = loser,
-            Isbn = "9780000000002",
-            Format = BookFormat.TradePaperback,
-            Copies = [new Copy { Condition = BookCondition.Good }]
-        };
+        var hardcover = TestEditions.Edition(
+            book: loser,
+            isbn: "9780000000001",
+            format: BookFormat.Hardcover,
+            copies: [TestEditions.Copy(condition: BookCondition.Good), TestEditions.Copy(condition: BookCondition.Fair)]);
+        var paperback = TestEditions.Edition(
+            book: loser,
+            isbn: "9780000000002",
+            format: BookFormat.TradePaperback,
+            copies: [TestEditions.Copy(condition: BookCondition.Good)]);
         db.Books.AddRange(winner, loser);
         db.Editions.AddRange(hardcover, paperback);
         await db.SaveChangesAsync();
@@ -84,13 +80,11 @@ public class BookMergeHandlerTests
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var winner = TestBooks.Book("B", works: [work]);
         var loser = TestBooks.Book("B", works: [work]);
-        var edition = new Edition
-        {
-            Book = loser,
-            Isbn = "9780000000003",
-            Format = BookFormat.Hardcover,
-            Copies = [new Copy { Condition = BookCondition.Good }]
-        };
+        var edition = TestEditions.Edition(
+            book: loser,
+            isbn: "9780000000003",
+            format: BookFormat.Hardcover,
+            copies: [TestEditions.Copy(condition: BookCondition.Good)]);
         db.Books.AddRange(winner, loser);
         db.Editions.Add(edition);
         await db.SaveChangesAsync();

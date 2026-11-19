@@ -158,9 +158,9 @@ public class GetCatalogSnapshotHandlerTests
                 works: [new Work { Title = "Rendezvous with Rama", WorkAuthors = [new WorkAuthor { Author = clarke, Order = 0 }] }],
                 editions:
                 [
-                    new Edition { Isbn = "9780553287899", Format = BookFormat.MassMarketPaperback },
-                    new Edition { Isbn = "9780575094192", Format = BookFormat.TradePaperback },
-                    new Edition { Isbn = null, Format = BookFormat.Hardcover },
+                    TestEditions.Edition(isbn: "9780553287899", format: BookFormat.MassMarketPaperback),
+                    TestEditions.Edition(isbn: "9780575094192", format: BookFormat.TradePaperback),
+                    TestEditions.Edition(isbn: null, format: BookFormat.Hardcover),
                 ]));
             await db.SaveChangesAsync();
         }
@@ -494,12 +494,12 @@ public class GetCatalogSnapshotHandlerTests
                 works: [new Work { Title = "Rendezvous with Rama", WorkAuthors = [new WorkAuthor { Author = clarke, Order = 0 }] }],
                 editions:
                 [
-                    new Edition { Isbn = "9780553287899", Format = BookFormat.MassMarketPaperback, CoverUrl = "https://covers.example/mm.jpg" },
-                    new Edition { Isbn = "9780575094192", Format = BookFormat.TradePaperback, CoverUrl = null },
+                    TestEditions.Edition(isbn: "9780553287899", format: BookFormat.MassMarketPaperback, coverUrl: "https://covers.example/mm.jpg"),
+                    TestEditions.Edition(isbn: "9780575094192", format: BookFormat.TradePaperback, coverUrl: null),
                     // No-ISBN edition still shipped (Format + maybe a
                     // CoverUrl) so the enhanced ScanPage view doesn't
                     // hide them.
-                    new Edition { Isbn = null, Format = BookFormat.Hardcover, CoverUrl = null },
+                    TestEditions.Edition(isbn: null, format: BookFormat.Hardcover, coverUrl: null),
                 ]));
             await db.SaveChangesAsync();
         }

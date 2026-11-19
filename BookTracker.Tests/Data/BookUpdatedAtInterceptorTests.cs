@@ -72,7 +72,7 @@ public class BookUpdatedAtInterceptorTests
             var book = TestBooks.Book(
                 "Foundation",
                 works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }],
-                editions: [new Edition { Isbn = "9780553293357" }]);
+                editions: [TestEditions.Edition(isbn: "9780553293357")]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -108,11 +108,9 @@ public class BookUpdatedAtInterceptorTests
             var book = TestBooks.Book(
                 "Foundation",
                 works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }],
-                editions: [new Edition
-                {
-                    Isbn = "9780553293357",
-                    Copies = [new Copy { Condition = BookCondition.Good }],
-                }]);
+                editions: [TestEditions.Edition(
+                    isbn: "9780553293357",
+                    copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;

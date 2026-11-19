@@ -22,7 +22,7 @@ public class AddScannedCopyHandlerTests
         var book = TestBooks.Book(
             "The Hobbit",
             tags: tags.Select(t => new Tag { Name = t }),
-            editions: [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }]);
+            editions: [TestEditions.Edition(isbn: "9780345391803", copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
         book.AttachWork(new Work
         {
             Title = "The Hobbit",
