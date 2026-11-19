@@ -38,6 +38,18 @@
                 <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-1">
                     <MudText Typo="Typo.h6">@group.BorrowerName</MudText>
                     <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@BookCountLabel(group.Loans.Count)</MudChip>
+                    @if (group.Loans.Any(l => l.DueOn is not null))
+                    {
+                        <MudSpacer />
+                        @* download keeps Blazor's router from intercepting the link;
+                           the file name comes from the response's Content-Disposition. *@
+                        <MudButton Href="@($"/api/loans/calendar.ics?borrower={Uri.EscapeDataString(group.BorrowerName)}")"
+                                   download=""
+                                   Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Event">
+                            Add all to calendar
+                        </MudButton>
+                    }
                 </MudStack>
                 @foreach (var loan in group.Loans)
                 {
@@ -71,6 +83,16 @@
                                 }
                             </MudStack>
                         </div>
+                        @if (loan.DueOn is not null)
+                        {
+                            <MudTooltip Text="Add to calendar">
+                                <MudIconButton Href="@($"/api/loans/{loan.LoanId}/calendar.ics")"
+                                               download="@($"loan-{loan.LoanId}.ics")"
+                                               Icon="@Icons.Material.Filled.Event"
+                                               Color="Color.Primary" Size="Size.Small" Class="flex-shrink-0"
+                                               aria-label="@($"Add the return of {loan.Title} to your calendar")" />
+                            </MudTooltip>
+                        }
                         <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Class="flex-shrink-0"
                                    Disabled="@VM.ReturningLoanIds.Contains(loan.LoanId)"
                                    OnClick="@(() => VM.ReturnAsync(loan.LoanId))">
