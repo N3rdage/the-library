@@ -1,4 +1,5 @@
 using Anthropic.SDK.Constants;
+using BookTracker.Application.Ai;
 
 namespace BookTracker.Web.Services;
 
@@ -18,6 +19,12 @@ public class AIOptions
     public AnthropicOptions Anthropic { get; set; } = new();
     public MicrosoftFoundryOptions MicrosoftFoundry { get; set; } = new();
     public AzureOpenAIOptions AzureOpenAI { get; set; } = new();
+
+    /// <summary>US-dollar prices per million tokens, keyed by the model string
+    /// the usage rows carry: the model id for Anthropic, the deployment name
+    /// for Azure OpenAI and Microsoft Foundry. A model with no entry shows its
+    /// tokens on /assistant without a cost.</summary>
+    public Dictionary<string, AiModelPrice> Prices { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 public class AnthropicOptions

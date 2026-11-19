@@ -23,9 +23,11 @@ public class AIAssistantViewModelTests
 
     // The paths under test never reach the AI service, so the provider factory
     // never dispatches a query.
-    private AIAssistantViewModel CreateVm() =>
-        new(_dispatcher, new AIProviderFactory(
-            _dispatcher, Options.Create(new AIOptions()), NullLoggerFactory.Instance));
+    private AIAssistantViewModel CreateVm(AIOptions? options = null)
+    {
+        var aiOptions = Options.Create(options ?? new AIOptions());
+        return new(_dispatcher, new AIProviderFactory(_dispatcher, aiOptions, NullLoggerFactory.Instance), aiOptions);
+    }
 
     [Fact]
     public async Task LoadBooksNeedingGenres_copiesTheQueryRows()

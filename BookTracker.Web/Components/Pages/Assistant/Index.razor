@@ -8,6 +8,11 @@
     <AIProviderToggle />
 </div>
 
+@if (VM.UsageLine is not null)
+{
+    <p class="text-muted small mb-3">@VM.UsageLine</p>
+}
+
 <div class="card mb-4">
     <div class="card-header bg-white"><h2 class="h5 mb-0">Book advisor</h2></div>
     <div class="card-body">
@@ -341,6 +346,8 @@
 </div>
 
 @code {
+    protected override Task OnInitializedAsync() => VM.LoadUsageSummaryAsync();
+
     private async Task HandleAdvisorKeyUp(KeyboardEventArgs e)
     {
         if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(VM.BookAdvisorQuery))
