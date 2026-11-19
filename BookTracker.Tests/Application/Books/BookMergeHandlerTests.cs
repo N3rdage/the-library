@@ -1,4 +1,5 @@
 using BookTracker.Application.Books;
+using BookTracker.Application.Catalog;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -69,6 +70,48 @@ public class BookMergeHandlerTests
         Assert.Equal(2, moved[hardcover.Id].Copies.Count);
         Assert.Single(moved[paperback.Id].Copies);
         Assert.Equal(2, verify.Editions.Count(e => e.BookId == winner.Id));
+    }
+
+    [Fact]
+    public async Task Merge_loser_is_a_snapshot_tombstone_and_its_edition_is_the_winners()
+    {
+        // The loser is soft-deleted through Book.SoftDelete, whose Editions/Tags
+        // clear runs after the merge has moved both to the winner: the catalog
+        // snapshot must list the loser in deletedIds and the moved ISBN under
+        // the winner, with nothing of the loser's left behind.
+        using var db = _factory.CreateDbContext();
+        var author = Author.Create("A");
+        var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var winner = TestBooks.Book("B", works: [work]);
+        var loser = TestBooks.Book("B", works: [work]);
+        var edition = new Edition
+        {
+            Book = loser,
+            Isbn = "9780000000003",
+            Format = BookFormat.Hardcover,
+            Copies = [new Copy { Condition = BookCondition.Good }]
+        };
+        db.Books.AddRange(winner, loser);
+        db.Editions.Add(edition);
+        await db.SaveChangesAsync();
+
+        await Task.Delay(20);
+        var beforeMerge = DateTime.UtcNow;
+        await Task.Delay(20);
+
+        var result = await Merge(winner.Id, loser.Id);
+
+        Assert.True(result.Success);
+        var delta = await new GetCatalogSnapshotHandler(_factory)
+            .HandleAsync(new GetCatalogSnapshot(beforeMerge, "dev"));
+        Assert.Equal([loser.Id], delta.DeletedIds ?? []);
+        var survivor = Assert.Single(delta.Books);
+        Assert.Equal(winner.Id, survivor.Id);
+        Assert.Equal(["9780000000003"], survivor.Isbns);
+
+        using var verify = _factory.CreateDbContext();
+        Assert.Equal(winner.Id, (await verify.Editions.SingleAsync(e => e.Id == edition.Id)).BookId);
+        Assert.Single(verify.Copies.Where(c => c.EditionId == edition.Id));
     }
 
     [Fact]

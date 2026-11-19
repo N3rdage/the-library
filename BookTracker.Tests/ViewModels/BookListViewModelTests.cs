@@ -32,28 +32,20 @@ public class BookListViewModelTests
         db.Series.Add(poirot);
 
         db.Books.AddRange(
-            new Book
-            {
-                Title = "Carrie",
-                Works = [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }], Genres = [horror] }]
-            },
-            new Book
-            {
-                Title = "The Long Walk",
-                Works = [new Work { Title = "The Long Walk", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }], Genres = [horror] }]
-            },
-            new Book
-            {
-                Title = "Murder on the Orient Express",
-                Series = poirot, SeriesOrder = 9,
-                Works = [new Work { Title = "Murder on the Orient Express", WorkAuthors = [new WorkAuthor { Author = christie, Order = 0 }], Genres = [mystery] }]
-            },
-            new Book
-            {
+            TestBooks.Book(
+                "Carrie",
+                works: [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }], Genres = [horror] }]),
+            TestBooks.Book(
+                "The Long Walk",
+                works: [new Work { Title = "The Long Walk", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }], Genres = [horror] }]),
+            TestBooks.Book(
+                "Murder on the Orient Express",
+                series: poirot, seriesOrder: 9,
+                works: [new Work { Title = "Murder on the Orient Express", WorkAuthors = [new WorkAuthor { Author = christie, Order = 0 }], Genres = [mystery] }]),
+            TestBooks.Book(
                 // No genre, no series — exercises the trailing buckets.
-                Title = "Mystery Book Without Tags",
-                Works = [new Work { Title = "Mystery Book Without Tags", WorkAuthors = [new WorkAuthor { Author = christie, Order = 0 }] }]
-            });
+                "Mystery Book Without Tags",
+                works: [new Work { Title = "Mystery Book Without Tags", WorkAuthors = [new WorkAuthor { Author = christie, Order = 0 }] }]));
 
         await db.SaveChangesAsync();
     }
@@ -169,9 +161,9 @@ public class BookListViewModelTests
             var dune = new Series { Name = "Dune", Type = SeriesType.Series };
             db.Series.Add(dune);
             db.Books.AddRange(
-                new Book { Title = "Dune Messiah", Series = dune, SeriesOrder = 2, Works = [new Work { Title = "Dune Messiah", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] }] },
-                new Book { Title = "Dune", Series = dune, SeriesOrder = 1, Works = [new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] }] },
-                new Book { Title = "Children of Dune", Series = dune, SeriesOrder = 3, Works = [new Work { Title = "Children of Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] }] });
+                TestBooks.Book("Dune Messiah", series: dune, seriesOrder: 2, works: [new Work { Title = "Dune Messiah", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] }]),
+                TestBooks.Book("Dune", series: dune, seriesOrder: 1, works: [new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] }]),
+                TestBooks.Book("Children of Dune", series: dune, seriesOrder: 3, works: [new Work { Title = "Children of Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] }]));
             await db.SaveChangesAsync();
             seriesId = dune.Id;
         }
@@ -202,8 +194,8 @@ public class BookListViewModelTests
             var herbert = Author.Create("Frank Herbert");
             var dune = new Series { Name = "Dune", Type = SeriesType.Series };
             db.Books.AddRange(
-                new Book { Title = "Dune Messiah", Series = dune, SeriesOrder = 2, Works = [new Work { Title = "Dune Messiah", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] }] },
-                new Book { Title = "Dune", Series = dune, SeriesOrder = 1, Works = [new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] }] });
+                TestBooks.Book("Dune Messiah", series: dune, seriesOrder: 2, works: [new Work { Title = "Dune Messiah", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] }]),
+                TestBooks.Book("Dune", series: dune, seriesOrder: 1, works: [new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] }]));
             await db.SaveChangesAsync();
             seriesId = dune.Id;
         }
@@ -233,17 +225,15 @@ public class BookListViewModelTests
         {
             var herbert = Author.Create("Frank Herbert");
             var dune = new Series { Name = "Dune", Type = SeriesType.Series };
-            db.Books.Add(new Book
-            {
-                Title = "Dune Omnibus",
-                Series = dune,
-                SeriesOrder = 1,
-                Works =
+            db.Books.Add(TestBooks.Book(
+                "Dune Omnibus",
+                series: dune,
+                seriesOrder: 1,
+                works:
                 [
                     new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] },
                     new Work { Title = "Dune Messiah", WorkAuthors = [new WorkAuthor { Author = herbert, Order = 0 }] },
-                ],
-            });
+                ]));
             await db.SaveChangesAsync();
             seriesId = dune.Id;
         }
@@ -312,29 +302,25 @@ public class BookListViewModelTests
             db.Authors.Add(king);
 
             db.Books.AddRange(
-                new Book
-                {
+                TestBooks.Book(
                     // Single-work book — its Work subtitle should surface.
-                    Title = "The Shining",
-                    Works = [new Work
+                    "The Shining",
+                    works: [new Work
                     {
                         Title = "The Shining",
                         Subtitle = "A Novel",
                         WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }]
-                    }]
-                },
-                new Book
-                {
+                    }]),
+                TestBooks.Book(
                     // Multi-work collection — even though Work[0] has a subtitle,
                     // the list should suppress it and report WorkCount=3.
-                    Title = "The Bachman Books",
-                    Works =
+                    "The Bachman Books",
+                    works:
                     [
                         new Work { Title = "Rage", Subtitle = "Subtitle from a single story", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] },
                         new Work { Title = "The Long Walk", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] },
                         new Work { Title = "Roadwork", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] },
-                    ]
-                });
+                    ]));
             await db.SaveChangesAsync();
         }
 
@@ -366,23 +352,19 @@ public class BookListViewModelTests
             await db.SaveChangesAsync();
 
             db.Books.AddRange(
-                new Book
-                {
-                    Title = "Foundation",
-                    Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]
-                },
+                TestBooks.Book(
+                    "Foundation",
+                    works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]),
                 // Compendium with Asimov + co-authors. Pre-fix this would surface
                 // King and Bradbury as separate group rows when filtering for Asimov.
-                new Book
-                {
-                    Title = "The Funhouse",
-                    Works =
+                TestBooks.Book(
+                    "The Funhouse",
+                    works:
                     [
                         new Work { Title = "Asimov story", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] },
                         new Work { Title = "King story", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] },
                         new Work { Title = "Bradbury story", WorkAuthors = [new WorkAuthor { Author = bradbury, Order = 0 }] },
-                    ]
-                });
+                    ]));
             await db.SaveChangesAsync();
         }
 
@@ -436,16 +418,14 @@ public class BookListViewModelTests
             db.Authors.AddRange(asimov, king, bradbury);
             await db.SaveChangesAsync();
 
-            db.Books.Add(new Book
-            {
-                Title = "The Funhouse",
-                Works =
+            db.Books.Add(TestBooks.Book(
+                "The Funhouse",
+                works:
                 [
                     new Work { Title = "Asimov story", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] },
                     new Work { Title = "King story", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] },
                     new Work { Title = "Bradbury story", WorkAuthors = [new WorkAuthor { Author = bradbury, Order = 0 }] },
-                ]
-            });
+                ]));
             await db.SaveChangesAsync();
         }
 
@@ -476,15 +456,13 @@ public class BookListViewModelTests
             db.Authors.AddRange(asimov, king);
             await db.SaveChangesAsync();
 
-            db.Books.Add(new Book
-            {
-                Title = "The Funhouse",
-                Works =
+            db.Books.Add(TestBooks.Book(
+                "The Funhouse",
+                works:
                 [
                     new Work { Title = "Asimov story", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] },
                     new Work { Title = "King story", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] },
-                ]
-            });
+                ]));
             await db.SaveChangesAsync();
         }
 
@@ -535,14 +513,12 @@ public class BookListViewModelTests
         using var db = factory.CreateDbContext();
         var author = Author.Create("Solo Author");
         db.Authors.Add(author);
-        var book = new Book
-        {
-            Title = "The Book",
-            Status = status,
-            Rating = rating,
-            Notes = notes,
-            Works = [new Work { Title = "The Book", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
-        };
+        var book = TestBooks.Book(
+            "The Book",
+            status: status,
+            rating: rating,
+            notes: notes,
+            works: [new Work { Title = "The Book", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]);
         db.Books.Add(book);
         await db.SaveChangesAsync();
         return book.Id;
@@ -557,8 +533,8 @@ public class BookListViewModelTests
             var a = Author.Create("A");
             db.Authors.Add(a);
             db.Books.AddRange(
-                new Book { Title = "Unread One", Status = BookStatus.Unread, Works = [new Work { Title = "Unread One", WorkAuthors = [new WorkAuthor { Author = a, Order = 0 }] }] },
-                new Book { Title = "Read One", Status = BookStatus.Read, Works = [new Work { Title = "Read One", WorkAuthors = [new WorkAuthor { Author = a, Order = 0 }] }] });
+                TestBooks.Book("Unread One", status: BookStatus.Unread, works: [new Work { Title = "Unread One", WorkAuthors = [new WorkAuthor { Author = a, Order = 0 }] }]),
+                TestBooks.Book("Read One", status: BookStatus.Read, works: [new Work { Title = "Read One", WorkAuthors = [new WorkAuthor { Author = a, Order = 0 }] }]));
             await db.SaveChangesAsync();
         }
 

@@ -3,14 +3,14 @@ using BookTracker.Data.Models;
 namespace BookTracker.Tests;
 
 // Seed builder for Book rows: Book's scalar setters (Title, Status, Rating,
-// Notes, series fields, timestamps) go private in the Book encapsulation
-// slice, so tests build a Book the way the app does, through Book.Create and
-// the series methods, rather than an object initialiser. One place to change
-// when the entity's public surface moves.
+// Notes, series fields) are private, so tests build a Book the way the app
+// does, through Book.Create and the series methods, rather than an object
+// initialiser. One place to change when the entity's public surface moves.
 //
 // Book.Create trims the title and trims notes / cover to null, and throws on
 // a blank title — a seed that needs a blank or padded value has to say so.
-// The rating is stored as given (Create has no 0–5 guard).
+// The rating is stored as given (Create has no 0–5 guard). DateAdded is
+// stamped at creation and nothing in the app moves it, so no seed sets it.
 public static class TestBooks
 {
     public static Book Book(
@@ -27,7 +27,6 @@ public static class TestBooks
         IEnumerable<Work>? works = null,
         IEnumerable<Edition>? editions = null,
         IEnumerable<Tag>? tags = null,
-        DateTime? dateAdded = null,
         DateTime? updatedAt = null,
         DateTime? deletedAt = null)
     {
@@ -53,7 +52,9 @@ public static class TestBooks
         if (editions is not null) book.Editions = editions.ToList();
         if (tags is not null) book.Tags = tags.ToList();
 
-        if (dateAdded is not null) book.DateAdded = dateAdded.Value;
+        // The timestamps have internal setters (the interceptor stamps UpdatedAt;
+        // SoftDelete stamps DeletedAt); BookTracker.Data's InternalsVisibleTo lets
+        // a seed pin a watermark or a tombstone without a save or a SoftDelete.
         if (updatedAt is not null) book.UpdatedAt = updatedAt.Value;
         if (deletedAt is not null) book.DeletedAt = deletedAt;
 

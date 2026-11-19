@@ -29,7 +29,10 @@ public sealed class MarkWishlistItemBoughtHandler(IDbContextFactory<BookTrackerD
         var followUpTag = await TagResolver.FindOrCreateAsync("follow-up", db, ct);
 
         var author = await AuthorResolver.FindOrCreateAsync(item.Author, db, ct);
-        var book = new Book { Title = item.Title, Tags = [followUpTag] };
+        // Unread, unrated, no notes or cover: the item's title is required on the
+        // wishlist side already, so Create's blank-title guard never fires here.
+        var book = Book.Create(item.Title, BookCategory.Fiction, BookStatus.Unread, 0, null, null);
+        book.Tags.Add(followUpTag);
         var work = Work.Create(book, item.Title, null, null, DatePrecision.Day, [author]);
         db.Books.Add(book);
         db.Works.Add(work); // the BookWork link (via Work.Create → AttachWork) carries the association; add explicitly for clarity

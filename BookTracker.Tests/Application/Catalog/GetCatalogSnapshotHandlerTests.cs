@@ -635,7 +635,7 @@ public class GetCatalogSnapshotHandlerTests
         using (var db = _factory.CreateDbContext())
         {
             var toDelete = await db.Books.FirstAsync(b => b.Id == bookIdToDelete);
-            toDelete.DeletedAt = DateTime.UtcNow;
+            toDelete.SoftDelete();
             await db.SaveChangesAsync();
         }
 
@@ -659,7 +659,7 @@ public class GetCatalogSnapshotHandlerTests
             var dead = TestBooks.Book("Doomed", works: [new Work { Title = "Doomed", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]);
             db.Books.Add(dead);
             await db.SaveChangesAsync();
-            dead.DeletedAt = DateTime.UtcNow;
+            dead.SoftDelete();
             await db.SaveChangesAsync();
         }
 
@@ -697,7 +697,7 @@ public class GetCatalogSnapshotHandlerTests
         using (var db = _factory.CreateDbContext())
         {
             var doomed = await db.Books.FirstAsync(b => b.Id == doomedId);
-            doomed.DeletedAt = DateTime.UtcNow;
+            doomed.SoftDelete();
             await db.SaveChangesAsync();
         }
 
@@ -733,7 +733,7 @@ public class GetCatalogSnapshotHandlerTests
             db.Books.Add(doomed);
             await db.SaveChangesAsync();
             doomedId = doomed.Id;
-            doomed.DeletedAt = DateTime.UtcNow;
+            doomed.SoftDelete();
             await db.SaveChangesAsync();
         }
 
