@@ -187,7 +187,7 @@ public static class ProgramSetup
         builder.Services.AddScoped<IAIAssistantService>(sp =>
             sp.GetRequiredService<AIProviderFactory>().GetService());
 
-        // The clock ViewModels take "today" from (LoanDates.Today); tests pin it.
+        // The clock ViewModels take "today" from LoanDates.Today; tests pin it.
         builder.Services.AddSingleton(TimeProvider.System);
 
         // ViewModels — transient so each component instance gets its own VM.

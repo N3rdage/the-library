@@ -20,14 +20,6 @@ public record LendableBook(int BookId, string Title, string? Author, IReadOnlyLi
 
 public record LendableCopy(int CopyId, string EditionLabel, BookCondition Condition);
 
-public static class EditionLabels
-{
-    /// <summary>The edition as the Book Detail edition row names it: the format,
-    /// then the ISBN ("no ISBN" when there is none).</summary>
-    public static string For(BookFormat format, string? isbn) =>
-        $"{format.DisplayName()} · {isbn ?? "no ISBN"}";
-}
-
 public sealed class SearchLendableBooksHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
     : IQueryHandler<SearchLendableBooks, IReadOnlyList<LendableBook>>
 {
