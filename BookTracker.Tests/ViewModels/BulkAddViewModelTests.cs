@@ -446,6 +446,73 @@ public class BulkAddViewModelTests
     }
 
     [Fact]
+    public async Task LookupRow_SwitchOn_StaysSearchingUntilTheAiAnswers_SoAcceptAllCannotSaveEmptyGenres()
+    {
+        // The grid offers Accept, and AcceptAllFoundAsync selects, on Found; a
+        // row that turned Found before its genres were written could be saved
+        // with none while the provider (about a second) was still answering.
+        GivenTaxonomy();
+        GivenLookupFinds("111", "The Hobbit", "J.R.R. Tolkien", "Cookery");
+        var aiAnswer = new TaskCompletionSource<GenreSuggestionResult>();
+        _ai.SuggestGenresAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(aiAnswer.Task);
+        var vm = CreateVm();
+        vm.AskAiForGenres = true;
+        var lookedUp = new TaskCompletionSource();
+        vm.OnStateChanged = () =>
+        {
+            lookedUp.TrySetResult();
+            return Task.CompletedTask;
+        };
+        vm.IsbnInput = "111";
+
+        // The lookup and taxonomy substitutes complete synchronously, so when
+        // AddIsbnAsync returns the fire-and-forget lookup is parked on the AI.
+        await vm.AddIsbnAsync();
+        var row = Assert.Single(vm.Rows);
+
+        await _ai.Received(1).SuggestGenresAsync("The Hobbit", "J.R.R. Tolkien", "There and Back Again", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>());
+        Assert.False(lookedUp.Task.IsCompleted);
+        Assert.Equal(BulkAddViewModel.RowStatus.Searching, row.Status);
+        Assert.Empty(row.Genres);
+
+        await vm.AcceptAllFoundAsync();
+
+        Assert.Contains(row, vm.Rows);
+        Assert.Empty(Sent<CreateBook>());
+
+        aiAnswer.SetResult(new GenreSuggestionResult(["High Fantasy"], "reasoning"));
+        await lookedUp.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(BulkAddViewModel.RowStatus.Found, row.Status);
+        Assert.Equal([("High Fantasy", true), ("Fantasy", true)], NamesOf(row));
+
+        await vm.AcceptAllFoundAsync();
+
+        Assert.Empty(vm.Rows);
+        var work = Assert.IsType<SingleWork>(Assert.Single(Sent<CreateBook>()).Works);
+        Assert.Equal([1, 5], work.GenreIds);
+    }
+
+    [Fact]
+    public async Task LookupRow_SwitchOn_NoCandidatesAndNoTitle_QueriesNothing()
+    {
+        // Nothing to match and nothing to ask the AI about: the taxonomy query
+        // is skipped too.
+        GivenTaxonomy();
+        GivenLookupFinds("111", "", "J.R.R. Tolkien");
+        var vm = CreateVm();
+        vm.AskAiForGenres = true;
+
+        var row = await AddAndAwaitLookupAsync(vm, "111");
+
+        Assert.Equal(BulkAddViewModel.RowStatus.Found, row.Status);
+        Assert.Empty(row.Genres);
+        await _dispatcher.DidNotReceive().Query(Arg.Any<GetGenreOptions>(), Arg.Any<CancellationToken>());
+        await _ai.DidNotReceiveWithAnyArgs().SuggestGenresAsync(default!, default!, default, default!, default);
+    }
+
+    [Fact]
     public async Task FollowUpRowAsync_CreatesBookWithFollowUpTag_AndRemovesRowFromGrid()
     {
         var vm = CreateVm();

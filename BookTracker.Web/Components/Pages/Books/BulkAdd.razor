@@ -70,8 +70,10 @@
                during its lookup; those names carry an "AI" marker in the grid. *@
             <MudSwitch T="bool"
                        @bind-Value="VM.AskAiForGenres"
+                       Disabled="@(AIFactory.AvailableProviders.Count == 0)"
                        Color="Color.Primary"
                        Label="Ask AI for genres" />
+            @* Disabled with no configured provider: there is nobody to ask. *@
         </div>
 
         @if (!string.IsNullOrEmpty(scannerError))

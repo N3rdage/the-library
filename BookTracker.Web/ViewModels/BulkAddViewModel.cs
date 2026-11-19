@@ -97,8 +97,12 @@ public class BulkAddViewModel(
                 row.DatePrinted = result.DatePrinted;
                 row.DatePrintedPrecision = result.DatePrintedPrecision;
                 row.Format = result.Format;
-                row.Status = RowStatus.Found;
+                // Genres before Found: the grid offers Accept and "Accept all
+                // found" selects on Found, so a row that turned Found first
+                // could be saved with empty genres while the taxonomy query
+                // or the AI call was still pending.
                 row.Genres = await ResolveGenresAsync(row, result.GenreCandidates);
+                row.Status = RowStatus.Found;
 
                 // SeriesMatch is best-effort enrichment — failure here must not
                 // flip the row back to NotFound, so it's wrapped separately.
@@ -218,7 +222,9 @@ public class BulkAddViewModel(
     private async Task<List<RowGenre>> ResolveGenresAsync(DiscoveryRow row, IReadOnlyList<string> candidates)
     {
         var genres = new List<RowGenre>();
-        if (candidates.Count == 0 && !AskAiForGenres) return genres;
+        // No candidates to match and nothing the AI could be asked about (switch
+        // off, or no title): the taxonomy query would feed nothing.
+        if (candidates.Count == 0 && (!AskAiForGenres || string.IsNullOrWhiteSpace(row.Title))) return genres;
 
         var allGenres = (await dispatcher.Query(new GetGenreOptions())).OrderBy(g => g.Id).ToList();
         foreach (var candidate in candidates)
