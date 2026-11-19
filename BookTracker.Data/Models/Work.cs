@@ -67,7 +67,9 @@ public class Work
     /// <summary>How precise <see cref="FirstPublishedDate"/> is — drives display formatting.</summary>
     public DatePrecision FirstPublishedDatePrecision { get; private set; } = DatePrecision.Day;
 
-    /// <summary>Written only through <see cref="SetGenres"/>.</summary>
+    /// <summary>Replaced only through <see cref="SetGenres"/>; the setter is private,
+    /// but the list's contents are still added to from outside (the work merge)
+    /// until the collections slice encapsulates it.</summary>
     public List<Genre> Genres { get; private set; } = [];
 
     // Series membership is NOT a Work concept — it lives on the Book (the book
