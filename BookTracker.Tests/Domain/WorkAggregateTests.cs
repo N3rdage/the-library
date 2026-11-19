@@ -91,19 +91,72 @@ public class WorkAggregateTests
         Assert.Same(b2, remaining.Book);        // b1's link removed, b2's stays
     }
 
+    // --- Internal constructors (the tests' seed path) ------------------------
+
+    [Fact]
+    public void InternalConstructor_storesValuesExactlyAsGiven()
+    {
+        var author = Author.Create("A");
+        var editor = new WorkAuthor(Author.Create("E"), 3, AuthorRole.Editor);
+        var genre = new Genre { Id = 1, Name = "G" };
+
+        var work = new Work("  untrimmed  ", "  ", new DateOnly(1990, 1, 1), DatePrecision.Year,
+            [new WorkAuthor(author, 0, AuthorRole.Author), editor], [genre]);
+
+        Assert.Equal("  untrimmed  ", work.Title);   // not normalised, unlike UpdateDetails
+        Assert.Equal("  ", work.Subtitle);
+        Assert.Equal(new DateOnly(1990, 1, 1), work.FirstPublishedDate);
+        Assert.Equal(DatePrecision.Year, work.FirstPublishedDatePrecision);
+        Assert.Equal(2, work.WorkAuthors.Count);
+        Assert.Same(editor, work.WorkAuthors[1]);
+        Assert.Same(genre, Assert.Single(work.Genres));
+        Assert.Empty(work.BookWorks);
+    }
+
+    [Fact]
+    public void WorkAuthorInternalConstructor_storesAuthorOrderAndRoleAsGiven()
+    {
+        var author = Author.Create("A");
+
+        var wa = new WorkAuthor(author, 5, AuthorRole.Translator);
+
+        Assert.Same(author, wa.Author);
+        Assert.Equal(5, wa.Order);
+        Assert.Equal(AuthorRole.Translator, wa.Role);
+    }
+
     // --- Field methods -------------------------------------------------------
+
+    [Fact]
+    public void FillBlanksFrom_fillsOnlyEmptyFields_andMovesDateWithPrecision()
+    {
+        var winner = TestWorks.Work("W", subtitle: "Kept");
+        var loser = TestWorks.Work("L", subtitle: " Loser sub ",
+            firstPublishedDate: new DateOnly(1965, 1, 1), firstPublishedDatePrecision: DatePrecision.Year);
+
+        var filled = winner.FillBlanksFrom(loser);
+
+        Assert.Equal(1, filled);
+        Assert.Equal("Kept", winner.Subtitle);                       // never overwritten
+        Assert.Equal(new DateOnly(1965, 1, 1), winner.FirstPublishedDate);
+        Assert.Equal(DatePrecision.Year, winner.FirstPublishedDatePrecision);
+
+        var blank = TestWorks.Work("B");
+        Assert.Equal(2, blank.FillBlanksFrom(loser));
+        Assert.Equal(" Loser sub ", blank.Subtitle);                  // copied as stored
+    }
 
     [Fact]
     public void UpdateDetails_blankTitle_throws()
     {
-        var work = new Work { Title = "old" };
+        var work = TestWorks.Work("old");
         Assert.Throws<DomainRuleException>(() => work.UpdateDetails("   ", null));
     }
 
     [Fact]
     public void SetGenres_replacesTheCollection()
     {
-        var work = new Work { Title = "T", Genres = { new Genre { Id = 1, Name = "Old" } } };
+        var work = TestWorks.Work("T", genres: [new Genre { Id = 1, Name = "Old" }]);
         var fantasy = new Genre { Id = 2, Name = "Fantasy" };
         work.SetGenres([fantasy]);
         Assert.Single(work.Genres);
@@ -115,7 +168,7 @@ public class WorkAggregateTests
     [Fact]
     public void AssignAuthorship_writesAuthorsWithOrder()
     {
-        var work = new Work { Title = "Relic" };
+        var work = TestWorks.Work("Relic");
         var preston = Author.Create("Preston");
         var child = Author.Create("Child");
 
@@ -131,7 +184,7 @@ public class WorkAggregateTests
     [Fact]
     public void AssignAuthorship_noContributors_throwsDomainRule()
     {
-        var work = new Work { Title = "x" };
+        var work = TestWorks.Work("x");
         Assert.Throws<DomainRuleException>(() => work.AssignAuthorship([]));
         Assert.Throws<DomainRuleException>(() => work.AssignAuthorship([], additionalContributors: []));
     }
@@ -139,7 +192,7 @@ public class WorkAggregateTests
     [Fact]
     public void AssignAuthorship_editorOnly_isValid()
     {
-        var work = new Work { Title = "Oxford Companion to Wine" };
+        var work = TestWorks.Work("Oxford Companion to Wine");
         var robinson = Author.Create("Jancis Robinson");
 
         work.AssignAuthorship([], [(robinson, AuthorRole.Editor)]);
@@ -153,7 +206,7 @@ public class WorkAggregateTests
     [Fact]
     public void AssignAuthorship_contributorsGetPerRoleOrderFromZero()
     {
-        var work = new Work { Title = "The Hobbit" };
+        var work = TestWorks.Work("The Hobbit");
         var tolkien = Author.Create("Tolkien");
         var sergio = Author.Create("Sergio Cariello");
         var mauss = Author.Create("Doug Mauss");
@@ -169,7 +222,7 @@ public class WorkAggregateTests
     [Fact]
     public void AssignAuthorship_allowsSamePersonInMultipleRoles()
     {
-        var work = new Work { Title = "The Hobbit" };
+        var work = TestWorks.Work("The Hobbit");
         var tolkien = Author.Create("Tolkien");
 
         work.AssignAuthorship([tolkien], [(tolkien, AuthorRole.Illustrator)]);
@@ -182,7 +235,7 @@ public class WorkAggregateTests
     [Fact]
     public void AssignAuthorship_dedupsContributorPairsWithinRole_andSkipsAuthorRole()
     {
-        var work = new Work { Title = "x" };
+        var work = TestWorks.Work("x");
         var asimov = Author.Create("Asimov");
         var pohl = Author.Create("Pohl");
 

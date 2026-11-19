@@ -16,11 +16,7 @@ public class WorkCommandHandlersTests
     private async Task<(int bookId, int workId)> SeedBookWithWorkAsync(string title = "Mort")
     {
         await using var db = _factory.CreateDbContext();
-        var work = new Work
-        {
-            Title = title,
-            WorkAuthors = { new WorkAuthor { Author = Author.Create("Pratchett"), Order = 0, Role = AuthorRole.Author } },
-        };
+        var work = TestWorks.Work(title, Author.Create("Pratchett"));
         var book = TestBooks.Book("Book", works: [work]);
         db.Books.Add(book);
         await db.SaveChangesAsync();
@@ -76,11 +72,7 @@ public class WorkCommandHandlersTests
         int bookA, workId;
         await using (var db = _factory.CreateDbContext())
         {
-            var work = new Work
-            {
-                Title = "Shared",
-                WorkAuthors = { new WorkAuthor { Author = Author.Create("A"), Order = 0, Role = AuthorRole.Author } },
-            };
+            var work = TestWorks.Work("Shared", Author.Create("A"));
             var a = TestBooks.Book("A", works: [work]);
             var b = TestBooks.Book("B", works: [work]);
             db.Books.AddRange(a, b);
@@ -237,7 +229,7 @@ public class WorkCommandHandlersTests
         var book = TestBooks.Book("Anthology");
         foreach (var t in titles)
         {
-            var w = new Work { Title = t, WorkAuthors = { new WorkAuthor { Author = author, Order = 0, Role = AuthorRole.Author } } };
+            var w = TestWorks.Work(t, author);
             book.AttachWork(w);   // appends 0,1,2… in title order
         }
         db.Books.Add(book);

@@ -525,6 +525,10 @@
                                 <MudMenuItem OnClick="@(() => OnStatusPicked(context, s))">@s</MudMenuItem>
                             }
                         </MudMenu>
+                        @if (context.LentTo is { } rowLentTo)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning" Class="mt-1">Lent to @rowLentTo</MudChip>
+                        }
                     </MudTd>
                     <MudTd>
                         <MudRating SelectedValue="@context.Rating"
@@ -576,6 +580,10 @@
                             <MudRating SelectedValue="@book.Rating"
                                        SelectedValueChanged="@(v => OnRatingPicked(book, v))"
                                        MaxValue="5" Size="Size.Small" />
+                            @if (book.LentTo is { } lentTo)
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">Lent to @lentTo</MudChip>
+                            }
                         </MudStack>
                     </div>
                 </div>

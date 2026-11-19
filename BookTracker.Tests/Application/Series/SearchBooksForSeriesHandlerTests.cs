@@ -21,7 +21,7 @@ public class SearchBooksForSeriesHandlerTests
         var book = TestBooks.Book(
             title,
             seriesId: seriesId,
-            works: [new Work { Title = workTitle ?? title, WorkAuthors = [new WorkAuthor { Author = existing ?? Author.Create(author), Order = 0 }] }]);
+            works: [TestWorks.Work(workTitle ?? title, existing ?? Author.Create(author))]);
         db.Books.Add(book);
         await db.SaveChangesAsync();
         return book.Id;
@@ -98,15 +98,13 @@ public class SearchBooksForSeriesHandlerTests
                 "Relic",
                 works:
                 [
-                    new Work
-                    {
-                        Title = "Relic",
-                        WorkAuthors =
+                    TestWorks.Work(
+                        "Relic",
+                        authorships:
                         [
-                            new WorkAuthor { Author = Author.Create("Lincoln Child"), Order = 1, Role = AuthorRole.Author },
-                            new WorkAuthor { Author = Author.Create("Douglas Preston"), Order = 0, Role = AuthorRole.Author },
-                        ],
-                    },
+                            TestWorks.Authorship(Author.Create("Lincoln Child"), 1),
+                            TestWorks.Authorship(Author.Create("Douglas Preston")),
+                        ]),
                 ]);
             db.Books.Add(book);
             await db.SaveChangesAsync();

@@ -174,6 +174,27 @@ fields:
   sees the internals (to seed a watermark or a tombstone); `BookTracker.Application` does not.
   The collections (`Editions`, `Tags`, `Works`, `BookWorks`) keep public setters until the
   collections slice (E6) encapsulates them.
+- `Edition`'s and `Copy`'s scalar fields are written only through their methods, and the
+  compiler enforces it: the setters are private (`Id` stays public, as on `Book`), as are
+  `Edition.Copies`' setter and the foreign keys `Edition.BookId` and `Copy.EditionId`.
+  `Edition` has `UpdateDetails`, `SetCover`, `ReplaceCoverUrl` (the cover mirror's URL swap,
+  which leaves `IsUserSupplied` alone), `ChangeFormat`, `ReassignPublisher`, `MoveToBook`,
+  `FillBlanksFrom` and `AdoptCopiesFrom` (the edition merge), `AddCopy` and `RemoveCopy`;
+  `Copy` has `UpdateDetails`, `LendTo` and `MarkReturned`. Each has a private parameterless
+  constructor for EF and an internal one that stores the values as given, used by
+  `book.AddEdition` / `edition.AddCopy` (which normalise first) and by the tests' seed
+  builder `TestEditions`. The parent navigations `Edition.Book` and `Copy.Edition` have
+  internal setters: EF fixes them up from the collections and keys, and the tests attach a
+  detached seed to its parent through them; `BookTracker.Application` cannot set them.
+- `Work`'s scalar fields and `WorkAuthor` rows are written only through `Work`'s methods (`Create`,
+  `UpdateDetails`, `SetFirstPublished`, `FillBlanksFrom`, `SetGenres`, `AssignAuthorship`,
+  `AppearsIn`, `RemoveFrom`), and the compiler enforces it: the scalar setters are private (`Id`
+  stays public, as on `Book`), and `WorkAuthor.Order` and `Role` are set only by `AssignAuthorship`.
+  `Work`'s collections have private setters, but their contents are still added to from outside
+  (`MergeWorks` adds genres, `Book.AttachWork` adds the link) until the collections slice
+  encapsulates them, as with `Book`'s collections. Each has a private parameterless constructor for EF and an
+  internal one that stores the values as given, used by the tests' seed builder `TestWorks` (and,
+  for `WorkAuthor`, by `AssignAuthorship`).
 - `Book` (root) owns `Editions`; `Edition` owns `Copies`. Exposed as
   `IReadOnlyCollection<>`; mutated only through methods (`AddCopy`, `AddEdition`, …).
 - Invariants live on the aggregate and are unit-testable.

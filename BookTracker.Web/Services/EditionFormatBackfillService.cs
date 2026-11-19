@@ -9,6 +9,11 @@ namespace BookTracker.Web.Services;
 // successful run records a MaintenanceLog row and subsequent startups
 // short-circuit to a no-op. Runs in the background so app startup isn't
 // blocked.
+//
+// It reads and writes through the DbContext factory itself rather than an
+// Application command: a documented exception to the data-access seam (C1,
+// WebLayeringTests), not a pattern to copy. The format write still goes
+// through Edition.ChangeFormat.
 public class EditionFormatBackfillService(
     IDbContextFactory<BookTrackerDbContext> dbFactory,
     IBookLookupService lookup,
@@ -71,7 +76,7 @@ public class EditionFormatBackfillService(
                 var result = await lookup.LookupByIsbnAsync(edition.Isbn, ct);
                 if (result?.Format is BookFormat resolved && resolved != edition.Format)
                 {
-                    edition.Format = resolved;
+                    edition.ChangeFormat(resolved);
                     updated++;
                 }
             }

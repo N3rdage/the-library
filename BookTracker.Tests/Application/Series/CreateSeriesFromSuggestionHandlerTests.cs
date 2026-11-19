@@ -16,14 +16,7 @@ public class CreateSeriesFromSuggestionHandlerTests
 
     private static Book NewBook(string title, Author author) => TestBooks.Book(
         title,
-        works:
-        [
-            new Work
-            {
-                Title = title,
-                WorkAuthors = [new WorkAuthor { Author = author, Order = 0, Role = AuthorRole.Author }],
-            },
-        ]);
+        works: [TestWorks.Work(title, author)]);
 
     [Fact]
     public async Task CreateSeriesFromSuggestion_createsSeries_assignsUnseriesedMatches_inOrder()

@@ -23,8 +23,8 @@ public class GetAuthorListHandlerTests
             var king = Author.Create("Stephen King");
             var bachman = TestAuthors.Alias("Richard Bachman", of: king);
             db.Authors.AddRange(king, bachman);
-            db.Books.Add(TestBooks.Book("Carrie", works: [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }]));
-            db.Books.Add(TestBooks.Book("Thinner", works: [new Work { Title = "Thinner", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }] }]));
+            db.Books.Add(TestBooks.Book("Carrie", works: [TestWorks.Work("Carrie", king)]));
+            db.Books.Add(TestBooks.Book("Thinner", works: [TestWorks.Work("Thinner", bachman)]));
             await db.SaveChangesAsync();
         }
 
@@ -50,9 +50,9 @@ public class GetAuthorListHandlerTests
             var king = Author.Create("Stephen King");
             var bachman = TestAuthors.Alias("Richard Bachman", of: king);
             db.Authors.AddRange(king, bachman);
-            db.Books.Add(TestBooks.Book("Carrie", works: [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }]));
-            db.Books.Add(TestBooks.Book("It", works: [new Work { Title = "It", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }]));
-            db.Books.Add(TestBooks.Book("Thinner", works: [new Work { Title = "Thinner", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }] }]));
+            db.Books.Add(TestBooks.Book("Carrie", works: [TestWorks.Work("Carrie", king)]));
+            db.Books.Add(TestBooks.Book("It", works: [TestWorks.Work("It", king)]));
+            db.Books.Add(TestBooks.Book("Thinner", works: [TestWorks.Work("Thinner", bachman)]));
             await db.SaveChangesAsync();
         }
 
@@ -82,10 +82,10 @@ public class GetAuthorListHandlerTests
             db.Series.AddRange(discworld, bromeliad);
 
             db.Books.AddRange(
-                TestBooks.Book("Mort", series: discworld, seriesOrder: 4, works: [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }] }]),
-                TestBooks.Book("The Colour of Magic", series: discworld, seriesOrder: 1, works: [new Work { Title = "The Colour of Magic", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }] }]),
-                TestBooks.Book("Truckers", series: bromeliad, seriesOrder: 1, works: [new Work { Title = "Truckers", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }] }]),
-                TestBooks.Book("Good Omens", works: [new Work { Title = "Good Omens", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }] }]));
+                TestBooks.Book("Mort", series: discworld, seriesOrder: 4, works: [TestWorks.Work("Mort", pratchett)]),
+                TestBooks.Book("The Colour of Magic", series: discworld, seriesOrder: 1, works: [TestWorks.Work("The Colour of Magic", pratchett)]),
+                TestBooks.Book("Truckers", series: bromeliad, seriesOrder: 1, works: [TestWorks.Work("Truckers", pratchett)]),
+                TestBooks.Book("Good Omens", works: [TestWorks.Work("Good Omens", pratchett)]));
             await db.SaveChangesAsync();
         }
 

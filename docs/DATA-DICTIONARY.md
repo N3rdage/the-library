@@ -36,7 +36,7 @@ The physical-object grouping. Carries reading state + cover art + series members
 | `Rating` | int 0–5 | 0 = unrated, 1–5 = stars. |
 | `Notes` | string (nullable, MAX) | Personal reading notes ("recommended by X, finished in two days, didn't love the ending"). High-signal for analysis but personal. |
 | `DateAdded` | DateTime (UTC) | When the row was created. |
-| `UpdatedAt` | DateTime (UTC, indexed, default `GETUTCDATE()`) | Auto-bumped by `BookUpdatedAtInterceptor` on **any** change to this Book OR any aggregate child (Edition, Copy, Work, WorkAuthor, Tag join). Drives delta-sync to Bookshelf. Value converter pins `Kind=Utc` on read. |
+| `UpdatedAt` | DateTime (UTC, indexed, default `GETUTCDATE()`) | Auto-bumped by `BookUpdatedAtInterceptor` on **any** change to this Book OR any aggregate child (Edition, Copy, Loan, Work, WorkAuthor, Tag join). Drives delta-sync to Bookshelf. Value converter pins `Kind=Utc` on read. |
 | `DeletedAt` | DateTime? (UTC, filtered index) | Soft-delete tombstone. Non-null = hidden from every normal query via a global EF `HasQueryFilter`. Husk survives only so the catalog snapshot emits the Id in `deletedIds[]` for Bookshelf to drop locally. Aggregate children (Editions / Copies / joins) are *hard*-removed at delete time. The JSON snapshot **excludes** soft-deleted rows. |
 | `DefaultCoverArtUrl` | string? (≤500) | Falls back to the first Edition's `CoverUrl` for display when not set. |
 | `SeriesId` | int? (FK) | Optional link to a `Series` — the book is installment N of a publication series. Null = standalone. Set-null on Series delete. Series membership is a **per-Book** concept. |
@@ -150,12 +150,30 @@ The physical item Drew owns. Multi-copy support exists (a book given as a gift y
 | `Condition` | enum `BookCondition` | Standard used-book grading. Default `Good`. |
 | `DateAcquired` | DateTime? | When this physical copy came into the collection. |
 | `Notes` | string? | Per-copy notes (provenance, defects, "signed by author"). |
+| `Loans` | List | 1-to-many. Every time this copy was lent, open and returned. Cascade-delete on Copy removal. |
 
 ### Enums
 
 ```
 BookCondition = { AsNew, Fine, VeryGood, Good, Fair, Poor }  ← default: Good
 ```
+
+---
+
+## Loan
+
+A Copy lent to someone. Part of the Book aggregate through Copy, so a lend or a return bumps `Book.UpdatedAt`. Created only through `Copy.LendTo` and closed through `Copy.MarkReturned`; returned loans stay as history.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `Id` | int (PK) | |
+| `CopyId` | int (FK, required) | Cascade-delete on Copy removal. **Filtered unique** (`WHERE ReturnedOn IS NULL`): at most one open loan per copy. |
+| `BorrowerName` | string (≤200, required) | Free text, trimmed; not a link to any person record. |
+| `LentOn` | DateOnly | The day the copy went out. |
+| `DueOn` | DateOnly? | Expected return; never before `LentOn`. Null = no due date. Overdue from the day after (`LoanDates.IsOverdue`, dates in `Australia/Melbourne`). |
+| `ReturnedOn` | DateOnly? | Null = the loan is open. Never before `LentOn`. |
+
+A Book with an open loan on any copy cannot be deleted until the loan is returned.
 
 ---
 

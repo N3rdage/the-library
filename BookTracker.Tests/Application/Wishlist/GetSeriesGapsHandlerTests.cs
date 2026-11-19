@@ -19,7 +19,7 @@ public class GetSeriesGapsHandlerTests
         series: series,
         seriesOrder: order,
         seriesOrderDisplay: orderDisplay,
-        works: [new Work { Title = title }]);
+        works: [TestWorks.Work(title)]);
 
     [Fact]
     public async Task StructuredSeries_ReportsMissingSlots_OwnedCount_AndOwnedBooksInSeriesOrder()

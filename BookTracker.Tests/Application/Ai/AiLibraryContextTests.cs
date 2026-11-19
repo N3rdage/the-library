@@ -38,13 +38,13 @@ public class AiLibraryContextTests
             db.Books.AddRange(
                 TestBooks.Book(
                     "Foundation", rating: 5, series: foundation, seriesOrder: 1,
-                    works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }], Genres = [sf] }]),
+                    works: [TestWorks.Work("Foundation", asimov, genres: [sf])]),
                 TestBooks.Book(
                     "I, Robot", rating: 3,
-                    works: [new Work { Title = "I, Robot", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }], Genres = [sf] }]),
+                    works: [TestWorks.Work("I, Robot", asimov, genres: [sf])]),
                 TestBooks.Book(
                     "A Wizard of Earthsea", rating: 4, series: open, seriesOrder: 1,
-                    works: [new Work { Title = "A Wizard of Earthsea", WorkAuthors = [new WorkAuthor { Author = leGuin, Order = 0 }], Genres = [fantasy] }]));
+                    works: [TestWorks.Work("A Wizard of Earthsea", leGuin, genres: [fantasy])]));
             await db.SaveChangesAsync();
         }
 

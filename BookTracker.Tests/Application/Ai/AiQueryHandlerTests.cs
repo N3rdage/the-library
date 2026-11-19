@@ -17,7 +17,7 @@ public class AiQueryHandlerTests
         rating: rating,
         series: series,
         seriesOrder: order,
-        works: [new Work { Title = title, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Genres = [.. genres] }]);
+        works: [TestWorks.Work(title, author, genres: genres)]);
 
     [Fact]
     public async Task GenreTaxonomy_ListsEveryGenreByName_WithItsParentName()
@@ -54,7 +54,7 @@ public class AiQueryHandlerTests
             var series = new Series { Name = "Discworld", Type = SeriesType.Series };
             var omens = TestBooks.Book(
                 "Good Omens",
-                works: [new Work { Title = "Good Omens", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }, new WorkAuthor { Author = gaiman, Order = 1 }] }]);
+                works: [TestWorks.Work("Good Omens", authorships: [TestWorks.Authorship(pratchett), TestWorks.Authorship(gaiman, 1)])]);
             var deleted = NewBook("Tombstoned", gaiman);
             deleted.SoftDelete();
             db.Books.AddRange(
@@ -88,8 +88,8 @@ public class AiQueryHandlerTests
                 rating: 4,
                 works:
                 [
-                    new Work { Title = "One", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Genres = [fantasy] },
-                    new Work { Title = "Two", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Genres = [fantasy, sf] },
+                    TestWorks.Work("One", author, genres: [fantasy]),
+                    TestWorks.Work("Two", author, genres: [fantasy, sf]),
                 ]);
             var deleted = NewBook("Tombstoned", author, 5);
             deleted.SoftDelete();

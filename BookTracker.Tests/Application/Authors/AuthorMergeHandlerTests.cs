@@ -171,15 +171,13 @@ public class AuthorMergeHandlerTests
         db.Authors.AddRange(winner, loser);
         await db.SaveChangesAsync();
 
-        var work = new Work
-        {
-            Title = "Work X",
-            WorkAuthors =
+        var work = TestWorks.Work(
+            "Work X",
+            authorships:
             [
-                new WorkAuthor { Author = winner, Order = 0, Role = AuthorRole.Author },
-                new WorkAuthor { Author = loser,  Order = 0, Role = AuthorRole.Translator },
-            ],
-        };
+                TestWorks.Authorship(winner),
+                TestWorks.Authorship(loser, 0, AuthorRole.Translator),
+            ]);
         db.Books.Add(TestBooks.Book("Book X", works: [work]));
         await db.SaveChangesAsync();
 
@@ -206,15 +204,13 @@ public class AuthorMergeHandlerTests
         db.Authors.AddRange(winner, loser);
         await db.SaveChangesAsync();
 
-        var work = new Work
-        {
-            Title = "Work X",
-            WorkAuthors =
+        var work = TestWorks.Work(
+            "Work X",
+            authorships:
             [
-                new WorkAuthor { Author = winner, Order = 0, Role = AuthorRole.Author },
-                new WorkAuthor { Author = loser,  Order = 1, Role = AuthorRole.Author },
-            ],
-        };
+                TestWorks.Authorship(winner),
+                TestWorks.Authorship(loser, 1),
+            ]);
         db.Books.Add(TestBooks.Book("Book X", works: [work]));
         await db.SaveChangesAsync();
 
@@ -227,6 +223,47 @@ public class AuthorMergeHandlerTests
         Assert.Single(rows);
         Assert.Equal(winner.Id, rows[0].AuthorId);
         Assert.Equal(AuthorRole.Author, rows[0].Role);
+    }
+
+    [Fact]
+    public async Task Merge_keeps_the_loser_credits_place_in_the_order_and_its_role()
+    {
+        // Loser is the middle of three authors and also a translator. The
+        // winner takes over both credits in the same position and role.
+        using var db = _factory.CreateDbContext();
+        var winner = Author.Create("Winner");
+        var loser = Author.Create("Loser");
+        var first = Author.Create("First");
+        var last = Author.Create("Last");
+        db.Authors.AddRange(winner, loser, first, last);
+        await db.SaveChangesAsync();
+
+        var work = TestWorks.Work(
+            "Work X",
+            authorships:
+            [
+                TestWorks.Authorship(first, 0),
+                TestWorks.Authorship(loser, 1),
+                TestWorks.Authorship(last, 2),
+                TestWorks.Authorship(loser, 0, AuthorRole.Translator),
+            ]);
+        db.Books.Add(TestBooks.Book("Book X", works: [work]));
+        await db.SaveChangesAsync();
+
+        var result = await Merge(winner.Id, loser.Id);
+
+        Assert.True(result.Success);
+        Assert.Equal(2, result.WorksReassigned);
+
+        using var verify = _factory.CreateDbContext();
+        var rows = verify.WorkAuthors.Where(wa => wa.WorkId == work.Id)
+            .Select(wa => new { wa.AuthorId, wa.Role, wa.Order })
+            .ToList();
+        Assert.Equal(4, rows.Count);
+        Assert.Contains(rows, r => r.AuthorId == first.Id && r.Role == AuthorRole.Author && r.Order == 0);
+        Assert.Contains(rows, r => r.AuthorId == winner.Id && r.Role == AuthorRole.Author && r.Order == 1);
+        Assert.Contains(rows, r => r.AuthorId == last.Id && r.Role == AuthorRole.Author && r.Order == 2);
+        Assert.Contains(rows, r => r.AuthorId == winner.Id && r.Role == AuthorRole.Translator && r.Order == 0);
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────
@@ -243,7 +280,7 @@ public class AuthorMergeHandlerTests
             {
                 db.Books.Add(TestBooks.Book(
                     t,
-                    works: [new Work { Title = t, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]));
+                    works: [TestWorks.Work(t, author)]));
             }
             authors.Add(author);
         }

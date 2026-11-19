@@ -60,7 +60,7 @@ App Service Easy Auth runs in v2 mode and already accepts both browser cookie fl
 
 What IS needed is one-time AAD-side setup (manual Azure Portal click-ops; runbook in [`infra/README.md`](../infra/README.md) under "Mobile companion — AAD setup"):
 
-1. **Expose the API scope** on the existing sign-in (Easy Auth) app registration, `<sign-in-app-registration>` (a placeholder; the real name is Drew's to supply): Expose an API → confirm Application ID URI = `api://<authClientId>` → Add scope `access_as_user`.
+1. **Expose the API scope** on the existing sign-in (Easy Auth) app registration for the Web app: Expose an API → confirm Application ID URI = `api://<authClientId>` → Add scope `access_as_user`.
 2. **Register a new AAD app** for the mobile client (Mobile and desktop applications, public client / native) in the same tenant. Redirect URI uses Android's custom URI scheme `msauth://com.thelibrary.mobile/<base64-signature-hash>` (signature hash is derived from the signing keystore).
 3. **Grant the mobile app reg API permission** to the Web app's `access_as_user` scope (delegated, with admin consent if the tenant requires it).
 

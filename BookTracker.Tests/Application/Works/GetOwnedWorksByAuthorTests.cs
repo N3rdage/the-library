@@ -23,11 +23,7 @@ public class GetOwnedWorksByAuthorTests
         var book = TestBooks.Book(
             title,
             editions: [TestEditions.Edition(copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
-        book.AttachWork(new Work
-        {
-            Title = title,
-            WorkAuthors = [new WorkAuthor { Author = authorRow, Order = 0, Role = AuthorRole.Author }],
-        });
+        book.AttachWork(TestWorks.Work(title, authorRow));
         db.Books.Add(book);
         await db.SaveChangesAsync();
         return book.Id;
