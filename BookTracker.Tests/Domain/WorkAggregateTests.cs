@@ -91,7 +91,60 @@ public class WorkAggregateTests
         Assert.Same(b2, remaining.Book);        // b1's link removed, b2's stays
     }
 
+    // --- Internal constructors (the tests' seed path) ------------------------
+
+    [Fact]
+    public void InternalConstructor_storesValuesExactlyAsGiven()
+    {
+        var author = Author.Create("A");
+        var editor = new WorkAuthor(Author.Create("E"), 3, AuthorRole.Editor);
+        var genre = new Genre { Id = 1, Name = "G" };
+
+        var work = new Work("  untrimmed  ", "  ", new DateOnly(1990, 1, 1), DatePrecision.Year,
+            [new WorkAuthor(author, 0, AuthorRole.Author), editor], [genre]);
+
+        Assert.Equal("  untrimmed  ", work.Title);   // not normalised, unlike UpdateDetails
+        Assert.Equal("  ", work.Subtitle);
+        Assert.Equal(new DateOnly(1990, 1, 1), work.FirstPublishedDate);
+        Assert.Equal(DatePrecision.Year, work.FirstPublishedDatePrecision);
+        Assert.Equal(2, work.WorkAuthors.Count);
+        Assert.Same(editor, work.WorkAuthors[1]);
+        Assert.Same(genre, Assert.Single(work.Genres));
+        Assert.Empty(work.BookWorks);
+    }
+
+    [Fact]
+    public void WorkAuthorInternalConstructor_storesAuthorOrderAndRoleAsGiven()
+    {
+        var author = Author.Create("A");
+
+        var wa = new WorkAuthor(author, 5, AuthorRole.Translator);
+
+        Assert.Same(author, wa.Author);
+        Assert.Equal(5, wa.Order);
+        Assert.Equal(AuthorRole.Translator, wa.Role);
+    }
+
     // --- Field methods -------------------------------------------------------
+
+    [Fact]
+    public void FillBlanksFrom_fillsOnlyEmptyFields_andMovesDateWithPrecision()
+    {
+        var winner = TestWorks.Work("W", subtitle: "Kept");
+        var loser = TestWorks.Work("L", subtitle: " Loser sub ",
+            firstPublishedDate: new DateOnly(1965, 1, 1), firstPublishedDatePrecision: DatePrecision.Year);
+
+        var filled = winner.FillBlanksFrom(loser);
+
+        Assert.Equal(1, filled);
+        Assert.Equal("Kept", winner.Subtitle);                       // never overwritten
+        Assert.Equal(new DateOnly(1965, 1, 1), winner.FirstPublishedDate);
+        Assert.Equal(DatePrecision.Year, winner.FirstPublishedDatePrecision);
+
+        var blank = TestWorks.Work("B");
+        Assert.Equal(2, blank.FillBlanksFrom(loser));
+        Assert.Equal(" Loser sub ", blank.Subtitle);                  // copied as stored
+    }
 
     [Fact]
     public void UpdateDetails_blankTitle_throws()
