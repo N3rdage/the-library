@@ -82,7 +82,7 @@ public class GetSeriesGapsHandlerTests
             var partial = new Series { Name = "Partial", Type = SeriesType.Series, ExpectedCount = 2 };
             db.Series.AddRange(complete, collection, partial);
             var deleted = NewBook(partial, "Tombstoned #2", 2);
-            deleted.DeletedAt = DateTime.UtcNow;
+            deleted.SoftDelete();
             db.Books.AddRange(
                 NewBook(complete, "C1", 1),
                 NewBook(complete, "C2", 2),
@@ -163,7 +163,7 @@ public class GetSeriesGapsHandlerTests
             var s = new Series { Name = "Ghost", Type = SeriesType.Series };
             db.Series.Add(s);
             var b = NewBook(s, "Gone", 1);
-            b.DeletedAt = DateTime.UtcNow;
+            b.SoftDelete();
             db.Books.Add(b);
             await db.SaveChangesAsync();
         }

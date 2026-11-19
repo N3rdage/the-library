@@ -55,7 +55,7 @@ public class CoverMirrorBackgroundServiceTests
         {
             await using var db = _factory.CreateDbContext();
             var book = await db.Books.SingleAsync(b => b.Id == bookId);
-            book.DefaultCoverArtUrl = UserUrl;
+            book.SetCover(UserUrl);
             await db.SaveChangesAsync();
         });
 
