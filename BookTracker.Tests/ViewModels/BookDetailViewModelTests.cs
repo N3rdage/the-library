@@ -1,4 +1,6 @@
 using BookTracker.Application;
+using BookTracker.Application.Books;
+using BookTracker.Application.Loans;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
@@ -18,7 +20,8 @@ public class BookDetailViewModelTests
     private static BookDetailViewModel CreateVm(TestDbContextFactory factory, IBookCoverStorage? coverStorage = null) =>
         new(coverStorage ?? Substitute.For<IBookCoverStorage>(),
             NullLogger<BookDetailViewModel>.Instance,
-            BuildDispatcher(factory));
+            BuildDispatcher(factory),
+            TimeProvider.System);
 
     // A real dispatcher backed by the application-layer DI registrations, so
     // these tests exercise the same command-resolution path as production.
@@ -1247,5 +1250,77 @@ public class BookDetailViewModelTests
 
         Assert.Null(result);
         Assert.Single(vm.Book!.Works);
+    }
+}
+
+// The lending surface of the detail VM: a substituted dispatcher and a pinned
+// clock. ReturnLoan's persistence is covered by the loan command tests.
+[Trait("Category", TestCategories.Unit)]
+public class BookDetailViewModelLoanTests
+{
+    private sealed class FixedClock(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+    }
+
+    // 14:00 UTC on 19 Nov is 20 Nov in Melbourne.
+    private static readonly TimeProvider Clock = new FixedClock(new DateTimeOffset(2026, 11, 19, 14, 0, 0, TimeSpan.Zero));
+    private static readonly DateOnly Today = new(2026, 11, 20);
+
+    private const int BookId = 7;
+    private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
+
+    private static BookDetail Detail(params CopyDetail[] copies) => new(
+        BookId, "Dune", BookCategory.Fiction, BookStatus.Unread, 0, null, null, new DateTime(2026, 1, 1),
+        Works: [],
+        Editions: [new EditionDetail(3, "9780441013593", BookFormat.Hardcover, "Hardcover", null, "", null, false, copies)],
+        Tags: [],
+        Series: null);
+
+    private async Task<BookDetailViewModel> LoadedVmAsync(params CopyDetail[] copies)
+    {
+        _dispatcher.Query(Arg.Any<BookTracker.Application.Books.GetBookDetail>(), Arg.Any<CancellationToken>())
+            .Returns(Detail(copies));
+        var vm = new BookDetailViewModel(
+            Substitute.For<IBookCoverStorage>(), NullLogger<BookDetailViewModel>.Instance, _dispatcher, Clock);
+        await vm.InitializeAsync(BookId);
+        return vm;
+    }
+
+    [Fact]
+    public async Task ReturnLoanAsync_SendsReturnLoanWithToday_AndReloads()
+    {
+        var loan = new CopyLoanDetail(42, "Sam", Today.AddDays(-10), null);
+        var vm = await LoadedVmAsync(new CopyDetail(11, BookCondition.Good, null, null, loan));
+        _dispatcher.ClearReceivedCalls();
+
+        await vm.ReturnLoanAsync(42);
+
+        await _dispatcher.Received(1).Send(
+            Arg.Is<ReturnLoan>(c => c!.LoanId == 42 && c.ReturnedOn == Today), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).Query(
+            Arg.Is<BookTracker.Application.Books.GetBookDetail>(q => q!.BookId == BookId), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task IsOverdue_UsesThePinnedToday()
+    {
+        var vm = await LoadedVmAsync();
+
+        Assert.Equal(Today, vm.Today);
+        Assert.False(vm.IsOverdue(new CopyLoanDetail(1, "Sam", Today.AddDays(-5), Today)));
+        Assert.True(vm.IsOverdue(new CopyLoanDetail(1, "Sam", Today.AddDays(-5), Today.AddDays(-1))));
+        Assert.False(vm.IsOverdue(new CopyLoanDetail(1, "Sam", Today.AddDays(-5), null)));
+    }
+
+    [Fact]
+    public async Task LendOptionFor_DescribesTheCopy()
+    {
+        var vm = await LoadedVmAsync(new CopyDetail(11, BookCondition.VeryGood, null, null));
+
+        var option = vm.LendOptionFor(11);
+
+        Assert.Equal(new LendDialogViewModel.LendCopyOption(11, "Dune", "Hardcover · 9780441013593", BookCondition.VeryGood), option);
+        Assert.Null(vm.LendOptionFor(999));
     }
 }

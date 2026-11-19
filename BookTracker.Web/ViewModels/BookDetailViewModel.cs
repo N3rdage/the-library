@@ -1,5 +1,6 @@
 using BookTracker.Application;
 using BookTracker.Application.Books;
+using BookTracker.Application.Loans;
 using BookTracker.Application.Works;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
@@ -24,7 +25,8 @@ namespace BookTracker.Web.ViewModels;
 public class BookDetailViewModel(
     IBookCoverStorage coverStorage,
     ILogger<BookDetailViewModel> logger,
-    IDispatcher dispatcher)
+    IDispatcher dispatcher,
+    TimeProvider clock)
 {
     /// <summary>Server-side cap on user-uploaded cover photos. 10 MB is generous
     /// enough to accept a 12MP phone-camera JPEG without rejection while
@@ -134,6 +136,33 @@ public class BookDetailViewModel(
     {
         if (Book is null) return;
         await dispatcher.Send(new DeleteCopy(Book.Id, copyId));
+    }
+
+    /// <summary>Today's date for loans (see <see cref="LoanDates.Today"/>).</summary>
+    public DateOnly Today => LoanDates.Today(clock);
+
+    public bool IsOverdue(CopyLoanDetail loan) => LoanDates.IsOverdue(loan.DueOn, Today);
+
+    /// <summary>The copy as the first entry of the lend dialog's list; null
+    /// when the copy is not on this book.</summary>
+    public LendDialogViewModel.LendCopyOption? LendOptionFor(int copyId)
+    {
+        if (Book is null) return null;
+        foreach (var edition in Book.Editions)
+        {
+            var copy = edition.Copies.FirstOrDefault(c => c.Id == copyId);
+            if (copy is not null)
+                return new(copy.Id, Book.Title, EditionLabels.For(edition.Format, edition.Isbn), copy.Condition);
+        }
+        return null;
+    }
+
+    /// <summary>Marks the loan returned today and reloads the detail.</summary>
+    public async Task ReturnLoanAsync(int loanId)
+    {
+        if (Book is null) return;
+        await dispatcher.Send(new ReturnLoan(loanId, Today));
+        await InitializeAsync(Book.Id);
     }
 
     /// <summary>

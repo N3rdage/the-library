@@ -1,0 +1,148 @@
+@* Modal dialog for lending one or more copies to one borrower. The page seeds
+   a LendDialogViewModel with the copy whose "Lend" was pressed and passes it
+   in (dialogs that need page state take the VM as a parameter). Confirm sends
+   one LendCopies for every listed copy; a refused lend shows its message here
+   and leaves the dialog open. *@
+
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width: 280px;">
+            @if (VM.ErrorMessage is not null)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@VM.ErrorMessage</MudAlert>
+            }
+
+            <MudAutocomplete T="string"
+                             @bind-Value="VM.BorrowerName"
+                             SearchFunc="@SuggestBorrowersAsync"
+                             Label="Lent to"
+                             Placeholder="Borrower's name"
+                             Variant="Variant.Outlined"
+                             Margin="Margin.Dense"
+                             DebounceInterval="250"
+                             CoerceValue="true"
+                             CoerceText="false"
+                             ResetValueOnEmptyText="true"
+                             Required="true" />
+
+            <MudDatePicker Label="Lent on"
+                           Date="@VM.LentOn"
+                           DateChanged="@((DateTime? d) => VM.LentOn = d)"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense" />
+
+            <MudDatePicker Label="Due back (optional)"
+                           Date="@VM.DueOn"
+                           DateChanged="@((DateTime? d) => VM.DueOn = d)"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Clearable="true" />
+
+            <div>
+                <MudText Typo="Typo.subtitle2" Class="mb-1">
+                    @VM.Copies.Count @(VM.Copies.Count == 1 ? "copy" : "copies")
+                </MudText>
+                @if (VM.Copies.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Add at least one book to lend.</MudText>
+                }
+                @foreach (var copy in VM.Copies)
+                {
+                    var copyId = copy.CopyId;
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                        <MudStack Spacing="0" Class="flex-grow-1" Style="min-width: 0;">
+                            <MudText Typo="Typo.body2" Style="word-break: break-word;">@copy.Title</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @copy.EditionLabel · @LendDialogViewModel.ConditionLabel(copy.Condition)
+                            </MudText>
+                        </MudStack>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                       Size="Size.Small"
+                                       Disabled="@VM.Saving"
+                                       aria-label="@($"Remove {copy.Title}")"
+                                       OnClick="@(() => VM.RemoveCopy(copyId))" />
+                    </MudStack>
+                }
+            </div>
+
+            <MudAutocomplete T="LendDialogViewModel.LendCopyOption"
+                             @ref="addBook"
+                             Value="null"
+                             ValueChanged="OnCopyPickedAsync"
+                             SearchFunc="@SearchCopiesAsync"
+                             ToStringFunc="@(o => o?.Display ?? string.Empty)"
+                             Label="Add another book"
+                             Placeholder="Type a title..."
+                             Variant="Variant.Outlined"
+                             Margin="Margin.Dense"
+                             MinCharacters="2"
+                             DebounceInterval="250"
+                             CoerceValue="false"
+                             ShowProgressIndicator="true"
+                             Disabled="@VM.Saving">
+                <ItemTemplate Context="o">
+                    <MudStack Spacing="0" Style="min-width: 0;">
+                        <MudText Typo="Typo.body2" Style="word-break: break-word;">@o.Title</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @o.EditionLabel · @LendDialogViewModel.ConditionLabel(o.Condition)
+                        </MudText>
+                    </MudStack>
+                </ItemTemplate>
+            </MudAutocomplete>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="@VM.Saving">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Disabled="@(!VM.CanConfirm)"
+                   OnClick="ConfirmAsync">
+            @(VM.Saving ? "Lending..." : VM.Copies.Count > 1 ? $"Lend {VM.Copies.Count} copies" : "Lend")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter, EditorRequired] public LendDialogViewModel VM { get; set; } = default!;
+
+    private MudAutocomplete<LendDialogViewModel.LendCopyOption>? addBook;
+
+    private async Task<IEnumerable<string>> SuggestBorrowersAsync(string? prefix, CancellationToken ct)
+    {
+        try { return await VM.SuggestBorrowersAsync(prefix, ct); }
+        catch (OperationCanceledException) { return []; }
+    }
+
+    private async Task<IEnumerable<LendDialogViewModel.LendCopyOption>> SearchCopiesAsync(string? query, CancellationToken ct)
+    {
+        try { return await VM.SearchCopiesAsync(query, ct); }
+        catch (OperationCanceledException) { return []; }
+    }
+
+    private async Task OnCopyPickedAsync(LendDialogViewModel.LendCopyOption? option)
+    {
+        if (option is null) return;
+        VM.AddCopy(option);
+        if (addBook is not null) await addBook.ClearAsync();
+    }
+
+    private async Task ConfirmAsync()
+    {
+        try
+        {
+            if (await VM.ConfirmAsync())
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Couldn't lend: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}
