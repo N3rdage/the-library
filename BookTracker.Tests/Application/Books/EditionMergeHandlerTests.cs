@@ -46,7 +46,7 @@ public class EditionMergeHandlerTests
     {
         using var db = _factory.CreateDbContext();
         var author = Author.Create("A");
-        var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var work = TestWorks.Work("T", author);
         var publisher = new Publisher { Name = "Acme Press" };
         var book = TestBooks.Book("B", works: [work]);
         // Winner has no date, no cover, no publisher, no ISBN.
@@ -83,7 +83,7 @@ public class EditionMergeHandlerTests
     {
         using var db = _factory.CreateDbContext();
         var author = Author.Create("A");
-        var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var work = TestWorks.Work("T", author);
         var pubA = new Publisher { Name = "Keep" };
         var pubB = new Publisher { Name = "Ignored" };
         var book = TestBooks.Book("B", works: [work]);
@@ -165,8 +165,8 @@ public class EditionMergeHandlerTests
     {
         using var db = _factory.CreateDbContext();
         var author = Author.Create("A");
-        var w1 = new Work { Title = "A1", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        var w2 = new Work { Title = "A2", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var w1 = TestWorks.Work("A1", author);
+        var w2 = TestWorks.Work("A2", author);
         var b1 = TestBooks.Book("B1", works: [w1]);
         var b2 = TestBooks.Book("B2", works: [w2]);
         var e1 = TestEditions.Edition(book: b1, isbn: "9780000000001", format: BookFormat.Hardcover);
@@ -186,7 +186,7 @@ public class EditionMergeHandlerTests
     {
         using var db = _factory.CreateDbContext();
         var author = Author.Create("Shared");
-        var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var work = TestWorks.Work("T", author);
         var book = TestBooks.Book("B", works: [work]);
         var winner = TestEditions.Edition(book: book, isbn: "9780000000001", format: BookFormat.Hardcover);
         var loser = TestEditions.Edition(book: book, isbn: "9780000000002", format: BookFormat.Hardcover);

@@ -23,11 +23,7 @@ public class AddScannedCopyHandlerTests
             "The Hobbit",
             tags: tags.Select(t => new Tag { Name = t }),
             editions: [TestEditions.Edition(isbn: "9780345391803", copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
-        book.AttachWork(new Work
-        {
-            Title = "The Hobbit",
-            WorkAuthors = [new WorkAuthor { Author = Author.Create("J.R.R. Tolkien"), Order = 0 }],
-        });
+        book.AttachWork(TestWorks.Work("The Hobbit", Author.Create("J.R.R. Tolkien")));
         db.Books.Add(book);
         await db.SaveChangesAsync();
         return book.Id;

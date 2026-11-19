@@ -298,8 +298,8 @@ public class BookCommandHandlersTests
         int bookA, exclusiveId, sharedId;
         await using (var db = _factory.CreateDbContext())
         {
-            var exclusive = new Work { Title = "Exclusive", WorkAuthors = { new WorkAuthor { Author = Author.Create("X"), Order = 0, Role = AuthorRole.Author } } };
-            var shared = new Work { Title = "Shared", WorkAuthors = { new WorkAuthor { Author = Author.Create("Y"), Order = 0, Role = AuthorRole.Author } } };
+            var exclusive = TestWorks.Work("Exclusive", Author.Create("X"));
+            var shared = TestWorks.Work("Shared", Author.Create("Y"));
             var a = TestBooks.Book("A", works: [exclusive, shared]);
             var b = TestBooks.Book("B", works: [shared]);
             db.Books.AddRange(a, b);
