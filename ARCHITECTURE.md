@@ -161,7 +161,7 @@ A short-lived context is created per operation. Never inject `DbContext` directl
 | `/books` | Library | Filterable book list (search, category, genre, tag, author, **status**, **series**). Group-by picker (Author / Genre / None); a grouped view renders each group as a row that drills into a flat, filtered book list. **Series browsing is the Series filter + reading-order sort, not a grouping mode** (the grouped Series view was retired — TODO #53c). Filters reduce within groups. Desktop table + mobile cards. **Inline status/rating quick-set:** each row's status chip is a menu and its stars are editable (without opening the book) — picking **Read** opens `MarkReadDialog` to capture rating + notes in one step; other statuses persist immediately. Edited rows are patched in place (not re-queried) so a book moved out of the active status filter stays visible until the next explicit reload. The status filter doubles as a re-triage worklist. |
 | `/books/add` | Add Book | ISBN lookup + manual entry. Creates Book + Edition + Copy. Series suggestion after lookup **plus a manual series typeahead** (pick existing or create new + order). Collection mode for multi-Work compendiums with inline existing-Work attach via title typeahead. |
 | `/books/{id}` | Book Detail | Default browsing surface for a single book. Read-only scaffold with inline auto-save (rating / status / notes / tags) plus a Delete affordance. Modal edits open `BookEditDialog` / `WorkEditDialog` / `EditionFormDialog` / `CopyFormDialog` / `AddWorkDialog`. The `/books/{id}/edit` "full edit page" escape hatch was decommissioned — every edit surface is now reachable from here. |
-| `/books/bulk-add` | Bulk Add | Rapid ISBN entry (text or barcode scanner). Discovery grid with async lookup, accept/follow-up, duplicate detection. |
+| `/books/bulk-add` | Bulk Add | Rapid ISBN entry (text or barcode scanner). Discovery grid with async lookup, accept/follow-up, duplicate detection. An opt-in "Ask AI for genres" switch (off by default, per circuit) asks the active provider for genres during a row's lookup when the rule-based match over the lookup's subject strings finds nothing or only top-level genres; the row lists its genres before Accept with AI-sourced names marked "AI". |
 | `/bookshop` | Bookshop Mode (PWA) | Mobile-optimised offline-capable surface for the "in a real bookshop" use case. ISBN scan + manual ISBN + author lookup tabs, backed by an IndexedDB cache populated from `/api/catalog-snapshot`. Sibling of Bookshelf MAUI — separate cache, same DTO shape. |
 | `/series` | Series List | All series/collections with completion status |
 | `/series/new` | New Series | Create a new series or collection |
@@ -276,7 +276,7 @@ Multi-provider architecture with runtime switching via `AIProviderFactory`.
 | Method | Speed | Purpose |
 |--------|-------|---------|
 | `ExtractIsbnFromImageAsync` | Fast | OCR ISBN from photo (vision API) |
-| `SuggestGenresAsync` | Fast | Suggest genres from preset taxonomy |
+| `SuggestGenresAsync` | Fast | Suggest genres from preset taxonomy (the AI Assistant's genre pass; Bulk Add behind its "Ask AI for genres" switch) |
 | `SuggestCollectionsAsync` | Fast | Suggest series/collection groupings |
 | `SuggestShoppingListAsync` | Fast | Recommend books based on library patterns |
 | `AssessBookAsync` | Deep | Suitability assessment for a book/author |
