@@ -22,4 +22,4 @@ originSessionId: 8c3462ff-d4fd-4094-b532-e213e55887db
 
 **Lesson** — `IAIAssistantService` was created in PR #45 just for testability ("we want to mock this in tests"). PR #54 turned that interface into the abstraction for swappable providers. Designing for testing → accidentally designed for runtime polymorphism. Worth noticing: the same shape that enables `Substitute.For<IAIAssistantService>()` in NSubstitute is the shape that enables `AIProviderFactory.Get(provider)`.
 
-**Quotable** — the AI providers were planned as separate features but ended up as one architectural arc. Foundry got dropped from prod in this session (Sponsored subscription) but the abstraction remained because it costs nothing to keep.
+**Quotable** — the AI providers were planned as separate features but ended up as one architectural arc. Foundry got dropped from prod in this session (the subscription type is excluded) but the abstraction remained because it costs nothing to keep.

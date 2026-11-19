@@ -8,9 +8,9 @@ type: project
 
 PR #111 — automated Easy Auth client secret rotation. The previous state was "rotate manually by re-running `deploy.ps1` whenever you remember" with a 2-year fail-safe; that's fine until it isn't.
 
-- **`rotate-easy-auth-secret.ps1`** — standalone script. Generates a fresh password on the `Library-Patrons` app registration, writes it to KV as `AuthClientSecret`, trims old passwords to keep the latest 2 (so the previous-active secret stays valid during App Service's ~24h KV reference refresh window).
-- **`.github/workflows/rotate-easy-auth-secret.yml`** — scheduled cron `0 2 1 */6 *` (02:00 UTC, 1st of every 6th month) + `workflow_dispatch` for on-demand. OIDC-auths as the existing `booktracker-ci` SP, installs the Graph + KV PowerShell modules, runs the script.
-- **`setup-github-oidc.ps1`** extended to grant the CI SP three narrow permissions needed for the rotation: Key Vault Secrets Officer on the vault, Owner of the `Library-Patrons` app registration, Graph `Application.ReadWrite.OwnedBy`. All three idempotent on re-run.
+- **`rotate-easy-auth-secret.ps1`** — standalone script. Generates a fresh password on the sign-in app registration, writes it to KV as `AuthClientSecret`, trims old passwords to keep the latest 2 (so the previous-active secret stays valid during App Service's ~24h KV reference refresh window).
+- **`.github/workflows/rotate-easy-auth-secret.yml`** — scheduled cron `0 2 1 */6 *` (02:00 UTC, 1st of every 6th month) + `workflow_dispatch` for on-demand. OIDC-auths as the existing CI identity, installs the Graph + KV PowerShell modules, runs the script.
+- **`setup-github-oidc.ps1`** extended to grant the CI SP three narrow permissions needed for the rotation: Key Vault Secrets Officer on the vault, Owner of the sign-in app registration, Graph `Application.ReadWrite.OwnedBy`. All three idempotent on re-run.
 
 Secret lifetime stayed at 2 years (fail-safe); rotation cadence is 6 months, so 4 overlapping secrets could exist between cleanups — trimmed to 2 on each run.
 
