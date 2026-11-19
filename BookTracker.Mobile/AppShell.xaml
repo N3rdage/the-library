@@ -11,8 +11,8 @@
     <!-- Three co-equal in-shop tabs (Bookshelf redesign §1). Page content +
          the Tabler tab icons are assigned in code-behind so the pages resolve
          through DI (a DataTemplate ContentTemplate would try a parameterless
-         ctor and throw). Find is the transitional MainPage until PR3 rebuilds
-         it as the unified search surface. -->
+         ctor and throw). Find is FindPage, the unified search of the owned
+         library with the inline scanner. -->
     <TabBar>
         <ShellContent x:Name="FindTab"     Title="Find"     Route="find" />
         <ShellContent x:Name="WishlistTab" Title="Wishlist" Route="wishlist" />

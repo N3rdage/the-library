@@ -71,7 +71,7 @@ public interface ICatalogCache
     Task<IReadOnlyList<SeriesGap>> GetSeriesGapsAsync();
 
     /// <summary>Reads the per-Book Editions + Works detail for the
-    /// enhanced ScanPage view. Returns null when the Book isn't in
+    /// enhanced ResultPage view. Returns null when the Book isn't in
     /// the cache. Editions list is sorted by Format then Isbn; Works
     /// list is sorted by Work.Id (mirrors the server's "first Work
     /// by Id" convention). Empty inner lists are possible when the
@@ -123,12 +123,12 @@ public interface ICatalogCache
     /// wasn't bought-marked.</summary>
     Task UnmarkBoughtLocallyAsync(int wishlistItemId);
 
-    /// <summary>True when the given ISBN matches any wishlisted ISBN
-    /// (across all rows, including legacy single-Isbn rows and the new
-    /// per-row Isbns from PR B's WishlistItemIsbn table — the server
-    /// unions them at the snapshot layer). Bought-local rows are
-    /// excluded so a book the user just marked bought doesn't keep
-    /// flagging on subsequent scans. Backs ScanPage's wishlist badge.</summary>
+    /// <summary>True when the given ISBN belongs to at least one wishlist
+    /// row that isn't bought-local (the server unions each row's legacy
+    /// single Isbn with its WishlistItemIsbn rows at the snapshot layer).
+    /// A book the user just marked bought doesn't keep flagging on
+    /// subsequent scans unless another wishlist row carries the same ISBN.
+    /// Backs ResultPage's wishlist badge.</summary>
     Task<bool> IsWishlistedIsbnAsync(string isbn);
 }
 
@@ -147,7 +147,7 @@ public record SeriesGap(
     int OwnedCount,
     IReadOnlyList<int> MissingOrders);
 
-/// <summary>Per-Book enriched detail surfaced in Bookshelf's ScanPage
+/// <summary>Per-Book enriched detail surfaced in Bookshelf's ResultPage
 /// FoundFrame — the "which Editions of this do I own, and what Works
 /// does it contain?" view. Editions + Works lists are always non-null;
 /// callers check Count and hide the corresponding section when ≤ 1

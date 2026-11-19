@@ -933,18 +933,20 @@ public class CatalogCache : ICatalogCache
     {
         if (string.IsNullOrWhiteSpace(isbn)) return false;
 
-        // Match the scanned ISBN against any cached wishlist ISBN row.
-        // Bought-local rows are excluded so a book the user just marked
-        // bought doesn't keep flagging on subsequent scans.
-        var match = await Db.Table<CachedWishlistItemIsbn>()
+        // Match the scanned ISBN against every cached wishlist ISBN row; the
+        // ISBN is flagged when any item carrying it is not bought-local, so
+        // a book the user just marked bought doesn't keep flagging on
+        // subsequent scans while another wishlist item with the ISBN still does.
+        var matches = await Db.Table<CachedWishlistItemIsbn>()
             .Where(i => i.Isbn == isbn)
-            .FirstOrDefaultAsync();
-        if (match is null) return false;
+            .ToListAsync();
+        if (matches.Count == 0) return false;
 
+        var itemIds = matches.Select(m => m.WishlistItemId).Distinct().ToList();
         var boughtCount = await Db.Table<WishlistBoughtLocal>()
-            .Where(b => b.WishlistItemId == match.WishlistItemId)
+            .Where(b => itemIds.Contains(b.WishlistItemId))
             .CountAsync();
-        return boughtCount == 0;
+        return boughtCount < itemIds.Count;
     }
 
     /// <summary>Priority comparator — High > Medium > Low. Stable for

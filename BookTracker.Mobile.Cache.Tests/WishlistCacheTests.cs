@@ -137,6 +137,21 @@ public class WishlistCacheTests
     }
 
     [Fact]
+    public async Task IsWishlistedIsbnAsync_TrueWhenAnotherItemWithTheIsbnIsNotBought()
+    {
+        // Two wishlist items share the ISBN; the first is bought, the second
+        // is not, so the scan still flags it.
+        var cache = await NewCacheAsync();
+        await cache.PopulateWishlistAsync(Snapshot(
+            Item(1, "Foundation", isbns: ["9780553293357"]),
+            Item(2, "Foundation (gift copy)", isbns: ["9780553293357"])));
+
+        await cache.MarkBoughtLocallyAsync(1);
+
+        Assert.True(await cache.IsWishlistedIsbnAsync("9780553293357"));
+    }
+
+    [Fact]
     public async Task UnmarkBoughtLocally_RestoresVisibility()
     {
         var cache = await NewCacheAsync();
