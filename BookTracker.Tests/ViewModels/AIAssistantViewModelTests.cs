@@ -1,4 +1,5 @@
 using BookTracker.Application;
+using BookTracker.Application.Ai;
 using BookTracker.Application.Books;
 using BookTracker.Application.Series;
 using BookTracker.Application.Wishlist;
@@ -143,5 +144,80 @@ public class AIAssistantViewModelTests
         await CreateVm().AddRecommendationToWishlistAsync(new BookRecommendation("Hyperion", "Dan Simmons", "because", null));
 
         await _dispatcher.DidNotReceive().Send(Arg.Any<AddWishlistItem>(), Arg.Any<CancellationToken>());
+    }
+
+    // --- Usage summary ---------------------------------------------------------
+
+    private static AiUsageSummary Summary(params AiUsageLine[] thisMonth) => new(thisMonth, []);
+
+    [Fact]
+    public async Task LoadUsageSummary_queriesWithTheConfiguredPrices_andTotalsAcrossProviders()
+    {
+        var options = new AIOptions { Prices = { ["gpt-4o"] = new AiModelPrice(2.50m, 10.00m) } };
+        _dispatcher.Query(Arg.Any<GetAiUsageSummary>(), Arg.Any<CancellationToken>()).Returns(Summary(
+            new AiUsageLine("Anthropic", "claude-sonnet-4-6", 10, 80_000, 5_000, 0.30m),
+            new AiUsageLine("AzureOpenAI", "gpt-4o", 2, 4_210, 1_120, 0.05m)));
+
+        var vm = CreateVm(options);
+        await vm.LoadUsageSummaryAsync();
+
+        await _dispatcher.Received(1).Query(
+            Arg.Is<GetAiUsageSummary>(q => ReferenceEquals(q!.Prices, options.Prices)), Arg.Any<CancellationToken>());
+        Assert.Equal("This month: 12 calls, 84,210 in / 6,120 out tokens, about $0.35", vm.UsageLine);
+    }
+
+    [Fact]
+    public async Task UsageLine_countsTheModelsWithoutAPrice()
+    {
+        _dispatcher.Query(Arg.Any<GetAiUsageSummary>(), Arg.Any<CancellationToken>()).Returns(Summary(
+            new AiUsageLine("Anthropic", "claude-sonnet-4-6", 1, 100, 10, 0.0005m),
+            new AiUsageLine("Anthropic", "claude-opus-4-6", 1, 100, 10, null),
+            new AiUsageLine("AzureOpenAI", "gpt-4o", 1, 100, 10, null)));
+
+        var vm = CreateVm();
+        await vm.LoadUsageSummaryAsync();
+
+        Assert.Equal("This month: 3 calls, 300 in / 30 out tokens, about $0.00 (2 models without a price in AI:Prices)", vm.UsageLine);
+    }
+
+    [Fact]
+    public async Task UsageLine_withNoPricedModel_omitsTheCost()
+    {
+        _dispatcher.Query(Arg.Any<GetAiUsageSummary>(), Arg.Any<CancellationToken>()).Returns(Summary(
+            new AiUsageLine("Anthropic", "claude-opus-4-6", 1, 100, 10, null)));
+
+        var vm = CreateVm();
+        await vm.LoadUsageSummaryAsync();
+
+        Assert.Equal("This month: 1 call, 100 in / 10 out tokens (1 model without a price in AI:Prices)", vm.UsageLine);
+    }
+
+    [Fact]
+    public async Task UsageLine_isNullUntilLoaded_andZeroCallsReadAsZero()
+    {
+        _dispatcher.Query(Arg.Any<GetAiUsageSummary>(), Arg.Any<CancellationToken>()).Returns(Summary());
+        var vm = CreateVm();
+
+        Assert.Null(vm.UsageLine);
+        await vm.LoadUsageSummaryAsync();
+        Assert.Equal("This month: 0 calls, 0 in / 0 out tokens", vm.UsageLine);
+    }
+
+    [Fact]
+    public async Task AssessBook_refreshesTheUsageSummary_evenWhenTheCallFails()
+    {
+        // The provider's library read throws before any model is called, so the
+        // AI call fails inside the VM's try/catch; the refresh after it must
+        // still run.
+        _dispatcher.Query(Arg.Any<GetLibraryProfileForAdvisor>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyList<AdvisorBook>>(_ => throw new InvalidOperationException("library unavailable"));
+        _dispatcher.Query(Arg.Any<GetAiUsageSummary>(), Arg.Any<CancellationToken>()).Returns(Summary());
+        var vm = CreateVm();
+        vm.BookAdvisorQuery = "Dune";
+
+        await vm.AssessBookAsync();
+
+        Assert.NotNull(vm.AdvisorError);
+        await _dispatcher.Received(1).Query(Arg.Any<GetAiUsageSummary>(), Arg.Any<CancellationToken>());
     }
 }
