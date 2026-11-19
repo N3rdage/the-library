@@ -180,7 +180,7 @@ public class AuthorMergeHandlerTests
                 new WorkAuthor { Author = loser,  Order = 0, Role = AuthorRole.Translator },
             ],
         };
-        db.Books.Add(new Book { Title = "Book X", Works = [work] });
+        db.Books.Add(TestBooks.Book("Book X", works: [work]));
         await db.SaveChangesAsync();
 
         var result = await Merge(winner.Id, loser.Id);
@@ -215,7 +215,7 @@ public class AuthorMergeHandlerTests
                 new WorkAuthor { Author = loser,  Order = 1, Role = AuthorRole.Author },
             ],
         };
-        db.Books.Add(new Book { Title = "Book X", Works = [work] });
+        db.Books.Add(TestBooks.Book("Book X", works: [work]));
         await db.SaveChangesAsync();
 
         var result = await Merge(winner.Id, loser.Id);
@@ -241,11 +241,9 @@ public class AuthorMergeHandlerTests
             db.Authors.Add(author);
             foreach (var t in titles)
             {
-                db.Books.Add(new Book
-                {
-                    Title = t,
-                    Works = [new Work { Title = t, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]
-                });
+                db.Books.Add(TestBooks.Book(
+                    t,
+                    works: [new Work { Title = t, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]));
             }
             authors.Add(author);
         }

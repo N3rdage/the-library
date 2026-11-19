@@ -20,12 +20,10 @@ public class FindEditionByIsbnHandlerTests
         int bookId, editionId;
         await using (var db = _factory.CreateDbContext())
         {
-            var book = new Book
-            {
-                Title = "The Hobbit",
-                Works = [new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = Author.Create("Tolkien"), Order = 0 }] }],
-                Editions = [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }],
-            };
+            var book = TestBooks.Book(
+                "The Hobbit",
+                works: [new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = Author.Create("Tolkien"), Order = 0 }] }],
+                editions: [TestEditions.Edition(isbn: "9780345391803", copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -47,23 +45,19 @@ public class FindEditionByIsbnHandlerTests
         // Richard Sapir: an ISBN the upstream providers do not index).
         await using (var db = _factory.CreateDbContext())
         {
-            var book = new Book
-            {
-                Title = "Funny Money",
-                DefaultCoverArtUrl = "https://example.test/funny-money.jpg",
-                Editions =
+            var book = TestBooks.Book(
+                "Funny Money",
+                coverUrl: "https://example.test/funny-money.jpg",
+                editions:
                 [
-                    new Edition
-                    {
-                        Isbn = "055210617X",
-                        Format = BookFormat.MassMarketPaperback,
-                        DatePrinted = new DateOnly(1983, 1, 1),
-                        DatePrintedPrecision = DatePrecision.Year,
-                        Publisher = new Publisher { Name = "Pinnacle" },
-                        Copies = [new Copy { Condition = BookCondition.Good }],
-                    },
-                ],
-            };
+                    TestEditions.Edition(
+                        isbn: "055210617X",
+                        format: BookFormat.MassMarketPaperback,
+                        datePrinted: new DateOnly(1983, 1, 1),
+                        datePrintedPrecision: DatePrecision.Year,
+                        publisher: new Publisher { Name = "Pinnacle" },
+                        copies: [TestEditions.Copy(condition: BookCondition.Good)]),
+                ]);
             book.AttachWork(new Work
             {
                 Title = "Funny Money",
@@ -102,12 +96,10 @@ public class FindEditionByIsbnHandlerTests
     {
         await using (var db = _factory.CreateDbContext())
         {
-            db.Books.Add(new Book
-            {
-                Title = "Loose Edition",
-                DefaultCoverArtUrl = "https://example.test/book.jpg",
-                Editions = [new Edition { Isbn = "9780000000002", CoverUrl = "https://example.test/edition.jpg", Copies = [new Copy()] }],
-            });
+            db.Books.Add(TestBooks.Book(
+                "Loose Edition",
+                coverUrl: "https://example.test/book.jpg",
+                editions: [TestEditions.Edition(isbn: "9780000000002", coverUrl: "https://example.test/edition.jpg", copies: [TestEditions.Copy()])]));
             await db.SaveChangesAsync();
         }
 
@@ -125,11 +117,9 @@ public class FindEditionByIsbnHandlerTests
     {
         await using (var db = _factory.CreateDbContext())
         {
-            db.Books.Add(new Book
-            {
-                Title = "The Hobbit",
-                Editions = [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }],
-            });
+            db.Books.Add(TestBooks.Book(
+                "The Hobbit",
+                editions: [TestEditions.Edition(isbn: "9780345391803", copies: [TestEditions.Copy(condition: BookCondition.Good)])]));
             await db.SaveChangesAsync();
         }
 
@@ -141,15 +131,13 @@ public class FindEditionByIsbnHandlerTests
     {
         await using (var db = _factory.CreateDbContext())
         {
-            db.Books.Add(new Book
-            {
-                Title = "Dune",
-                Editions =
+            db.Books.Add(TestBooks.Book(
+                "Dune",
+                editions:
                 [
-                    new Edition { Isbn = "9780441172719", Copies = [new Copy(), new Copy()] },
-                    new Edition { Isbn = "9780340960196", Copies = [new Copy()] },
-                ],
-            });
+                    TestEditions.Edition(isbn: "9780441172719", copies: [TestEditions.Copy(), TestEditions.Copy()]),
+                    TestEditions.Edition(isbn: "9780340960196", copies: [TestEditions.Copy()]),
+                ]));
             await db.SaveChangesAsync();
         }
 
@@ -184,11 +172,9 @@ public class FindEditionByIsbnHandlerTests
                 Title = "Reliquary",
                 WorkAuthors = [new WorkAuthor { Author = child, Order = 0, Role = AuthorRole.Author }],
             };
-            var book = new Book
-            {
-                Title = "Relic & Reliquary",
-                Editions = [new Edition { Isbn = "9780000000001", Copies = [new Copy()] }],
-            };
+            var book = TestBooks.Book(
+                "Relic & Reliquary",
+                editions: [TestEditions.Edition(isbn: "9780000000001", copies: [TestEditions.Copy()])]);
             book.AttachWork(first);
             book.AttachWork(second);
             db.Books.Add(book);
@@ -210,11 +196,9 @@ public class FindEditionByIsbnHandlerTests
                 Title = "Concise Oxford English Dictionary",
                 WorkAuthors = [new WorkAuthor { Author = Author.Create("Catherine Soanes"), Order = 0, Role = AuthorRole.Editor }],
             };
-            var book = new Book
-            {
-                Title = "Concise Oxford English Dictionary",
-                Editions = [new Edition { Isbn = "9780199601080", Copies = [new Copy()] }],
-            };
+            var book = TestBooks.Book(
+                "Concise Oxford English Dictionary",
+                editions: [TestEditions.Edition(isbn: "9780199601080", copies: [TestEditions.Copy()])]);
             book.AttachWork(work);
             db.Books.Add(book);
             await db.SaveChangesAsync();

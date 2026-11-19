@@ -1,4 +1,5 @@
 using BookTracker.Application.Books;
+using BookTracker.Application.Catalog;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -24,22 +25,18 @@ public class BookMergeHandlerTests
         using var db = _factory.CreateDbContext();
         var author = Author.Create("A");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        var winner = new Book { Title = "B", Works = [work] };
-        var loser = new Book { Title = "B", Works = [work] };
-        var hardcover = new Edition
-        {
-            Book = loser,
-            Isbn = "9780000000001",
-            Format = BookFormat.Hardcover,
-            Copies = [new Copy { Condition = BookCondition.Good }, new Copy { Condition = BookCondition.Fair }]
-        };
-        var paperback = new Edition
-        {
-            Book = loser,
-            Isbn = "9780000000002",
-            Format = BookFormat.TradePaperback,
-            Copies = [new Copy { Condition = BookCondition.Good }]
-        };
+        var winner = TestBooks.Book("B", works: [work]);
+        var loser = TestBooks.Book("B", works: [work]);
+        var hardcover = TestEditions.Edition(
+            book: loser,
+            isbn: "9780000000001",
+            format: BookFormat.Hardcover,
+            copies: [TestEditions.Copy(condition: BookCondition.Good), TestEditions.Copy(condition: BookCondition.Fair)]);
+        var paperback = TestEditions.Edition(
+            book: loser,
+            isbn: "9780000000002",
+            format: BookFormat.TradePaperback,
+            copies: [TestEditions.Copy(condition: BookCondition.Good)]);
         db.Books.AddRange(winner, loser);
         db.Editions.AddRange(hardcover, paperback);
         await db.SaveChangesAsync();
@@ -72,14 +69,54 @@ public class BookMergeHandlerTests
     }
 
     [Fact]
+    public async Task Merge_loser_is_a_snapshot_tombstone_and_its_edition_is_the_winners()
+    {
+        // The loser is soft-deleted through Book.SoftDelete, whose Editions/Tags
+        // clear runs after the merge has moved both to the winner: the catalog
+        // snapshot must list the loser in deletedIds and the moved ISBN under
+        // the winner, with nothing of the loser's left behind.
+        using var db = _factory.CreateDbContext();
+        var author = Author.Create("A");
+        var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var winner = TestBooks.Book("B", works: [work]);
+        var loser = TestBooks.Book("B", works: [work]);
+        var edition = TestEditions.Edition(
+            book: loser,
+            isbn: "9780000000003",
+            format: BookFormat.Hardcover,
+            copies: [TestEditions.Copy(condition: BookCondition.Good)]);
+        db.Books.AddRange(winner, loser);
+        db.Editions.Add(edition);
+        await db.SaveChangesAsync();
+
+        await Task.Delay(20);
+        var beforeMerge = DateTime.UtcNow;
+        await Task.Delay(20);
+
+        var result = await Merge(winner.Id, loser.Id);
+
+        Assert.True(result.Success);
+        var delta = await new GetCatalogSnapshotHandler(_factory)
+            .HandleAsync(new GetCatalogSnapshot(beforeMerge, "dev"));
+        Assert.Equal([loser.Id], delta.DeletedIds ?? []);
+        var survivor = Assert.Single(delta.Books);
+        Assert.Equal(winner.Id, survivor.Id);
+        Assert.Equal(["9780000000003"], survivor.Isbns);
+
+        using var verify = _factory.CreateDbContext();
+        Assert.Equal(winner.Id, (await verify.Editions.SingleAsync(e => e.Id == edition.Id)).BookId);
+        Assert.Single(verify.Copies.Where(c => c.EditionId == edition.Id));
+    }
+
+    [Fact]
     public async Task Merge_unions_works_without_duplicating()
     {
         using var db = _factory.CreateDbContext();
         var author = Author.Create("A");
         var sharedWork = new Work { Title = "Shared", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var loserOnlyWork = new Work { Title = "LoserOnly", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        var winner = new Book { Title = "B", Works = [sharedWork] };
-        var loser = new Book { Title = "B", Works = [sharedWork, loserOnlyWork] };
+        var winner = TestBooks.Book("B", works: [sharedWork]);
+        var loser = TestBooks.Book("B", works: [sharedWork, loserOnlyWork]);
         db.Books.AddRange(winner, loser);
         await db.SaveChangesAsync();
 
@@ -101,8 +138,8 @@ public class BookMergeHandlerTests
         var tagA = new Tag { Name = "tag-a" };
         var tagB = new Tag { Name = "tag-b" };
         db.Tags.AddRange(tagA, tagB);
-        var winner = new Book { Title = "B", Works = [work], Tags = [tagA] };
-        var loser = new Book { Title = "B", Works = [work], Tags = [tagA, tagB] };
+        var winner = TestBooks.Book("B", works: [work], tags: [tagA]);
+        var loser = TestBooks.Book("B", works: [work], tags: [tagA, tagB]);
         db.Books.AddRange(winner, loser);
         await db.SaveChangesAsync();
 
@@ -121,22 +158,18 @@ public class BookMergeHandlerTests
         using var db = _factory.CreateDbContext();
         var author = Author.Create("A");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        var winner = new Book
-        {
-            Title = "B",
-            Works = [work],
-            Rating = 0,                 // unrated → will take loser's 4
-            Notes = null,               // empty → will take loser's notes
-            DefaultCoverArtUrl = null,  // empty → will take loser's cover
-        };
-        var loser = new Book
-        {
-            Title = "B",
-            Works = [work],
-            Rating = 4,
-            Notes = "Good read",
-            DefaultCoverArtUrl = "https://example.com/cover.jpg",
-        };
+        var winner = TestBooks.Book(
+            "B",
+            works: [work],
+            rating: 0,                  // unrated → will take loser's 4
+            notes: null,                // empty → will take loser's notes
+            coverUrl: null);            // empty → will take loser's cover
+        var loser = TestBooks.Book(
+            "B",
+            works: [work],
+            rating: 4,
+            notes: "Good read",
+            coverUrl: "https://example.com/cover.jpg");
         db.Books.AddRange(winner, loser);
         await db.SaveChangesAsync();
 
@@ -162,13 +195,11 @@ public class BookMergeHandlerTests
         var author = Author.Create("A");
         var series = new Series { Name = "Dune Chronicles", Type = SeriesType.Series };
         db.Series.Add(series);
-        var winner = new Book { Title = "Dune", Works = [new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }] };
-        var loser = new Book
-        {
-            Title = "Dune",
-            Series = series, SeriesOrder = 1,
-            Works = [new Work { Title = "Dune (dup)", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
-        };
+        var winner = TestBooks.Book("Dune", works: [new Work { Title = "Dune", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]);
+        var loser = TestBooks.Book(
+            "Dune",
+            series: series, seriesOrder: 1,
+            works: [new Work { Title = "Dune (dup)", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]);
         db.Books.AddRange(winner, loser);
         await db.SaveChangesAsync();
 
@@ -187,16 +218,12 @@ public class BookMergeHandlerTests
         using var db = _factory.CreateDbContext();
         var author = Author.Create("A");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        var winner = new Book
-        {
-            Title = "B", Works = [work],
-            Rating = 5, Notes = "Winner notes", DefaultCoverArtUrl = "winner.jpg",
-        };
-        var loser = new Book
-        {
-            Title = "B", Works = [work],
-            Rating = 1, Notes = "Loser notes", DefaultCoverArtUrl = "loser.jpg",
-        };
+        var winner = TestBooks.Book(
+            "B", works: [work],
+            rating: 5, notes: "Winner notes", coverUrl: "winner.jpg");
+        var loser = TestBooks.Book(
+            "B", works: [work],
+            rating: 1, notes: "Loser notes", coverUrl: "loser.jpg");
         db.Books.AddRange(winner, loser);
         await db.SaveChangesAsync();
 
@@ -217,8 +244,8 @@ public class BookMergeHandlerTests
         using var db = _factory.CreateDbContext();
         var author = Author.Create("A");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        var winner = new Book { Title = "B", Works = [work], Rating = 0 };
-        var loser = new Book { Title = "B", Works = [work], Rating = 3 };
+        var winner = TestBooks.Book("B", works: [work], rating: 0);
+        var loser = TestBooks.Book("B", works: [work], rating: 3);
         db.Books.AddRange(winner, loser);
         await db.SaveChangesAsync();
 
@@ -234,8 +261,8 @@ public class BookMergeHandlerTests
         using var db = _factory.CreateDbContext();
         var author = Author.Create("A");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        var winner = new Book { Title = "B", Works = [work], Rating = 0 };
-        var loser = new Book { Title = "B", Works = [work], Rating = 0 };
+        var winner = TestBooks.Book("B", works: [work], rating: 0);
+        var loser = TestBooks.Book("B", works: [work], rating: 0);
         db.Books.AddRange(winner, loser);
         await db.SaveChangesAsync();
 
@@ -293,8 +320,8 @@ public class BookMergeHandlerTests
         using var db = _factory.CreateDbContext();
         var author = Author.Create("Shared");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        var winner = new Book { Title = "B", Works = [work] };
-        var loser = new Book { Title = "B", Works = [work] };
+        var winner = TestBooks.Book("B", works: [work]);
+        var loser = TestBooks.Book("B", works: [work]);
         db.Books.AddRange(winner, loser);
         await db.SaveChangesAsync();
         return (winner.Id, loser.Id);

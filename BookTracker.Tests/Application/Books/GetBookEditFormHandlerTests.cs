@@ -28,7 +28,7 @@ public class GetBookEditFormHandlerTests
         int bookId;
         using (var db = _factory.CreateDbContext())
         {
-            var book = new Book { Title = "Gone", DeletedAt = DateTime.UtcNow, Works = OneWork() };
+            var book = TestBooks.Book("Gone", deletedAt: DateTime.UtcNow, works: OneWork());
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -43,13 +43,11 @@ public class GetBookEditFormHandlerTests
         int bookId;
         using (var db = _factory.CreateDbContext())
         {
-            var book = new Book
-            {
-                Title = "Mort",
-                Category = BookCategory.NonFiction,
-                DefaultCoverArtUrl = "https://example.com/mort.jpg",
-                Works = OneWork(),
-            };
+            var book = TestBooks.Book(
+                "Mort",
+                category: BookCategory.NonFiction,
+                coverUrl: "https://example.com/mort.jpg",
+                works: OneWork());
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -73,12 +71,10 @@ public class GetBookEditFormHandlerTests
         {
             var series = new Series { Name = "Witcher", Type = SeriesType.Series };
             db.Series.Add(series);
-            var book = new Book
-            {
-                Title = "T",
-                Series = series, SeriesOrder = 4, SeriesOrderDisplay = "4.5",
-                Works = OneWork(),
-            };
+            var book = TestBooks.Book(
+                "T",
+                series: series, seriesOrder: 4, seriesOrderDisplay: "4.5",
+                works: OneWork());
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -101,7 +97,7 @@ public class GetBookEditFormHandlerTests
         int bookId;
         using (var db = _factory.CreateDbContext())
         {
-            var book = new Book { Title = "T", SeriesOrder = 5, Works = OneWork() };
+            var book = TestBooks.Book("T", seriesOrder: 5, works: OneWork());
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;

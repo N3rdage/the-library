@@ -14,18 +14,16 @@ public class CreateSeriesFromSuggestionHandlerTests
 {
     private readonly TestDbContextFactory _factory = new();
 
-    private static Book NewBook(string title, Author author) => new()
-    {
-        Title = title,
-        Works =
+    private static Book NewBook(string title, Author author) => TestBooks.Book(
+        title,
+        works:
         [
             new Work
             {
                 Title = title,
                 WorkAuthors = [new WorkAuthor { Author = author, Order = 0, Role = AuthorRole.Author }],
             },
-        ],
-    };
+        ]);
 
     [Fact]
     public async Task CreateSeriesFromSuggestion_createsSeries_assignsUnseriesedMatches_inOrder()
@@ -36,7 +34,7 @@ public class CreateSeriesFromSuggestionHandlerTests
             var other = new Series { Name = "AIA Other", Type = SeriesType.Series };
             db.Series.Add(other);
             await db.SaveChangesAsync();
-            var b = new Book { Title = "Already Seriesed" };
+            var b = TestBooks.Book("Already Seriesed");
             b.AssignToSeries(other.Id, 4, null);
             db.Books.Add(b);
 

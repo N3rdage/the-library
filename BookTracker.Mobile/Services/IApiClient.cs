@@ -1,4 +1,5 @@
 using BookTracker.Shared.Catalog;
+using BookTracker.Shared.Online;
 using BookTracker.Shared.Wishlist;
 
 namespace BookTracker.Mobile.Services;
@@ -26,4 +27,11 @@ public interface IApiClient
     /// full refresh every time is cheap). Used by the Bookshelf
     /// WishlistPage and by the scan-flag lookup on ScanPage.</summary>
     Task<WishlistSnapshot> GetWishlistSnapshotAsync(CancellationToken ct = default);
+
+    /// <summary>Calls GET /api/online/isbn/{isbn} with the cached bearer
+    /// token: what the providers know about an ISBN the cache does not
+    /// hold, and whether the library owns that work. Returns null when no
+    /// provider knows the ISBN (404) and on any other failure — the Result
+    /// page then keeps its offline answer, so this never throws.</summary>
+    Task<OnlineIsbnLookup?> LookupIsbnOnlineAsync(string isbn, CancellationToken ct = default);
 }

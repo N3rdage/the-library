@@ -153,8 +153,8 @@ public class GetDuplicateReportHandlerTests
         using var db = _factory.CreateDbContext();
         var author = Author.Create("J.R.R. Tolkien");
         var work = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        db.Books.Add(new Book { Title = "Hobbit HB", Works = [work] });
-        db.Books.Add(new Book { Title = "Hobbit PB", Works = [work] });
+        db.Books.Add(TestBooks.Book("Hobbit HB", works: [work]));
+        db.Books.Add(TestBooks.Book("Hobbit PB", works: [work]));
         await db.SaveChangesAsync();
 
         var report = await DetectAsync();
@@ -170,8 +170,8 @@ public class GetDuplicateReportHandlerTests
         using var db = _factory.CreateDbContext();
         var author = Author.Create("J.R.R. Tolkien");
         var work = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        db.Books.Add(new Book { Title = "The Hobbit", Works = [work] });
-        db.Books.Add(new Book { Title = "The Hobbit", Works = [work] });
+        db.Books.Add(TestBooks.Book("The Hobbit", works: [work]));
+        db.Books.Add(TestBooks.Book("The Hobbit", works: [work]));
         await db.SaveChangesAsync();
 
         var report = await DetectAsync();
@@ -188,16 +188,14 @@ public class GetDuplicateReportHandlerTests
         var author = Author.Create("Agatha Christie");
         var work = new Work { Title = "Murder on the Orient Express", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var publisher = new Publisher { Name = "Collins Crime Club" };
-        var book = new Book
-        {
-            Title = "Murder on the Orient Express",
-            Works = [work],
-            Editions =
+        var book = TestBooks.Book(
+            "Murder on the Orient Express",
+            works: [work],
+            editions:
             [
-                new Edition { Isbn = null, Format = BookFormat.Hardcover, Publisher = publisher, DatePrinted = new DateOnly(1934, 1, 1) },
-                new Edition { Isbn = null, Format = BookFormat.Hardcover, Publisher = publisher, DatePrinted = new DateOnly(1934, 1, 1) }
-            ]
-        };
+                TestEditions.Edition(isbn: null, format: BookFormat.Hardcover, publisher: publisher, datePrinted: new DateOnly(1934, 1, 1)),
+                TestEditions.Edition(isbn: null, format: BookFormat.Hardcover, publisher: publisher, datePrinted: new DateOnly(1934, 1, 1))
+            ]);
         db.Books.Add(book);
         await db.SaveChangesAsync();
 
@@ -213,16 +211,14 @@ public class GetDuplicateReportHandlerTests
         var author = Author.Create("Agatha Christie");
         var work = new Work { Title = "Murder on the Orient Express", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var publisher = new Publisher { Name = "Collins Crime Club" };
-        var book = new Book
-        {
-            Title = "Murder on the Orient Express",
-            Works = [work],
-            Editions =
+        var book = TestBooks.Book(
+            "Murder on the Orient Express",
+            works: [work],
+            editions:
             [
-                new Edition { Isbn = null, Format = BookFormat.Hardcover, Publisher = publisher, DatePrinted = new DateOnly(1934, 1, 1) },
-                new Edition { Isbn = null, Format = BookFormat.TradePaperback, Publisher = publisher, DatePrinted = new DateOnly(1934, 1, 1) }
-            ]
-        };
+                TestEditions.Edition(isbn: null, format: BookFormat.Hardcover, publisher: publisher, datePrinted: new DateOnly(1934, 1, 1)),
+                TestEditions.Edition(isbn: null, format: BookFormat.TradePaperback, publisher: publisher, datePrinted: new DateOnly(1934, 1, 1))
+            ]);
         db.Books.Add(book);
         await db.SaveChangesAsync();
 
@@ -247,11 +243,9 @@ public class GetDuplicateReportHandlerTests
         // (Author.Name is unique).
         var existing = db.Authors.FirstOrDefault(a => a.Name == authorName);
         var author = existing ?? Author.Create(authorName);
-        var book = new Book
-        {
-            Title = title,
-            Works = [new Work { Title = title, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]
-        };
+        var book = TestBooks.Book(
+            title,
+            works: [new Work { Title = title, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]);
         db.Books.Add(book);
         await db.SaveChangesAsync();
     }

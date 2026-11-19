@@ -32,18 +32,16 @@ public class GetSeriesDetailHandlerTests
                 ExpectedCount = 7, Description = "Psychohistory",
             };
             var asimov = Author.Create("Isaac Asimov");
-            Book B(string title, int? order, string? display = null) => new()
-            {
-                Title = title, Series = series, SeriesOrder = order, SeriesOrderDisplay = display,
-                Works = [new Work { Title = title, WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }],
-            };
+            Book B(string title, int? order, string? display = null) => TestBooks.Book(
+                title, series: series, seriesOrder: order, seriesOrderDisplay: display,
+                works: [new Work { Title = title, WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]);
             db.Books.AddRange(
                 B("Unnumbered B", null),
                 B("Second Foundation", 3),
                 B("Foundation", 1),
                 B("Unnumbered A", null),
                 B("Foundation and Empire", 2, "2"));
-            db.Books.Add(new Book { Title = "Not in series" });
+            db.Books.Add(TestBooks.Book("Not in series"));
             await db.SaveChangesAsync();
             seriesId = series.Id;
         }
@@ -76,12 +74,11 @@ public class GetSeriesDetailHandlerTests
             var preston = Author.Create("Douglas Preston");
             var child = Author.Create("Lincoln Child");
             var editor = Author.Create("Ed Itor");
-            db.Books.Add(new Book
-            {
-                Title = "Relic",
-                Series = series,
-                SeriesOrder = 1,
-                Works =
+            db.Books.Add(TestBooks.Book(
+                "Relic",
+                series: series,
+                seriesOrder: 1,
+                works:
                 [
                     new Work
                     {
@@ -93,8 +90,7 @@ public class GetSeriesDetailHandlerTests
                             new WorkAuthor { Author = editor, Order = 0, Role = AuthorRole.Editor },
                         ],
                     },
-                ],
-            });
+                ]));
             await db.SaveChangesAsync();
             seriesId = series.Id;
         }
@@ -113,8 +109,8 @@ public class GetSeriesDetailHandlerTests
         {
             var series = new Series { Name = "Discworld", Type = SeriesType.Series };
             db.Books.AddRange(
-                new Book { Title = "Mort", Series = series, SeriesOrder = 4 },
-                new Book { Title = "Gone", Series = series, SeriesOrder = 5, DeletedAt = DateTime.UtcNow });
+                TestBooks.Book("Mort", series: series, seriesOrder: 4),
+                TestBooks.Book("Gone", series: series, seriesOrder: 5, deletedAt: DateTime.UtcNow));
             await db.SaveChangesAsync();
             seriesId = series.Id;
         }

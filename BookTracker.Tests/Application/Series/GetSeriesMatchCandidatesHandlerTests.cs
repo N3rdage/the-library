@@ -68,9 +68,9 @@ public class GetSeriesMatchCandidatesHandlerTests
             var author = Author.Create("Some Author");
             var series = new Series { Name = "Existing Series", Type = SeriesType.Series };
             db.Books.AddRange(
-                new Book { Title = "Book A", Works = [new Work { Title = "Book A", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }] },
-                new Book { Title = "Book B", Works = [new Work { Title = "Book B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }] },
-                new Book { Title = "Book C", Series = series, SeriesOrder = 1, Works = [new Work { Title = "Book C", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }] });
+                TestBooks.Book("Book A", works: [new Work { Title = "Book A", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]),
+                TestBooks.Book("Book B", works: [new Work { Title = "Book B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]),
+                TestBooks.Book("Book C", series: series, seriesOrder: 1, works: [new Work { Title = "Book C", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]));
             await db.SaveChangesAsync();
         }
 
@@ -90,10 +90,9 @@ public class GetSeriesMatchCandidatesHandlerTests
         {
             var translator = Author.Create("Ann Translator");
             var lead = Author.Create("Lead Author");
-            db.Books.Add(new Book
-            {
-                Title = "Translated",
-                Works =
+            db.Books.Add(TestBooks.Book(
+                "Translated",
+                works:
                 [
                     new Work
                     {
@@ -104,8 +103,7 @@ public class GetSeriesMatchCandidatesHandlerTests
                             new WorkAuthor { Author = translator, Order = 0, Role = AuthorRole.Translator },
                         ],
                     },
-                ],
-            });
+                ]));
             await db.SaveChangesAsync();
         }
 

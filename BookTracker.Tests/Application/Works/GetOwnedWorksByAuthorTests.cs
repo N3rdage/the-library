@@ -20,11 +20,9 @@ public class GetOwnedWorksByAuthorTests
         // Author.Name is unique, so a second book by the same author reuses the row.
         var authorRow = await db.Authors.SingleOrDefaultAsync(a => a.Name == author)
             ?? Author.Create(author);
-        var book = new Book
-        {
-            Title = title,
-            Editions = [new Edition { Copies = [new Copy { Condition = BookCondition.Good }] }],
-        };
+        var book = TestBooks.Book(
+            title,
+            editions: [TestEditions.Edition(copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
         book.AttachWork(new Work
         {
             Title = title,

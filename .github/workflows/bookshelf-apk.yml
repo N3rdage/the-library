@@ -63,10 +63,10 @@ name: Bookshelf APK (on demand)
 #     workflow file and build scripts are unreviewed code;
 #   - the keystore and the three AAD values are ENVIRONMENT secrets (same names),
 #     not repository secrets, so no other workflow or branch can read them;
-#   - Azure sign-in uses a separate identity, `booktracker-apk-upload`
+#   - Azure sign-in uses a separate upload-only identity
 #     (infra/setup-bookshelf-apk-identity.ps1), whose only federated credential is
 #     this environment and whose only role is Storage Blob Data Contributor on the
-#     `bookshelf-builds` container. It is not booktracker-ci and cannot touch
+#     `bookshelf-builds` container. It is not the deploy identity and cannot touch
 #     anything else in the resource group.
 # The upload identity's client id and the storage account's name are read from ENVIRONMENT
 # secrets BOOKSHELF_APK_CLIENT_ID and BOOKSHELF_STORAGE_ACCOUNT when they exist, so the public
@@ -225,7 +225,7 @@ jobs:
           ls -l "$FINAL"
 
       - name: Azure login (OIDC)
-        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ secrets.BOOKSHELF_APK_CLIENT_ID || vars.BOOKSHELF_APK_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}

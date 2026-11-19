@@ -79,11 +79,9 @@ public class PublisherAdminCommandsTests
         {
             var p = new Publisher { Name = "Tor" };
             db.Publishers.Add(p);
-            db.Books.Add(new Book
-            {
-                Title = "Foo",
-                Editions = [new Edition { Publisher = p, Format = BookFormat.Hardcover }]
-            });
+            db.Books.Add(TestBooks.Book(
+                "Foo",
+                editions: [TestEditions.Edition(publisher: p, format: BookFormat.Hardcover)]));
             await db.SaveChangesAsync();
             publisherId = p.Id;
         }
@@ -105,15 +103,13 @@ public class PublisherAdminCommandsTests
             var source = new Publisher { Name = "Tor Books" };
             var target = new Publisher { Name = "Tor" };
             db.Publishers.AddRange(source, target);
-            db.Books.Add(new Book
-            {
-                Title = "Foo",
-                Editions =
+            db.Books.Add(TestBooks.Book(
+                "Foo",
+                editions:
                 [
-                    new Edition { Publisher = source, Format = BookFormat.Hardcover },
-                    new Edition { Publisher = source, Format = BookFormat.TradePaperback }
-                ]
-            });
+                    TestEditions.Edition(publisher: source, format: BookFormat.Hardcover),
+                    TestEditions.Edition(publisher: source, format: BookFormat.TradePaperback)
+                ]));
             await db.SaveChangesAsync();
             sourceId = source.Id;
             targetId = target.Id;
@@ -136,11 +132,9 @@ public class PublisherAdminCommandsTests
         {
             var p = new Publisher { Name = "Tor" };
             db.Publishers.Add(p);
-            db.Books.Add(new Book
-            {
-                Title = "Foo",
-                Editions = [new Edition { Publisher = p, Format = BookFormat.Hardcover }]
-            });
+            db.Books.Add(TestBooks.Book(
+                "Foo",
+                editions: [TestEditions.Edition(publisher: p, format: BookFormat.Hardcover)]));
             await db.SaveChangesAsync();
             publisherId = p.Id;
         }

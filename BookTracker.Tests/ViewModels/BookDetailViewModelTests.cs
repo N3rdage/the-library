@@ -52,13 +52,12 @@ public class BookDetailViewModelTests
         {
             var author = Author.Create("Ursula K. Le Guin");
             var genre = new Genre { Name = "Fantasy" };
-            var book = new Book
-            {
-                Title = "A Wizard of Earthsea",
-                Status = BookStatus.Read,
-                Rating = 5,
-                Notes = "Gorgeous prose.",
-                Works =
+            var book = TestBooks.Book(
+                "A Wizard of Earthsea",
+                status: BookStatus.Read,
+                rating: 5,
+                notes: "Gorgeous prose.",
+                works:
                 [
                     new Work
                     {
@@ -66,8 +65,7 @@ public class BookDetailViewModelTests
                         WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
                         Genres = [genre],
                     }
-                ],
-            };
+                ]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -99,7 +97,7 @@ public class BookDetailViewModelTests
             // Series membership is a per-Book concept — the compendium sits in the
             // collection as one installment; its Works carry no series of their own.
             var series = new Series { Name = "Shakespeare's Plays", Type = SeriesType.Collection };
-            var book = new Book { Title = "Complete Works", Series = series };
+            var book = TestBooks.Book("Complete Works", series: series);
             // Capture order deliberately differs from alphabetical (Hamlet would be
             // first if sorted by title) — the read must preserve capture order.
             // AttachWork assigns the per-book Order 0,1,2.
@@ -130,30 +128,24 @@ public class BookDetailViewModelTests
         using (var db = factory.CreateDbContext())
         {
             var author = Author.Create("Terry Pratchett");
-            var book = new Book
-            {
-                Title = "Mort",
-                Works = [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
-                Editions =
+            var book = TestBooks.Book(
+                "Mort",
+                works: [new Work { Title = "Mort", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+                editions:
                 [
-                    new Edition
-                    {
-                        Isbn = "9780552131063",
-                        Format = BookFormat.MassMarketPaperback,
-                        Copies =
+                    TestEditions.Edition(
+                        isbn: "9780552131063",
+                        format: BookFormat.MassMarketPaperback,
+                        copies:
                         [
-                            new Copy { Condition = BookCondition.Good },
-                            new Copy { Condition = BookCondition.Fair },
-                        ],
-                    },
-                    new Edition
-                    {
-                        Isbn = "9780061020681",
-                        Format = BookFormat.Hardcover,
-                        Copies = [new Copy { Condition = BookCondition.Fine }],
-                    },
-                ],
-            };
+                            TestEditions.Copy(condition: BookCondition.Good),
+                            TestEditions.Copy(condition: BookCondition.Fair),
+                        ]),
+                    TestEditions.Edition(
+                        isbn: "9780061020681",
+                        format: BookFormat.Hardcover,
+                        copies: [TestEditions.Copy(condition: BookCondition.Fine)]),
+                ]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -290,11 +282,9 @@ public class BookDetailViewModelTests
         using (var db = factory.CreateDbContext())
         {
             db.Tags.Add(new Tag { Name = "follow-up" }); // pre-existing tag
-            var book = new Book
-            {
-                Title = "T",
-                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
-            };
+            var book = TestBooks.Book(
+                "T",
+                works: [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -321,11 +311,9 @@ public class BookDetailViewModelTests
         using (var db = factory.CreateDbContext())
         {
             db.Tags.Add(new Tag { Name = "Sci-Fi" }); // legacy mixed-case row
-            var book = new Book
-            {
-                Title = "T",
-                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
-            };
+            var book = TestBooks.Book(
+                "T",
+                works: [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -355,12 +343,10 @@ public class BookDetailViewModelTests
         using (var db = factory.CreateDbContext())
         {
             var tag = new Tag { Name = "gift" };
-            var book = new Book
-            {
-                Title = "T",
-                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
-                Tags = [tag],
-            };
+            var book = TestBooks.Book(
+                "T",
+                works: [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
+                tags: [tag]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -383,12 +369,10 @@ public class BookDetailViewModelTests
         using (var db = factory.CreateDbContext())
         {
             var tag = new Tag { Name = "gift" };
-            var book = new Book
-            {
-                Title = "T",
-                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
-                Tags = [tag],
-            };
+            var book = TestBooks.Book(
+                "T",
+                works: [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
+                tags: [tag]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -416,20 +400,16 @@ public class BookDetailViewModelTests
         int editionId;
         using (var db = factory.CreateDbContext())
         {
-            var edition = new Edition
-            {
-                Isbn = "x",
-                Copies = [
-                    new Copy { Condition = BookCondition.Good },
-                    new Copy { Condition = BookCondition.Fair },
-                ],
-            };
-            var book = new Book
-            {
-                Title = "B",
-                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
-                Editions = [edition],
-            };
+            var edition = TestEditions.Edition(
+                isbn: "x",
+                copies: [
+                    TestEditions.Copy(condition: BookCondition.Good),
+                    TestEditions.Copy(condition: BookCondition.Fair),
+                ]);
+            var book = TestBooks.Book(
+                "B",
+                works: [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
+                editions: [edition]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -455,13 +435,11 @@ public class BookDetailViewModelTests
         int editionId;
         using (var db = factory.CreateDbContext())
         {
-            var edition = new Edition { Isbn = "x", Copies = [new Copy { Condition = BookCondition.Good }] };
-            var book = new Book
-            {
-                Title = "B",
-                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
-                Editions = [edition],
-            };
+            var edition = TestEditions.Edition(isbn: "x", copies: [TestEditions.Copy(condition: BookCondition.Good)]);
+            var book = TestBooks.Book(
+                "B",
+                works: [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
+                editions: [edition]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -488,12 +466,10 @@ public class BookDetailViewModelTests
             var assigned = new Tag { Name = "signed" };
             db.Tags.Add(new Tag { Name = "follow-up" });
             db.Tags.Add(new Tag { Name = "gift" });
-            var book = new Book
-            {
-                Title = "T",
-                Works = [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
-                Tags = [assigned],
-            };
+            var book = TestBooks.Book(
+                "T",
+                works: [new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
+                tags: [assigned]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -515,14 +491,12 @@ public class BookDetailViewModelTests
         string? notes = null)
     {
         using var db = factory.CreateDbContext();
-        var book = new Book
-        {
-            Title = "Seed",
-            Status = status,
-            Rating = rating,
-            Notes = notes,
-            Works = [new Work { Title = "Seed", WorkAuthors = [new WorkAuthor { Author = Author.Create("Seed Author"), Order = 0 }] }],
-        };
+        var book = TestBooks.Book(
+            "Seed",
+            status: status,
+            rating: rating,
+            notes: notes,
+            works: [new Work { Title = "Seed", WorkAuthors = [new WorkAuthor { Author = Author.Create("Seed Author"), Order = 0 }] }]);
         db.Books.Add(book);
         await db.SaveChangesAsync();
         return book.Id;
@@ -537,17 +511,15 @@ public class BookDetailViewModelTests
         using (var db = factory.CreateDbContext())
         {
             var author = Author.Create("Author");
-            var book = new Book
-            {
-                Title = "Tagged",
-                Works = [new Work { Title = "Tagged", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
-                Tags =
+            var book = TestBooks.Book(
+                "Tagged",
+                works: [new Work { Title = "Tagged", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+                tags:
                 [
                     new Tag { Name = "signed" },
                     new Tag { Name = "follow-up" },
                     new Tag { Name = "gift" },
-                ],
-            };
+                ]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -568,12 +540,10 @@ public class BookDetailViewModelTests
         using (var db = factory.CreateDbContext())
         {
             var author = Author.Create("A");
-            var book = new Book
-            {
-                Title = "B",
-                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
-                Editions = [new Edition { Isbn = "1", Format = BookFormat.TradePaperback, Copies = [new Copy { Condition = BookCondition.Good }] }],
-            };
+            var book = TestBooks.Book(
+                "B",
+                works: [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+                editions: [TestEditions.Edition(isbn: "1", format: BookFormat.TradePaperback, copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -619,12 +589,10 @@ public class BookDetailViewModelTests
         using (var db = factory.CreateDbContext())
         {
             var author = Author.Create("A");
-            var book = new Book
-            {
-                Title = "B",
-                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
-                Editions = [new Edition { Format = BookFormat.TradePaperback, Copies = [new Copy { Condition = BookCondition.Good }] }],
-            };
+            var book = TestBooks.Book(
+                "B",
+                works: [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+                editions: [TestEditions.Edition(format: BookFormat.TradePaperback, copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -657,12 +625,10 @@ public class BookDetailViewModelTests
         using (var db = factory.CreateDbContext())
         {
             var author = Author.Create("A");
-            var book = new Book
-            {
-                Title = "B",
-                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
-                Editions = [new Edition { Format = BookFormat.TradePaperback, Copies = [new Copy { Condition = BookCondition.Good }] }],
-            };
+            var book = TestBooks.Book(
+                "B",
+                works: [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+                editions: [TestEditions.Edition(format: BookFormat.TradePaperback, copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -706,8 +672,8 @@ public class BookDetailViewModelTests
                 Title = "The Dunwich Horror",
                 WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
             };
-            db.Books.Add(new Book { Title = "Anthology A", Works = [cthulhu] });
-            db.Books.Add(new Book { Title = "Anthology B", Works = [dunwich] });
+            db.Books.Add(TestBooks.Book("Anthology A", works: [cthulhu]));
+            db.Books.Add(TestBooks.Book("Anthology B", works: [dunwich]));
             await db.SaveChangesAsync();
             bookId = db.Books.Single(b => b.Title == "Anthology A").Id;
         }
@@ -744,8 +710,8 @@ public class BookDetailViewModelTests
                 Title = "The Dunwich Horror",
                 WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
             };
-            db.Books.Add(new Book { Title = "Anthology A", Works = [cthulhu] });
-            db.Books.Add(new Book { Title = "Anthology B", Works = [dunwich] });
+            db.Books.Add(TestBooks.Book("Anthology A", works: [cthulhu]));
+            db.Books.Add(TestBooks.Book("Anthology B", works: [dunwich]));
             await db.SaveChangesAsync();
             bookId = db.Books.Single(b => b.Title == "Anthology A").Id;
             dunwichId = dunwich.Id;
@@ -780,15 +746,13 @@ public class BookDetailViewModelTests
         {
             var author = Author.Create("Existing Author");
             var fantasy = new Genre { Name = "Fantasy" };
-            db.Books.Add(new Book
-            {
-                Title = "Compendium",
-                Works = [new Work
+            db.Books.Add(TestBooks.Book(
+                "Compendium",
+                works: [new Work
                 {
                     Title = "First story",
                     WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
-                }]
-            });
+                }]));
             db.Genres.Add(fantasy);
             await db.SaveChangesAsync();
             bookId = db.Books.Single().Id;
@@ -834,11 +798,9 @@ public class BookDetailViewModelTests
         using (var db = factory.CreateDbContext())
         {
             var author = Author.Create("Author");
-            db.Books.Add(new Book
-            {
-                Title = "Book",
-                Works = [new Work { Title = "Work", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]
-            });
+            db.Books.Add(TestBooks.Book(
+                "Book",
+                works: [new Work { Title = "Work", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]));
             await db.SaveChangesAsync();
             bookId = db.Books.Single().Id;
         }
@@ -868,11 +830,9 @@ public class BookDetailViewModelTests
         using (var db = factory.CreateDbContext())
         {
             var author = Author.Create("Author");
-            db.Books.Add(new Book
-            {
-                Title = "Anthology",
-                Works = [new Work { Title = "Original", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]
-            });
+            db.Books.Add(TestBooks.Book(
+                "Anthology",
+                works: [new Work { Title = "Original", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]));
             await db.SaveChangesAsync();
             bookId = db.Books.Single().Id;
         }
@@ -911,11 +871,9 @@ public class BookDetailViewModelTests
         using (var db = factory.CreateDbContext())
         {
             var author = Author.Create("Stephen King");
-            db.Books.Add(new Book
-            {
-                Title = "Different Seasons",
-                Works = [new Work { Title = "Different Seasons", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
-            });
+            db.Books.Add(TestBooks.Book(
+                "Different Seasons",
+                works: [new Work { Title = "Different Seasons", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]));
             await db.SaveChangesAsync();
             bookId = db.Books.Single().Id;
         }
@@ -952,11 +910,9 @@ public class BookDetailViewModelTests
         using (var db = factory.CreateDbContext())
         {
             var seed = Author.Create("Seed");
-            db.Books.Add(new Book
-            {
-                Title = "Christie Mysteries",
-                Works = [new Work { Title = "Seed Work", WorkAuthors = [new WorkAuthor { Author = seed, Order = 0 }] }],
-            });
+            db.Books.Add(TestBooks.Book(
+                "Christie Mysteries",
+                works: [new Work { Title = "Seed Work", WorkAuthors = [new WorkAuthor { Author = seed, Order = 0 }] }]));
             await db.SaveChangesAsync();
             bookId = db.Books.Single().Id;
         }
@@ -1004,12 +960,10 @@ public class BookDetailViewModelTests
                 Title = "Apt Pupil",
                 WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }],
             };
-            var sourceBook = new Book { Title = "Different Seasons", Works = [existing] };
-            var targetBook = new Book
-            {
-                Title = "Four Past Midnight",
-                Works = [new Work { Title = "Four Past Midnight", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }],
-            };
+            var sourceBook = TestBooks.Book("Different Seasons", works: [existing]);
+            var targetBook = TestBooks.Book(
+                "Four Past Midnight",
+                works: [new Work { Title = "Four Past Midnight", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }]);
             db.Books.AddRange(sourceBook, targetBook);
             await db.SaveChangesAsync();
             targetBookId = targetBook.Id;
@@ -1048,11 +1002,9 @@ public class BookDetailViewModelTests
         using (var db = factory.CreateDbContext())
         {
             var seed = Author.Create("Seed");
-            db.Books.Add(new Book
-            {
-                Title = "Some Compendium",
-                Works = [new Work { Title = "Seed", WorkAuthors = [new WorkAuthor { Author = seed, Order = 0 }] }],
-            });
+            db.Books.Add(TestBooks.Book(
+                "Some Compendium",
+                works: [new Work { Title = "Seed", WorkAuthors = [new WorkAuthor { Author = seed, Order = 0 }] }]));
             await db.SaveChangesAsync();
             bookId = db.Books.Single().Id;
         }
@@ -1082,11 +1034,9 @@ public class BookDetailViewModelTests
         using (var db = factory.CreateDbContext())
         {
             var seed = Author.Create("Seed");
-            db.Books.Add(new Book
-            {
-                Title = "X",
-                Works = [new Work { Title = "Seed", WorkAuthors = [new WorkAuthor { Author = seed, Order = 0 }] }],
-            });
+            db.Books.Add(TestBooks.Book(
+                "X",
+                works: [new Work { Title = "Seed", WorkAuthors = [new WorkAuthor { Author = seed, Order = 0 }] }]));
             await db.SaveChangesAsync();
             bookId = db.Books.Single().Id;
         }
@@ -1122,11 +1072,9 @@ public class BookDetailViewModelTests
                 Title = "Already On Book",
                 WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }],
             };
-            db.Books.Add(new Book
-            {
-                Title = "Test Compendium",
-                Works = [existing],
-            });
+            db.Books.Add(TestBooks.Book(
+                "Test Compendium",
+                works: [existing]));
             await db.SaveChangesAsync();
             bookId = db.Books.Single().Id;
             existingWorkId = existing.Id;
@@ -1169,8 +1117,8 @@ public class BookDetailViewModelTests
                 Title = "Anchor",
                 WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
             };
-            var current = new Book { Title = "Compendium A", Works = [keeper, shared] };
-            var other = new Book { Title = "Compendium B", Works = [shared] };
+            var current = TestBooks.Book("Compendium A", works: [keeper, shared]);
+            var other = TestBooks.Book("Compendium B", works: [shared]);
             db.Books.AddRange(current, other);
             await db.SaveChangesAsync();
             currentBookId = current.Id;
@@ -1206,7 +1154,7 @@ public class BookDetailViewModelTests
             var author = Author.Create("Author");
             var keeper = new Work { Title = "Anchor", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
             var orphan = new Work { Title = "Outlier", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-            db.Books.Add(new Book { Title = "Solo", Works = [keeper, orphan] });
+            db.Books.Add(TestBooks.Book("Solo", works: [keeper, orphan]));
             await db.SaveChangesAsync();
             bookId = db.Books.Single().Id;
             keeperWorkId = keeper.Id;
@@ -1238,19 +1186,15 @@ public class BookDetailViewModelTests
         using (var db = factory.CreateDbContext())
         {
             var author = Author.Create("Author");
-            db.Books.Add(new Book
-            {
-                Title = "Doomed",
-                Works = [new Work { Title = "Work", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
-                Editions =
+            db.Books.Add(TestBooks.Book(
+                "Doomed",
+                works: [new Work { Title = "Work", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+                editions:
                 [
-                    new Edition
-                    {
-                        Isbn = "9780000000001",
-                        Copies = [new Copy { Condition = BookCondition.Good }, new Copy { Condition = BookCondition.AsNew }],
-                    }
-                ]
-            });
+                    TestEditions.Edition(
+                        isbn: "9780000000001",
+                        copies: [TestEditions.Copy(condition: BookCondition.Good), TestEditions.Copy(condition: BookCondition.AsNew)])
+                ]));
             await db.SaveChangesAsync();
             bookId = db.Books.Single().Id;
         }
@@ -1290,7 +1234,7 @@ public class BookDetailViewModelTests
                 Title = "The Call of Cthulhu",
                 WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
             };
-            db.Books.Add(new Book { Title = "Anthology", Works = [work] });
+            db.Books.Add(TestBooks.Book("Anthology", works: [work]));
             await db.SaveChangesAsync();
             bookId = db.Books.Single().Id;
             workId = work.Id;

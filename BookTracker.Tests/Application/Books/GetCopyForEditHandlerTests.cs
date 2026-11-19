@@ -25,19 +25,15 @@ public class GetCopyForEditHandlerTests
         int copyId, editionId;
         using (var db = _factory.CreateDbContext())
         {
-            var copy = new Copy
-            {
-                Condition = BookCondition.VeryGood,
-                DateAcquired = new DateTime(2024, 3, 15),
-                Notes = "From a charity shop",
-            };
-            var edition = new Edition { Isbn = "x", Copies = [copy] };
-            db.Books.Add(new Book
-            {
-                Title = "B",
-                Works = [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
-                Editions = [edition],
-            });
+            var copy = TestEditions.Copy(
+                condition: BookCondition.VeryGood,
+                dateAcquired: new DateTime(2024, 3, 15),
+                notes: "From a charity shop");
+            var edition = TestEditions.Edition(isbn: "x", copies: [copy]);
+            db.Books.Add(TestBooks.Book(
+                "B",
+                works: [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
+                editions: [edition]));
             await db.SaveChangesAsync();
             copyId = copy.Id;
             editionId = edition.Id;

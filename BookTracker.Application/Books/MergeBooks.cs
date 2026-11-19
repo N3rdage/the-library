@@ -67,19 +67,23 @@ public sealed class MergeBooksHandler(IDbContextFactory<BookTrackerDbContext> db
 
         if (string.IsNullOrWhiteSpace(winner.Notes) && !string.IsNullOrWhiteSpace(loser.Notes))
         {
-            winner.Notes = loser.Notes;
+            winner.UpdateNotes(loser.Notes);
             fieldsAutoFilled++;
         }
 
         if (string.IsNullOrWhiteSpace(winner.DefaultCoverArtUrl) && !string.IsNullOrWhiteSpace(loser.DefaultCoverArtUrl))
         {
-            winner.DefaultCoverArtUrl = loser.DefaultCoverArtUrl;
+            winner.SetCover(loser.DefaultCoverArtUrl);
             fieldsAutoFilled++;
         }
 
         if (winner.Rating == 0 && loser.Rating > 0)
         {
-            winner.Rating = loser.Rating;
+            // Rate rejects values outside 0–5. A stored rating is always in range
+            // (Rate and MarkRead guard every post-creation write; the Add form
+            // validates the rating Book.Create stores), so the guard cannot fire
+            // on a loaded loser.
+            winner.Rate(loser.Rating);
             fieldsAutoFilled++;
         }
 
@@ -87,11 +91,9 @@ public sealed class MergeBooksHandler(IDbContextFactory<BookTrackerDbContext> db
         // Pre-move it rode along on the loser's Works that get unioned below;
         // now it must be carried explicitly, else merging a series-less winner
         // with a series-bearing loser silently drops the book out of its series.
-        if (winner.SeriesId is null && loser.SeriesId is not null)
+        if (winner.SeriesId is null && loser.SeriesId is int loserSeriesId)
         {
-            winner.SeriesId = loser.SeriesId;
-            winner.SeriesOrder = loser.SeriesOrder;
-            winner.SeriesOrderDisplay = loser.SeriesOrderDisplay;
+            winner.AssignToSeries(loserSeriesId, loser.SeriesOrder, loser.SeriesOrderDisplay);
             fieldsAutoFilled++;
         }
 
@@ -137,9 +139,10 @@ public sealed class MergeBooksHandler(IDbContextFactory<BookTrackerDbContext> db
         // Soft-delete the loser: the row is kept as a tombstone for the
         // catalog snapshot's deletedIds[]. The merge has already moved
         // Editions to the winner and cleared Works/Tags on the loser, so
-        // the husk row owns no aggregate. The global HasQueryFilter
+        // SoftDelete's own Editions/Tags clear finds both collections empty
+        // and the husk row owns no aggregate. The global HasQueryFilter
         // hides the loser from all subsequent queries.
-        loser.DeletedAt = DateTime.UtcNow;
+        loser.SoftDelete();
 
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);

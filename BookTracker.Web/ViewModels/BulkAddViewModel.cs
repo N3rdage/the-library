@@ -14,6 +14,7 @@ namespace BookTracker.Web.ViewModels;
 public class BulkAddViewModel(
     IBookLookupService lookup,
     SeriesMatchService seriesMatch,
+    AIProviderFactory providerFactory,
     ILogger<BulkAddViewModel> logger,
     IDispatcher dispatcher)
 {
@@ -22,6 +23,14 @@ public class BulkAddViewModel(
     /// Wire this to <c>() => InvokeAsync(StateHasChanged)</c> in the component.
     /// </summary>
     public Func<Task>? OnStateChanged { get; set; }
+
+    /// <summary>
+    /// The page's "Ask AI for genres" switch. Off by default and per circuit,
+    /// never persisted. With it on, a row whose rule-based genre match finds
+    /// nothing or only top-level genres asks the active provider as part of
+    /// its lookup; with it off the lookup makes no AI call.
+    /// </summary>
+    public bool AskAiForGenres { get; set; }
 
     public string IsbnInput { get; set; } = "";
     public List<DiscoveryRow> Rows { get; } = [];
@@ -87,8 +96,12 @@ public class BulkAddViewModel(
                 row.Subtitle = result.Subtitle;
                 row.DatePrinted = result.DatePrinted;
                 row.DatePrintedPrecision = result.DatePrintedPrecision;
-                row.GenreCandidates = result.GenreCandidates.ToList();
                 row.Format = result.Format;
+                // Genres before Found: the grid offers Accept and "Accept all
+                // found" selects on Found, so a row that turned Found first
+                // could be saved with empty genres while the taxonomy query
+                // or the AI call was still pending.
+                row.Genres = await ResolveGenresAsync(row, result.GenreCandidates);
                 row.Status = RowStatus.Found;
 
                 // SeriesMatch is best-effort enrichment — failure here must not
@@ -179,7 +192,7 @@ public class BulkAddViewModel(
 
         await dispatcher.Send(new CreateBook(
             new NewBook(bookTitle, BookCategory.Fiction, BookStatus.Unread, 0, null, row.CoverUrl),
-            new SingleWork(bookTitle, row.Subtitle, null, DatePrecision.Day, authorNames, [], await MatchGenreIdsAsync(row.GenreCandidates)),
+            new SingleWork(bookTitle, row.Subtitle, null, DatePrecision.Day, authorNames, [], row.Genres.Select(g => g.Id).ToList()),
             new NewEdition(
                 row.Isbn,
                 row.Format ?? BookFormat.TradePaperback,
@@ -198,27 +211,61 @@ public class BulkAddViewModel(
             tagNames));
     }
 
-    // Each lookup candidate picks the first genre (in id order) it fuzzy-matches,
-    // plus that genre's parent; each genre is picked once.
-    private async Task<List<int>> MatchGenreIdsAsync(IReadOnlyList<string> candidates)
+    /// <summary>
+    /// Resolves a row's genres once its lookup has returned, so the grid shows
+    /// them before Accept. Each lookup candidate picks the first genre (in id
+    /// order) it fuzzy-matches, plus that genre's parent; each genre is picked
+    /// once. Then, with <see cref="AskAiForGenres"/> on and that match empty
+    /// or top-level only, the active provider's suggestions are added by the
+    /// same rule, keeping only names in the taxonomy and marking them AI-sourced.
+    /// </summary>
+    private async Task<List<RowGenre>> ResolveGenresAsync(DiscoveryRow row, IReadOnlyList<string> candidates)
     {
-        var matched = new List<int>();
-        if (candidates.Count == 0) return matched;
+        var genres = new List<RowGenre>();
+        // No candidates to match and nothing the AI could be asked about (switch
+        // off, or no title): the taxonomy query would feed nothing.
+        if (candidates.Count == 0 && (!AskAiForGenres || string.IsNullOrWhiteSpace(row.Title))) return genres;
 
         var allGenres = (await dispatcher.Query(new GetGenreOptions())).OrderBy(g => g.Id).ToList();
         foreach (var candidate in candidates)
         {
-            var genre = allGenres.FirstOrDefault(g => MudGenrePickerViewModel.FuzzyGenreMatch(candidate, g.Name));
-            if (genre is null || matched.Contains(genre.Id)) continue;
+            AddWithParent(genres, allGenres, allGenres.FirstOrDefault(g => MudGenrePickerViewModel.FuzzyGenreMatch(candidate, g.Name)), fromAi: false);
+        }
 
-            matched.Add(genre.Id);
-            if (genre.ParentGenreId is int parentId && !matched.Contains(parentId)
-                && allGenres.Any(g => g.Id == parentId))
+        // A matched child already places the book precisely; a bare top-level
+        // genre (or none) is where the subject strings ran out and the AI earns
+        // its call. Nothing to classify without a title.
+        var hasChild = genres.Any(g => allGenres.Any(o => o.Id == g.Id && o.ParentGenreId is not null));
+        if (!AskAiForGenres || hasChild || string.IsNullOrWhiteSpace(row.Title)) return genres;
+
+        // Best-effort like the series match: a failing or slow provider leaves
+        // the rule-based genres in place and the row still completes.
+        try
+        {
+            var suggestion = await providerFactory.GetService().SuggestGenresAsync(
+                row.Title, row.Author ?? string.Empty, row.Subtitle, genres.Select(g => g.Name).ToList());
+            foreach (var name in suggestion.SuggestedGenres)
             {
-                matched.Add(parentId);
+                AddWithParent(genres, allGenres, allGenres.FirstOrDefault(g => string.Equals(g.Name, name.Trim(), StringComparison.OrdinalIgnoreCase)), fromAi: true);
             }
         }
-        return matched;
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "AI genre suggestion failed for ISBN {Isbn} — row keeps its rule-based genres", row.Isbn);
+        }
+        return genres;
+    }
+
+    private static void AddWithParent(List<RowGenre> genres, List<GenrePickerOption> allGenres, GenrePickerOption? genre, bool fromAi)
+    {
+        if (genre is null || genres.Any(g => g.Id == genre.Id)) return;
+
+        genres.Add(new RowGenre(genre.Id, genre.Name, fromAi));
+        if (genre.ParentGenreId is int parentId && !genres.Any(g => g.Id == parentId)
+            && allGenres.FirstOrDefault(g => g.Id == parentId) is { } parent)
+        {
+            genres.Add(new RowGenre(parent.Id, parent.Name, fromAi));
+        }
     }
 
     private const string FollowUpTag = "follow-up";
@@ -242,7 +289,10 @@ public class BulkAddViewModel(
         public string? Publisher { get; set; }
         public DateOnly? DatePrinted { get; set; }
         public DatePrecision DatePrintedPrecision { get; set; } = DatePrecision.Day;
-        public List<string> GenreCandidates { get; set; } = [];
+        // Resolved against the taxonomy when the lookup returns (rule-based
+        // first, then the AI's when asked) so the grid shows them before
+        // Accept; the save sends exactly these ids.
+        public List<RowGenre> Genres { get; set; } = [];
         // Null when the lookup couldn't infer a confident format; the save
         // path falls back to TradePaperback so manual override still wins
         // pre-save.
@@ -262,6 +312,11 @@ public class BulkAddViewModel(
         // time; re-parsed into (SeriesOrder, SeriesOrderDisplay) at save.
         public string? AcceptedSeriesOrderLabel { get; set; }
     }
+
+    /// <summary>One genre on a row. <paramref name="FromAi"/> marks a name the
+    /// active provider suggested (or the parent it brought in) rather than one
+    /// the rule-based match found, so the grid can flag it before Accept.</summary>
+    public record RowGenre(int Id, string Name, bool FromAi);
 
     public async Task AcceptSeriesSuggestion(DiscoveryRow row)
     {

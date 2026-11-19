@@ -39,8 +39,8 @@ public static class MauiProgram
         // Offline catalog cache. Singleton because the SQLite
         // connection is per-DB-file and we want one open handle for
         // the lifetime of the app process. Init is idempotent + lazy
-        // — callers (currently MainPage.OnAppearing) call InitAsync
-        // before any other method on first use.
+        // — AppShell.OnAppearing calls InitAsync (through
+        // SyncService.InitAsync) before any other method on first use.
         builder.Services.AddSingleton<ICatalogCache, CatalogCache>();
 
         // Named HttpClient for cover fetches. No BaseAddress — cover

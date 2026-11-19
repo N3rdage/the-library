@@ -97,12 +97,10 @@ public class WishlistViewModelTests
         using (var db = _factory.CreateDbContext())
         {
             var author = Author.Create("Tolkien");
-            var book = new Book
-            {
-                Title = "The Hobbit",
-                Works = [new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
-                Editions = [new Edition { Isbn = "9780261103252", Format = BookFormat.Hardcover }],
-            };
+            var book = TestBooks.Book(
+                "The Hobbit",
+                works: [new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
+                editions: [TestEditions.Edition(isbn: "9780261103252", format: BookFormat.Hardcover)]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -566,14 +564,12 @@ public class WishlistViewModelTests
                     Title = $"Work {display ?? order?.ToString()}",
                     WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
                 };
-                db.Books.Add(new Book
-                {
-                    Title = $"Book {display ?? order?.ToString()}",
-                    Series = series,
-                    SeriesOrder = order,
-                    SeriesOrderDisplay = display,
-                    Works = [work],
-                });
+                db.Books.Add(TestBooks.Book(
+                    $"Book {display ?? order?.ToString()}",
+                    series: series,
+                    seriesOrder: order,
+                    seriesOrderDisplay: display,
+                    works: [work]));
             }
             db.Series.Add(series);
             await db.SaveChangesAsync();
@@ -604,24 +600,20 @@ public class WishlistViewModelTests
             await db.SaveChangesAsync();
             seriesId = witcher.Id;
 
-            db.Books.Add(new Book
-            {
-                Title = "The Last Wish",
-                SeriesId = witcher.Id,
-                SeriesOrder = 1,
-                Works =
+            db.Books.Add(TestBooks.Book(
+                "The Last Wish",
+                seriesId: witcher.Id,
+                seriesOrder: 1,
+                works:
                 [
                     new Work { Title = "The Witcher", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] },
                     new Work { Title = "A Grain of Truth", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] },
-                ],
-            });
-            db.Books.Add(new Book
-            {
-                Title = "Blood of Elves",
-                SeriesId = witcher.Id,
-                SeriesOrder = 3,
-                Works = [new Work { Title = "Blood of Elves", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }],
-            });
+                ]));
+            db.Books.Add(TestBooks.Book(
+                "Blood of Elves",
+                seriesId: witcher.Id,
+                seriesOrder: 3,
+                works: [new Work { Title = "Blood of Elves", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]));
             await db.SaveChangesAsync();
         }
 
@@ -645,17 +637,15 @@ public class WishlistViewModelTests
             db.Series.Add(discworld);
             await db.SaveChangesAsync();
 
-            var book = new Book
-            {
-                Title = "Mort",
-                SeriesId = discworld.Id,
-                SeriesOrder = 4,
-                Works = [new Work
+            var book = TestBooks.Book(
+                "Mort",
+                seriesId: discworld.Id,
+                seriesOrder: 4,
+                works: [new Work
                 {
                     Title = "Mort",
                     WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }],
-                }],
-            };
+                }]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
         }

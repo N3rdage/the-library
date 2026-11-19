@@ -26,13 +26,12 @@ public class GetSeriesBookRowHandlerTests
         using (var db = _factory.CreateDbContext())
         {
             var series = new Series { Name = "Stormlight", Type = SeriesType.Series };
-            var book = new Book
-            {
-                Title = "Edgedancer",
-                Series = series,
-                SeriesOrder = 2,
-                SeriesOrderDisplay = "2.5",
-                Works =
+            var book = TestBooks.Book(
+                "Edgedancer",
+                series: series,
+                seriesOrder: 2,
+                seriesOrderDisplay: "2.5",
+                works:
                 [
                     new Work
                     {
@@ -43,8 +42,7 @@ public class GetSeriesBookRowHandlerTests
                             new WorkAuthor { Author = Author.Create("Ann Translator"), Order = 0, Role = AuthorRole.Translator },
                         ],
                     },
-                ],
-            };
+                ]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -63,10 +61,9 @@ public class GetSeriesBookRowHandlerTests
         {
             var king = Author.Create("Stephen King");
             var straub = Author.Create("Peter Straub");
-            var book = new Book
-            {
-                Title = "Collection",
-                Works =
+            var book = TestBooks.Book(
+                "Collection",
+                works:
                 [
                     new Work { Title = "One", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] },
                     new Work
@@ -78,8 +75,7 @@ public class GetSeriesBookRowHandlerTests
                             new WorkAuthor { Author = straub, Order = 1 },
                         ],
                     },
-                ],
-            };
+                ]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;

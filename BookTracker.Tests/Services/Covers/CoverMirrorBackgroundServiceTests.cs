@@ -55,7 +55,7 @@ public class CoverMirrorBackgroundServiceTests
         {
             await using var db = _factory.CreateDbContext();
             var book = await db.Books.SingleAsync(b => b.Id == bookId);
-            book.DefaultCoverArtUrl = UserUrl;
+            book.SetCover(UserUrl);
             await db.SaveChangesAsync();
         });
 
@@ -99,13 +99,11 @@ public class CoverMirrorBackgroundServiceTests
     private async Task<(int BookId, int EditionId)> SeedAsync(string? editionCoverUrl, string? bookCoverUrl)
     {
         await using var db = _factory.CreateDbContext();
-        var edition = new Edition { Isbn = "9780553293357", CoverUrl = editionCoverUrl };
-        var book = new Book
-        {
-            Title = "Foundation",
-            DefaultCoverArtUrl = bookCoverUrl,
-            Editions = [edition],
-        };
+        var edition = TestEditions.Edition(isbn: "9780553293357", coverUrl: editionCoverUrl);
+        var book = TestBooks.Book(
+            "Foundation",
+            coverUrl: bookCoverUrl,
+            editions: [edition]);
         db.Books.Add(book);
         await db.SaveChangesAsync();
         return (book.Id, edition.Id);

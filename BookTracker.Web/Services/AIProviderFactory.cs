@@ -24,7 +24,10 @@ public class AIProviderFactory(
         _activeProvider = _options.DefaultProvider;
     }
 
-    public IAIAssistantService GetService()
+    /// <summary>The service for the active provider, created on first use and
+    /// after each <see cref="SwitchProvider"/>. Virtual so a ViewModel test can
+    /// stand in a substituted <see cref="IAIAssistantService"/>.</summary>
+    public virtual IAIAssistantService GetService()
     {
         if (_currentService is null || GetProviderForService(_currentService) != _activeProvider)
         {
@@ -43,8 +46,8 @@ public class AIProviderFactory(
     private IAIAssistantService CreateService(AIProvider provider) => provider switch
     {
         AIProvider.Anthropic => new AnthropicAIAssistantService(dispatcher, _options.Anthropic, loggerFactory.CreateLogger<AnthropicAIAssistantService>()),
-        AIProvider.MicrosoftFoundry => new MicrosoftFoundryAIAssistantService(dispatcher, _options.MicrosoftFoundry),
-        AIProvider.AzureOpenAI => new AzureOpenAIAssistantService(dispatcher, _options.AzureOpenAI),
+        AIProvider.MicrosoftFoundry => new MicrosoftFoundryAIAssistantService(dispatcher, _options.MicrosoftFoundry, loggerFactory.CreateLogger<MicrosoftFoundryAIAssistantService>()),
+        AIProvider.AzureOpenAI => new AzureOpenAIAssistantService(dispatcher, _options.AzureOpenAI, loggerFactory.CreateLogger<AzureOpenAIAssistantService>()),
         _ => throw new ArgumentOutOfRangeException(nameof(provider))
     };
 

@@ -12,14 +12,12 @@ public class AiQueryHandlerTests
 {
     private readonly TestDbContextFactory _factory = new();
 
-    private static Book NewBook(string title, Author author, int rating = 0, Series? series = null, int? order = null, params Genre[] genres) => new()
-    {
-        Title = title,
-        Rating = rating,
-        Series = series,
-        SeriesOrder = order,
-        Works = [new Work { Title = title, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Genres = [.. genres] }],
-    };
+    private static Book NewBook(string title, Author author, int rating = 0, Series? series = null, int? order = null, params Genre[] genres) => TestBooks.Book(
+        title,
+        rating: rating,
+        series: series,
+        seriesOrder: order,
+        works: [new Work { Title = title, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Genres = [.. genres] }]);
 
     [Fact]
     public async Task GenreTaxonomy_ListsEveryGenreByName_WithItsParentName()
@@ -54,13 +52,11 @@ public class AiQueryHandlerTests
             var gaiman = Author.Create("Neil Gaiman");
             var pratchett = Author.Create("Terry Pratchett");
             var series = new Series { Name = "Discworld", Type = SeriesType.Series };
-            var omens = new Book
-            {
-                Title = "Good Omens",
-                Works = [new Work { Title = "Good Omens", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }, new WorkAuthor { Author = gaiman, Order = 1 }] }],
-            };
+            var omens = TestBooks.Book(
+                "Good Omens",
+                works: [new Work { Title = "Good Omens", WorkAuthors = [new WorkAuthor { Author = pratchett, Order = 0 }, new WorkAuthor { Author = gaiman, Order = 1 }] }]);
             var deleted = NewBook("Tombstoned", gaiman);
-            deleted.DeletedAt = DateTime.UtcNow;
+            deleted.SoftDelete();
             db.Books.AddRange(
                 NewBook("Stardust", gaiman),
                 omens,
@@ -87,18 +83,16 @@ public class AiQueryHandlerTests
             var author = Author.Create("Ursula K. Le Guin");
             var fantasy = new Genre { Name = "Fantasy" };
             var sf = new Genre { Name = "Science Fiction" };
-            var compendium = new Book
-            {
-                Title = "Collected",
-                Rating = 4,
-                Works =
+            var compendium = TestBooks.Book(
+                "Collected",
+                rating: 4,
+                works:
                 [
                     new Work { Title = "One", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Genres = [fantasy] },
                     new Work { Title = "Two", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Genres = [fantasy, sf] },
-                ],
-            };
+                ]);
             var deleted = NewBook("Tombstoned", author, 5);
-            deleted.DeletedAt = DateTime.UtcNow;
+            deleted.SoftDelete();
             db.Books.AddRange(compendium, NewBook("A Wizard of Earthsea", author, 5, genres: fantasy), deleted);
             await db.SaveChangesAsync();
         }
@@ -123,7 +117,7 @@ public class AiQueryHandlerTests
             var foundation = new Series { Name = "Foundation", Author = "Isaac Asimov", Type = SeriesType.Series, ExpectedCount = 3 };
             db.Series.AddRange(zeta, foundation);
             var interquel = NewBook("Interlude", asimov, 2, foundation, 2);
-            interquel.SeriesOrderDisplay = "2.5";
+            interquel.SetSeriesOrder(2, "2.5");
             db.Books.AddRange(
                 NewBook("Foundation", asimov, 5, foundation, 1),
                 interquel,

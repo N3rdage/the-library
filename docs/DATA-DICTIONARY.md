@@ -284,6 +284,24 @@ Not typically interesting for analysis — included for completeness.
 
 ---
 
+## AiUsage
+
+One row per successful AI call, written by the providers after the answer is in hand. The cost summary on `/assistant` is computed from these rows and the prices in `AI:Prices`, so a price change re-prices the history.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `Id` | int (PK) | |
+| `OccurredAt` | DateTime (UTC, indexed) | When the call completed. The summary splits rows at the start of the current UTC month. |
+| `Provider` | string (≤40, required) | `Anthropic` / `MicrosoftFoundry` / `AzureOpenAI` — the `AIProvider` enum name, stored as text. |
+| `Model` | string (≤100, required) | The model id for Anthropic; the deployment name for Azure OpenAI and Microsoft Foundry. Prices are keyed by this value. |
+| `Operation` | string (≤60, required) | `SuggestGenres` / `SuggestCollections` / `SuggestShoppingList` / `AssessBook` / `ExtractIsbn`. |
+| `InputTokens` | int | As reported by the provider. |
+| `OutputTokens` | int | As reported by the provider. |
+
+No relation to any aggregate; not in the JSON snapshot. A usage row never bumps `Book.UpdatedAt`.
+
+---
+
 ## IgnoredDuplicate
 
 User-dismissed duplicate-candidate pairs so `/duplicates` doesn't keep resurfacing false positives.

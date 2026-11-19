@@ -36,12 +36,12 @@ public class GetBookMergePreviewHandlerTests
         {
             var austen = Author.Create("Jane Austen");
             var dickens = Author.Create("Charles Dickens");
-            var book = new Book { Title = "Two-Author Anthology" };
+            var book = TestBooks.Book("Two-Author Anthology");
             var emma = new Work { Title = "Emma", WorkAuthors = [new WorkAuthor { Author = austen, Order = 0 }] };
             var oliver = new Work { Title = "Oliver Twist", WorkAuthors = [new WorkAuthor { Author = dickens, Order = 0 }] };
             book.AttachWork(emma);    // Order 0 → headline
             book.AttachWork(oliver);  // Order 1
-            var other = new Book { Title = "Other", Works = [new Work { Title = "X", WorkAuthors = [new WorkAuthor { Author = austen, Order = 0 }] }] };
+            var other = TestBooks.Book("Other", works: [new Work { Title = "X", WorkAuthors = [new WorkAuthor { Author = austen, Order = 0 }] }]);
             db.Books.AddRange(book, other);
             await db.SaveChangesAsync();
             bookId = book.Id; otherId = other.Id; firstWorkId = emma.Id; secondWorkId = oliver.Id;
@@ -66,8 +66,8 @@ public class GetBookMergePreviewHandlerTests
         using var db = _factory.CreateDbContext();
         var author = Author.Create("Shared");
         var work = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        var winner = new Book { Title = "B", Works = [work] };
-        var loser = new Book { Title = "B", Works = [work] };
+        var winner = TestBooks.Book("B", works: [work]);
+        var loser = TestBooks.Book("B", works: [work]);
         db.Books.AddRange(winner, loser);
         await db.SaveChangesAsync();
         return (winner.Id, loser.Id);

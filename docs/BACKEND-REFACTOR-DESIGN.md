@@ -167,6 +167,13 @@ public sealed class GetBookDetailHandler(IDbContextFactory<BookTrackerDbContext>
 The target is entities that carry behaviour and have no public setters on invariant-bearing
 fields:
 
+- `Book`'s scalar fields (title, category, status, rating, notes, cover, series membership) are
+  written only through its methods (`Create`, `Rate`, `MarkRead`, `UpdateDetails`, `SetCover`,
+  `AssignToSeries`, `SoftDelete`, …): the setters are private, `UpdatedAt` / `DeletedAt` internal
+  for the interceptor and `SoftDelete`, and the compiler enforces it. `BookTracker.Tests` alone
+  sees the internals (to seed a watermark or a tombstone); `BookTracker.Application` does not.
+  The collections (`Editions`, `Tags`, `Works`, `BookWorks`) keep public setters until the
+  collections slice (E6) encapsulates them.
 - `Book` (root) owns `Editions`; `Edition` owns `Copies`. Exposed as
   `IReadOnlyCollection<>`; mutated only through methods (`AddCopy`, `AddEdition`, …).
 - Invariants live on the aggregate and are unit-testable.
