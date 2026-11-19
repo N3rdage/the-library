@@ -15,7 +15,8 @@ public class WorkAggregateTests
     [Fact]
     public void Create_bornAttachedToFirstBook_withFieldsAndAuthorship()
     {
-        var book = new Book { Id = 1, Title = "B" };
+        var book = TestBooks.Book("B");
+        book.Id = 1;
         var author = Author.Create("Le Guin");
 
         var work = Work.Create(book, "  A Wizard of Earthsea  ", "  ", new DateOnly(1968, 1, 1), DatePrecision.Year, [author]);
