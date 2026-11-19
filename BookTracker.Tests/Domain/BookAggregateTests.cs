@@ -22,9 +22,9 @@ public class BookAggregateTests
     public void AttachWork_appendsWithIncreasingOrder()
     {
         var book = Book.Create("Anthology", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
-        var first = new Work { Title = "First" };
-        var second = new Work { Title = "Second" };
-        var third = new Work { Title = "Third" };
+        var first = TestWorks.Work("First");
+        var second = TestWorks.Work("Second");
+        var third = TestWorks.Work("Third");
 
         Assert.True(book.AttachWork(first));
         Assert.True(book.AttachWork(second));
@@ -40,7 +40,7 @@ public class BookAggregateTests
     public void AttachWork_alreadyAttached_isNoOp()
     {
         var book = Book.Create("Anthology", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
-        var work = new Work { Title = "Only" };
+        var work = TestWorks.Work("Only");
 
         Assert.True(book.AttachWork(work));
         Assert.False(book.AttachWork(work));      // second attach → no-op
@@ -280,7 +280,7 @@ public class BookAggregateTests
     {
         var book = TestBooks.Book(
             "X",
-            works: [new Work { Title = "W" }],
+            works: [TestWorks.Work("W")],
             tags: [new Tag { Name = "t" }],
             editions: [TestEditions.Edition(copies: [TestEditions.Copy()])]);
 
