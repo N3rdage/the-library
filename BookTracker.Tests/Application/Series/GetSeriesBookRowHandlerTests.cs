@@ -33,15 +33,13 @@ public class GetSeriesBookRowHandlerTests
                 seriesOrderDisplay: "2.5",
                 works:
                 [
-                    new Work
-                    {
-                        Title = "Edgedancer",
-                        WorkAuthors =
+                    TestWorks.Work(
+                        "Edgedancer",
+                        authorships:
                         [
-                            new WorkAuthor { Author = Author.Create("Brandon Sanderson"), Order = 0, Role = AuthorRole.Author },
-                            new WorkAuthor { Author = Author.Create("Ann Translator"), Order = 0, Role = AuthorRole.Translator },
-                        ],
-                    },
+                            TestWorks.Authorship(Author.Create("Brandon Sanderson")),
+                            TestWorks.Authorship(Author.Create("Ann Translator"), 0, AuthorRole.Translator),
+                        ]),
                 ]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
@@ -65,16 +63,10 @@ public class GetSeriesBookRowHandlerTests
                 "Collection",
                 works:
                 [
-                    new Work { Title = "One", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] },
-                    new Work
-                    {
-                        Title = "Two",
-                        WorkAuthors =
-                        [
-                            new WorkAuthor { Author = king, Order = 0 },
-                            new WorkAuthor { Author = straub, Order = 1 },
-                        ],
-                    },
+                    TestWorks.Work("One", king),
+                    TestWorks.Work(
+                        "Two",
+                        authorships: [TestWorks.Authorship(king), TestWorks.Authorship(straub, 1)]),
                 ]);
             db.Books.Add(book);
             await db.SaveChangesAsync();

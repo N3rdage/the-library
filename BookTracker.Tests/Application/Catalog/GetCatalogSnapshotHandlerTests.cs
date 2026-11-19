@@ -26,7 +26,7 @@ public class GetCatalogSnapshotHandlerTests
             db.Authors.Add(asimov);
             db.Books.Add(TestBooks.Book(
                 "Foundation",
-                works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]));
+                works: [TestWorks.Work("Foundation", asimov)]));
             await db.SaveChangesAsync();
         }
 
@@ -54,9 +54,9 @@ public class GetCatalogSnapshotHandlerTests
                 "The Funhouse",
                 works:
                 [
-                    new Work { Title = "Asimov story", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] },
-                    new Work { Title = "King story", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] },
-                    new Work { Title = "Bradbury story", WorkAuthors = [new WorkAuthor { Author = bradbury, Order = 0 }] },
+                    TestWorks.Work("Asimov story", asimov),
+                    TestWorks.Work("King story", king),
+                    TestWorks.Work("Bradbury story", bradbury),
                 ]));
             await db.SaveChangesAsync();
         }
@@ -87,8 +87,8 @@ public class GetCatalogSnapshotHandlerTests
             var bachman = TestAuthors.Alias("Richard Bachman", of: king);
             db.Authors.Add(bachman);
             db.Books.AddRange(
-                TestBooks.Book("Carrie", works: [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }]),
-                TestBooks.Book("The Long Walk", works: [new Work { Title = "The Long Walk", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }] }]));
+                TestBooks.Book("Carrie", works: [TestWorks.Work("Carrie", king)]),
+                TestBooks.Book("The Long Walk", works: [TestWorks.Work("The Long Walk", bachman)]));
             await db.SaveChangesAsync();
         }
 
@@ -124,15 +124,13 @@ public class GetCatalogSnapshotHandlerTests
             db.Authors.Add(bachman);
             db.Books.Add(TestBooks.Book(
                 "The Bachman Books",
-                works: [new Work
-                {
-                    Title = "The Bachman Books",
-                    WorkAuthors =
+                works: [TestWorks.Work(
+                    "The Bachman Books",
+                    authorships:
                     [
-                        new WorkAuthor { Author = king, Order = 0 },
-                        new WorkAuthor { Author = bachman, Order = 1 },
-                    ]
-                }]));
+                        TestWorks.Authorship(king),
+                        TestWorks.Authorship(bachman, 1),
+                    ])]));
             await db.SaveChangesAsync();
         }
 
@@ -155,7 +153,7 @@ public class GetCatalogSnapshotHandlerTests
             db.Authors.Add(clarke);
             db.Books.Add(TestBooks.Book(
                 "Rendezvous with Rama",
-                works: [new Work { Title = "Rendezvous with Rama", WorkAuthors = [new WorkAuthor { Author = clarke, Order = 0 }] }],
+                works: [TestWorks.Work("Rendezvous with Rama", clarke)],
                 editions:
                 [
                     TestEditions.Edition(isbn: "9780553287899", format: BookFormat.MassMarketPaperback),
@@ -200,7 +198,7 @@ public class GetCatalogSnapshotHandlerTests
                 "2001: A Space Odyssey",
                 status: BookStatus.Read,
                 rating: 5,
-                works: [new Work { Title = "2001", WorkAuthors = [new WorkAuthor { Author = clarke, Order = 0 }] }]));
+                works: [TestWorks.Work("2001", clarke)]));
             await db.SaveChangesAsync();
         }
 
@@ -233,16 +231,12 @@ public class GetCatalogSnapshotHandlerTests
                 seriesOrder: 1,
                 works:
                 [
-                    new Work
-                    {
-                        Title = "Foundation",
-                        WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }],
-                    },
+                    TestWorks.Work("Foundation", asimov),
                 ]));
             // Standalone book — no series.
             db.Books.Add(TestBooks.Book(
                 "Nightfall",
-                works: [new Work { Title = "Nightfall", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]));
+                works: [TestWorks.Work("Nightfall", asimov)]));
             await db.SaveChangesAsync();
         }
 
@@ -278,11 +272,7 @@ public class GetCatalogSnapshotHandlerTests
                 seriesOrderDisplay: "4.5",
                 works:
                 [
-                    new Work
-                    {
-                        Title = "Edgedancer",
-                        WorkAuthors = [new WorkAuthor { Author = sanderson, Order = 0 }],
-                    },
+                    TestWorks.Work("Edgedancer", sanderson),
                 ]));
             await db.SaveChangesAsync();
         }
@@ -318,9 +308,9 @@ public class GetCatalogSnapshotHandlerTests
                 seriesOrder: 1,
                 works:
                 [
-                    new Work { Title = "The Witcher", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] },
-                    new Work { Title = "A Grain of Truth", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] },
-                    new Work { Title = "The Lesser Evil", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] },
+                    TestWorks.Work("The Witcher", author),
+                    TestWorks.Work("A Grain of Truth", author),
+                    TestWorks.Work("The Lesser Evil", author),
                 ]));
             await db.SaveChangesAsync();
         }
@@ -356,11 +346,7 @@ public class GetCatalogSnapshotHandlerTests
                 "Foundation",
                 seriesId: foundation.Id,
                 seriesOrder: 1,
-                works: [new Work
-                {
-                    Title = "Foundation",
-                    WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }],
-                }]));
+                works: [TestWorks.Work("Foundation", asimov)]));
             await db.SaveChangesAsync();
         }
 
@@ -381,8 +367,8 @@ public class GetCatalogSnapshotHandlerTests
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             db.Books.AddRange(
-                TestBooks.Book("Foundation", works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]),
-                TestBooks.Book("I, Robot", works: [new Work { Title = "I, Robot", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]));
+                TestBooks.Book("Foundation", works: [TestWorks.Work("Foundation", asimov)]),
+                TestBooks.Book("I, Robot", works: [TestWorks.Work("I, Robot", asimov)]));
             await db.SaveChangesAsync();
         }
 
@@ -403,7 +389,7 @@ public class GetCatalogSnapshotHandlerTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
-            db.Books.Add(TestBooks.Book("Foundation", works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]));
+            db.Books.Add(TestBooks.Book("Foundation", works: [TestWorks.Work("Foundation", asimov)]));
             await db.SaveChangesAsync();
         }
 
@@ -424,7 +410,7 @@ public class GetCatalogSnapshotHandlerTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
-            db.Books.Add(TestBooks.Book("Foundation", works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]));
+            db.Books.Add(TestBooks.Book("Foundation", works: [TestWorks.Work("Foundation", asimov)]));
             await db.SaveChangesAsync();
         }
 
@@ -438,7 +424,7 @@ public class GetCatalogSnapshotHandlerTests
         using (var db = _factory.CreateDbContext())
         {
             var asimov = db.Authors.Single();
-            db.Books.Add(TestBooks.Book("I, Robot", works: [new Work { Title = "I, Robot", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]));
+            db.Books.Add(TestBooks.Book("I, Robot", works: [TestWorks.Work("I, Robot", asimov)]));
             await db.SaveChangesAsync();
         }
 
@@ -461,7 +447,7 @@ public class GetCatalogSnapshotHandlerTests
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
             db.Series.Add(new Series { Name = "Foundation", Type = SeriesType.Series, ExpectedCount = 7 });
-            db.Books.Add(TestBooks.Book("Foundation", works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]));
+            db.Books.Add(TestBooks.Book("Foundation", works: [TestWorks.Work("Foundation", asimov)]));
             await db.SaveChangesAsync();
         }
 
@@ -491,7 +477,7 @@ public class GetCatalogSnapshotHandlerTests
             db.Authors.Add(clarke);
             db.Books.Add(TestBooks.Book(
                 "Rendezvous with Rama",
-                works: [new Work { Title = "Rendezvous with Rama", WorkAuthors = [new WorkAuthor { Author = clarke, Order = 0 }] }],
+                works: [TestWorks.Work("Rendezvous with Rama", clarke)],
                 editions:
                 [
                     TestEditions.Edition(isbn: "9780553287899", format: BookFormat.MassMarketPaperback, coverUrl: "https://covers.example/mm.jpg"),
@@ -533,8 +519,8 @@ public class GetCatalogSnapshotHandlerTests
                 "The Funhouse",
                 works:
                 [
-                    new Work { Title = "Asimov story", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] },
-                    new Work { Title = "King story", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] },
+                    TestWorks.Work("Asimov story", asimov),
+                    TestWorks.Work("King story", king),
                 ]));
             await db.SaveChangesAsync();
         }
@@ -556,8 +542,8 @@ public class GetCatalogSnapshotHandlerTests
         {
             var a = Author.Create("A");
             var book = TestBooks.Book("Anthology");
-            var first = new Work { Title = "First captured", WorkAuthors = [new WorkAuthor { Author = a, Order = 0 }] };
-            var second = new Work { Title = "Second captured", WorkAuthors = [new WorkAuthor { Author = a, Order = 0 }] };
+            var first = TestWorks.Work("First captured", a);
+            var second = TestWorks.Work("Second captured", a);
             book.AttachWork(first);   // Order 0, lower WorkId
             book.AttachWork(second);  // Order 1, higher WorkId
             db.Books.Add(book);
@@ -592,11 +578,9 @@ public class GetCatalogSnapshotHandlerTests
                 "Concise Oxford English Dictionary",
                 works:
                 [
-                    new Work
-                    {
-                        Title = "Concise Oxford English Dictionary",
-                        WorkAuthors = [new WorkAuthor { Author = editor, Order = 0, Role = AuthorRole.Editor }]
-                    }
+                    TestWorks.Work(
+                        "Concise Oxford English Dictionary",
+                        authorships: [TestWorks.Authorship(editor, 0, AuthorRole.Editor)])
                 ]));
             await db.SaveChangesAsync();
         }
@@ -624,8 +608,8 @@ public class GetCatalogSnapshotHandlerTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
-            var keeper = TestBooks.Book("Foundation", works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]);
-            var doomed = TestBooks.Book("Doomed", works: [new Work { Title = "Doomed", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]);
+            var keeper = TestBooks.Book("Foundation", works: [TestWorks.Work("Foundation", asimov)]);
+            var doomed = TestBooks.Book("Doomed", works: [TestWorks.Work("Doomed", asimov)]);
             db.Books.AddRange(keeper, doomed);
             await db.SaveChangesAsync();
             bookIdToKeep = keeper.Id;
@@ -656,7 +640,7 @@ public class GetCatalogSnapshotHandlerTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
-            var dead = TestBooks.Book("Doomed", works: [new Work { Title = "Doomed", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]);
+            var dead = TestBooks.Book("Doomed", works: [TestWorks.Work("Doomed", asimov)]);
             db.Books.Add(dead);
             await db.SaveChangesAsync();
             dead.SoftDelete();
@@ -683,8 +667,8 @@ public class GetCatalogSnapshotHandlerTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
-            db.Books.Add(TestBooks.Book("Foundation", works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]));
-            var doomed = TestBooks.Book("Doomed", works: [new Work { Title = "Doomed", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]);
+            db.Books.Add(TestBooks.Book("Foundation", works: [TestWorks.Work("Foundation", asimov)]));
+            var doomed = TestBooks.Book("Doomed", works: [TestWorks.Work("Doomed", asimov)]);
             db.Books.Add(doomed);
             await db.SaveChangesAsync();
             doomedId = doomed.Id;
@@ -729,7 +713,7 @@ public class GetCatalogSnapshotHandlerTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
-            var doomed = TestBooks.Book("Doomed", works: [new Work { Title = "Doomed", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]);
+            var doomed = TestBooks.Book("Doomed", works: [TestWorks.Work("Doomed", asimov)]);
             db.Books.Add(doomed);
             await db.SaveChangesAsync();
             doomedId = doomed.Id;

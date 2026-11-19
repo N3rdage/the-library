@@ -23,15 +23,13 @@ public class SearchLendableBooksHandlerTests
         if (author is not null)
         {
             // An Illustrator listed first by Order must not win over the lead Author.
-            works.Add(new Work
-            {
-                Title = title,
-                WorkAuthors =
+            works.Add(TestWorks.Work(
+                title,
+                authorships:
                 [
-                    new WorkAuthor { Author = Author.Create($"{author} Illustrator"), Order = 0, Role = AuthorRole.Illustrator },
-                    new WorkAuthor { Author = Author.Create(author), Order = 0 },
-                ],
-            });
+                    TestWorks.Authorship(Author.Create($"{author} Illustrator"), 0, AuthorRole.Illustrator),
+                    TestWorks.Authorship(Author.Create(author)),
+                ]));
         }
         var book = TestBooks.Book(title, works: works, editions: editions, deletedAt: deletedAt);
         db.Books.Add(book);

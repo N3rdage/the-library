@@ -34,9 +34,9 @@ public class GetHomeDashboardHandlerTests
             var author1 = Author.Create("Author 1");
             var author2 = Author.Create("Author 2");
             db.Books.AddRange(
-                TestBooks.Book("Book A", works: [new Work { Title = "Book A", WorkAuthors = [new WorkAuthor { Author = author1, Order = 0 }] }]),
-                TestBooks.Book("Book B", works: [new Work { Title = "Book B", WorkAuthors = [new WorkAuthor { Author = author1, Order = 0 }] }]),
-                TestBooks.Book("Book C", works: [new Work { Title = "Book C", WorkAuthors = [new WorkAuthor { Author = author2, Order = 0 }] }])
+                TestBooks.Book("Book A", works: [TestWorks.Work("Book A", author1)]),
+                TestBooks.Book("Book B", works: [TestWorks.Work("Book B", author1)]),
+                TestBooks.Book("Book C", works: [TestWorks.Work("Book C", author2)])
             );
             await db.SaveChangesAsync();
         }
@@ -65,8 +65,8 @@ public class GetHomeDashboardHandlerTests
             var bachman = TestAuthors.Alias("Richard Bachman", of: king);
             db.Authors.Add(bachman);
 
-            db.Books.Add(TestBooks.Book("Carrie", works: [new Work { Title = "Carrie", WorkAuthors = [new WorkAuthor { Author = king, Order = 0 }] }]));
-            db.Books.Add(TestBooks.Book("The Long Walk", works: [new Work { Title = "The Long Walk", WorkAuthors = [new WorkAuthor { Author = bachman, Order = 0 }] }]));
+            db.Books.Add(TestBooks.Book("Carrie", works: [TestWorks.Work("Carrie", king)]));
+            db.Books.Add(TestBooks.Book("The Long Walk", works: [TestWorks.Work("The Long Walk", bachman)]));
             await db.SaveChangesAsync();
         }
 
@@ -89,8 +89,8 @@ public class GetHomeDashboardHandlerTests
         {
             var live = Author.Create("Live Author");
             var ghost = Author.Create("Ghost Author");
-            db.Books.Add(TestBooks.Book("Live Book", works: [new Work { Title = "Live Book", WorkAuthors = [new WorkAuthor { Author = live, Order = 0 }] }]));
-            db.Books.Add(TestBooks.Book("Deleted Book", deletedAt: DateTime.UtcNow, works: [new Work { Title = "Deleted Book", WorkAuthors = [new WorkAuthor { Author = ghost, Order = 0 }] }]));
+            db.Books.Add(TestBooks.Book("Live Book", works: [TestWorks.Work("Live Book", live)]));
+            db.Books.Add(TestBooks.Book("Deleted Book", deletedAt: DateTime.UtcNow, works: [TestWorks.Work("Deleted Book", ghost)]));
             await db.SaveChangesAsync();
         }
 
@@ -113,9 +113,9 @@ public class GetHomeDashboardHandlerTests
             var c = Author.Create("C");
 
             db.Books.AddRange(
-                TestBooks.Book("Book A", works: [new Work { Title = "Book A", WorkAuthors = [new WorkAuthor { Author = a, Order = 0 }], Genres = [fantasy] }]),
-                TestBooks.Book("Book B", works: [new Work { Title = "Book B", WorkAuthors = [new WorkAuthor { Author = b, Order = 0 }], Genres = [fantasy, sciFi] }]),
-                TestBooks.Book("Book C", works: [new Work { Title = "Book C", WorkAuthors = [new WorkAuthor { Author = c, Order = 0 }], Genres = [sciFi] }])
+                TestBooks.Book("Book A", works: [TestWorks.Work("Book A", a, genres: [fantasy])]),
+                TestBooks.Book("Book B", works: [TestWorks.Work("Book B", b, genres: [fantasy, sciFi])]),
+                TestBooks.Book("Book C", works: [TestWorks.Work("Book C", c, genres: [sciFi])])
             );
             await db.SaveChangesAsync();
         }
