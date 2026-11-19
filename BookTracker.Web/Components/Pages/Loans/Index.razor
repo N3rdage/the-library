@@ -1,0 +1,136 @@
+@page "/loans"
+@using BookTracker.Application.Loans
+@inject LoansViewModel VM
+
+<PageTitle>On loan - Bookcase</PageTitle>
+
+@* Books currently lent out, grouped by borrower, with the returned-loan
+   history below. One card-row layout at every width (the Library's mobile
+   card pattern), so the page reads the same on a phone and a desktop. *@
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="py-3">
+
+    <MudText Typo="Typo.h4" Class="mb-3">On loan</MudText>
+
+    @if (!string.IsNullOrEmpty(VM.ErrorMessage))
+    {
+        <MudAlert Severity="Severity.Error"
+                  ShowCloseIcon="true"
+                  CloseIconClicked="@(() => { VM.ErrorMessage = null; StateHasChanged(); })"
+                  Class="mb-3">@VM.ErrorMessage</MudAlert>
+    }
+
+    @if (!VM.Loaded)
+    {
+        <MudStack AlignItems="AlignItems.Center" Class="py-5">
+            <MudProgressCircular Indeterminate="true" />
+        </MudStack>
+    }
+    else if (VM.Groups.Count == 0)
+    {
+        <MudText Color="Color.Secondary" Class="py-3">Nothing is out on loan.</MudText>
+    }
+    else
+    {
+        @foreach (var group in VM.Groups)
+        {
+            <MudPaper Elevation="1" Class="pa-3 mb-3">
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-1">
+                    <MudText Typo="Typo.h6">@group.BorrowerName</MudText>
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@BookCountLabel(group.Loans.Count)</MudChip>
+                </MudStack>
+                @foreach (var loan in group.Loans)
+                {
+                    <div class="book-card-mobile d-flex gap-3 align-items-start">
+                        <a href="@($"/books/{loan.BookId}")" class="flex-shrink-0">
+                            @if (!string.IsNullOrWhiteSpace(loan.CoverUrl))
+                            {
+                                <img src="@loan.CoverUrl" alt="" loading="lazy" decoding="async" class="rounded" style="width: 48px; height: 68px; object-fit: cover;" />
+                            }
+                            else
+                            {
+                                <div class="rounded d-flex align-items-center justify-content-center" style="width: 48px; height: 68px; background: rgba(0,0,0,0.05);">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">--</MudText>
+                                </div>
+                            }
+                        </a>
+                        <div class="flex-grow-1 min-width-0">
+                            <MudLink Href="@($"/books/{loan.BookId}")" Underline="Underline.Hover" Color="Color.Inherit"
+                                     Style="font-weight: 500;">@loan.Title</MudLink>
+                            @if (!string.IsNullOrWhiteSpace(loan.Author))
+                            {
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">@loan.Author</MudText>
+                            }
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mt-1" Wrap="Wrap.Wrap">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">since @loan.LentOn.ToString("d MMM yyyy")</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">·</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@DueLabel(loan)</MudText>
+                                @if (VM.IsOverdue(loan))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">Overdue</MudChip>
+                                }
+                            </MudStack>
+                        </div>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Class="flex-shrink-0"
+                                   Disabled="@VM.ReturningLoanIds.Contains(loan.LoanId)"
+                                   OnClick="@(() => VM.ReturnAsync(loan.LoanId))">
+                            Returned
+                        </MudButton>
+                    </div>
+                }
+            </MudPaper>
+        }
+    }
+
+    <MudExpansionPanels Elevation="1" Class="mt-4">
+        <MudExpansionPanel @bind-Expanded:get="_historyOpen" @bind-Expanded:set="OnHistoryExpandedChanged">
+            <TitleContent>
+                <MudText Typo="Typo.h6">History</MudText>
+            </TitleContent>
+            <ChildContent>
+                @if (!VM.HistoryLoaded)
+                {
+                    <MudStack AlignItems="AlignItems.Center" Class="py-3">
+                        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                    </MudStack>
+                }
+                else if (VM.History.Count == 0)
+                {
+                    <MudText Color="Color.Secondary">No returned loans yet.</MudText>
+                }
+                else
+                {
+                    @foreach (var row in VM.History)
+                    {
+                        <div class="book-card-mobile">
+                            <MudLink Href="@($"/books/{row.BookId}")" Underline="Underline.Hover" Color="Color.Inherit"
+                                     Style="font-weight: 500;">@row.Title</MudLink>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">@row.BorrowerName</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                lent @row.LentOn.ToString("d MMM yyyy") · returned @row.ReturnedOn.ToString("d MMM yyyy")
+                            </MudText>
+                        </div>
+                    }
+                }
+            </ChildContent>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+
+</MudContainer>
+
+@code {
+    private bool _historyOpen;
+
+    protected override Task OnInitializedAsync() => VM.LoadAsync();
+
+    private async Task OnHistoryExpandedChanged(bool expanded)
+    {
+        _historyOpen = expanded;
+        if (expanded) await VM.EnsureHistoryLoadedAsync();
+    }
+
+    private static string DueLabel(OpenLoanRow loan) =>
+        loan.DueOn is { } due ? $"due {due:d MMM yyyy}" : "no return date";
+
+    private static string BookCountLabel(int count) => count == 1 ? "1 book" : $"{count} books";
+}
