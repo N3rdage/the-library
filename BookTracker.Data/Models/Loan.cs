@@ -26,7 +26,9 @@ public class Loan
         DueOn = dueOn;
     }
 
-    public int Id { get; private set; }
+    /// <summary>The setter is internal so the tests can give unsaved loans
+    /// distinct ids (InternalsVisibleTo); EF assigns it on save.</summary>
+    public int Id { get; internal set; }
 
     public int CopyId { get; private set; }
     public Copy Copy { get; private set; } = null!;

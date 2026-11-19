@@ -152,21 +152,6 @@ public class LoanCommandHandlersTests
     }
 
     [Fact]
-    public async Task ReturnLoan_oldLoanWhileCopyIsLentAgain_throwsDomainRule_andLeavesNewLoanOpen()
-    {
-        var (_, copyIds) = await SeedBookAsync(copies: 1);
-        await Lend(copyIds, "Sam");
-        var first = (await LoansAsync()).Single().Id;
-        await new ReturnLoanHandler(_factory).HandleAsync(new ReturnLoan(first, Lent.AddDays(1)));
-        await Lend(copyIds, "Alex", Lent.AddDays(2));
-
-        await Assert.ThrowsAsync<DomainRuleException>(() =>
-            new ReturnLoanHandler(_factory).HandleAsync(new ReturnLoan(first, Lent.AddDays(3))));
-
-        Assert.Null((await LoansAsync())[1].ReturnedOn);
-    }
-
-    [Fact]
     public async Task ReturnLoan_beforeLentOn_throwsDomainRule_andLeavesLoanOpen()
     {
         var (_, copyIds) = await SeedBookAsync(copies: 1);

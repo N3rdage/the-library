@@ -179,7 +179,7 @@ public class BookUpdatedAtInterceptorTests
         using (var db = _factory.CreateDbContext())
         {
             var copy = await db.Copies.Include(c => c.Loans).FirstAsync(c => c.Id == copyId);
-            copy.MarkReturned(new DateOnly(2026, 11, 2));
+            copy.MarkReturned(copy.OpenLoan!.Id, new DateOnly(2026, 11, 2));
             await db.SaveChangesAsync();
         }
 

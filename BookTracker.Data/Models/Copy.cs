@@ -51,13 +51,15 @@ public class Copy
         return loan;
     }
 
-    /// <summary>Closes the open loan on <paramref name="returnedOn"/>. Throws when
-    /// the copy has no open loan or the return date is before the lend date.
-    /// Returns the closed loan.</summary>
-    public Loan MarkReturned(DateOnly returnedOn)
+    /// <summary>Closes loan <paramref name="loanId"/> on <paramref name="returnedOn"/>.
+    /// Throws when that loan is not this copy's open loan (already returned,
+    /// another copy's, or the copy is not lent out), or when the return date is
+    /// before the lend date. Returns the closed loan.</summary>
+    public Loan MarkReturned(int loanId, DateOnly returnedOn)
     {
-        var loan = OpenLoan
-            ?? throw new DomainRuleException("This copy is not lent out.");
+        var loan = OpenLoan;
+        if (loan is null || loan.Id != loanId)
+            throw new DomainRuleException("This loan has already been returned.");
         if (returnedOn < loan.LentOn)
             throw new DomainRuleException("The return date cannot be before the lend date.");
         loan.MarkReturned(returnedOn);

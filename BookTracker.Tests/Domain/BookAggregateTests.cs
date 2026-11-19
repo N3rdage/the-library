@@ -312,8 +312,8 @@ public class BookAggregateTests
     public void SoftDelete_withOnlyReturnedLoans_deletes()
     {
         var copy = TestEditions.Copy();
-        copy.LendTo("Sam", new DateOnly(2026, 11, 1), null);
-        copy.MarkReturned(new DateOnly(2026, 11, 2));
+        var loan = copy.LendTo("Sam", new DateOnly(2026, 11, 1), null);
+        copy.MarkReturned(loan.Id, new DateOnly(2026, 11, 2));
         var book = TestBooks.Book("X", editions: [TestEditions.Edition(copies: [copy])]);
 
         book.SoftDelete();

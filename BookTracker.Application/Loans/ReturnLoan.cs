@@ -22,10 +22,7 @@ public sealed class ReturnLoanHandler(IDbContextFactory<BookTrackerDbContext> db
             .FirstOrDefaultAsync(c => c.Loans.Any(l => l.Id == command.LoanId), ct)
             ?? throw new NotFoundException($"Loan {command.LoanId} not found.");
 
-        if (copy.OpenLoan?.Id != command.LoanId)
-            throw new DomainRuleException("This loan has already been returned.");
-
-        copy.MarkReturned(command.ReturnedOn);
+        copy.MarkReturned(command.LoanId, command.ReturnedOn);
         await db.SaveChangesAsync(ct);
     }
 }

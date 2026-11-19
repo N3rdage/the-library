@@ -92,7 +92,7 @@ public class CopyLoanTests
         var copy = TestEditions.Copy();
         var loan = copy.LendTo("Sam", Lent, null);
 
-        var returned = copy.MarkReturned(Lent.AddDays(3));
+        var returned = copy.MarkReturned(loan.Id, Lent.AddDays(3));
 
         Assert.Same(loan, returned);
         Assert.Equal(Lent.AddDays(3), loan.ReturnedOn);
@@ -105,15 +105,56 @@ public class CopyLoanTests
     public void MarkReturned_sameDayAsLent_isAllowed()
     {
         var copy = TestEditions.Copy();
-        copy.LendTo("Sam", Lent, null);
-        Assert.Equal(Lent, copy.MarkReturned(Lent).ReturnedOn);
+        var loan = copy.LendTo("Sam", Lent, null);
+        Assert.Equal(Lent, copy.MarkReturned(loan.Id, Lent).ReturnedOn);
     }
 
     [Fact]
     public void MarkReturned_withoutOpenLoan_throws()
     {
         var copy = TestEditions.Copy();
-        Assert.Throws<DomainRuleException>(() => copy.MarkReturned(Lent));
+        Assert.Throws<DomainRuleException>(() => copy.MarkReturned(0, Lent));
+    }
+
+    [Fact]
+    public void MarkReturned_alreadyReturned_throws_andKeepsFirstReturnDate()
+    {
+        var copy = TestEditions.Copy();
+        var loan = copy.LendTo("Sam", Lent, null);
+        copy.MarkReturned(loan.Id, Lent.AddDays(5));
+
+        var ex = Assert.Throws<DomainRuleException>(() => copy.MarkReturned(loan.Id, Lent.AddDays(9)));
+
+        Assert.Equal("This loan has already been returned.", ex.Message);
+        Assert.Equal(Lent.AddDays(5), loan.ReturnedOn);
+    }
+
+    [Fact]
+    public void MarkReturned_oldLoanWhileCopyIsLentAgain_throws_andLeavesNewLoanOpen()
+    {
+        var copy = TestEditions.Copy();
+        var first = copy.LendTo("Sam", Lent, null);
+        first.Id = 1;
+        copy.MarkReturned(first.Id, Lent.AddDays(1));
+        var second = copy.LendTo("Alex", Lent.AddDays(2), null);
+        second.Id = 2;
+
+        var ex = Assert.Throws<DomainRuleException>(() => copy.MarkReturned(first.Id, Lent.AddDays(3)));
+
+        Assert.Equal("This loan has already been returned.", ex.Message);
+        Assert.True(second.IsOpen);
+        Assert.Equal(Lent.AddDays(1), first.ReturnedOn);
+    }
+
+    [Fact]
+    public void MarkReturned_loanIdOfAnotherCopy_throws_andLeavesOpenLoanOpen()
+    {
+        var copy = TestEditions.Copy();
+        var loan = copy.LendTo("Sam", Lent, null);
+        loan.Id = 1;
+
+        Assert.Throws<DomainRuleException>(() => copy.MarkReturned(99, Lent.AddDays(1)));
+        Assert.True(loan.IsOpen);
     }
 
     [Fact]
@@ -122,7 +163,7 @@ public class CopyLoanTests
         var copy = TestEditions.Copy();
         var loan = copy.LendTo("Sam", Lent, null);
 
-        Assert.Throws<DomainRuleException>(() => copy.MarkReturned(Lent.AddDays(-1)));
+        Assert.Throws<DomainRuleException>(() => copy.MarkReturned(loan.Id, Lent.AddDays(-1)));
         Assert.True(loan.IsOpen);
     }
 
@@ -130,8 +171,8 @@ public class CopyLoanTests
     public void LendTo_afterReturn_opensSecondLoan()
     {
         var copy = TestEditions.Copy();
-        copy.LendTo("Sam", Lent, null);
-        copy.MarkReturned(Lent.AddDays(2));
+        var first = copy.LendTo("Sam", Lent, null);
+        copy.MarkReturned(first.Id, Lent.AddDays(2));
 
         var second = copy.LendTo("Alex", Lent.AddDays(5), null);
 

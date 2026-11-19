@@ -57,7 +57,7 @@ public class LoanQueryHandlersTests
     private static Copy ReturnedCopy(string borrower, DateOnly lentOn)
     {
         var copy = LentCopy(borrower, lentOn: lentOn);
-        copy.MarkReturned(lentOn.AddDays(1));
+        copy.MarkReturned(copy.OpenLoan!.Id, lentOn.AddDays(1));
         return copy;
     }
 

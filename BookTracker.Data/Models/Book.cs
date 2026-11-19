@@ -304,7 +304,6 @@ public class Book
         if (Editions.Any(e => e.Copies.Any(c => c.OpenLoan is not null)))
             throw new DomainRuleException("A copy of this book is lent out. Return the loan first.");
 
-
         // Severing the required Book→Edition relationship orphan-deletes each
         // Edition (and its Copies cascade at the DB level) — same mechanism
         // RemoveCopy already relies on.
