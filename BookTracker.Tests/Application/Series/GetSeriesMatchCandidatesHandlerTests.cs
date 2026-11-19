@@ -68,9 +68,9 @@ public class GetSeriesMatchCandidatesHandlerTests
             var author = Author.Create("Some Author");
             var series = new Series { Name = "Existing Series", Type = SeriesType.Series };
             db.Books.AddRange(
-                TestBooks.Book("Book A", works: [new Work { Title = "Book A", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]),
-                TestBooks.Book("Book B", works: [new Work { Title = "Book B", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]),
-                TestBooks.Book("Book C", series: series, seriesOrder: 1, works: [new Work { Title = "Book C", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]));
+                TestBooks.Book("Book A", works: [TestWorks.Work("Book A", author)]),
+                TestBooks.Book("Book B", works: [TestWorks.Work("Book B", author)]),
+                TestBooks.Book("Book C", series: series, seriesOrder: 1, works: [TestWorks.Work("Book C", author)]));
             await db.SaveChangesAsync();
         }
 
@@ -94,15 +94,13 @@ public class GetSeriesMatchCandidatesHandlerTests
                 "Translated",
                 works:
                 [
-                    new Work
-                    {
-                        Title = "Translated",
-                        WorkAuthors =
+                    TestWorks.Work(
+                        "Translated",
+                        authorships:
                         [
-                            new WorkAuthor { Author = lead, Order = 0, Role = AuthorRole.Author },
-                            new WorkAuthor { Author = translator, Order = 0, Role = AuthorRole.Translator },
-                        ],
-                    },
+                            TestWorks.Authorship(lead),
+                            TestWorks.Authorship(translator, 0, AuthorRole.Translator),
+                        ]),
                 ]));
             await db.SaveChangesAsync();
         }

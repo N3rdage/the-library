@@ -36,7 +36,7 @@ public class BookUpdatedAtInterceptorTests
             db.Authors.Add(asimov);
             var book = TestBooks.Book(
                 "Foundation",
-                works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]);
+                works: [TestWorks.Work("Foundation", asimov)]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
@@ -71,7 +71,7 @@ public class BookUpdatedAtInterceptorTests
             db.Authors.Add(asimov);
             var book = TestBooks.Book(
                 "Foundation",
-                works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }],
+                works: [TestWorks.Work("Foundation", asimov)],
                 editions: [TestEditions.Edition(isbn: "9780553293357")]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
@@ -109,7 +109,7 @@ public class BookUpdatedAtInterceptorTests
             db.Authors.Add(asimov);
             var book = TestBooks.Book(
                 "Foundation",
-                works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }],
+                works: [TestWorks.Work("Foundation", asimov)],
                 editions: [TestEditions.Edition(
                     isbn: "9780553293357",
                     copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
@@ -205,11 +205,7 @@ public class BookUpdatedAtInterceptorTests
         {
             var lovecraft = Author.Create("H.P. Lovecraft");
             db.Authors.Add(lovecraft);
-            var sharedWork = new Work
-            {
-                Title = "The Call of Cthulhu",
-                WorkAuthors = [new WorkAuthor { Author = lovecraft, Order = 0 }],
-            };
+            var sharedWork = TestWorks.Work("The Call of Cthulhu", lovecraft);
             var bookA = TestBooks.Book("Anthology A", works: [sharedWork]);
             var bookB = TestBooks.Book("Anthology B", works: [sharedWork]);
             db.Books.AddRange(bookA, bookB);
@@ -255,15 +251,13 @@ public class BookUpdatedAtInterceptorTests
                 "Relic",
                 works:
                 [
-                    new Work
-                    {
-                        Title = "Relic",
-                        WorkAuthors =
+                    TestWorks.Work(
+                        "Relic",
+                        authorships:
                         [
-                            new WorkAuthor { Author = preston, Order = 0 },
-                            new WorkAuthor { Author = child, Order = 1 },
-                        ],
-                    },
+                            TestWorks.Authorship(preston),
+                            TestWorks.Authorship(child, 1),
+                        ]),
                 ]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
@@ -306,7 +300,7 @@ public class BookUpdatedAtInterceptorTests
             db.Authors.Add(asimov);
             var book = TestBooks.Book(
                 "Foundation",
-                works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]);
+                works: [TestWorks.Work("Foundation", asimov)]);
             db.Books.Add(book);
             db.Tags.Add(new Tag { Name = "favourites" });
             await db.SaveChangesAsync();
@@ -353,7 +347,7 @@ public class BookUpdatedAtInterceptorTests
             db.Authors.Add(asimov);
             var book = TestBooks.Book(
                 "Foundation",
-                works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }],
+                works: [TestWorks.Work("Foundation", asimov)],
                 deletedAt: DateTime.UtcNow); // populate so we can assert Kind on the nullable property too
             db.Books.Add(book);
             await db.SaveChangesAsync();

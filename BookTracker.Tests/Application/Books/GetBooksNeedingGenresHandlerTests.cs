@@ -14,15 +14,7 @@ public class GetBooksNeedingGenresHandlerTests
 
     private static Book NewBook(string title, Author author, params Genre[] genres) => TestBooks.Book(
         title,
-        works:
-        [
-            new Work
-            {
-                Title = title,
-                WorkAuthors = [new WorkAuthor { Author = author, Order = 0, Role = AuthorRole.Author }],
-                Genres = [.. genres],
-            },
-        ]);
+        works: [TestWorks.Work(title, author, genres: genres)]);
 
     [Fact]
     public async Task GetBooksNeedingGenres_ordersByFewestGenres_thenTitle()

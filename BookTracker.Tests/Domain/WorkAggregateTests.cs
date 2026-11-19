@@ -96,14 +96,14 @@ public class WorkAggregateTests
     [Fact]
     public void UpdateDetails_blankTitle_throws()
     {
-        var work = new Work { Title = "old" };
+        var work = TestWorks.Work("old");
         Assert.Throws<DomainRuleException>(() => work.UpdateDetails("   ", null));
     }
 
     [Fact]
     public void SetGenres_replacesTheCollection()
     {
-        var work = new Work { Title = "T", Genres = { new Genre { Id = 1, Name = "Old" } } };
+        var work = TestWorks.Work("T", genres: [new Genre { Id = 1, Name = "Old" }]);
         var fantasy = new Genre { Id = 2, Name = "Fantasy" };
         work.SetGenres([fantasy]);
         Assert.Single(work.Genres);
@@ -115,7 +115,7 @@ public class WorkAggregateTests
     [Fact]
     public void AssignAuthorship_writesAuthorsWithOrder()
     {
-        var work = new Work { Title = "Relic" };
+        var work = TestWorks.Work("Relic");
         var preston = Author.Create("Preston");
         var child = Author.Create("Child");
 
@@ -131,7 +131,7 @@ public class WorkAggregateTests
     [Fact]
     public void AssignAuthorship_noContributors_throwsDomainRule()
     {
-        var work = new Work { Title = "x" };
+        var work = TestWorks.Work("x");
         Assert.Throws<DomainRuleException>(() => work.AssignAuthorship([]));
         Assert.Throws<DomainRuleException>(() => work.AssignAuthorship([], additionalContributors: []));
     }
@@ -139,7 +139,7 @@ public class WorkAggregateTests
     [Fact]
     public void AssignAuthorship_editorOnly_isValid()
     {
-        var work = new Work { Title = "Oxford Companion to Wine" };
+        var work = TestWorks.Work("Oxford Companion to Wine");
         var robinson = Author.Create("Jancis Robinson");
 
         work.AssignAuthorship([], [(robinson, AuthorRole.Editor)]);
@@ -153,7 +153,7 @@ public class WorkAggregateTests
     [Fact]
     public void AssignAuthorship_contributorsGetPerRoleOrderFromZero()
     {
-        var work = new Work { Title = "The Hobbit" };
+        var work = TestWorks.Work("The Hobbit");
         var tolkien = Author.Create("Tolkien");
         var sergio = Author.Create("Sergio Cariello");
         var mauss = Author.Create("Doug Mauss");
@@ -169,7 +169,7 @@ public class WorkAggregateTests
     [Fact]
     public void AssignAuthorship_allowsSamePersonInMultipleRoles()
     {
-        var work = new Work { Title = "The Hobbit" };
+        var work = TestWorks.Work("The Hobbit");
         var tolkien = Author.Create("Tolkien");
 
         work.AssignAuthorship([tolkien], [(tolkien, AuthorRole.Illustrator)]);
@@ -182,7 +182,7 @@ public class WorkAggregateTests
     [Fact]
     public void AssignAuthorship_dedupsContributorPairsWithinRole_andSkipsAuthorRole()
     {
-        var work = new Work { Title = "x" };
+        var work = TestWorks.Work("x");
         var asimov = Author.Create("Asimov");
         var pohl = Author.Create("Pohl");
 

@@ -171,15 +171,13 @@ public class AuthorMergeHandlerTests
         db.Authors.AddRange(winner, loser);
         await db.SaveChangesAsync();
 
-        var work = new Work
-        {
-            Title = "Work X",
-            WorkAuthors =
+        var work = TestWorks.Work(
+            "Work X",
+            authorships:
             [
-                new WorkAuthor { Author = winner, Order = 0, Role = AuthorRole.Author },
-                new WorkAuthor { Author = loser,  Order = 0, Role = AuthorRole.Translator },
-            ],
-        };
+                TestWorks.Authorship(winner),
+                TestWorks.Authorship(loser, 0, AuthorRole.Translator),
+            ]);
         db.Books.Add(TestBooks.Book("Book X", works: [work]));
         await db.SaveChangesAsync();
 
@@ -206,15 +204,13 @@ public class AuthorMergeHandlerTests
         db.Authors.AddRange(winner, loser);
         await db.SaveChangesAsync();
 
-        var work = new Work
-        {
-            Title = "Work X",
-            WorkAuthors =
+        var work = TestWorks.Work(
+            "Work X",
+            authorships:
             [
-                new WorkAuthor { Author = winner, Order = 0, Role = AuthorRole.Author },
-                new WorkAuthor { Author = loser,  Order = 1, Role = AuthorRole.Author },
-            ],
-        };
+                TestWorks.Authorship(winner),
+                TestWorks.Authorship(loser, 1),
+            ]);
         db.Books.Add(TestBooks.Book("Book X", works: [work]));
         await db.SaveChangesAsync();
 
@@ -243,7 +239,7 @@ public class AuthorMergeHandlerTests
             {
                 db.Books.Add(TestBooks.Book(
                     t,
-                    works: [new Work { Title = t, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]));
+                    works: [TestWorks.Work(t, author)]));
             }
             authors.Add(author);
         }

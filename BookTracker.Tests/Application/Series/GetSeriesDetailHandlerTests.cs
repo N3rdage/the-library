@@ -34,7 +34,7 @@ public class GetSeriesDetailHandlerTests
             var asimov = Author.Create("Isaac Asimov");
             Book B(string title, int? order, string? display = null) => TestBooks.Book(
                 title, series: series, seriesOrder: order, seriesOrderDisplay: display,
-                works: [new Work { Title = title, WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }] }]);
+                works: [TestWorks.Work(title, asimov)]);
             db.Books.AddRange(
                 B("Unnumbered B", null),
                 B("Second Foundation", 3),
@@ -80,16 +80,14 @@ public class GetSeriesDetailHandlerTests
                 seriesOrder: 1,
                 works:
                 [
-                    new Work
-                    {
-                        Title = "Relic",
-                        WorkAuthors =
+                    TestWorks.Work(
+                        "Relic",
+                        authorships:
                         [
-                            new WorkAuthor { Author = child, Order = 1, Role = AuthorRole.Author },
-                            new WorkAuthor { Author = preston, Order = 0, Role = AuthorRole.Author },
-                            new WorkAuthor { Author = editor, Order = 0, Role = AuthorRole.Editor },
-                        ],
-                    },
+                            TestWorks.Authorship(child, 1),
+                            TestWorks.Authorship(preston),
+                            TestWorks.Authorship(editor, 0, AuthorRole.Editor),
+                        ]),
                 ]));
             await db.SaveChangesAsync();
             seriesId = series.Id;

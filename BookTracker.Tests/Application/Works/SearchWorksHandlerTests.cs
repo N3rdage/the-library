@@ -56,8 +56,8 @@ public class SearchWorksHandlerTests
     {
         using var db = _factory.CreateDbContext();
         var author = Author.Create("Tolkien");
-        var hobbit = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        var fellowship = new Work { Title = "Fellowship", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var hobbit = TestWorks.Work("The Hobbit", author);
+        var fellowship = TestWorks.Work("Fellowship", author);
         db.Books.Add(TestBooks.Book("Compendium", works: [hobbit]));
         db.Books.Add(TestBooks.Book("Other", works: [fellowship]));
         await db.SaveChangesAsync();
@@ -99,7 +99,7 @@ public class SearchWorksHandlerTests
         {
             db.Books.Add(TestBooks.Book(
                 title,
-                works: [new Work { Title = title, WorkAuthors = [new WorkAuthor { Author = authorsByName[authorName], Order = 0 }] }]));
+                works: [TestWorks.Work(title, authorsByName[authorName])]));
         }
         await db.SaveChangesAsync();
     }

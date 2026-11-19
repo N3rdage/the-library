@@ -36,8 +36,8 @@ public class GetWorkMergePreviewHandlerTests
         using var db = _factory.CreateDbContext();
         var tolkien = Author.Create("J.R.R. Tolkien");
         var notTolkien = Author.Create("Imposter");
-        var w1 = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = tolkien, Order = 0 }] };
-        var w2 = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = notTolkien, Order = 0 }] };
+        var w1 = TestWorks.Work("The Hobbit", tolkien);
+        var w2 = TestWorks.Work("The Hobbit", notTolkien);
         db.Books.Add(TestBooks.Book("A", works: [w1]));
         db.Books.Add(TestBooks.Book("B", works: [w2]));
         await db.SaveChangesAsync();
@@ -54,8 +54,8 @@ public class GetWorkMergePreviewHandlerTests
         // flag that so the merge confirmation surfaces the overlap.
         using var db = _factory.CreateDbContext();
         var author = Author.Create("Agatha Christie");
-        var w1 = new Work { Title = "A", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        var w2 = new Work { Title = "A", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var w1 = TestWorks.Work("A", author);
+        var w2 = TestWorks.Work("A", author);
         db.Books.Add(TestBooks.Book("Solo W1", works: [w1]));
         db.Books.Add(TestBooks.Book("Solo W2", works: [w2]));
         db.Books.Add(TestBooks.Book("Compendium", works: [w1, w2]));
@@ -72,8 +72,8 @@ public class GetWorkMergePreviewHandlerTests
     {
         using var db = _factory.CreateDbContext();
         var author = Author.Create("Shared Author");
-        var winner = new Work { Title = winnerTitle, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        var loser = new Work { Title = loserTitle, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var winner = TestWorks.Work(winnerTitle, author);
+        var loser = TestWorks.Work(loserTitle, author);
         foreach (var t in winnerBooks)
         {
             db.Books.Add(TestBooks.Book(t, works: [winner]));

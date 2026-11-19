@@ -25,11 +25,7 @@ public class SeriesCommandHandlersTests
     private async Task<int> SeedBookAsync(string title, int? seriesId = null, int? order = null, string? orderDisplay = null)
     {
         await using var db = _factory.CreateDbContext();
-        var work = new Work
-        {
-            Title = title,
-            WorkAuthors = { new WorkAuthor { Author = Author.Create($"Author of {title}"), Order = 0, Role = AuthorRole.Author } },
-        };
+        var work = TestWorks.Work(title, Author.Create($"Author of {title}"));
         var book = TestBooks.Book(
             title,
             works: [work],

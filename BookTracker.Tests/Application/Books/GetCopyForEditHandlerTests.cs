@@ -32,7 +32,7 @@ public class GetCopyForEditHandlerTests
             var edition = TestEditions.Edition(isbn: "x", copies: [copy]);
             db.Books.Add(TestBooks.Book(
                 "B",
-                works: [new Work { Title = "B", WorkAuthors = [new WorkAuthor { Author = Author.Create("A"), Order = 0 }] }],
+                works: [TestWorks.Work("B", Author.Create("A"))],
                 editions: [edition]));
             await db.SaveChangesAsync();
             copyId = copy.Id;
