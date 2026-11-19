@@ -130,6 +130,36 @@ public class BookMergeHandlerTests
     }
 
     [Fact]
+    public async Task Merge_work_shared_with_a_third_book_keeps_its_third_book_and_is_not_deleted()
+    {
+        // The loser's works are detached through Work.RemoveFrom: a work the
+        // loser shares with a third book moves to the winner, keeps the third
+        // book, and survives; only the loser's link goes.
+        using var db = _factory.CreateDbContext();
+        var author = Author.Create("A");
+        var shared = TestWorks.Work("Shared", author);
+        var loserOnly = TestWorks.Work("LoserOnly", author);
+        var winner = TestBooks.Book("B", works: [TestWorks.Work("WinnerOnly", author)]);
+        var loser = TestBooks.Book("B", works: [shared, loserOnly]);
+        var third = TestBooks.Book("C", works: [shared]);
+        db.Books.AddRange(winner, loser, third);
+        await db.SaveChangesAsync();
+
+        var result = await Merge(winner.Id, loser.Id);
+
+        Assert.True(result.Success);
+        Assert.Equal(2, result.WorksUnioned);
+
+        using var verify = _factory.CreateDbContext();
+        var links = verify.Set<BookWork>();
+        var sharedBooks = links.Where(bw => bw.WorkId == shared.Id).Select(bw => bw.BookId).ToList();
+        Assert.Equal(new[] { winner.Id, third.Id }.Order(), sharedBooks.Order());
+        Assert.Equal([winner.Id], links.Where(bw => bw.WorkId == loserOnly.Id).Select(bw => bw.BookId).ToList());
+        Assert.Empty(links.Where(bw => bw.BookId == loser.Id));
+        Assert.Equal(3, verify.Works.Count());
+    }
+
+    [Fact]
     public async Task Merge_unions_tags_without_duplicating()
     {
         using var db = _factory.CreateDbContext();

@@ -69,20 +69,7 @@ public sealed class MergeWorksHandler(IDbContextFactory<BookTrackerDbContext> db
         // Only fills gaps — never overwrites a value winner already has.
         // Paired fields move together (date+precision) so both halves stay
         // consistent.
-        var fieldsAutoFilled = 0;
-
-        if (string.IsNullOrWhiteSpace(winner.Subtitle) && !string.IsNullOrWhiteSpace(loser.Subtitle))
-        {
-            winner.Subtitle = loser.Subtitle;
-            fieldsAutoFilled++;
-        }
-
-        if (winner.FirstPublishedDate is null && loser.FirstPublishedDate is not null)
-        {
-            winner.FirstPublishedDate = loser.FirstPublishedDate;
-            winner.FirstPublishedDatePrecision = loser.FirstPublishedDatePrecision;
-            fieldsAutoFilled++;
-        }
+        var fieldsAutoFilled = winner.FillBlanksFrom(loser);
 
         var winnerGenreIds = winner.Genres.Select(g => g.Id).ToHashSet();
         var genresAdded = 0;

@@ -176,6 +176,15 @@ Entities gain behaviour and lose public setters on invariant-bearing fields:
   builder `TestEditions`. The parent navigations `Edition.Book` and `Copy.Edition` have
   internal setters: EF fixes them up from the collections and keys, and the tests attach a
   detached seed to its parent through them; `BookTracker.Application` cannot set them.
+- `Work`'s scalar fields and `WorkAuthor` rows are written only through `Work`'s methods (`Create`,
+  `UpdateDetails`, `SetFirstPublished`, `FillBlanksFrom`, `SetGenres`, `AssignAuthorship`,
+  `AppearsIn`, `RemoveFrom`), and the compiler enforces it: the scalar setters are private (`Id`
+  stays public, as on `Book`), and `WorkAuthor.Order` and `Role` are set only by `AssignAuthorship`.
+  `Work`'s collections have private setters, but their contents are still added to from outside
+  (`MergeWorks` adds genres, `Book.AttachWork` adds the link) until the collections slice
+  encapsulates them, as with `Book`'s collections. Each has a private parameterless constructor for EF and an
+  internal one that stores the values as given, used by the tests' seed builder `TestWorks` (and,
+  for `WorkAuthor`, by `AssignAuthorship`).
 - `Book` (root) owns `Editions`; `Edition` owns `Copies`. Exposed as
   `IReadOnlyCollection<>`; mutated only through methods (`AddCopy`, `AddEdition`, …).
 - Invariants currently enforced procedurally move onto the aggregate and become unit-testable.

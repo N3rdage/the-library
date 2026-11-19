@@ -2,12 +2,12 @@ using BookTracker.Data.Models;
 
 namespace BookTracker.Tests;
 
-// Seed builder for Work and WorkAuthor rows. Every seed builds through here so
-// that the next slice can make Work's setters private and change only these
-// bodies, not some 250 call sites.
+// Seed builder for Work and WorkAuthor rows. Every seed builds through here, so
+// Work's private setters need only these two bodies to reach the internal
+// constructors (InternalsVisibleTo).
 //
-// The bodies are plain object initialisers for now: they store exactly what
-// they are given, nothing trimmed or normalised (unlike Work.UpdateDetails),
+// The bodies store exactly what they are given, nothing trimmed or normalised
+// (unlike Work.UpdateDetails),
 // and an omitted argument leaves the entity default. The common case is one
 // line, TestWorks.Work("Dune", author): one Author-role authorship at order 0.
 // A seed with several authorships, other roles or no author at all passes
@@ -28,18 +28,17 @@ public static class TestWorks
             throw new ArgumentException("Pass either author or authorships, not both.");
 
         // Fully qualified: inside this class the simple name Work is the method.
-        var work = new global::BookTracker.Data.Models.Work
-        {
-            Title = title,
-            Subtitle = subtitle,
-            FirstPublishedDate = firstPublishedDate,
-            FirstPublishedDatePrecision = firstPublishedDatePrecision,
-        };
+        // The internal constructor stores everything as given, so a seed keeps
+        // the exact order and role of each authorship it passes.
+        var work = new global::BookTracker.Data.Models.Work(
+            title,
+            subtitle,
+            firstPublishedDate,
+            firstPublishedDatePrecision,
+            author is not null ? new[] { Authorship(author) } : authorships,
+            genres);
 
         if (id is not null) work.Id = id.Value;
-        if (author is not null) work.WorkAuthors = [Authorship(author)];
-        if (authorships is not null) work.WorkAuthors = authorships.ToList();
-        if (genres is not null) work.Genres = genres.ToList();
 
         return work;
     }
@@ -49,6 +48,6 @@ public static class TestWorks
         int order = 0,
         AuthorRole role = AuthorRole.Author)
     {
-        return new WorkAuthor { Author = author, Order = order, Role = role };
+        return new WorkAuthor(author, order, role);
     }
 }

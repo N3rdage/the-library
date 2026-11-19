@@ -45,21 +45,38 @@ public enum AuthorRole
 // same Author can't appear twice on a single Work in the SAME role —
 // but the same Author CAN hold multiple roles on the same Work
 // (Tolkien is Author + Illustrator on *The Hobbit*).
+//
+// Part of the Work aggregate: rows are built only by Work.AssignAuthorship (the
+// internal constructor also serves the tests' seed builder through
+// InternalsVisibleTo), and every field has a private setter, so Order and Role
+// cannot be written from outside the aggregate. Work and WorkId are set by EF
+// fix-up when the row is added to Work.WorkAuthors.
 public class WorkAuthor
 {
-    public int WorkId { get; set; }
-    public Work Work { get; set; } = null!;
+    // EF materialisation.
+    private WorkAuthor() { }
 
-    public int AuthorId { get; set; }
-    public Author Author { get; set; } = null!;
+    /// <summary>Stores exactly the values given.</summary>
+    internal WorkAuthor(Author author, int order, AuthorRole role)
+    {
+        Author = author;
+        Order = order;
+        Role = role;
+    }
+
+    public int WorkId { get; private set; }
+    public Work Work { get; private set; } = null!;
+
+    public int AuthorId { get; private set; }
+    public Author Author { get; private set; } = null!;
 
     /// <summary>Display position. 0 = lead/primary author, ascending for additional authors. Per-Role.</summary>
-    public int Order { get; set; }
+    public int Order { get; private set; }
 
     /// <summary>
     /// What kind of contribution this person made to the Work. Default
     /// <see cref="AuthorRole.Author"/>; rollup queries filter to Author
     /// by default and opt in to other roles explicitly.
     /// </summary>
-    public AuthorRole Role { get; set; }
+    public AuthorRole Role { get; private set; }
 }

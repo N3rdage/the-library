@@ -60,40 +60,38 @@ public sealed class MergeAuthorsHandler(IDbContextFactory<BookTrackerDbContext> 
             winner.PromoteToCanonical();
         }
 
-        // Reassign every WorkAuthor row from loser to winner. Composite PK
-        // (WorkId, AuthorId, Role) means we can't UPDATE the AuthorId column
-        // — delete + add. Dedup by (WorkId, Role): if winner is already
-        // credited on the same Work in the same Role, drop the loser row;
-        // otherwise re-add as winner so distinct roles survive (e.g. winner
-        // is Author of Work X, loser is Translator of Work X — both should
-        // exist post-merge under winner).
-        var loserWorkAuthors = await db.WorkAuthors
-            .Where(wa => wa.AuthorId == loser.Id)
+        // Reassign every loser credit to the winner, through each Work's
+        // AssignAuthorship (the one write path for WorkAuthor rows). The credit
+        // keeps its role and its place in that role's order. Dedup by role: if
+        // the winner is already credited on the same Work in the same role, the
+        // loser's credit is dropped; otherwise it becomes the winner's, so
+        // distinct roles survive (winner is Author of Work X, loser is
+        // Translator of Work X — both exist post-merge under winner).
+        var works = await db.Works
+            .Where(w => w.WorkAuthors.Any(wa => wa.AuthorId == loser.Id))
+            .Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author)
             .ToListAsync(ct);
 
-        var winnerCreditedByWorkAndRole = (await db.WorkAuthors
-            .Where(wa => wa.AuthorId == winner.Id)
-            .Select(wa => new { wa.WorkId, wa.Role })
-            .ToListAsync(ct))
-            .Select(x => (x.WorkId, x.Role))
-            .ToHashSet();
-
-        foreach (var wa in loserWorkAuthors)
+        var worksReassignedCount = 0;
+        foreach (var work in works)
         {
-            db.WorkAuthors.Remove(wa);
-            if (!winnerCreditedByWorkAndRole.Contains((wa.WorkId, wa.Role)))
+            var credits = new List<(Author Person, AuthorRole Role)>();
+            foreach (var wa in work.WorkAuthors.OrderBy(wa => wa.Role).ThenBy(wa => wa.Order).ToList())
             {
-                db.WorkAuthors.Add(new WorkAuthor
+                if (wa.AuthorId != loser.Id)
                 {
-                    WorkId = wa.WorkId,
-                    AuthorId = winner.Id,
-                    Order = wa.Order,
-                    Role = wa.Role,
-                });
-                winnerCreditedByWorkAndRole.Add((wa.WorkId, wa.Role));
+                    credits.Add((wa.Author, wa.Role));
+                    continue;
+                }
+                worksReassignedCount++;
+                if (!work.WorkAuthors.Any(x => x.AuthorId == winner.Id && x.Role == wa.Role))
+                    credits.Add((winner, wa.Role));
             }
+
+            work.AssignAuthorship(
+                credits.Where(c => c.Role == AuthorRole.Author).Select(c => c.Person).ToList(),
+                credits.Where(c => c.Role != AuthorRole.Author).ToList());
         }
-        var worksReassignedCount = loserWorkAuthors.Count;
 
         // External aliases of the loser become aliases of the winner. Must
         // exclude the winner explicitly — if winner was an alias of loser its

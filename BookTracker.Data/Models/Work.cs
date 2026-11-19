@@ -14,41 +14,76 @@ namespace BookTracker.Data.Models;
 // Author.CanonicalAuthorId. WorkAuthor.Order keeps the lead author first
 // on display ("Preston & Child" stays in that order rather than being
 // alphabetised).
+//
+// Work's and WorkAuthor's fields are written only through the methods below
+// (private setters; EF materialises through them regardless of accessibility),
+// so a handler cannot bypass an invariant and the compiler enforces it. A Work is
+// created through Create; the internal constructor serves the tests' seed builder
+// (InternalsVisibleTo), and BookTracker.Application cannot reach it. Id stays
+// public for EF and the tests' in-memory graphs.
 public class Work
 {
+    // EF materialisation, and Create.
+    private Work() { }
+
+    /// <summary>Stores exactly the values given: nothing is trimmed or
+    /// normalised here (unlike <see cref="UpdateDetails"/>), and the authorship
+    /// rows keep the order and role they were built with, so a test seed gets
+    /// exactly what it passes.</summary>
+    internal Work(
+        string title,
+        string? subtitle,
+        DateOnly? firstPublishedDate,
+        DatePrecision firstPublishedDatePrecision,
+        IEnumerable<WorkAuthor>? workAuthors,
+        IEnumerable<Genre>? genres)
+    {
+        Title = title;
+        Subtitle = subtitle;
+        FirstPublishedDate = firstPublishedDate;
+        FirstPublishedDatePrecision = firstPublishedDatePrecision;
+        if (workAuthors is not null) WorkAuthors = workAuthors.ToList();
+        if (genres is not null) Genres = genres.ToList();
+    }
+
     public int Id { get; set; }
 
     [Required, MaxLength(300)]
-    public string Title { get; set; } = string.Empty;
+    public string Title { get; private set; } = string.Empty;
 
     [MaxLength(300)]
-    public string? Subtitle { get; set; }
+    public string? Subtitle { get; private set; }
 
-    /// <summary>Explicit join with Order. The canonical read source for ordered display ("Preston & Child").</summary>
-    public List<WorkAuthor> WorkAuthors { get; set; } = [];
+    /// <summary>Explicit join with Order. The canonical read source for ordered
+    /// display ("Preston & Child"). Written only through <see cref="AssignAuthorship"/>.</summary>
+    public List<WorkAuthor> WorkAuthors { get; private set; } = [];
 
     /// <summary>Skip-navigation through WorkAuthor — convenient for "any author of this work" semantics; does NOT preserve Order.</summary>
-    public List<Author> Authors { get; set; } = [];
+    public List<Author> Authors { get; private set; } = [];
 
     /// <summary>The year/date the Work was first published — distinct from any specific Edition's print date.</summary>
-    public DateOnly? FirstPublishedDate { get; set; }
+    public DateOnly? FirstPublishedDate { get; private set; }
 
     /// <summary>How precise <see cref="FirstPublishedDate"/> is — drives display formatting.</summary>
-    public DatePrecision FirstPublishedDatePrecision { get; set; } = DatePrecision.Day;
+    public DatePrecision FirstPublishedDatePrecision { get; private set; } = DatePrecision.Day;
 
-    public List<Genre> Genres { get; set; } = [];
+    /// <summary>Replaced only through <see cref="SetGenres"/>; the setter is private,
+    /// but the list's contents are still added to from outside (the work merge)
+    /// until the collections slice encapsulates it.</summary>
+    public List<Genre> Genres { get; private set; } = [];
 
     // Series membership is NOT a Work concept — it lives on the Book (the book
     // is installment N of a publication series). See Book.SeriesId.
 
     /// <summary>Skip-navigation over the Book↔Work join — "which books contain
     /// this work" semantics. Does NOT carry per-book display order.</summary>
-    public List<Book> Books { get; set; } = [];
+    public List<Book> Books { get; private set; } = [];
 
     /// <summary>Explicit join rows (the per-book <see cref="BookWork.Order"/>
     /// lives here). Mostly read from the Book side; present for symmetry and so
-    /// <see cref="Book.AttachWork"/> can keep both ends of the graph consistent.</summary>
-    public List<BookWork> BookWorks { get; set; } = [];
+    /// <see cref="Book.AttachWork"/> can keep both ends of the graph consistent.
+    /// Written only through <see cref="Book.AttachWork"/> and <see cref="RemoveFrom"/>.</summary>
+    public List<BookWork> BookWorks { get; private set; } = [];
 
     // --- Aggregate behaviour -------------------------------------------------
     // A Work is the durable creative unit; it OWNS its Book↔Work membership and
@@ -56,8 +91,7 @@ public class Work
     // least one Book — it's created with its first book (the factory below) and
     // is orphaned (the caller deletes it) when its last book is removed. The
     // authorship invariant (≥1 contributor) lives on AssignAuthorship.
-    // See docs/BACKEND-REFACTOR-DESIGN.md. (Collection setters stay public until
-    // the C7 lock-down.)
+    // See docs/BACKEND-REFACTOR-DESIGN.md.
 
     /// <summary>Creates a Work attached to its first Book (ref count starts at 1),
     /// with title, optional subtitle/date, and authorship. Title is required;
@@ -95,6 +129,31 @@ public class Work
     {
         FirstPublishedDate = date;
         FirstPublishedDatePrecision = precision;
+    }
+
+    /// <summary>Fills this Work's empty fields from <paramref name="other"/>
+    /// without overwriting any value this Work already has: the subtitle, and
+    /// the first-published date and its precision as a pair. Values are copied
+    /// as stored. Returns how many of those two were filled (a work merge, where
+    /// this Work is the winner).</summary>
+    public int FillBlanksFrom(Work other)
+    {
+        var filled = 0;
+
+        if (string.IsNullOrWhiteSpace(Subtitle) && !string.IsNullOrWhiteSpace(other.Subtitle))
+        {
+            Subtitle = other.Subtitle;
+            filled++;
+        }
+
+        if (FirstPublishedDate is null && other.FirstPublishedDate is not null)
+        {
+            FirstPublishedDate = other.FirstPublishedDate;
+            FirstPublishedDatePrecision = other.FirstPublishedDatePrecision;
+            filled++;
+        }
+
+        return filled;
     }
 
     /// <summary>Associates this Work with another Book it also appears in. No-op
@@ -141,7 +200,7 @@ public class Work
 
         WorkAuthors.Clear();
         for (var i = 0; i < authors.Count; i++)
-            WorkAuthors.Add(new WorkAuthor { Author = authors[i], Order = i, Role = AuthorRole.Author });
+            WorkAuthors.Add(new WorkAuthor(authors[i], i, AuthorRole.Author));
 
         if (additionalContributors is null || additionalContributors.Count == 0) return;
 
@@ -155,7 +214,7 @@ public class Work
             if (role == AuthorRole.Author) continue;
             if (!seen.Add((person, role))) continue;
             var next = orderByRole.GetValueOrDefault(role, 0);
-            WorkAuthors.Add(new WorkAuthor { Author = person, Order = next, Role = role });
+            WorkAuthors.Add(new WorkAuthor(person, next, role));
             orderByRole[role] = next + 1;
         }
     }

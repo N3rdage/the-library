@@ -221,7 +221,7 @@ public class BookUpdatedAtInterceptorTests
         using (var db = _factory.CreateDbContext())
         {
             var work = await db.Works.Include(w => w.Books).FirstAsync();
-            work.Title = "The Call of Cthulhu (revised)";
+            work.UpdateDetails("The Call of Cthulhu (revised)", work.Subtitle);
             await db.SaveChangesAsync();
         }
 
@@ -269,12 +269,12 @@ public class BookUpdatedAtInterceptorTests
 
         using (var db = _factory.CreateDbContext())
         {
-            // Swap the two authors' Order — Child becomes lead.
-            var workAuthors = await db.WorkAuthors.ToListAsync();
-            var preston = workAuthors.Single(wa => wa.Order == 0);
-            var child = workAuthors.Single(wa => wa.Order == 1);
-            preston.Order = 1;
-            child.Order = 0;
+            // Swap the two authors' Order — Child becomes lead — through the
+            // aggregate's one authorship write path.
+            var work = await db.Works.Include(w => w.WorkAuthors).ThenInclude(wa => wa.Author).FirstAsync();
+            var preston = work.WorkAuthors.Single(wa => wa.Order == 0).Author;
+            var child = work.WorkAuthors.Single(wa => wa.Order == 1).Author;
+            work.AssignAuthorship([child, preston]);
             await db.SaveChangesAsync();
         }
 
