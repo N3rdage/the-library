@@ -12,10 +12,9 @@ public class GetBooksNeedingGenresHandlerTests
 {
     private readonly TestDbContextFactory _factory = new();
 
-    private static Book NewBook(string title, Author author, params Genre[] genres) => new()
-    {
-        Title = title,
-        Works =
+    private static Book NewBook(string title, Author author, params Genre[] genres) => TestBooks.Book(
+        title,
+        works:
         [
             new Work
             {
@@ -23,8 +22,7 @@ public class GetBooksNeedingGenresHandlerTests
                 WorkAuthors = [new WorkAuthor { Author = author, Order = 0, Role = AuthorRole.Author }],
                 Genres = [.. genres],
             },
-        ],
-    };
+        ]);
 
     [Fact]
     public async Task GetBooksNeedingGenres_ordersByFewestGenres_thenTitle()

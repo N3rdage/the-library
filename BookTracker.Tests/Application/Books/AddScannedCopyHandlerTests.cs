@@ -19,12 +19,10 @@ public class AddScannedCopyHandlerTests
     private async Task<int> SeedHobbitAsync(params string[] tags)
     {
         await using var db = _factory.CreateDbContext();
-        var book = new Book
-        {
-            Title = "The Hobbit",
-            Tags = tags.Select(t => new Tag { Name = t }).ToList(),
-            Editions = [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }],
-        };
+        var book = TestBooks.Book(
+            "The Hobbit",
+            tags: tags.Select(t => new Tag { Name = t }),
+            editions: [new Edition { Isbn = "9780345391803", Copies = [new Copy { Condition = BookCondition.Good }] }]);
         book.AttachWork(new Work
         {
             Title = "The Hobbit",

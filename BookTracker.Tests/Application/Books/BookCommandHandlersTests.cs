@@ -20,7 +20,7 @@ public class BookCommandHandlersTests
     private async Task<int> SeedBookAsync()
     {
         await using var db = _factory.CreateDbContext();
-        var book = new Book { Title = "Dune" };
+        var book = TestBooks.Book("Dune");
         db.Books.Add(book);
         await db.SaveChangesAsync();
         return book.Id;
@@ -77,7 +77,7 @@ public class BookCommandHandlersTests
         int id;
         await using (var db = _factory.CreateDbContext())
         {
-            var book = new Book { Title = "Dune", Notes = "keep me" };
+            var book = TestBooks.Book("Dune", notes: "keep me");
             db.Books.Add(book);
             await db.SaveChangesAsync();
             id = book.Id;
@@ -300,8 +300,8 @@ public class BookCommandHandlersTests
         {
             var exclusive = new Work { Title = "Exclusive", WorkAuthors = { new WorkAuthor { Author = Author.Create("X"), Order = 0, Role = AuthorRole.Author } } };
             var shared = new Work { Title = "Shared", WorkAuthors = { new WorkAuthor { Author = Author.Create("Y"), Order = 0, Role = AuthorRole.Author } } };
-            var a = new Book { Title = "A", Works = { exclusive, shared } };
-            var b = new Book { Title = "B", Works = { shared } };
+            var a = TestBooks.Book("A", works: [exclusive, shared]);
+            var b = TestBooks.Book("B", works: [shared]);
             db.Books.AddRange(a, b);
             await db.SaveChangesAsync();
             bookA = a.Id; exclusiveId = exclusive.Id; sharedId = shared.Id;

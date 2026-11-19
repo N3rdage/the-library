@@ -38,7 +38,7 @@ public class GetEditionForEditHandlerTests
                 CoverUrl = "https://example.com/mort.jpg",
                 Copies = [new Copy { Condition = BookCondition.Good }],
             };
-            var book = new Book { Title = "Mort", Works = OneWork(), Editions = [edition] };
+            var book = TestBooks.Book("Mort", works: OneWork(), editions: [edition]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             editionId = edition.Id;
@@ -65,7 +65,7 @@ public class GetEditionForEditHandlerTests
         using (var db = _factory.CreateDbContext())
         {
             var edition = new Edition { Format = BookFormat.Hardcover, Copies = [new Copy()] };
-            db.Books.Add(new Book { Title = "Mort", Works = OneWork(), Editions = [edition] });
+            db.Books.Add(TestBooks.Book("Mort", works: OneWork(), editions: [edition]));
             await db.SaveChangesAsync();
             editionId = edition.Id;
         }

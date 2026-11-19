@@ -33,7 +33,7 @@ public class GetWorkForEditHandlerTests
                 FirstPublishedDate = new DateOnly(1987, 11, 12),
                 FirstPublishedDatePrecision = DatePrecision.Day,
             };
-            db.Books.Add(new Book { Title = "Mort", Works = [work] });
+            db.Books.Add(TestBooks.Book("Mort", works: [work]));
             await db.SaveChangesAsync();
             workId = work.Id;
         }
@@ -70,7 +70,7 @@ public class GetWorkForEditHandlerTests
                     new WorkAuthor { Author = Author.Create("Amy Editor"), Role = AuthorRole.Editor, Order = 0 },
                 ],
             };
-            db.Books.Add(new Book { Title = "Good Omens", Works = [work] });
+            db.Books.Add(TestBooks.Book("Good Omens", works: [work]));
             await db.SaveChangesAsync();
             workId = work.Id;
         }
@@ -103,7 +103,7 @@ public class GetWorkForEditHandlerTests
                 WorkAuthors = [new WorkAuthor { Author = Author.Create("a"), Order = 0 }],
                 Genres = [fantasy, horror],
             };
-            db.Books.Add(new Book { Title = "B", Works = [work] });
+            db.Books.Add(TestBooks.Book("B", works: [work]));
             await db.SaveChangesAsync();
             workId = work.Id;
             fantasyId = fantasy.Id;

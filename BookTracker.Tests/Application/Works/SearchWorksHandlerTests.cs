@@ -58,8 +58,8 @@ public class SearchWorksHandlerTests
         var author = Author.Create("Tolkien");
         var hobbit = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var fellowship = new Work { Title = "Fellowship", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        db.Books.Add(new Book { Title = "Compendium", Works = [hobbit] });
-        db.Books.Add(new Book { Title = "Other", Works = [fellowship] });
+        db.Books.Add(TestBooks.Book("Compendium", works: [hobbit]));
+        db.Books.Add(TestBooks.Book("Other", works: [fellowship]));
         await db.SaveChangesAsync();
 
         var compendiumId = db.Books.Single(b => b.Title == "Compendium").Id;
@@ -97,11 +97,9 @@ public class SearchWorksHandlerTests
 
         foreach (var (title, authorName) in data)
         {
-            db.Books.Add(new Book
-            {
-                Title = title,
-                Works = [new Work { Title = title, WorkAuthors = [new WorkAuthor { Author = authorsByName[authorName], Order = 0 }] }]
-            });
+            db.Books.Add(TestBooks.Book(
+                title,
+                works: [new Work { Title = title, WorkAuthors = [new WorkAuthor { Author = authorsByName[authorName], Order = 0 }] }]));
         }
         await db.SaveChangesAsync();
     }

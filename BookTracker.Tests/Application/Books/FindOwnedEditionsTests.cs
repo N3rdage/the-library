@@ -18,13 +18,10 @@ public class FindOwnedEditionsTests
     private async Task<int> SeedBookAsync(string title, params string[] isbns)
     {
         await using var db = _factory.CreateDbContext();
-        var book = new Book
-        {
-            Title = title,
-            Editions = isbns
-                .Select(isbn => new Edition { Isbn = isbn, Copies = [new Copy { Condition = BookCondition.Good }] })
-                .ToList(),
-        };
+        var book = TestBooks.Book(
+            title,
+            editions: isbns
+                .Select(isbn => new Edition { Isbn = isbn, Copies = [new Copy { Condition = BookCondition.Good }] }));
         db.Books.Add(book);
         await db.SaveChangesAsync();
         return book.Id;

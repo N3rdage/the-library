@@ -18,12 +18,10 @@ public class SearchBooksForSeriesHandlerTests
     {
         using var db = _factory.CreateDbContext();
         var existing = db.Authors.FirstOrDefault(a => a.Name == author);
-        var book = new Book
-        {
-            Title = title,
-            SeriesId = seriesId,
-            Works = [new Work { Title = workTitle ?? title, WorkAuthors = [new WorkAuthor { Author = existing ?? Author.Create(author), Order = 0 }] }],
-        };
+        var book = TestBooks.Book(
+            title,
+            seriesId: seriesId,
+            works: [new Work { Title = workTitle ?? title, WorkAuthors = [new WorkAuthor { Author = existing ?? Author.Create(author), Order = 0 }] }]);
         db.Books.Add(book);
         await db.SaveChangesAsync();
         return book.Id;
@@ -96,10 +94,9 @@ public class SearchBooksForSeriesHandlerTests
         int bookId;
         using (var db = _factory.CreateDbContext())
         {
-            var book = new Book
-            {
-                Title = "Relic",
-                Works =
+            var book = TestBooks.Book(
+                "Relic",
+                works:
                 [
                     new Work
                     {
@@ -110,8 +107,7 @@ public class SearchBooksForSeriesHandlerTests
                             new WorkAuthor { Author = Author.Create("Douglas Preston"), Order = 0, Role = AuthorRole.Author },
                         ],
                     },
-                ],
-            };
+                ]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;

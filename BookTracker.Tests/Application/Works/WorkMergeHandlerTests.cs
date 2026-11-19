@@ -48,8 +48,8 @@ public class WorkMergeHandlerTests
         var author = Author.Create("Agatha Christie");
         var winner = new Work { Title = "Style", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var loser = new Work { Title = "Style", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        db.Books.Add(new Book { Title = "Solo W2", Works = [loser] });
-        db.Books.Add(new Book { Title = "Compendium", Works = [winner, loser] });
+        db.Books.Add(TestBooks.Book("Solo W2", works: [loser]));
+        db.Books.Add(TestBooks.Book("Compendium", works: [winner, loser]));
         await db.SaveChangesAsync();
 
         var result = await Merge(winner.Id, loser.Id);
@@ -127,8 +127,8 @@ public class WorkMergeHandlerTests
         var notTolkien = Author.Create("Imposter");
         var w1 = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = tolkien, Order = 0 }] };
         var w2 = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = notTolkien, Order = 0 }] };
-        db.Books.Add(new Book { Title = "A", Works = [w1] });
-        db.Books.Add(new Book { Title = "B", Works = [w2] });
+        db.Books.Add(TestBooks.Book("A", works: [w1]));
+        db.Books.Add(TestBooks.Book("B", works: [w2]));
         await db.SaveChangesAsync();
 
         var result = await Merge(w1.Id, w2.Id);
@@ -159,8 +159,8 @@ public class WorkMergeHandlerTests
             FirstPublishedDatePrecision = DatePrecision.Day,
             Genres = [horror, fantasy]
         };
-        db.Books.Add(new Book { Title = "Winner Book", Works = [winner] });
-        db.Books.Add(new Book { Title = "Loser Book", Works = [loser] });
+        db.Books.Add(TestBooks.Book("Winner Book", works: [winner]));
+        db.Books.Add(TestBooks.Book("Loser Book", works: [loser]));
         await db.SaveChangesAsync();
 
         var result = await Merge(winner.Id, loser.Id);
@@ -198,8 +198,8 @@ public class WorkMergeHandlerTests
             Subtitle = "Ignored",
             FirstPublishedDate = new DateOnly(1900, 1, 1),
         };
-        db.Books.Add(new Book { Title = "BW", Works = [winner] });
-        db.Books.Add(new Book { Title = "BL", Works = [loser] });
+        db.Books.Add(TestBooks.Book("BW", works: [winner]));
+        db.Books.Add(TestBooks.Book("BL", works: [loser]));
         await db.SaveChangesAsync();
 
         var result = await Merge(winner.Id, loser.Id);
@@ -226,8 +226,8 @@ public class WorkMergeHandlerTests
 
         var winner = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Genres = [horror, fantasy] };
         var loser = new Work { Title = "T", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }], Genres = [fantasy, mystery] };
-        db.Books.Add(new Book { Title = "BW", Works = [winner] });
-        db.Books.Add(new Book { Title = "BL", Works = [loser] });
+        db.Books.Add(TestBooks.Book("BW", works: [winner]));
+        db.Books.Add(TestBooks.Book("BL", works: [loser]));
         await db.SaveChangesAsync();
 
         await Merge(winner.Id, loser.Id);
@@ -265,8 +265,8 @@ public class WorkMergeHandlerTests
             Title = "Hobbit",
             WorkAuthors = [new WorkAuthor { Author = tolkien, Order = 0, Role = AuthorRole.Author }],
         };
-        db.Books.Add(new Book { Title = "Winner Book", Works = [winner] });
-        db.Books.Add(new Book { Title = "Loser Book", Works = [loser] });
+        db.Books.Add(TestBooks.Book("Winner Book", works: [winner]));
+        db.Books.Add(TestBooks.Book("Loser Book", works: [loser]));
         await db.SaveChangesAsync();
 
         var result = await Merge(winner.Id, loser.Id);
@@ -286,11 +286,11 @@ public class WorkMergeHandlerTests
         var loser = new Work { Title = loserTitle, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         foreach (var t in winnerBooks)
         {
-            db.Books.Add(new Book { Title = t, Works = [winner] });
+            db.Books.Add(TestBooks.Book(t, works: [winner]));
         }
         foreach (var t in loserBooks)
         {
-            db.Books.Add(new Book { Title = t, Works = [loser] });
+            db.Books.Add(TestBooks.Book(t, works: [loser]));
         }
         await db.SaveChangesAsync();
         return (winner.Id, loser.Id, 0);
@@ -303,9 +303,9 @@ public class WorkMergeHandlerTests
         var winner = new Work { Title = "W", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var loser = new Work { Title = "L", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
         var other = new Work { Title = "O", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
-        db.Books.Add(new Book { Title = "BW", Works = [winner] });
-        db.Books.Add(new Book { Title = "BL", Works = [loser] });
-        db.Books.Add(new Book { Title = "BO", Works = [other] });
+        db.Books.Add(TestBooks.Book("BW", works: [winner]));
+        db.Books.Add(TestBooks.Book("BL", works: [loser]));
+        db.Books.Add(TestBooks.Book("BO", works: [other]));
         await db.SaveChangesAsync();
         return (winner.Id, loser.Id, other.Id);
     }

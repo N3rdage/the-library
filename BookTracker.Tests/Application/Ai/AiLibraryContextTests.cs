@@ -36,21 +36,15 @@ public class AiLibraryContextTests
             db.Series.AddRange(foundation, zeta, open);
 
             db.Books.AddRange(
-                new Book
-                {
-                    Title = "Foundation", Rating = 5, Series = foundation, SeriesOrder = 1,
-                    Works = [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }], Genres = [sf] }],
-                },
-                new Book
-                {
-                    Title = "I, Robot", Rating = 3,
-                    Works = [new Work { Title = "I, Robot", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }], Genres = [sf] }],
-                },
-                new Book
-                {
-                    Title = "A Wizard of Earthsea", Rating = 4, Series = open, SeriesOrder = 1,
-                    Works = [new Work { Title = "A Wizard of Earthsea", WorkAuthors = [new WorkAuthor { Author = leGuin, Order = 0 }], Genres = [fantasy] }],
-                });
+                TestBooks.Book(
+                    "Foundation", rating: 5, series: foundation, seriesOrder: 1,
+                    works: [new Work { Title = "Foundation", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }], Genres = [sf] }]),
+                TestBooks.Book(
+                    "I, Robot", rating: 3,
+                    works: [new Work { Title = "I, Robot", WorkAuthors = [new WorkAuthor { Author = asimov, Order = 0 }], Genres = [sf] }]),
+                TestBooks.Book(
+                    "A Wizard of Earthsea", rating: 4, series: open, seriesOrder: 1,
+                    works: [new Work { Title = "A Wizard of Earthsea", WorkAuthors = [new WorkAuthor { Author = leGuin, Order = 0 }], Genres = [fantasy] }]));
             await db.SaveChangesAsync();
         }
 

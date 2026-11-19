@@ -21,7 +21,7 @@ public class WorkCommandHandlersTests
             Title = title,
             WorkAuthors = { new WorkAuthor { Author = Author.Create("Pratchett"), Order = 0, Role = AuthorRole.Author } },
         };
-        var book = new Book { Title = "Book", Works = { work } };
+        var book = TestBooks.Book("Book", works: [work]);
         db.Books.Add(book);
         await db.SaveChangesAsync();
         return (book.Id, work.Id);
@@ -30,7 +30,7 @@ public class WorkCommandHandlersTests
     private async Task<int> SeedBareBookAsync(string title = "Bare")
     {
         await using var db = _factory.CreateDbContext();
-        var book = new Book { Title = title };
+        var book = TestBooks.Book(title);
         db.Books.Add(book);
         await db.SaveChangesAsync();
         return book.Id;
@@ -81,8 +81,8 @@ public class WorkCommandHandlersTests
                 Title = "Shared",
                 WorkAuthors = { new WorkAuthor { Author = Author.Create("A"), Order = 0, Role = AuthorRole.Author } },
             };
-            var a = new Book { Title = "A", Works = { work } };
-            var b = new Book { Title = "B", Works = { work } };
+            var a = TestBooks.Book("A", works: [work]);
+            var b = TestBooks.Book("B", works: [work]);
             db.Books.AddRange(a, b);
             await db.SaveChangesAsync();
             bookA = a.Id; workId = work.Id;
@@ -234,7 +234,7 @@ public class WorkCommandHandlersTests
     {
         await using var db = _factory.CreateDbContext();
         var author = Author.Create("Seed Author");
-        var book = new Book { Title = "Anthology" };
+        var book = TestBooks.Book("Anthology");
         foreach (var t in titles)
         {
             var w = new Work { Title = t, WorkAuthors = { new WorkAuthor { Author = author, Order = 0, Role = AuthorRole.Author } } };
