@@ -70,9 +70,12 @@ public static class ProgramSetup
         // resolves from APPLICATIONINSIGHTS_CONNECTION_STRING (set in
         // app-config.bicep). UserActivityProcessor stamps the authenticated user
         // onto every Activity as enduser.id (Application Insights' authenticated user id).
-        builder.Services.AddApplicationInsightsTelemetry();
+        // Processors run in the order they are added, so it is registered before the
+        // Application Insights exporter: the tag is on the Activity before the export
+        // processor sees it end.
         builder.Services.AddHttpContextAccessor();
         builder.Services.ConfigureOpenTelemetryTracerProvider(tracing => tracing.AddProcessor<UserActivityProcessor>());
+        builder.Services.AddApplicationInsightsTelemetry();
 
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
