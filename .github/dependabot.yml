@@ -39,6 +39,15 @@ updates:
         patterns:
           - "SkiaSharp*"
     ignore:
+      # Microsoft.ApplicationInsights.AspNetCore 3.x is a full OpenTelemetry
+      # rewrite of the classic SDK — ITelemetryInitializer (currently used
+      # by UserTelemetryInitializer.cs) is gone; migration to BaseProcessor
+      # <Activity> + IHttpContextAccessor is non-trivial. Tracked in TODO
+      # #42; ignore the major bump until then so Dependabot doesn't keep
+      # re-opening the failing PR. Minor / patch updates within 2.x stay
+      # auto-applied.
+      - dependency-name: "Microsoft.ApplicationInsights.AspNetCore"
+        update-types: ["version-update:semver-major"]
       # Both apps target net10.0, and the Microsoft.Extensions.* /
       # Microsoft.AspNetCore.* (Mvc.Testing in the test projects) / EF Core /
       # System.Security.Cryptography.Pkcs packages ride the runtime's line:
