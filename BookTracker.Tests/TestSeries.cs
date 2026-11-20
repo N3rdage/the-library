@@ -20,13 +20,6 @@ public static class TestSeries
         string? description = null)
     {
         // Fully qualified: inside this class the simple name Series is the method.
-        return new global::BookTracker.Data.Models.Series
-        {
-            Name = name,
-            Type = type,
-            Author = author,
-            ExpectedCount = expectedCount,
-            Description = description,
-        };
+        return new global::BookTracker.Data.Models.Series(name, type, author, expectedCount, description);
     }
 }

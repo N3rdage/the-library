@@ -25,21 +25,7 @@ public static class TestWishlistItems
         int? seriesId = null,
         int? seriesOrder = null)
     {
-        var item = new WishlistItem
-        {
-            Title = title,
-            Author = author,
-            Priority = priority,
-            Isbn = isbn,
-            CoverUrl = coverUrl,
-            Series = series,
-            SeriesId = seriesId,
-            SeriesOrder = seriesOrder,
-        };
-
-        if (isbns is not null) item.Isbns = isbns.Select(i => new WishlistItemIsbn { Isbn = i }).ToList();
-        if (dateAdded is not null) item.DateAdded = dateAdded.Value;
-
-        return item;
+        return new WishlistItem(
+            title, author, priority, isbn, isbns, coverUrl, dateAdded, series, seriesId, seriesOrder);
     }
 }
