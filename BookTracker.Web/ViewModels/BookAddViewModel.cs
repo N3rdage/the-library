@@ -15,7 +15,7 @@ public class BookAddViewModel(
     IBookLookupService lookup,
     SeriesMatchService seriesMatch,
     IDispatcher dispatcher,
-    ILogger<BookAddViewModel> logger)
+    ILogger<BookAddViewModel> logger) : DispatchingViewModel
 {
     /// <summary>Search existing Works for the collection-row autocomplete.
     /// Returns matches as the user types so they can attach an already-
@@ -413,9 +413,9 @@ public class BookAddViewModel(
         AddingCopy = true;
         try
         {
-            await dispatcher.Send(new AddCopyToEdition(
-                ExistingBook.EditionId, CopyInput.Condition, DateAcquired: null, Notes: null));
-            return ExistingBook.BookId;
+            await DispatchAsync(() => dispatcher.Send(new AddCopyToEdition(
+                ExistingBook.EditionId, CopyInput.Condition, DateAcquired: null, Notes: null)));
+            return Error is null ? ExistingBook.BookId : null;
         }
         finally
         {
@@ -516,11 +516,13 @@ public class BookAddViewModel(
     {
         // The page's EditForm validates its own model on submit, not these nested
         // inputs, so the cover URL rule is enforced here too and surfaces through
-        // the page's save-error alert.
+        // Error.
+        Error = null;
         if (!CoverFetchPolicy.IsAcceptableCoverUrl(BookInput.DefaultCoverArtUrl)
             || !CoverFetchPolicy.IsAcceptableCoverUrl(EditionInput.CoverUrl))
         {
-            throw new InvalidOperationException(CoverUrlAttribute.Message);
+            Error = CoverUrlAttribute.Message;
+            return null;
         }
 
         Saving = true;
@@ -533,7 +535,7 @@ public class BookAddViewModel(
             // typeahead) lands on the Book in both modes: a collection is still
             // installment N of a publication series.
             var datePrinted = PartialDateParser.TryParse(EditionInput.DatePrinted) ?? PartialDate.Empty;
-            return await dispatcher.Send(new CreateBook(
+            var bookId = await DispatchAsync(() => dispatcher.Send(new CreateBook(
                 new NewBook(
                     BookInput.Title ?? string.Empty,
                     BookInput.Category,
@@ -552,7 +554,15 @@ public class BookAddViewModel(
                     EditionInput.CoverUrl),
                 CopyInput.Condition,
                 new SeriesChoice(AcceptedSeriesId, AcceptedSeriesName, AcceptedSeriesOrderLabel),
-                []));
+                [])));
+            return Error is null ? bookId : null;
+        }
+        // CreateBook states its validation refusals (no contributor, empty
+        // collection) as InvalidOperationException with a user-facing message.
+        catch (InvalidOperationException ex)
+        {
+            Error = ex.Message;
+            return null;
         }
         finally
         {

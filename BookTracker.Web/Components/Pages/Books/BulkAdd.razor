@@ -149,6 +149,8 @@
             </CardHeaderActions>
         </MudCardHeader>
 
+        <ActionError Message="@VM.Error" />
+
         @* Desktop table — MudTable for visual consistency with the rest of the
            Mud chrome. Per-row tinting (accepted / follow-up / duplicate states)
            via RowStyleFunc that maps RowAction to a translucent background. *@

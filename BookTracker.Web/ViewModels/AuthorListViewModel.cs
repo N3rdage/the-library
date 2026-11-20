@@ -10,7 +10,7 @@ namespace BookTracker.Web.ViewModels;
 //
 // Detail / rename / alias-management lives at /authors/{id} via
 // AuthorDetailViewModel — this VM only renders the listing.
-public class AuthorListViewModel(IDispatcher dispatcher)
+public class AuthorListViewModel(IDispatcher dispatcher) : DispatchingViewModel
 {
     public bool Loading { get; private set; } = true;
     public IReadOnlyList<AuthorRow> Authors { get; private set; } = [];

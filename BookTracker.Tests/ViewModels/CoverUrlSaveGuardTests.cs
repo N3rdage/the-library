@@ -105,7 +105,7 @@ public class CoverUrlSaveGuardTests
     [Theory]
     [InlineData(HttpCover, null)]
     [InlineData(null, HttpCover)]
-    public async Task BookAdd_UnacceptableCoverUrl_ThrowsTheFieldMessageBeforeSaving(string? bookCover, string? editionCover)
+    public async Task BookAdd_UnacceptableCoverUrl_SetsTheFieldMessageBeforeSaving(string? bookCover, string? editionCover)
     {
         var vm = new BookAddViewModel(
             Substitute.For<IBookLookupService>(), new SeriesMatchService(_dispatcher),
@@ -114,9 +114,9 @@ public class CoverUrlSaveGuardTests
         vm.BookInput.DefaultCoverArtUrl = bookCover;
         vm.EditionInput.CoverUrl = editionCover;
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => vm.SaveAsync([]));
+        Assert.Null(await vm.SaveAsync([]));
 
-        Assert.Equal(CoverUrlAttribute.Message, ex.Message);
+        Assert.Equal(CoverUrlAttribute.Message, vm.Error);
         Assert.False(vm.Saving);
         Assert.Empty(_dispatcher.ReceivedCalls());
     }

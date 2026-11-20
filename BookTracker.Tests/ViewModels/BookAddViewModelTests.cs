@@ -2,6 +2,7 @@ using BookTracker.Application;
 using BookTracker.Application.Books;
 using BookTracker.Application.Series;
 using BookTracker.Application.Works;
+using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
@@ -353,12 +354,11 @@ public class BookAddViewModelTests
     }
 
     [Fact]
-    public async Task SaveAsync_HandlerValidationError_PropagatesAndClearsSaving()
+    public async Task SaveAsync_HandlerValidationError_SetsErrorAndClearsSaving()
     {
         // The handler owns the user-facing validation throws (no contributor,
-        // no usable collection row, Single-Author mode with no shared author).
-        // The Add page shows an InvalidOperationException's message as-is, so
-        // the VM must let it through unchanged.
+        // no usable collection row, Single-Author mode with no shared author)
+        // as InvalidOperationException; the message goes to Error as-is.
         _dispatcher.Send(Arg.Any<CreateBook>(), Arg.Any<CancellationToken>())
             .Throws(new InvalidOperationException("A collection in Single-Author mode needs at least one work with a title, plus at least one shared author. (Or attach an existing work.)"));
         var vm = CreateVm();
@@ -368,10 +368,55 @@ public class BookAddViewModelTests
         vm.SharedAuthors = [];
         vm.CollectionWorks = [new() { Title = "Story A" }];
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => vm.SaveAsync(selectedGenreIds: []));
+        var bookId = await vm.SaveAsync(selectedGenreIds: []);
 
-        Assert.Contains("Single-Author", ex.Message);
+        Assert.Null(bookId);
+        Assert.Contains("Single-Author", vm.Error);
         Assert.False(vm.Saving);
+    }
+
+    [Fact]
+    public async Task SaveAsync_DomainRefusal_SetsErrorAndClearsSaving()
+    {
+        _dispatcher.Send(Arg.Any<CreateBook>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DomainRuleException("Title is required."));
+        var vm = CreateVm();
+
+        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+
+        Assert.Null(bookId);
+        Assert.Equal("Title is required.", vm.Error);
+        Assert.False(vm.Saving);
+    }
+
+    [Fact]
+    public async Task SaveAsync_Fault_PropagatesLeavesErrorClearAndClearsSaving()
+    {
+        _dispatcher.Send(Arg.Any<CreateBook>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new TimeoutException("db down"));
+        var vm = CreateVm();
+
+        await Assert.ThrowsAsync<TimeoutException>(() => vm.SaveAsync(selectedGenreIds: []));
+
+        Assert.Null(vm.Error);
+        Assert.False(vm.Saving);
+    }
+
+    [Fact]
+    public async Task AddCopyToExistingAsync_NotFound_SetsErrorAndReturnsNull()
+    {
+        _dispatcher.Query(Arg.Any<FindEditionByIsbn>(), Arg.Any<CancellationToken>()).Returns(HobbitMatch());
+        _dispatcher.Send(Arg.Any<AddCopyToEdition>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new NotFoundException("Edition 5 not found."));
+        var vm = CreateVm();
+        vm.LookupIsbn = "9780261102217";
+        await vm.LookupAsync();
+
+        var bookId = await vm.AddCopyToExistingAsync();
+
+        Assert.Null(bookId);
+        Assert.Equal("Edition 5 not found.", vm.Error);
+        Assert.False(vm.AddingCopy);
     }
 
     [Fact]

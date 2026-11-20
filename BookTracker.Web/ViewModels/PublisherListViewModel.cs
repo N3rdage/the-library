@@ -16,7 +16,7 @@ namespace BookTracker.Web.ViewModels;
 // keeps only presentation state — the per-row expand set and the lazily-loaded
 // edition-detail cache, invalidated whenever a structural change could affect
 // what's displayed.
-public class PublisherListViewModel(IDispatcher dispatcher)
+public class PublisherListViewModel(IDispatcher dispatcher) : DispatchingViewModel
 {
     public bool Loading { get; private set; } = true;
     public IReadOnlyList<PublisherRow> Publishers { get; private set; } = [];
@@ -44,31 +44,39 @@ public class PublisherListViewModel(IDispatcher dispatcher)
 
     public async Task RenameAsync(int publisherId, string newName)
     {
-        var result = await dispatcher.Send(new RenamePublisher(publisherId, newName));
+        var result = await DispatchAsync(() => dispatcher.Send(new RenamePublisher(publisherId, newName)));
         await ApplyAsync(result, publisherId);
     }
 
     public async Task DeleteUnusedAsync(int publisherId)
     {
-        var result = await dispatcher.Send(new DeleteUnusedPublisher(publisherId));
+        var result = await DispatchAsync(() => dispatcher.Send(new DeleteUnusedPublisher(publisherId)));
         await ApplyAsync(result, publisherId);
     }
 
     public async Task MergeAsync(int sourceId, int targetId)
     {
-        var result = await dispatcher.Send(new MergePublishers(sourceId, targetId));
+        var result = await DispatchAsync(() => dispatcher.Send(new MergePublishers(sourceId, targetId)));
         await ApplyAsync(result, sourceId, targetId);
     }
 
-    // Surface the toast and, when the command changed data, drop the stale
-    // drill-down cache for the affected rows and reload the list.
-    private async Task ApplyAsync(PublisherAdminResult result, params int[] affectedIds)
+    // A changed result is a success: show its message and drop the stale
+    // drill-down cache for the affected rows before reloading the list. A
+    // guard refusal (name clash, publisher in use) carries a message but no
+    // change and goes to Error. A null result means the dispatch itself was
+    // refused and Error is already set.
+    private async Task ApplyAsync(PublisherAdminResult? result, params int[] affectedIds)
     {
-        if (result.Message is not null) SuccessMessage = result.Message;
+        if (result is null) return;
         if (result.Changed)
         {
+            SuccessMessage = result.Message;
             InvalidateDetailsFor(affectedIds);
             await LoadAsync();
+        }
+        else if (result.Message is not null)
+        {
+            Error = result.Message;
         }
     }
 

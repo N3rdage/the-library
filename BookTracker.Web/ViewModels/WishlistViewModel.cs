@@ -22,7 +22,7 @@ namespace BookTracker.Web.ViewModels;
 public class WishlistViewModel(
     IBookLookupService lookup,
     IDispatcher dispatcher,
-    ILogger<WishlistViewModel> logger)
+    ILogger<WishlistViewModel> logger) : DispatchingViewModel
 {
     // ---- Search-and-add (PR B) ----
 
@@ -221,8 +221,8 @@ public class WishlistViewModel(
     {
         // Aggregate owns the normalisation (trim, "Unknown" fallback, ISBN
         // dual-write); a blank title comes back as null.
-        var result = await dispatcher.Send(new AddWishlistItem(
-            candidate.Title, candidate.Author, WishlistPriority.Medium, candidate.Isbns, candidate.CoverUrl));
+        var result = await DispatchAsync(() => dispatcher.Send(new AddWishlistItem(
+            candidate.Title, candidate.Author, WishlistPriority.Medium, candidate.Isbns, candidate.CoverUrl)));
         if (result is null) return null;
 
         var row = new WishlistRow(
@@ -261,12 +261,14 @@ public class WishlistViewModel(
     /// detection. Existing wishlist rows at the same (SeriesId,
     /// SeriesOrder) are skipped silently to make re-runs idempotent —
     /// asking for slots 4–7 twice still ends up with one row per slot.
-    /// Returns the count actually added (excluding the silent skips).</summary>
-    public async Task<int> AddSeriesSlotsToWishlistAsync(int seriesId, IReadOnlyList<int> slots)
+    /// Returns the count actually added (excluding the silent skips), or null
+    /// when the domain refused it (with <see cref="DispatchingViewModel.Error"/> set).</summary>
+    public async Task<int?> AddSeriesSlotsToWishlistAsync(int seriesId, IReadOnlyList<int> slots)
     {
         ArgumentNullException.ThrowIfNull(slots);
         // The handler owns the dedup, series lookup, and idempotency skip.
-        var added = await dispatcher.Send(new AddWishlistSeriesSlots(seriesId, slots));
+        var added = await DispatchAsync(() => dispatcher.Send(new AddWishlistSeriesSlots(seriesId, slots)));
+        if (Error is not null) return null;
 
         // If the wishlist is already loaded, refresh it so the new stubs surface
         // immediately. Skip if not loaded — the user hasn't asked to see it yet.
@@ -295,9 +297,9 @@ public class WishlistViewModel(
         // Same AddWishlistItem path as search-and-add — the typed ISBN (if any)
         // goes in as the single known ISBN so PR D's scan-flag catches it too.
         var isbn = string.IsNullOrWhiteSpace(QuickAdd.Isbn) ? null : QuickAdd.Isbn.Trim();
-        var result = await dispatcher.Send(new AddWishlistItem(
+        var result = await DispatchAsync(() => dispatcher.Send(new AddWishlistItem(
             QuickAdd.Title, QuickAdd.Author, QuickAdd.Priority,
-            isbn is null ? [] : [isbn], CoverUrl: null));
+            isbn is null ? [] : [isbn], CoverUrl: null)));
         if (result is null) return;
 
         InsertSortedRow(new WishlistRow(
@@ -321,7 +323,7 @@ public class WishlistViewModel(
 
     public async Task RemoveFromWishlistAsync(int itemId)
     {
-        await dispatcher.Send(new RemoveWishlistItem(itemId));
+        if (!await DispatchAsync(() => dispatcher.Send(new RemoveWishlistItem(itemId)))) return;
         Wishlist.RemoveAll(i => i.Id == itemId);
     }
 
@@ -333,7 +335,8 @@ public class WishlistViewModel(
     /// </summary>
     public async Task<int?> MarkAsBoughtAsync(WishlistRow item)
     {
-        var bookId = await dispatcher.Send(new MarkWishlistItemBought(item.Id));
+        var bookId = await DispatchAsync(() => dispatcher.Send(new MarkWishlistItemBought(item.Id)));
+        if (Error is not null) return null;
         Wishlist.RemoveAll(i => i.Id == item.Id);
         return bookId;
     }

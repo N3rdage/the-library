@@ -1,6 +1,8 @@
 using BookTracker.Application;
 using BookTracker.Application.Publishers;
+using BookTracker.Data;
 using BookTracker.Data.Models;
+using NSubstitute.ExceptionExtensions;
 using BookTracker.Web.ViewModels;
 using NSubstitute;
 
@@ -82,8 +84,34 @@ public class PublisherListViewModelTests
 
         await vm.RenameAsync(1, "Tor");
 
-        Assert.Contains("already exists", vm.SuccessMessage);
+        Assert.Contains("already exists", vm.Error);
+        Assert.Null(vm.SuccessMessage);
         await _dispatcher.Received(1).Query(Arg.Any<GetPublisherList>(), Arg.Any<CancellationToken>()); // only the initial load
+    }
+
+    [Fact]
+    public async Task DeleteUnusedAsync_DomainRefusal_SetsError_DoesNotReload()
+    {
+        var vm = await LoadedVm(new PublisherRow(1, "Tor", 0));
+        _dispatcher.Send(Arg.Any<DeleteUnusedPublisher>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new NotFoundException("Publisher 1 not found."));
+
+        await vm.DeleteUnusedAsync(1);
+
+        Assert.Equal("Publisher 1 not found.", vm.Error);
+        await _dispatcher.Received(1).Query(Arg.Any<GetPublisherList>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task MergeAsync_Fault_Propagates()
+    {
+        var vm = await LoadedVm(new PublisherRow(1, "Tor Books", 2), new PublisherRow(2, "Tor", 0));
+        _dispatcher.Send(Arg.Any<MergePublishers>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new TimeoutException("db down"));
+
+        await Assert.ThrowsAsync<TimeoutException>(() => vm.MergeAsync(1, 2));
+
+        Assert.Null(vm.Error);
     }
 
     [Fact]
