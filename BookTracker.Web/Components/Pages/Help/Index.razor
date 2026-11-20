@@ -1,0 +1,70 @@
+@page "/help"
+
+<PageTitle>Help - Bookcase</PageTitle>
+
+@* The app has <base href="/">, so every manual link is "manual#id", never a bare "#id". *@
+<MudText Typo="Typo.h4" Class="mb-2">Help</MudText>
+<MudText Class="mb-4">
+    This page tells you where things are and what the main ideas mean.
+    For the full details, read the <a href="manual">manual</a>.
+</MudText>
+
+<MudText Typo="Typo.h5" Class="mb-2">Where things are</MudText>
+<MudSimpleTable Dense="true" Class="mb-6" id="help-surfaces">
+    <tbody>
+        @foreach (var s in Surfaces)
+        {
+            <tr>
+                <td><a href="@s.Href">@s.Name</a></td>
+                <td>@s.Summary <a href="manual#@s.ManualId">More</a></td>
+            </tr>
+        }
+    </tbody>
+</MudSimpleTable>
+
+<MudText Typo="Typo.h5" Class="mb-2">Key concepts</MudText>
+<MudText Class="mb-2">The <a href="manual#key-concepts">manual</a> explains each of these in full.</MudText>
+<MudList T="string" Dense="true" id="help-concepts">
+    @foreach (var c in Concepts)
+    {
+        <MudListItem T="string"><strong>@c.Term.</strong> @c.Meaning</MudListItem>
+    }
+</MudList>
+
+@code {
+    private sealed record Surface(string Name, string Href, string Summary, string ManualId);
+    private sealed record Concept(string Term, string Meaning);
+
+    private static readonly Surface[] Surfaces =
+    [
+        new("Home", "", "A summary of your library: totals, loans due back, and your top authors and genres.", "home"),
+        new("Library", "books", "Lists every book so you can find one, change its status or rating, and open its page.", "library"),
+        new("Add book", "books/add", "Records one book with its first edition and copy, after an ISBN lookup or by hand.", "add-book"),
+        new("Bulk add", "books/bulk-add", "Captures a pile of books by ISBN, then gives you a grid to confirm.", "bulk-add"),
+        new("Series", "series", "Lists every series and collection, with progress towards the expected count.", "series"),
+        new("Shelf order", "shelf-order", "A plain list, by genre then author, to read at the bookcase or print.", "shelf-order"),
+        new("Authors", "authors", "Lists every author with counts, and lets you link pen names to the real author.", "authors"),
+        new("Publishers", "publishers", "Lists publishers with edition counts, and lets you rename, merge or delete them.", "publishers"),
+        new("Wishlist", "wishlist", "Finds books to add to your wishlist, shows series gaps, and keeps the list of books you want.", "wishlist"),
+        new("On loan", "loans", "Shows what you have lent out, grouped by borrower, and lets you lend a book or mark it returned.", "on-loan"),
+        new("Bookshop", "bookshop", "A phone-sized page for checking your library in a shop, even without a connection.", "bookshop"),
+        new("AI Assistant", "assistant", "Uses an AI provider to advise on books, clean up genres and suggest groupings and purchases.", "ai-assistant"),
+        new("Duplicates", "duplicates", "Finds pairs that may be the same author, work, book or edition, and merges or dismisses them.", "duplicates"),
+        new("Privacy", "privacy", "A placeholder page that holds no settings.", "privacy"),
+        new("Manual", "manual", "The full user guide, with a contents list.", "navigation"),
+    ];
+
+    private static readonly Concept[] Concepts =
+    [
+        new("Book", "The physical thing on your shelf: one volume, with your reading state, cover, tags and place in a series."),
+        new("Work", "A story, novel or play, apart from any volume it is printed in; most Books hold one, a compendium holds several."),
+        new("Edition", "One printing of a Book, with its ISBN, format, publisher and print date."),
+        new("Copy", "One physical item of an Edition, with a condition, an acquired date and notes."),
+        new("Series and Collection", "A Series is a numbered run with a known order; a Collection is a looser grouping with no fixed order."),
+        new("Author and pen name", "A pen name is its own Author row linked to the real author as an alias, so totals and searches roll up."),
+        new("Genre", "A label for a Work; genres have parents and children, so picking a child also picks its parent."),
+        new("Tag", "A free, flat label on a Book that you make up as you go."),
+        new("Wishlist", "Books you want but do not own, each with a title, author and priority."),
+        new("Loan", "A record that you lent a Copy to someone, with a borrower, a date lent and an optional due date."),
+    ];
+}
