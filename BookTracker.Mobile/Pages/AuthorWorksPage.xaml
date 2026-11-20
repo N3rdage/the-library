@@ -5,18 +5,31 @@
              Style="{StaticResource Page}">
 
     <!-- Author drill-down: the works you own by the canonical author (alias
-         credits roll up). Title is set in code-behind. v1 is owned-only — the
-         "Missing" scope (works you don't own) needs the author's online
-         bibliography, deferred to the online-layer arc (TODO #54). -->
+         credits roll up), from the cache. Title is set in code-behind. When
+         the phone is online, the author's bibliography from Bookcase adds the
+         works you don't own (muted, "Not owned") and the All · Missing only
+         segment appears. -->
 
-    <Grid RowDefinitions="Auto,*" Padding="20,16,20,0">
+    <Grid RowDefinitions="Auto,Auto,*" Padding="20,16,20,0">
         <Label x:Name="HeaderLabel"
                Grid.Row="0"
                FontSize="14"
                LineBreakMode="WordWrap"
                TextColor="{AppThemeBinding Light={StaticResource TextMutedL}, Dark={StaticResource TextMutedD}}" />
 
-        <ScrollView Grid.Row="1" Margin="0,12,0,0">
+        <!-- Scope segment (All / Missing only) — shown only once the online
+             list has arrived. Same control as the Find page's scope. -->
+        <Grid x:Name="ScopeSegment"
+              Grid.Row="1"
+              Padding="0,12,0,0"
+              ColumnDefinitions="*,*"
+              ColumnSpacing="8"
+              IsVisible="False">
+            <Button x:Name="ScopeAllButton" Text="All" Clicked="OnScopeAll" HeightRequest="40" CornerRadius="8" FontSize="13" />
+            <Button x:Name="ScopeMissingButton" Grid.Column="1" Text="Missing only" Clicked="OnScopeMissing" HeightRequest="40" CornerRadius="8" FontSize="13" />
+        </Grid>
+
+        <ScrollView Grid.Row="2" Margin="0,12,0,0">
             <VerticalStackLayout x:Name="WorksLayout"
                                  Spacing="8"
                                  Padding="0,0,0,20" />

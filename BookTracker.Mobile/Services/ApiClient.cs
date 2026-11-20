@@ -98,4 +98,31 @@ public class ApiClient(HttpClient http, IAuthService auth) : IApiClient
             return null;
         }
     }
+
+    public async Task<OnlineAuthorWorks?> GetAuthorWorksOnlineAsync(string author, CancellationToken ct = default)
+    {
+        try
+        {
+            var token = await auth.AcquireTokenSilentAsync()
+                ?? await auth.SignInAsync();
+
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get, $"/api/online/author-works?author={Uri.EscapeDataString(author)}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            using var response = await http.SendAsync(request, ct);
+            // 400 (no name) and 5xx are failures; the page keeps its owned list.
+            if (!response.IsSuccessStatusCode) return null;
+
+            return await response.Content.ReadFromJsonAsync<OnlineAuthorWorks>(JsonOptions, ct);
+        }
+        catch (Exception)
+        {
+            // Same reasoning as LookupIsbnOnlineAsync: the bibliography is
+            // extra on top of the owned list already on screen, so a failure
+            // (sign-in cancelled, no network, timeout, bad JSON) means "no
+            // online list" rather than an error.
+            return null;
+        }
+    }
 }
