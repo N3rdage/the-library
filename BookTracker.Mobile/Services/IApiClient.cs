@@ -34,4 +34,11 @@ public interface IApiClient
     /// provider knows the ISBN (404) and on any other failure — the Result
     /// page then keeps its offline answer, so this never throws.</summary>
     Task<OnlineIsbnLookup?> LookupIsbnOnlineAsync(string isbn, CancellationToken ct = default);
+
+    /// <summary>Calls GET /api/online/author-works?author={name} with the
+    /// cached bearer token: the author's Open Library bibliography, each work
+    /// flagged with the owned Book when the library holds it. Returns null on
+    /// any failure — the Author-works page then keeps its owned list, so this
+    /// never throws.</summary>
+    Task<OnlineAuthorWorks?> GetAuthorWorksOnlineAsync(string author, CancellationToken ct = default);
 }
