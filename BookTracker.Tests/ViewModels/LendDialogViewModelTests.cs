@@ -53,6 +53,45 @@ public class LendDialogViewModelTests
     }
 
     [Fact]
+    public void InitializeEmpty_startsWithNoCopies_andCannotConfirmUntilOneIsAdded()
+    {
+        var vm = new LendDialogViewModel(_dispatcher, Clock);
+        vm.Initialize();
+        vm.BorrowerName = "Sam";
+
+        Assert.Empty(vm.Copies);
+        Assert.Equal(Today, vm.LentOn);
+        Assert.False(vm.CanConfirm);
+
+        vm.AddCopy(First);
+
+        Assert.True(vm.CanConfirm);
+    }
+
+    [Fact]
+    public void InitializeEmpty_clearsAPreviousSession()
+    {
+        var vm = InitializedVm();
+        vm.BorrowerName = "Sam";
+
+        vm.Initialize();
+
+        Assert.Empty(vm.Copies);
+        Assert.Null(vm.BorrowerName);
+    }
+
+    [Fact]
+    public void LentMessage_namesTheBorrower_orCountsTheCopies()
+    {
+        var vm = InitializedVm();
+        vm.BorrowerName = "  Sam ";
+        Assert.Equal("Lent to Sam", vm.LentMessage);
+
+        vm.AddCopy(new LendDialogViewModel.LendCopyOption(12, "Emma", "Paperback", BookCondition.Good));
+        Assert.Equal("2 copies lent to Sam", vm.LentMessage);
+    }
+
+    [Fact]
     public async Task SuggestBorrowersAsync_QueriesGetBorrowerNamesWithThePrefix()
     {
         _dispatcher.Query(Arg.Is<GetBorrowerNames>(q => q!.Prefix == "sa"), Arg.Any<CancellationToken>())
