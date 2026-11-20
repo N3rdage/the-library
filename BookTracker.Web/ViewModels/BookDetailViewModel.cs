@@ -157,6 +157,39 @@ public class BookDetailViewModel(
         return null;
     }
 
+    private IEnumerable<CopyDetail> AllCopies => Book?.Editions.SelectMany(e => e.Copies) ?? [];
+
+    /// <summary>The copy the header "Lend" seeds the dialog with: the first copy
+    /// not on loan; null when every copy is out or the book has none.</summary>
+    public int? FirstFreeCopyId => AllCopies.FirstOrDefault(c => c.OpenLoan is null)?.Id;
+
+    /// <summary>True when the book has copies and every one of them is on loan.</summary>
+    public bool AllCopiesLent => TotalCopies > 0 && FirstFreeCopyId is null;
+
+    /// <summary>"Lent to Ann, Bob": the distinct borrowers in copy order; null
+    /// unless every copy is on loan.</summary>
+    public string? LentToLabel => AllCopiesLent
+        ? "Lent to " + string.Join(", ", AllCopies.Select(c => c.OpenLoan!.BorrowerName).Distinct(StringComparer.Ordinal))
+        : null;
+
+    /// <summary>Marks every open loan on the book returned today, then reloads
+    /// the detail once (also when one return is refused, so the page shows what
+    /// is still out).</summary>
+    public async Task ReturnAllLoansAsync()
+    {
+        if (Book is null) return;
+        var loanIds = AllCopies.Where(c => c.OpenLoan is not null).Select(c => c.OpenLoan!.LoanId).ToList();
+        try
+        {
+            foreach (var loanId in loanIds)
+                await dispatcher.Send(new ReturnLoan(loanId, Today));
+        }
+        finally
+        {
+            await InitializeAsync(Book.Id);
+        }
+    }
+
     /// <summary>Marks the loan returned today and reloads the detail.</summary>
     public async Task ReturnLoanAsync(int loanId)
     {

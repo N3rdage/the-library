@@ -1278,4 +1278,73 @@ public class BookDetailViewModelLoanTests
         Assert.Equal(new LendDialogViewModel.LendCopyOption(11, "Dune", "Hardcover · 9780441013593", BookCondition.VeryGood), option);
         Assert.Null(vm.LendOptionFor(999));
     }
+
+    private static CopyDetail Free(int id) => new(id, BookCondition.Good, null, null);
+
+    private static CopyDetail Out(int id, int loanId, string borrower) =>
+        new(id, BookCondition.Good, null, null, new CopyLoanDetail(loanId, borrower, Today.AddDays(-3), null));
+
+    [Fact]
+    public async Task NoCopies_hasNothingToLend_andNoLentLabel()
+    {
+        var vm = await LoadedVmAsync();
+
+        Assert.Null(vm.FirstFreeCopyId);
+        Assert.False(vm.AllCopiesLent);
+        Assert.Null(vm.LentToLabel);
+    }
+
+    [Fact]
+    public async Task OneFreeCopy_isTheSeed()
+    {
+        var vm = await LoadedVmAsync(Free(11));
+
+        Assert.Equal(11, vm.FirstFreeCopyId);
+        Assert.False(vm.AllCopiesLent);
+        Assert.Null(vm.LentToLabel);
+    }
+
+    [Fact]
+    public async Task SeveralCopies_seedWithTheFirstOneNotOnLoan()
+    {
+        var vm = await LoadedVmAsync(Out(10, 1, "Ann"), Free(11), Free(12));
+
+        Assert.Equal(11, vm.FirstFreeCopyId);
+        Assert.False(vm.AllCopiesLent);
+        Assert.Null(vm.LentToLabel);
+    }
+
+    [Fact]
+    public async Task EveryCopyLent_hasNoSeed_andNamesTheBorrower()
+    {
+        var vm = await LoadedVmAsync(Out(10, 1, "Ann"));
+
+        Assert.Null(vm.FirstFreeCopyId);
+        Assert.True(vm.AllCopiesLent);
+        Assert.Equal("Lent to Ann", vm.LentToLabel);
+    }
+
+    [Fact]
+    public async Task EveryCopyLentToDifferentPeople_listsEachBorrowerOnce()
+    {
+        var vm = await LoadedVmAsync(Out(10, 1, "Ann"), Out(11, 2, "Bob"), Out(12, 3, "Ann"));
+
+        Assert.Equal("Lent to Ann, Bob", vm.LentToLabel);
+    }
+
+    [Fact]
+    public async Task ReturnAllLoansAsync_returnsEveryOpenLoanTodayAndReloadsOnce()
+    {
+        var vm = await LoadedVmAsync(Out(10, 1, "Ann"), Out(11, 2, "Bob"));
+        _dispatcher.ClearReceivedCalls();
+
+        await vm.ReturnAllLoansAsync();
+
+        await _dispatcher.Received(1).Send(
+            Arg.Is<ReturnLoan>(c => c!.LoanId == 1 && c.ReturnedOn == Today), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).Send(
+            Arg.Is<ReturnLoan>(c => c!.LoanId == 2 && c.ReturnedOn == Today), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).Query(
+            Arg.Any<BookTracker.Application.Books.GetBookDetail>(), Arg.Any<CancellationToken>());
+    }
 }
