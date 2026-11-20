@@ -3,10 +3,12 @@ using BookTracker.Application.Books;
 using BookTracker.Application.Loans;
 using BookTracker.Data;
 using BookTracker.Data.Models;
+using BookTracker.Web.Components.Layout;
 using BookTracker.Web.Components.Shared;
 using BookTracker.Web.Services.Covers;
 using BookTracker.Web.ViewModels;
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -85,5 +87,31 @@ public class ActionErrorTests : ComponentTestBase
         Assert.True(cut.Markup.IndexOf("That loan no longer exists.", StringComparison.Ordinal)
             < cut.Markup.IndexOf("Lent to Ann", StringComparison.Ordinal));
         Assert.Empty(Services.GetRequiredService<ISnackbar>().ShownSnackbars);
+    }
+
+    [Fact]
+    public void Page_debouncedNotesSaveFault_reachesTheErrorBoundary()
+    {
+        var detail = new BookDetail(
+            7, "Dune", BookCategory.Fiction, BookStatus.Unread, 0, null, null, new DateTime(2026, 1, 1),
+            Works: [], Editions: [], Tags: [], Series: null);
+        _dispatcher.Query(Arg.Any<GetBookDetail>(), Arg.Any<CancellationToken>()).Returns(detail);
+        _dispatcher.Send(Arg.Any<UpdateBookNotes>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("notes store down"));
+        Render<MudPopoverProvider>();
+        Render<MudDialogProvider>();
+        var cut = Render<PageErrorBoundary>(p => p
+            .Add(b => b.ChildContent, (RenderFragment)(b =>
+            {
+                b.OpenComponent<BooksDetail>(0);
+                b.AddComponentParameter(1, nameof(BooksDetail.BookId), 7);
+                b.CloseComponent();
+            }))
+            .Add(b => b.ErrorContent, (RenderFragment<Exception>)(ex => b => b.AddContent(0, $"fault: {ex.Message}"))));
+
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("textarea")));
+        cut.Find("textarea").Input("A note");
+
+        cut.WaitForAssertion(() => Assert.Contains("fault: notes store down", cut.Markup), TimeSpan.FromSeconds(5));
     }
 }

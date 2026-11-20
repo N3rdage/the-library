@@ -4,7 +4,6 @@
 @inject BookDetailViewModel VM
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
-@inject ILogger<Detail> Logger
 @inject IDialogService DialogService
 @inject LendDialogViewModel LendVM
 @inject IBrowserViewportService Viewport
@@ -695,9 +694,9 @@
         catch (TaskCanceledException) { /* superseded by a newer keystroke */ }
         catch (Exception ex)
         {
-            // Not inside an event handler, so the error boundary cannot see it. The
-            // notes stay dirty and the next blur save retries (and surfaces a fault).
-            Logger.LogError(ex, "Debounced notes save failed for book {BookId}.", BookId);
+            // Not inside an event handler, so hand the fault to the renderer: it
+            // reaches the page error boundary like any other fault.
+            await DispatchExceptionAsync(ex);
         }
     }
 

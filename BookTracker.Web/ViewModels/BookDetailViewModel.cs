@@ -113,6 +113,8 @@ public class BookDetailViewModel(
         var trimmed = name.Trim();
         if (CurrentTags.Any(t => t.Name.Equals(trimmed, StringComparison.OrdinalIgnoreCase)))
         {
+            // Nothing to dispatch, but the attempt still clears an earlier refusal.
+            Error = null;
             return null;
         }
 

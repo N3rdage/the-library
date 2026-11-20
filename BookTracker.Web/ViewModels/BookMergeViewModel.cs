@@ -15,7 +15,6 @@ public class BookMergeViewModel(IDispatcher dispatcher) : DispatchingViewModel
     public BookMergeDetail? Lower { get; private set; }
     public BookMergeDetail? Higher { get; private set; }
 
-
     public int? SelectedWinnerId { get; set; }
 
     public int? LoserId =>
