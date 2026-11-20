@@ -10,7 +10,7 @@ namespace BookTracker.Application.Works;
 /// anthology). Single-author / single-genre modes apply a shared author/genre
 /// set to every new row. Returns the count of Works actually attached (already-
 /// attached existing rows are skipped silently). Throws
-/// <see cref="InvalidOperationException"/> with a user-facing message when there
+/// <see cref="DomainRuleException"/> with a user-facing message when there
 /// are no usable rows, or a new row carries a title but no contributor.</summary>
 public sealed record AttachWorksToBook(
     int BookId,
@@ -35,7 +35,7 @@ public sealed class AttachWorksToBookHandler(IDbContextFactory<BookTrackerDbCont
             .Where(r => r.AttachedWorkId is not null || !string.IsNullOrWhiteSpace(r.Title))
             .ToList();
         if (orderedRows.Count == 0)
-            throw new InvalidOperationException(
+            throw new DomainRuleException(
                 "Add at least one work — type a title for a new work, or pick an existing one from the dropdown.");
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -95,7 +95,7 @@ public sealed class AttachWorksToBookHandler(IDbContextFactory<BookTrackerDbCont
                 .Select(c => (Person: byName[c.Name.Trim()], c.Role))
                 .ToList();
             if (rowAuthors.Count == 0 && rowContributors.Count == 0)
-                throw new InvalidOperationException(
+                throw new DomainRuleException(
                     $"Work \"{row.Title}\" needs at least one contributor (author, editor, or other role).");
 
             var rowGenres = GenresFor(row)

@@ -352,8 +352,8 @@ public class BookDetailViewModel(
     /// contributor across <c>Authors</c> / <c>Contributors</c>, or
     /// covered by <c>SharedAuthors</c> when <paramref name="singleAuthor"/>
     /// is true). Empty rows are silently dropped; if no usable rows
-    /// remain after filtering, throws <see cref="InvalidOperationException"/>
-    /// with a user-facing message.
+    /// remain after filtering, sets <see cref="DispatchingViewModel.Error"/>
+    /// to the handler's user-facing message and returns 0.
     ///
     /// Returns the count of Works actually attached (excludes already-
     /// attached existing rows, which are silently skipped — matches the

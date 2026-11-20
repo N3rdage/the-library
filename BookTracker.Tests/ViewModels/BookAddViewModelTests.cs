@@ -358,9 +358,9 @@ public class BookAddViewModelTests
     {
         // The handler owns the user-facing validation throws (no contributor,
         // no usable collection row, Single-Author mode with no shared author)
-        // as InvalidOperationException; the message goes to Error as-is.
+        // as DomainRuleException; the message goes to Error as-is.
         _dispatcher.Send(Arg.Any<CreateBook>(), Arg.Any<CancellationToken>())
-            .Throws(new InvalidOperationException("A collection in Single-Author mode needs at least one work with a title, plus at least one shared author. (Or attach an existing work.)"));
+            .Throws(new DomainRuleException("A collection in Single-Author mode needs at least one work with a title, plus at least one shared author. (Or attach an existing work.)"));
         var vm = CreateVm();
         vm.BookInput.Title = "Untitled Collection";
         vm.IsCollection = true;
@@ -403,6 +403,19 @@ public class BookAddViewModelTests
     }
 
     [Fact]
+    public async Task SaveAsync_UnrelatedInvalidOperation_PropagatesAndIsNotShownInline()
+    {
+        _dispatcher.Send(Arg.Any<CreateBook>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("sequence contains no elements"));
+        var vm = CreateVm();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => vm.SaveAsync(selectedGenreIds: []));
+
+        Assert.Null(vm.Error);
+        Assert.False(vm.Saving);
+    }
+
+    [Fact]
     public async Task AddCopyToExistingAsync_NotFound_SetsErrorAndReturnsNull()
     {
         _dispatcher.Query(Arg.Any<FindEditionByIsbn>(), Arg.Any<CancellationToken>()).Returns(HobbitMatch());
@@ -416,7 +429,27 @@ public class BookAddViewModelTests
 
         Assert.Null(bookId);
         Assert.Equal("Edition 5 not found.", vm.Error);
+        Assert.True(vm.AddCopyRefused);
         Assert.False(vm.AddingCopy);
+    }
+
+    [Fact]
+    public async Task SaveAsync_RefusalAfterAddCopyRefusal_IsNotAttributedToAddCopy()
+    {
+        _dispatcher.Query(Arg.Any<FindEditionByIsbn>(), Arg.Any<CancellationToken>()).Returns(HobbitMatch());
+        _dispatcher.Send(Arg.Any<AddCopyToEdition>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new NotFoundException("Edition 5 not found."));
+        _dispatcher.Send(Arg.Any<CreateBook>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DomainRuleException("Title is required."));
+        var vm = CreateVm();
+        vm.LookupIsbn = "9780261102217";
+        await vm.LookupAsync();
+        await vm.AddCopyToExistingAsync();
+
+        await vm.SaveAsync(selectedGenreIds: []);
+
+        Assert.Equal("Title is required.", vm.Error);
+        Assert.False(vm.AddCopyRefused);
     }
 
     [Fact]

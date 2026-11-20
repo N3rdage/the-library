@@ -67,6 +67,7 @@ public class PublisherListViewModel(IDispatcher dispatcher) : DispatchingViewMod
     // refused and Error is already set.
     private async Task ApplyAsync(PublisherAdminResult? result, params int[] affectedIds)
     {
+        SuccessMessage = null;
         if (result is null) return;
         if (result.Changed)
         {

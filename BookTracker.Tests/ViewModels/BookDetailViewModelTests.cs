@@ -966,10 +966,10 @@ public class BookDetailViewModelTests
     }
 
     [Fact]
-    public async Task AttachMultipleWorksAsync_RowWithNoContributors_ThrowsWithUserFacingMessage()
+    public async Task AttachMultipleWorksAsync_RowWithNoContributors_SetsErrorWithUserFacingMessage()
     {
         // A row with a title but no authors AND no contributors is a
-        // validation failure — the dialog's catch surfaces the .Message
+        // validation failure — the VM puts the handler's message in Error
         // verbatim. Lock the message shape.
         var factory = new TestDbContextFactory();
         int bookId;
@@ -991,14 +991,15 @@ public class BookDetailViewModelTests
             new() { Title = "Untitled Story", Authors = [] },
         };
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            vm.AttachMultipleWorksAsync(rows, false, false, [], []));
-        Assert.Contains("contributor", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Untitled Story", ex.Message);
+        var added = await vm.AttachMultipleWorksAsync(rows, false, false, [], []);
+
+        Assert.Equal(0, added);
+        Assert.Contains("contributor", vm.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Untitled Story", vm.Error);
     }
 
     [Fact]
-    public async Task AttachMultipleWorksAsync_AllBlankRows_ThrowsWithUserFacingMessage()
+    public async Task AttachMultipleWorksAsync_AllBlankRows_SetsErrorWithUserFacingMessage()
     {
         // Every row blank (no title, no attach) is a dialog-state error —
         // surface the "add at least one work" message rather than silently
@@ -1024,9 +1025,10 @@ public class BookDetailViewModelTests
             new() { Title = "   ", Authors = [] },
         };
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            vm.AttachMultipleWorksAsync(rows, false, false, [], []));
-        Assert.Contains("at least one work", ex.Message, StringComparison.OrdinalIgnoreCase);
+        var added = await vm.AttachMultipleWorksAsync(rows, false, false, [], []);
+
+        Assert.Equal(0, added);
+        Assert.Contains("at least one work", vm.Error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

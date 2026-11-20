@@ -24,6 +24,7 @@ public class DuplicatesViewModel(IDispatcher dispatcher) : DispatchingViewModel
 
     public async Task DismissAsync(DuplicateEntityType type, int idA, int idB, string? note = null)
     {
+        SuccessMessage = null;
         if (!await DispatchAsync(() => dispatcher.Send(new DismissDuplicatePair(type, idA, idB, note)))) return;
         SuccessMessage = "Pair dismissed — you can un-ignore it from the Dismissed section.";
         await LoadAsync();
@@ -31,6 +32,7 @@ public class DuplicatesViewModel(IDispatcher dispatcher) : DispatchingViewModel
 
     public async Task UnignoreAsync(int ignoredDuplicateId)
     {
+        SuccessMessage = null;
         if (!await DispatchAsync(() => dispatcher.Send(new RestoreDismissedDuplicate(ignoredDuplicateId)))) return;
         SuccessMessage = "Pair un-ignored — back in the active list.";
         await LoadAsync();

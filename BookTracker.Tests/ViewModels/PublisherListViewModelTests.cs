@@ -103,6 +103,24 @@ public class PublisherListViewModelTests
     }
 
     [Fact]
+    public async Task RenameAsync_RefusalAfterSuccess_ClearsTheEarlierSuccessMessage()
+    {
+        var vm = await LoadedVm(new PublisherRow(1, "Tor Books", 0));
+        _dispatcher.Send(Arg.Any<RenamePublisher>(), Arg.Any<CancellationToken>())
+            .Returns(
+                PublisherAdminResult.Done("Renamed."),
+                PublisherAdminResult.Refused("A publisher named \"Tor\" already exists."));
+
+        await vm.RenameAsync(1, "Tor Books 2");
+        Assert.Equal("Renamed.", vm.SuccessMessage);
+
+        await vm.RenameAsync(1, "Tor");
+
+        Assert.Null(vm.SuccessMessage);
+        Assert.Contains("already exists", vm.Error);
+    }
+
+    [Fact]
     public async Task MergeAsync_Fault_Propagates()
     {
         var vm = await LoadedVm(new PublisherRow(1, "Tor Books", 2), new PublisherRow(2, "Tor", 0));

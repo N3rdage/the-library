@@ -158,7 +158,7 @@
                                 <strong>@VM.ExistingBook.Title</strong> by @VM.ExistingBook.Authors —
                                 @VM.ExistingBook.CopyCount cop@(VM.ExistingBook.CopyCount == 1 ? "y" : "ies") on file.
                             </MudText>
-                            <ActionError Message="@VM.Error" />
+                            <ActionError Message="@(VM.AddCopyRefused ? VM.Error : null)" />
                             <MudStack Row="true" Spacing="2">
                                 <MudButton Size="Size.Small"
                                            Variant="Variant.Filled"
@@ -372,7 +372,7 @@
             <EditionCopyForm EditionInput="VM.EditionInput" CopyInput="VM.CopyInput" Title="First edition & copy" />
         </MudItem>
 
-        @if (!string.IsNullOrEmpty(VM.Error))
+        @if (!VM.AddCopyRefused && !string.IsNullOrEmpty(VM.Error))
         {
             <MudItem xs="12">
                 <ActionError Message="@VM.Error" />

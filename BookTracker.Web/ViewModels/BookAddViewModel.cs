@@ -307,6 +307,10 @@ public class BookAddViewModel(
     public ExistingBookMatch? ExistingBook { get; private set; }
     public bool AddingCopy { get; private set; }
 
+    /// <summary>True when the current <see cref="DispatchingViewModel.Error"/> came from the
+    /// add-another-copy action, so the page shows it beside that button only.</summary>
+    public bool AddCopyRefused { get; private set; }
+
     public async Task LookupAsync()
     {
         LookupMessage = null;
@@ -415,6 +419,7 @@ public class BookAddViewModel(
         {
             await DispatchAsync(() => dispatcher.Send(new AddCopyToEdition(
                 ExistingBook.EditionId, CopyInput.Condition, DateAcquired: null, Notes: null)));
+            AddCopyRefused = Error is not null;
             return Error is null ? ExistingBook.BookId : null;
         }
         finally
@@ -518,6 +523,7 @@ public class BookAddViewModel(
         // inputs, so the cover URL rule is enforced here too and surfaces through
         // Error.
         Error = null;
+        AddCopyRefused = false;
         if (!CoverFetchPolicy.IsAcceptableCoverUrl(BookInput.DefaultCoverArtUrl)
             || !CoverFetchPolicy.IsAcceptableCoverUrl(EditionInput.CoverUrl))
         {
@@ -556,13 +562,6 @@ public class BookAddViewModel(
                 new SeriesChoice(AcceptedSeriesId, AcceptedSeriesName, AcceptedSeriesOrderLabel),
                 [])));
             return Error is null ? bookId : null;
-        }
-        // CreateBook states its validation refusals (no contributor, empty
-        // collection) as InvalidOperationException with a user-facing message.
-        catch (InvalidOperationException ex)
-        {
-            Error = ex.Message;
-            return null;
         }
         finally
         {
