@@ -27,7 +27,7 @@ public class FindEditionByIsbnHandlerTests
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
-            editionId = book.Editions[0].Id;
+            editionId = book.Editions.Single().Id;
         }
 
         var match = await FindAsync("9780345391803");

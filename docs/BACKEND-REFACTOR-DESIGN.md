@@ -156,19 +156,22 @@ near-unchanged and becomes the template for read handlers.
 ### Rich aggregates (in BookTracker.Data)
 
 Entities carry their behaviour, and their invariant-bearing fields have private setters, so every
-write goes through a method and the compiler enforces it; collections keep public setters or
-outside writes to their contents until the collections slice (E6) encapsulates them:
+write goes through a method and the compiler enforces it. Every entity collection is
+`IReadOnlyCollection<T>` over a private backing field (C7):
 
 - `Book`'s scalar fields (title, category, status, rating, notes, cover, series membership) are
   written only through its methods (`Create`, `Rate`, `MarkRead`, `UpdateDetails`, `SetCover`,
   `AssignToSeries`, `SoftDelete`, …): the setters are private, `UpdatedAt` / `DeletedAt` internal
   for the interceptor and `SoftDelete`, and the compiler enforces it. `BookTracker.Tests` alone
   sees the internals (to seed a watermark or a tombstone); `BookTracker.Application` does not.
-  The collections (`Editions`, `Tags`, `Works`, `BookWorks`) keep public setters until the
-  collections slice (E6) encapsulates them.
+  Its collections (`Editions`, `Tags`, `Works`, `BookWorks`) are written only through its
+  methods: `AddEdition`, `RemoveCopy` and `MoveEditionsTo` (the book merge) for editions,
+  `AddTag`, `RemoveTag` and `AdoptTagsFrom` (the book merge) for tags, `AttachWork` and
+  `Work.RemoveFrom` for the work links, and `SoftDelete`. The tests' seed builder `TestBooks`
+  stores seeded collections as given through the internal `SeedCollections`.
 - `Edition`'s and `Copy`'s scalar fields are written only through their methods, and the
-  compiler enforces it: the setters are private (`Id` stays public, as on `Book`), as are
-  `Edition.Copies`' setter and the foreign keys `Edition.BookId` and `Copy.EditionId`.
+  compiler enforces it: the setters are private (`Id` stays public, as on `Book`), as are the
+  foreign keys `Edition.BookId` and `Copy.EditionId`.
   `Edition` has `UpdateDetails`, `SetCover`, `ReplaceCoverUrl` (the cover mirror's URL swap,
   which leaves `IsUserSupplied` alone), `ChangeFormat`, `ReassignPublisher`, `MoveToBook`,
   `FillBlanksFrom` and `AdoptCopiesFrom` (the edition merge), `AddCopy` and `RemoveCopy`;
@@ -191,14 +194,20 @@ outside writes to their contents until the collections slice (E6) encapsulates t
   ExpectedCount/Type pairing; name uniqueness stays in the handlers (`SeriesNameGuard`).
   `WishlistItem`'s fields are written only through `Create`, `CreateSeriesSlot` (which links the
   item to its series and slot) and `SetIsbns` (the ISBN dual-write). The setters are private on
-  both (`Id` stays public, as on `Book`), as is `Series.Books`' setter; book membership is written
+  both (`Id` stays public, as on `Book`); `Series.Books` membership is written
   through `Book.AssignToSeries` / `ClearSeries`. Each has a private parameterless constructor for
   EF and an internal one that stores the values as given, used by the tests' seed builders
   `TestSeries` and `TestWishlistItems`.
-- `Book` (root) owns `Editions`; `Edition` owns `Copies`. Exposed as
-  `IReadOnlyCollection<>`; mutated only through methods (`AddCopy`, `AddEdition`, …).
+- `Book` (root) owns `Editions`; `Edition` owns `Copies`; `Copy` owns `Loans`. Exposed as
+  `IReadOnlyCollection<>`; mutated only through methods (`AddCopy`, `AddEdition`, `LendTo`, …).
+  The inverse collections on `Author`, `Genre`, `Publisher` and `Tag` are read-only too: EF
+  fills them, and writes go through the owning side (`Work.AssignAuthorship`, `Work.SetGenres`,
+  `Edition.ReassignPublisher`, `Book.AddTag`).
 - Invariants currently enforced procedurally move onto the aggregate and become unit-testable.
-- EF maps to **backing fields** for encapsulated collections (`UsePropertyAccessMode(Field)`).
+- EF maps every collection navigation, skip navigations included, to its **backing field**
+  (`HasField` + `UsePropertyAccessMode(Field)`). `BookTracker.Tests/Architecture/EntityCollectionTests.cs`
+  fails when an entity exposes a collection as anything but `IReadOnlyCollection<>` /
+  `IEnumerable<>` or with a public setter.
 - The `UpdatedAt` interceptor stays — it's a cross-cutting persistence concern, not a domain rule.
 
 ## Conventions
@@ -213,7 +222,7 @@ These are binding for the whole arc.
 | C4 | One handler per file. File name = command/query name. Handlers are `sealed`. |
 | C5 | Read handlers use `AsNoTracking()` and project to a DTO. Write handlers load a tracked aggregate, mutate via aggregate methods, `SaveChanges`. Never mix in one handler. |
 | C6 | Invariants live **on the aggregate**, not in the handler. Handlers orchestrate; aggregates enforce. |
-| C7 | Aggregate-owned collections are encapsulated (`IReadOnlyCollection<>` + mutator methods + EF backing fields). No public `List<>` setters on roots. |
+| C7 | Entity collections are encapsulated: `IReadOnlyCollection<>` over a private backing field that EF maps with `UsePropertyAccessMode(Field)`, written only through the entity's methods. No entity exposes a `List<>` / `ICollection<>` or a collection setter; `EntityCollectionTests` (`BookTracker.Tests/Architecture/EntityCollectionTests.cs`) enforces it. |
 | C8 | Domain unit tests cover every invariant/calculation with **no EF / no container**. Handlers get integration tests against the MSSQL Testcontainer as today. |
 | C9 | Flat lookup tables with no invariants (`Tag`, `Publisher`, `Genre`) stay plain — do not over-aggregate. |
 | C10 | Commands model **user intentions/gestures, not table columns**. A gesture that sets several fields at once is *one* command (e.g. `MarkBookRead` = status + rating + notes), not three — atomic, one save, one `UpdatedAt` bump. A field-level command is correct only when the UI fires that field on its own (e.g. the detail page's independent inline rating / status / notes auto-saves). Never reflexively emit a CRUD command per property. *(Added after the PR1a gate — the pilot's first cut decomposed "mark read" into three field commands; see retro.)* |

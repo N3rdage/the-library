@@ -17,11 +17,7 @@ public sealed class RemoveTagFromBookHandler(IDbContextFactory<BookTrackerDbCont
         var book = await db.Books.Include(b => b.Tags).FirstOrDefaultAsync(b => b.Id == command.BookId, ct);
         if (book is null) return;
 
-        var tag = book.Tags.FirstOrDefault(t => t.Id == command.TagId);
-        if (tag is not null)
-        {
-            book.Tags.Remove(tag);
+        if (book.RemoveTag(command.TagId))
             await db.SaveChangesAsync(ct);
-        }
     }
 }

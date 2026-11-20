@@ -32,7 +32,7 @@ public sealed class MarkWishlistItemBoughtHandler(IDbContextFactory<BookTrackerD
         // Unread, unrated, no notes or cover: the item's title is required on the
         // wishlist side already, so Create's blank-title guard never fires here.
         var book = Book.Create(item.Title, BookCategory.Fiction, BookStatus.Unread, 0, null, null);
-        book.Tags.Add(followUpTag);
+        book.AddTag(followUpTag);
         var work = Work.Create(book, item.Title, null, null, DatePrecision.Day, [author]);
         db.Books.Add(book);
         db.Works.Add(work); // the BookWork link (via Work.Create → AttachWork) carries the association; add explicitly for clarity
