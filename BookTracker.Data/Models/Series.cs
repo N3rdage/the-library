@@ -53,7 +53,8 @@ public class Series
     // publication series (a series of short-story collections is unmanageable at
     // Work grain). Books is the inverse navigation; Work carries no series.
     // Membership is written through Book.AssignToSeries / ClearSeries.
-    public List<Book> Books { get; private set; } = [];
+    public IReadOnlyCollection<Book> Books => _books;
+    private readonly List<Book> _books = [];
 
     // --- Aggregate behaviour -------------------------------------------------
     // Series is a thin aggregate: no shared m2m, no ref-count lifecycle (Book

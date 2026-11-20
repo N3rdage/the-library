@@ -16,7 +16,8 @@ public class Edition
 
     /// <summary>Stores exactly the values given: nothing is trimmed or
     /// normalised here (<see cref="Book.AddEdition"/> normalises before calling),
-    /// so a test seed gets exactly what it passes.</summary>
+    /// so a test seed gets exactly what it passes, including any
+    /// <paramref name="copies"/> it attaches.</summary>
     internal Edition(
         string? isbn,
         BookFormat format,
@@ -25,7 +26,8 @@ public class Edition
         DatePrecision datePrintedPrecision,
         string? coverUrl,
         bool isUserSupplied,
-        Publisher? publisher)
+        Publisher? publisher,
+        IEnumerable<Copy>? copies = null)
     {
         Isbn = isbn;
         Format = format;
@@ -35,6 +37,7 @@ public class Edition
         CoverUrl = coverUrl;
         IsUserSupplied = isUserSupplied;
         Publisher = publisher;
+        if (copies is not null) _copies.AddRange(copies);
     }
 
     public int Id { get; set; }
@@ -87,13 +90,14 @@ public class Edition
 
     /// <summary>Written only through <see cref="AddCopy"/>, <see cref="RemoveCopy"/>
     /// and <see cref="AdoptCopiesFrom"/>.</summary>
-    public List<Copy> Copies { get; private set; } = [];
+    public IReadOnlyCollection<Copy> Copies => _copies;
+    private readonly List<Copy> _copies = [];
 
     /// <summary>Adds a Copy to this Edition. Returns the new Copy.</summary>
     public Copy AddCopy(BookCondition condition, DateTime? dateAcquired, string? notes)
     {
         var copy = new Copy(condition, dateAcquired, notes.TrimToNull());
-        Copies.Add(copy);
+        _copies.Add(copy);
         return copy;
     }
 
@@ -101,9 +105,9 @@ public class Edition
     /// with no Copies (the Book then drops the empty Edition).</summary>
     public bool RemoveCopy(int copyId)
     {
-        var copy = Copies.FirstOrDefault(c => c.Id == copyId);
-        if (copy is not null) Copies.Remove(copy);
-        return Copies.Count == 0;
+        var copy = _copies.FirstOrDefault(c => c.Id == copyId);
+        if (copy is not null) _copies.Remove(copy);
+        return _copies.Count == 0;
     }
 
     public void UpdateDetails(
@@ -191,12 +195,12 @@ public class Edition
     public int AdoptCopiesFrom(Edition other)
     {
         var moved = 0;
-        foreach (var copy in other.Copies.ToList())
+        foreach (var copy in other._copies)
         {
             copy.MoveToEdition(Id);
             moved++;
         }
-        other.Copies.Clear();
+        other._copies.Clear();
         return moved;
     }
 }
