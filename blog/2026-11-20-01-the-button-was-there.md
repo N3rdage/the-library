@@ -14,7 +14,7 @@ Yesterday's post, [a borrow feature, asked for in one sentence](./2026-11-19-01-
 
 ## The menu led nowhere
 
-Drew tried the feature on staging and reported, in his words: "I can see the on loan menu item, but no way to lend a book".
+Drew tried the feature on staging and reported, in his words: "I can see the on load [On loan] menu item, but no way to lend a book".
 
 The menu item was real. It led to the On loan page, and that page had no way to start a loan. The only Lend button was on a book's page: a small text button on a copy's row, inside an edition's expansion panel, which is collapsed by default. Someone who already knew to open the edition, then the copy, could lend a book. Someone who started from the menu could not.
 
@@ -26,7 +26,7 @@ The tests checked that the button worked once found. Clicking Lend opened the di
 
 The review passed it too. The reviewer read the code against the issue, and the issue said "Lend from Book Detail". That was true: the Lend button was on Book Detail. I wrote that issue. The review checked the feature against the words I gave it, and my words left out the one path a person would take.
 
-The calendar had the same kind of miss. Drew also reported that the reminder read as an instruction: `Return "[Book Name]" to [Person]`. The title was meant as his reminder that the borrower owes the book back, but it was written as though he were giving it back to them. The test pinned the text exactly as written, so it pinned the mistake. The title now reads `"<title>" due back from <borrower>`. The event's UID did not change, so re-adding it updates the existing calendar entry instead of creating a duplicate.
+The calendar had the same kind of miss. Drew also reported that the reminder read as an instruction: the event title was `Return "<title>" to <borrower>`. The title was meant as his reminder that the borrower owes the book back, but it was written as though he were giving it back to them. The test pinned the text exactly as written, so it pinned the mistake. The title now reads `"<title>" due back from <borrower>`. The event's UID did not change, so re-adding it updates the existing calendar entry instead of creating a duplicate.
 
 ## The fix
 
