@@ -10,7 +10,7 @@ The constants are defined in [`TestCategories.cs`](TestCategories.cs):
 
 | Constant | What | Speed | Examples |
 |---|---|---|---|
-| `Unit` | Pure C# logic. No DB, no Razor render, no browser. NSubstitute mocks for collaborators are fine. | <10ms each | `ErrorMessageMapperTests`, `UserTelemetryInitializerTests`, the merge-VM tests using mocked services |
+| `Unit` | Pure C# logic. No DB, no Razor render, no browser. NSubstitute mocks for collaborators are fine. | <10ms each | `ErrorMessageMapperTests`, `UserActivityProcessorTests`, the merge-VM tests using mocked services |
 | `Component` | bUnit Razor render with MudBlazor wired. Mid-tier — fast but heavier than `Unit` because of component-rendering setup. | mid-tier | `MudAuthorPickerTests` |
 | `Integration` | Real EF Core against `Testcontainers.MsSql` + Respawn. Slower per test once the container is up. | ~24s suite startup; fast per-test thereafter | most `ViewModels/*Tests`, most `Services/*Tests` |
 | `E2E` | Playwright browser tests against real Kestrel + Chromium. Slowest tier — full request/response including JS interop. | tens of seconds per test | `ChassisSmokeTests` (POC chassis validation) |

@@ -8,12 +8,12 @@ using BookTracker.Web.Services;
 using BookTracker.Web.Services.Covers;
 using BookTracker.Web.Telemetry;
 using BookTracker.Web.ViewModels;
-using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Options;
 using MudBlazor.Services;
+using OpenTelemetry.Trace;
 
 namespace BookTracker.Web;
 
@@ -62,17 +62,35 @@ public static class ProgramSetup
         options.Preload = false;
     }
 
+    /// <summary>
+    /// Application Insights 3.x: an OpenTelemetry pipeline with the Azure Monitor
+    /// exporter, registered explicitly so structured ILogger output (message-template
+    /// properties like {Isbn}) becomes custom dimensions. The connection string comes
+    /// from APPLICATIONINSIGHTS_CONNECTION_STRING (set in app-config.bicep). Without
+    /// one (local dev, tests) nothing is registered, because the exporter refuses to
+    /// start with no connection string. UserActivityProcessor stamps the authenticated
+    /// user onto every Activity as enduser.id (Application Insights' authenticated user
+    /// id); processors run in the order they are added, so it is registered before the
+    /// exporter and the tag is on the Activity before the export processor sees it end.
+    /// </summary>
+    internal static bool AddApplicationInsights(WebApplicationBuilder builder)
+    {
+        var connectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]
+            ?? builder.Configuration["ApplicationInsights:ConnectionString"];
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return false;
+        }
+
+        builder.Services.ConfigureOpenTelemetryTracerProvider(tracing => tracing.AddProcessor<UserActivityProcessor>());
+        builder.Services.AddApplicationInsightsTelemetry();
+        return true;
+    }
+
     private static void ConfigureServices(WebApplicationBuilder builder)
     {
-        // Application Insights: explicit SDK registration (the App Service codeless
-        // attach gives baseline request/dependency telemetry but NOT structured
-        // ILogger output — message-template properties like {Isbn} only become
-        // custom dimensions once the SDK is wired here). Connection string
-        // resolves from APPLICATIONINSIGHTS_CONNECTION_STRING (set in
-        // app-config.bicep).
-        builder.Services.AddApplicationInsightsTelemetry();
         builder.Services.AddHttpContextAccessor();
-        builder.Services.AddSingleton<ITelemetryInitializer, UserTelemetryInitializer>();
+        AddApplicationInsights(builder);
 
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
