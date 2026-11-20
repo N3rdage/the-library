@@ -218,10 +218,6 @@
                 MudDialog.Close(DialogResult.Ok(true));
             }
         }
-        catch (InvalidOperationException ex)
-        {
-            VM.Error = ex.Message;
-        }
         finally
         {
             saving = false;

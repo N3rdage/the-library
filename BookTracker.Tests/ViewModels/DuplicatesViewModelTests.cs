@@ -114,6 +114,40 @@ public class DuplicatesViewModelTests
     }
 
     [Fact]
+    public async Task DismissAsync_refusal_after_success_clears_the_earlier_success_message()
+    {
+        ReturnsReport(new DuplicateReport([], [], [], []));
+        var vm = CreateVm();
+        await vm.LoadAsync();
+        await vm.UnignoreAsync(42);
+        Assert.NotNull(vm.SuccessMessage);
+        _dispatcher.Send(Arg.Any<DismissDuplicatePair>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DomainRuleException("Pair is already dismissed."));
+
+        await vm.DismissAsync(DuplicateEntityType.Author, 1, 2);
+
+        Assert.Null(vm.SuccessMessage);
+        Assert.Equal("Pair is already dismissed.", vm.Error);
+    }
+
+    [Fact]
+    public async Task UnignoreAsync_refusal_after_success_clears_the_earlier_success_message()
+    {
+        ReturnsReport(new DuplicateReport([], [], [], []));
+        var vm = CreateVm();
+        await vm.LoadAsync();
+        await vm.DismissAsync(DuplicateEntityType.Author, 1, 2);
+        Assert.NotNull(vm.SuccessMessage);
+        _dispatcher.Send(Arg.Any<RestoreDismissedDuplicate>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new NotFoundException("Dismissal 42 not found."));
+
+        await vm.UnignoreAsync(42);
+
+        Assert.Null(vm.SuccessMessage);
+        Assert.Equal("Dismissal 42 not found.", vm.Error);
+    }
+
+    [Fact]
     public async Task UnignoreAsync_not_found_sets_Error()
     {
         ReturnsReport(new DuplicateReport([], [], [], []));
