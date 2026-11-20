@@ -54,7 +54,7 @@ public static class LoanCalendar
 
     /// <summary>The event title, also used as the alarm text.</summary>
     public static string Summary(LoanCalendarEntry entry) =>
-        $"Return \"{entry.Title}\" to {entry.BorrowerName}";
+        $"\"{entry.Title}\" due back from {entry.BorrowerName}";
 
     /// <summary>Escapes a TEXT value (RFC 5545 §3.3.11): backslash, semicolon,
     /// comma and line breaks.</summary>

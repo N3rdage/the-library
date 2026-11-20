@@ -73,7 +73,7 @@
                              ValueChanged="OnCopyPickedAsync"
                              SearchFunc="@SearchCopiesAsync"
                              ToStringFunc="@(o => o?.Display ?? string.Empty)"
-                             Label="Add another book"
+                             Label="@(VM.Copies.Count == 0 ? "Find a book" : "Add another book")"
                              Placeholder="Type a title..."
                              Variant="Variant.Outlined"
                              Margin="Margin.Dense"

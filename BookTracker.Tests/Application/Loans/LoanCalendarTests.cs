@@ -47,11 +47,11 @@ public class LoanCalendarTests
             "DTSTAMP:20261119T013005Z",
             "DTSTART;VALUE=DATE:20261203",
             "DTEND;VALUE=DATE:20261204",
-            "SUMMARY:Return \"Dune\" to Sam",
+            "SUMMARY:\"Dune\" due back from Sam",
             "DESCRIPTION:\"Dune\" was lent to Sam through Bookcase and is due back on 3 December 2026.",
             "BEGIN:VALARM",
             "ACTION:DISPLAY",
-            "DESCRIPTION:Return \"Dune\" to Sam",
+            "DESCRIPTION:\"Dune\" due back from Sam",
             "TRIGGER:PT9H",
             "END:VALARM",
             "END:VEVENT",
@@ -93,6 +93,20 @@ public class LoanCalendarTests
         Assert.Equal(uid, Assert.Single(Unfolded(later), l => l.StartsWith("UID:")));
     }
 
+    [Fact]
+    public void Summary_readsAsTheBorrowerOwingTheBookBack()
+    {
+        Assert.Equal("\"Dune\" due back from Sam", LoanCalendar.Summary(Entry()));
+    }
+
+    [Fact]
+    public void Uid_isUnchangedByTheWording_soAnAlreadyAddedEventUpdatesInPlace()
+    {
+        var lines = Unfolded(Write(Entry(id: 7)));
+
+        Assert.Contains("UID:loan-7@books.example.test", lines);
+    }
+
     [Theory]
     [InlineData("a\\b", @"a\\b")]
     [InlineData("a;b", @"a\;b")]
@@ -111,7 +125,7 @@ public class LoanCalendarTests
     {
         var lines = Unfolded(Write(Entry(title: "Eats, Shoots; Leaves\\", borrower: "Jo\nSmith")));
 
-        Assert.Contains("SUMMARY:Return \"Eats\\, Shoots\\; Leaves\\\\\" to Jo\\nSmith", lines);
+        Assert.Contains("SUMMARY:\"Eats\\, Shoots\\; Leaves\\\\\" due back from Jo\\nSmith", lines);
     }
 
     [Fact]
@@ -129,17 +143,17 @@ public class LoanCalendarTests
         Assert.InRange(Encoding.UTF8.GetByteCount(summaryStart), 72, 75);
         // No replacement characters: every multi-byte character survived intact.
         Assert.DoesNotContain('�', ics);
-        Assert.Contains($"SUMMARY:Return \"{title}\" to Sam", Unfolded(ics));
+        Assert.Contains($"SUMMARY:\"{title}\" due back from Sam", Unfolded(ics));
     }
 
     [Fact]
     public void LineOfExactly75Octets_isNotFolded()
     {
-        // "SUMMARY:Return \"" + title + "\" to Sam" is 24 octets plus the title.
-        var title = new string('x', 75 - 24);
+        // "SUMMARY:\"" + title + "\" due back from Sam" is 31 octets plus the title.
+        var title = new string('x', 75 - 31);
         var physical = Write(Entry(title: title)).Split("\r\n");
 
-        Assert.Contains($"SUMMARY:Return \"{title}\" to Sam", physical);
+        Assert.Contains($"SUMMARY:\"{title}\" due back from Sam", physical);
     }
 
     [Theory]
