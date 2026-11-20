@@ -166,6 +166,10 @@ public partial class ResultPage : ContentPage
             OnlineSyncButton.IsVisible = answer.State == OnlineResultState.OwnedSameEdition;
             OnlineAddButton.IsVisible = answer.State == OnlineResultState.NotOwned;
 
+            OtherEditionsTitle.Text = WorkEditionsOrdering.RowTitle;
+            OtherEditionsCaption.Text = WorkEditionsOrdering.OnlineOnlyCaption;
+            OtherEditionsSection.IsVisible = true;
+
             MissingFrame.IsVisible = false;
             OnlineFrame.IsVisible = true;
             _ = OnlineFrame.InAsync();
@@ -173,6 +177,41 @@ public partial class ResultPage : ContentPage
 
         if (lookup is not null && !ct.IsCancellationRequested && answer.State != OnlineResultState.Unknown)
             _ = LoadEditionCoverAsync(lookup.CoverUrl, OnlineCover, OnlineCoverPlaceholder);
+
+        if (lookup?.WorkKey is { Length: > 0 } workKey && !ct.IsCancellationRequested
+            && answer.State != OnlineResultState.Unknown)
+            await LoadOtherEditionsAsync(workKey, owned, ct);
+    }
+
+    // The row is already on screen disabled; it only ever lights up, and a
+    // failed or empty fetch leaves it as it was.
+    private async Task LoadOtherEditionsAsync(string workKey, BookEnrichedDetail? owned, CancellationToken ct)
+    {
+        var editions = await _api.GetWorkEditionsOnlineAsync(workKey, ct); // null on any failure
+        if (editions is null || ct.IsCancellationRequested) return;
+
+        var rows = WorkEditionsOrdering.Arrange(editions.Editions, owned?.Editions.Select(e => e.Isbn) ?? []);
+        if (rows.Count == 0) return;
+
+        await MainThread.InvokeOnMainThreadAsync(() =>
+        {
+            if (ct.IsCancellationRequested) return;
+
+            foreach (var row in rows)
+                OtherEditionsLayout.Children.Add(BuildOtherEditionRow(row));
+
+            OtherEditionsTitle.SetThemeColor(Label.TextColorProperty, "TextL", "TextD");
+            OtherEditionsCaption.Text = rows.Count == 1 ? "1 edition" : $"{rows.Count:N0} editions";
+            OtherEditionsChevron.Text = "▸";
+            OtherEditionsChevron.IsVisible = true;
+        });
+    }
+
+    private void OnOtherEditionsTapped(object? sender, TappedEventArgs e)
+    {
+        if (!OtherEditionsChevron.IsVisible) return; // disabled: nothing to expand
+        OtherEditionsLayout.IsVisible = !OtherEditionsLayout.IsVisible;
+        OtherEditionsChevron.Text = OtherEditionsLayout.IsVisible ? "▾" : "▸";
     }
 
     private static void SetLine(Label label, string text)
@@ -198,7 +237,10 @@ public partial class ResultPage : ContentPage
         return label;
     }
 
-    private View BuildEditionRow(EditionSnapshot edition)
+    // A 40x60 thumbnail slot. Edition thumbs use the edition CoverUrl directly
+    // (no disk cache — EnsureCoverCachedAsync keys on Book.Id and would
+    // clobber the main cover).
+    private Grid BuildEditionCoverSlot(string? coverUrl)
     {
         var coverPlaceholder = new Label
         {
@@ -217,7 +259,57 @@ public partial class ResultPage : ContentPage
             Children = { coverPlaceholder, coverImage },
         };
         coverSlot.SetThemeColor(Grid.BackgroundColorProperty, "CoverMissL", "CoverMissD");
+        _ = LoadEditionCoverAsync(coverUrl, coverImage, coverPlaceholder);
+        return coverSlot;
+    }
 
+    private View BuildOtherEditionRow(WorkEditionRow edition)
+    {
+        var heading = new Label
+        {
+            Text = string.IsNullOrWhiteSpace(edition.Title) ? "Untitled edition" : edition.Title,
+            FontSize = 13,
+            FontAttributes = FontAttributes.Bold,
+            LineBreakMode = LineBreakMode.WordWrap,
+        };
+        heading.SetThemeColor(Label.TextColorProperty, "TextL", "TextD");
+        var textStack = new VerticalStackLayout
+        {
+            Spacing = 2,
+            VerticalOptions = LayoutOptions.Center,
+            Children = { heading },
+        };
+
+        var meta = WorkEditionsOrdering.Meta(edition);
+        if (meta.Length > 0)
+        {
+            var metaLabel = new Label { Text = meta, FontSize = 12, LineBreakMode = LineBreakMode.WordWrap };
+            metaLabel.SetThemeColor(Label.TextColorProperty, "TextL", "TextD");
+            textStack.Children.Add(metaLabel);
+        }
+
+        var isbnText = string.IsNullOrWhiteSpace(edition.Isbn) ? "no ISBN" : edition.Isbn;
+        var isbnLabel = new Label
+        {
+            Text = edition.IsOwned ? $"{isbnText}  ·  ✓ You own this" : isbnText,
+            FontSize = 11,
+            FontFamily = "Courier New",
+        };
+        isbnLabel.SetThemeColor(Label.TextColorProperty, "TextMutedL", "TextMutedD");
+        textStack.Children.Add(isbnLabel);
+
+        var row = new Grid
+        {
+            ColumnDefinitions = { new ColumnDefinition(GridLength.Auto), new ColumnDefinition(GridLength.Star) },
+            ColumnSpacing = 10,
+        };
+        row.Add(BuildEditionCoverSlot(edition.CoverUrl), 0, 0);
+        row.Add(textStack, 1, 0);
+        return row;
+    }
+
+    private View BuildEditionRow(EditionSnapshot edition)
+    {
         var formatText = edition.EditionNumber is int n
             ? $"{EditionFormatName.FormatPrettyName(edition.Format)} · {FormatOrdinalEdition(n)}"
             : EditionFormatName.FormatPrettyName(edition.Format);
@@ -243,12 +335,8 @@ public partial class ResultPage : ContentPage
             ColumnDefinitions = { new ColumnDefinition(GridLength.Auto), new ColumnDefinition(GridLength.Star) },
             ColumnSpacing = 10,
         };
-        row.Add(coverSlot, 0, 0);
+        row.Add(BuildEditionCoverSlot(edition.CoverUrl), 0, 0);
         row.Add(textStack, 1, 0);
-
-        // Edition thumbs use the edition CoverUrl directly (no disk cache —
-        // EnsureCoverCachedAsync keys on Book.Id and would clobber the main cover).
-        _ = LoadEditionCoverAsync(edition.CoverUrl, coverImage, coverPlaceholder);
         return row;
     }
 
