@@ -412,7 +412,7 @@ public class BookDetailViewModelTests
             await db.SaveChangesAsync();
             bookId = book.Id;
             editionId = edition.Id;
-            copyToDelete = edition.Copies[0].Id;
+            copyToDelete = edition.Copies.First().Id;
         }
 
         var vm = CreateVm(factory);
@@ -442,7 +442,7 @@ public class BookDetailViewModelTests
             await db.SaveChangesAsync();
             bookId = book.Id;
             editionId = edition.Id;
-            copyToDelete = edition.Copies[0].Id;
+            copyToDelete = edition.Copies.First().Id;
         }
 
         var vm = CreateVm(factory);

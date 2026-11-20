@@ -42,7 +42,7 @@ public class WishlistItem
         Author = author;
         Priority = priority;
         Isbn = isbn;
-        if (isbns is not null) Isbns = isbns.Select(i => new WishlistItemIsbn { Isbn = i }).ToList();
+        if (isbns is not null) _isbns.AddRange(isbns.Select(i => new WishlistItemIsbn { Isbn = i }));
         CoverUrl = coverUrl;
         if (dateAdded is not null) DateAdded = dateAdded.Value;
         Series = series;
@@ -77,7 +77,8 @@ public class WishlistItem
     /// Books / Trove can each surface different ISBNs for the same work).
     /// Backs the PR D scan-flag lookup — when Drew scans a book in a
     /// bookshop, ANY of these ISBNs matching means "on your wishlist".</summary>
-    public List<WishlistItemIsbn> Isbns { get; private set; } = [];
+    public IReadOnlyCollection<WishlistItemIsbn> Isbns => _isbns;
+    private readonly List<WishlistItemIsbn> _isbns = [];
 
     /// <summary>Upstream cover URL captured at add time. Lightweight
     /// (not mirrored to blob storage like Book/Edition covers — wishlist
@@ -151,7 +152,8 @@ public class WishlistItem
             .ToList();
 
         Isbn = clean.FirstOrDefault();   // legacy column — primary ISBN for back-compat
-        Isbns = clean.Select(i => new WishlistItemIsbn { Isbn = i }).ToList();
+        _isbns.Clear();
+        _isbns.AddRange(clean.Select(i => new WishlistItemIsbn { Isbn = i }));
     }
 }
 

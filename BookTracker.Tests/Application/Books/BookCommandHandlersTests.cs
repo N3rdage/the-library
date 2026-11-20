@@ -169,8 +169,7 @@ public class BookCommandHandlersTests
         await using var db = _factory.CreateDbContext();
         var edition = await db.Editions.Include(e => e.Copies).Include(e => e.Publisher).FirstAsync(e => e.Id == editionId);
         Assert.Equal(id, edition.BookId);
-        Assert.Single(edition.Copies);
-        Assert.Equal(BookCondition.Fine, edition.Copies[0].Condition);
+        Assert.Equal(BookCondition.Fine, Assert.Single(edition.Copies).Condition);
         Assert.Equal("Penguin", edition.Publisher!.Name);
     }
 

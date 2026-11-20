@@ -23,8 +23,11 @@ public class Author
     public int? CanonicalAuthorId { get; private set; }
     public Author? CanonicalAuthor { get; set; }
 
-    /// <summary>Inverse of CanonicalAuthorId — pen names that resolve to this Author.</summary>
-    public List<Author> Aliases { get; set; } = [];
+    /// <summary>Inverse of CanonicalAuthorId — pen names that resolve to this Author.
+    /// EF fixes it up from each alias's key; the alias side is written through
+    /// <see cref="MarkAliasOf"/> and <see cref="PromoteToCanonical"/>.</summary>
+    public IReadOnlyCollection<Author> Aliases => _aliases;
+    private readonly List<Author> _aliases = [];
 
     /// <summary>Skip-navigation through WorkAuthor (M:N). Includes works where this Author is a co-author, not just the lead.</summary>
     public List<Work> Works { get; set; } = [];

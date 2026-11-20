@@ -167,8 +167,7 @@ public class BookAggregateTests
         Assert.Single(book.Editions);
         Assert.Same(edition, book.Editions[0]);
         Assert.Equal("978-1", edition.Isbn);
-        Assert.Single(edition.Copies);
-        Assert.Equal(BookCondition.Fine, edition.Copies[0].Condition);
+        Assert.Equal(BookCondition.Fine, Assert.Single(edition.Copies).Condition);
     }
 
     [Fact]
@@ -251,8 +250,7 @@ public class BookAggregateTests
         book.RemoveCopy(10);
 
         Assert.Single(book.Editions);
-        Assert.Single(edition.Copies);
-        Assert.Equal(11, edition.Copies[0].Id);
+        Assert.Equal(11, Assert.Single(edition.Copies).Id);
     }
 
     [Fact]
