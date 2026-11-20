@@ -25,12 +25,12 @@
         </MudButton>
     </MudStack>
 
-    @if (!string.IsNullOrEmpty(VM.ErrorMessage))
+    @if (!string.IsNullOrEmpty(VM.Error))
     {
         <MudAlert Severity="Severity.Error"
                   ShowCloseIcon="true"
-                  CloseIconClicked="@(() => { VM.ErrorMessage = null; StateHasChanged(); })"
-                  Class="mb-3">@VM.ErrorMessage</MudAlert>
+                  CloseIconClicked="@(() => { VM.Error = null; StateHasChanged(); })"
+                  Class="mb-3">@VM.Error</MudAlert>
     }
 
     @if (!VM.Loaded)

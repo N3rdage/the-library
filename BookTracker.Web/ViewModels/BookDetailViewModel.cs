@@ -26,7 +26,7 @@ public class BookDetailViewModel(
     IBookCoverStorage coverStorage,
     ILogger<BookDetailViewModel> logger,
     IDispatcher dispatcher,
-    TimeProvider clock)
+    TimeProvider clock) : DispatchingViewModel
 {
     /// <summary>Server-side cap on user-uploaded cover photos. 10 MB is generous
     /// enough to accept a 12MP phone-camera JPEG without rejection while
@@ -174,15 +174,19 @@ public class BookDetailViewModel(
 
     /// <summary>Marks every open loan on the book returned today, then reloads
     /// the detail once (also when one return is refused, so the page shows what
-    /// is still out).</summary>
-    public async Task ReturnAllLoansAsync()
+    /// is still out). False, with <see cref="DispatchingViewModel.Error"/> set,
+    /// when a return was refused.</summary>
+    public async Task<bool> ReturnAllLoansAsync()
     {
-        if (Book is null) return;
+        if (Book is null) return false;
         var loanIds = AllCopies.Where(c => c.OpenLoan is not null).Select(c => c.OpenLoan!.LoanId).ToList();
         try
         {
-            foreach (var loanId in loanIds)
-                await dispatcher.Send(new ReturnLoan(loanId, Today));
+            return await DispatchAsync(async () =>
+            {
+                foreach (var loanId in loanIds)
+                    await dispatcher.Send(new ReturnLoan(loanId, Today));
+            });
         }
         finally
         {
@@ -190,12 +194,15 @@ public class BookDetailViewModel(
         }
     }
 
-    /// <summary>Marks the loan returned today and reloads the detail.</summary>
-    public async Task ReturnLoanAsync(int loanId)
+    /// <summary>Marks the loan returned today and reloads the detail. False,
+    /// with <see cref="DispatchingViewModel.Error"/> set, when the return was
+    /// refused.</summary>
+    public async Task<bool> ReturnLoanAsync(int loanId)
     {
-        if (Book is null) return;
-        await dispatcher.Send(new ReturnLoan(loanId, Today));
+        if (Book is null) return false;
+        if (!await DispatchAsync(() => dispatcher.Send(new ReturnLoan(loanId, Today)))) return false;
         await InitializeAsync(Book.Id);
+        return true;
     }
 
     /// <summary>
@@ -250,13 +257,9 @@ public class BookDetailViewModel(
             return UploadCoverResult.Failure("Upload failed. Try again or check the file.");
         }
 
-        try
+        if (!await DispatchAsync(() => dispatcher.Send(new SetEditionCover(editionId, newUrl, IsUserSupplied: true), ct)))
         {
-            await dispatcher.Send(new SetEditionCover(editionId, newUrl, IsUserSupplied: true), ct);
-        }
-        catch (NotFoundException)
-        {
-            return UploadCoverResult.Failure("Edition not found.");
+            return UploadCoverResult.Failure(Error!);
         }
 
         // Refresh the in-memory snapshot so the page re-renders against the new URL.

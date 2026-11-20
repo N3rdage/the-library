@@ -231,8 +231,14 @@ the human *or* the agent), we adjust the conventions here before rolling out PR2
 
 ## Open questions to resolve before/within PR1
 
-- **Exception → UI mapping.** How do `NotFoundException` / validation failures from handlers
-  surface to the user (snackbar)? Establish the pattern in PR1.
+- **Exception → UI mapping.** ✅ *Resolved:* a `DomainRuleException` or `NotFoundException`
+  from a dispatch is an expected outcome, shown where the user acted with the message the
+  domain wrote; anything else is a fault, logged with its trace id and shown by one page-level
+  boundary that keeps the circuit alive. Dispatching view models derive from
+  `DispatchingViewModel`, whose `DispatchAsync` clears `Error`, runs the dispatch, and turns
+  those two exception types into `Error` plus a `false` (or default) result; every other
+  exception propagates. The component renders `Error`. The boundary is `PageErrorBoundary` in
+  `MainLayout`.
 - **Handler registration.** ✅ *Resolved (PR1b):* handlers implement
   `ICommandHandler<TCommand>` / `ICommandHandler<TCommand, TResult>`; commands carry an
   `ICommand` / `ICommand<TResult>` marker; consumers inject a Scoped `IDispatcher` that

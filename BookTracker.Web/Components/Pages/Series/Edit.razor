@@ -31,11 +31,11 @@ else
         </div>
     }
 
-    @if (!string.IsNullOrEmpty(VM.ErrorMessage))
+    @if (!string.IsNullOrEmpty(VM.Error))
     {
         <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            @VM.ErrorMessage
-            <button type="button" class="btn-close" @onclick="() => VM.ErrorMessage = null" aria-label="Close"></button>
+            @VM.Error
+            <button type="button" class="btn-close" @onclick="() => VM.Error = null" aria-label="Close"></button>
         </div>
     }
 

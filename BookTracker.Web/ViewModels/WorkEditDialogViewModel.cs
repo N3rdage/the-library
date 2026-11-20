@@ -9,7 +9,7 @@ namespace BookTracker.Web.ViewModels;
 // Work's title, subtitle, author (find-or-create with typeahead), first
 // published date (PartialDateParser), and genres (via MudGenrePicker — PR B).
 // Series membership is a per-Book concept now — edited via BookEditDialog.
-public class WorkEditDialogViewModel(IDispatcher dispatcher)
+public class WorkEditDialogViewModel(IDispatcher dispatcher) : DispatchingViewModel
 {
     public bool NotFound { get; private set; }
     public int WorkId { get; private set; }
@@ -45,9 +45,11 @@ public class WorkEditDialogViewModel(IDispatcher dispatcher)
         SelectedGenreIds = [.. work.GenreIds];
     }
 
-    public async Task SaveAsync()
+    /// <summary>True when saved; false when the dialog state is stale or the
+    /// domain refused (see <see cref="DispatchingViewModel.Error"/>).</summary>
+    public async Task<bool> SaveAsync()
     {
-        if (NotFound || string.IsNullOrWhiteSpace(Title) || AuthorNames.All(string.IsNullOrWhiteSpace)) return;
+        if (NotFound || string.IsNullOrWhiteSpace(Title) || AuthorNames.All(string.IsNullOrWhiteSpace)) return false;
 
         var parsed = PartialDateParser.TryParse(FirstPublishedDate) ?? PartialDate.Empty;
 
@@ -56,15 +58,8 @@ public class WorkEditDialogViewModel(IDispatcher dispatcher)
             .Select(c => new ContributorInput(c.Name, c.Role))
             .ToList();
 
-        try
-        {
-            await dispatcher.Send(new UpdateWork(
-                WorkId, Title, Subtitle, AuthorNames, contributorInputs,
-                parsed.Date, parsed.Precision, SelectedGenreIds));
-        }
-        catch (NotFoundException)
-        {
-            // Work deleted between opening the dialog and saving — no-op.
-        }
+        return await DispatchAsync(() => dispatcher.Send(new UpdateWork(
+            WorkId, Title, Subtitle, AuthorNames, contributorInputs,
+            parsed.Date, parsed.Precision, SelectedGenreIds)));
     }
 }

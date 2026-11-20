@@ -48,7 +48,7 @@ public class LendDialogViewModelTests
         Assert.Equal(Today, vm.LentOn);
         Assert.Null(vm.DueOn);
         Assert.Null(vm.BorrowerName);
-        Assert.Null(vm.ErrorMessage);
+        Assert.Null(vm.Error);
         Assert.False(vm.CanConfirm); // no borrower yet
     }
 
@@ -193,7 +193,7 @@ public class LendDialogViewModelTests
         var ok = await vm.ConfirmAsync();
 
         Assert.False(ok);
-        Assert.Equal("This copy is already lent out.", vm.ErrorMessage);
+        Assert.Equal("This copy is already lent out.", vm.Error);
         Assert.False(vm.Saving);
         Assert.Equal([First], vm.Copies);
     }
@@ -207,7 +207,7 @@ public class LendDialogViewModelTests
         vm.BorrowerName = "Sam";
 
         Assert.False(await vm.ConfirmAsync());
-        Assert.Equal("Copy 11 not found.", vm.ErrorMessage);
+        Assert.Equal("Copy 11 not found.", vm.Error);
     }
 
     [Fact]

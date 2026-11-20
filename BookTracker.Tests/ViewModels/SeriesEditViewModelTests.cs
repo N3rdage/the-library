@@ -111,7 +111,7 @@ public class SeriesEditViewModelTests
         var id = await vm.SaveAsync(null);
 
         Assert.Null(id);
-        Assert.False(string.IsNullOrEmpty(vm.ErrorMessage));
+        Assert.False(string.IsNullOrEmpty(vm.Error));
         Assert.False(vm.Saving);
     }
 
@@ -135,7 +135,7 @@ public class SeriesEditViewModelTests
     }
 
     [Fact]
-    public async Task SaveAsync_edit_missing_marksNotFound_returnsNull()
+    public async Task SaveAsync_edit_missing_showsMessage_returnsNull()
     {
         GivenSeries();
         _dispatcher.Send(Arg.Any<UpdateSeries>(), Arg.Any<CancellationToken>())
@@ -147,7 +147,7 @@ public class SeriesEditViewModelTests
         var id = await vm.SaveAsync(SeriesId);
 
         Assert.Null(id);
-        Assert.True(vm.NotFound);
+        Assert.Equal("gone", vm.Error);
     }
 
     [Fact]
@@ -166,7 +166,7 @@ public class SeriesEditViewModelTests
         var id = await vm.SaveAsync(SeriesId);
 
         Assert.Null(id);
-        Assert.False(string.IsNullOrEmpty(vm.ErrorMessage));
+        Assert.False(string.IsNullOrEmpty(vm.Error));
         Assert.True(string.IsNullOrEmpty(vm.SuccessMessage)); // no dual green+red banner
     }
 

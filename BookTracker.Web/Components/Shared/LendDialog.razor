@@ -4,14 +4,12 @@
    one LendCopies for every listed copy; a refused lend shows its message here
    and leaves the dialog open. *@
 
-@inject ISnackbar Snackbar
-
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3" Style="min-width: 280px;">
-            @if (VM.ErrorMessage is not null)
+            @if (VM.Error is not null)
             {
-                <MudAlert Severity="Severity.Error" Dense="true">@VM.ErrorMessage</MudAlert>
+                <MudAlert Severity="Severity.Error" Dense="true">@VM.Error</MudAlert>
             }
 
             <MudAutocomplete T="string"
@@ -131,16 +129,9 @@
 
     private async Task ConfirmAsync()
     {
-        try
+        if (await VM.ConfirmAsync())
         {
-            if (await VM.ConfirmAsync())
-            {
-                MudDialog.Close(DialogResult.Ok(true));
-            }
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Couldn't lend: {ex.Message}", Severity.Error);
+            MudDialog.Close(DialogResult.Ok(true));
         }
     }
 

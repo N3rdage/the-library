@@ -6,7 +6,7 @@ namespace BookTracker.Web.ViewModels;
 
 // Dialog VM for Add Copy (against an existing Edition) and Edit Copy,
 // picked by IsNew flag.
-public class CopyFormDialogViewModel(IDispatcher dispatcher)
+public class CopyFormDialogViewModel(IDispatcher dispatcher) : DispatchingViewModel
 {
     public bool IsNew { get; private set; }
     public bool NotFound { get; private set; }
@@ -39,26 +39,21 @@ public class CopyFormDialogViewModel(IDispatcher dispatcher)
         Notes = copy.Notes;
     }
 
+    /// <returns>The copy id; null when the dialog state is stale or the domain
+    /// refused (see <see cref="DispatchingViewModel.Error"/>).</returns>
     public async Task<int?> SaveAsync()
     {
         if (NotFound) return null;
-        try
+        if (IsNew)
         {
-            if (IsNew)
-            {
-                if (EditionId is not int eid) return null;
-                return await dispatcher.Send(new AddCopyToEdition(eid, Condition, DateAcquired, Notes));
-            }
+            if (EditionId is not int eid) return null;
+            return await DispatchAsync<int?>(async () =>
+                await dispatcher.Send(new AddCopyToEdition(eid, Condition, DateAcquired, Notes)));
+        }
 
-            if (CopyId is not int cid) return null;
-            await dispatcher.Send(new UpdateCopy(cid, Condition, DateAcquired, Notes));
-            return cid;
-        }
-        catch (NotFoundException)
-        {
-            // Edition/Copy deleted between opening the dialog and saving — no-op,
-            // matching the old FindAsync-returns-null path.
-            return null;
-        }
+        if (CopyId is not int cid) return null;
+        return await DispatchAsync(() => dispatcher.Send(new UpdateCopy(cid, Condition, DateAcquired, Notes)))
+            ? cid
+            : null;
     }
 }

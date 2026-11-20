@@ -15,7 +15,7 @@ namespace BookTracker.Web.ViewModels;
 public class AIAssistantViewModel(
     IDispatcher dispatcher,
     AIProviderFactory providerFactory,
-    IOptions<AIOptions> aiOptions)
+    IOptions<AIOptions> aiOptions) : DispatchingViewModel
 {
     private IAIAssistantService AiService => providerFactory.GetService();
 
@@ -128,16 +128,12 @@ public class AIAssistantViewModel(
     public bool SuggestingCollections { get; private set; }
     public string? CollectionError { get; private set; }
 
-    /// <summary>The domain error from the last Create on a suggested grouping
-    /// (blank or duplicate name), shown above the groupings.</summary>
-    public string? CreateCollectionError { get; private set; }
-
     public async Task SuggestCollectionsAsync()
     {
         SuggestingCollections = true;
         CollectionSuggestion = null;
         CollectionError = null;
-        CreateCollectionError = null;
+        Error = null;
 
         try
         {
@@ -160,25 +156,17 @@ public class AIAssistantViewModel(
             ? SeriesType.Series
             : SeriesType.Collection;
 
-        CreateCollectionError = null;
-        try
-        {
-            await dispatcher.Send(new CreateSeriesFromSuggestion(
-                grouping.SuggestedName, seriesType, grouping.Reasoning, grouping.BookTitles));
-        }
-        catch (DomainRuleException ex)
-        {
-            // Blank or clashing name — surface the friendly message and keep the
-            // suggestions on screen.
-            CreateCollectionError = ex.Message;
-        }
+        // A blank or clashing name lands in Error, shown above the groupings; the
+        // suggestions stay on screen.
+        await DispatchAsync(() => dispatcher.Send(new CreateSeriesFromSuggestion(
+            grouping.SuggestedName, seriesType, grouping.Reasoning, grouping.BookTitles)));
     }
 
     public void DismissCollections()
     {
         CollectionSuggestion = null;
         CollectionError = null;
-        CreateCollectionError = null;
+        Error = null;
     }
 
     // Shopping suggestions

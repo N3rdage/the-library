@@ -1027,17 +1027,12 @@
 
     private Task ReturnAllLoansAsync() => ReturnGuardedAsync(VM.ReturnAllLoansAsync);
 
-    private Task ReturnGuardedAsync(Func<Task> returnLoans) => OpenDialogGuardedAsync(async () =>
+    private Task ReturnGuardedAsync(Func<Task<bool>> returnLoans) => OpenDialogGuardedAsync(async () =>
     {
-        try
-        {
-            await returnLoans();
+        if (await returnLoans())
             Snackbar.Add("Marked returned", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Couldn't mark returned: {ex.Message}", Severity.Error);
-        }
+        else
+            Snackbar.Add($"Couldn't mark returned: {VM.Error}", Severity.Error);
     });
 
     // Delete uses the same guard — the inline Delete confirm button lives
