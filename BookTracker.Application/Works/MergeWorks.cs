@@ -71,19 +71,12 @@ public sealed class MergeWorksHandler(IDbContextFactory<BookTrackerDbContext> db
         // consistent.
         var fieldsAutoFilled = winner.FillBlanksFrom(loser);
 
-        var winnerGenreIds = winner.Genres.Select(g => g.Id).ToHashSet();
-        var genresAdded = 0;
-        foreach (var g in loser.Genres.Where(g => !winnerGenreIds.Contains(g.Id)).ToList())
-        {
-            winner.Genres.Add(g);
-            genresAdded++;
-        }
-        if (genresAdded > 0) fieldsAutoFilled++;
+        if (winner.AdoptGenresFrom(loser) > 0) fieldsAutoFilled++;
 
         // ─── Reassign BookWork rows ────────────────────────────────────
         // Book-contains-both case: for each Book in loser.Books where winner
         // is NOT already attached, add winner; otherwise skip (winner stays,
-        // loser just gets removed when we clear loser.Books).
+        // loser just gets removed when it leaves all its books).
         var winnerBookIds = winner.Books.Select(b => b.Id).ToHashSet();
 
         var booksReassigned = 0;
@@ -102,7 +95,7 @@ public sealed class MergeWorksHandler(IDbContextFactory<BookTrackerDbContext> db
             }
         }
 
-        loser.Books.Clear();
+        loser.LeaveAllBooks();
 
         var staleIgnores = await db.IgnoredDuplicates
             .Where(d => d.EntityType == DuplicateEntityType.Work

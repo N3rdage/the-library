@@ -262,6 +262,13 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
                     j.Property(wa => wa.Role).HasDefaultValue(AuthorRole.Author);
                 });
 
+        var work = modelBuilder.Entity<Work>();
+        work.Navigation(w => w.WorkAuthors).HasField("_workAuthors").UsePropertyAccessMode(PropertyAccessMode.Field);
+        work.Navigation(w => w.Authors).HasField("_authors").UsePropertyAccessMode(PropertyAccessMode.Field);
+        work.Navigation(w => w.Genres).HasField("_genres").UsePropertyAccessMode(PropertyAccessMode.Field);
+        work.Navigation(w => w.Books).HasField("_books").UsePropertyAccessMode(PropertyAccessMode.Field);
+        work.Navigation(w => w.BookWorks).HasField("_bookWorks").UsePropertyAccessMode(PropertyAccessMode.Field);
+
         modelBuilder.Entity<Author>()
             .HasIndex(a => a.Name)
             .IsUnique();

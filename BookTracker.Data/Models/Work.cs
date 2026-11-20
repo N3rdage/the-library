@@ -20,9 +20,17 @@ namespace BookTracker.Data.Models;
 // so a handler cannot bypass an invariant and the compiler enforces it. A Work is
 // created through Create; the internal constructor serves the tests' seed builder
 // (InternalsVisibleTo), and BookTracker.Application cannot reach it. Id stays
-// public for EF and the tests' in-memory graphs.
+// public for EF and the tests' in-memory graphs. Its collections are read-only
+// over private backing fields that EF reads and writes directly, so every
+// change to them goes through the methods below.
 public class Work
 {
+    private readonly List<WorkAuthor> _workAuthors = [];
+    private readonly List<Author> _authors = [];
+    private readonly List<Genre> _genres = [];
+    private readonly List<Book> _books = [];
+    private readonly List<BookWork> _bookWorks = [];
+
     // EF materialisation, and Create.
     private Work() { }
 
@@ -42,8 +50,8 @@ public class Work
         Subtitle = subtitle;
         FirstPublishedDate = firstPublishedDate;
         FirstPublishedDatePrecision = firstPublishedDatePrecision;
-        if (workAuthors is not null) WorkAuthors = workAuthors.ToList();
-        if (genres is not null) Genres = genres.ToList();
+        if (workAuthors is not null) _workAuthors.AddRange(workAuthors);
+        if (genres is not null) _genres.AddRange(genres);
     }
 
     public int Id { get; set; }
@@ -56,10 +64,10 @@ public class Work
 
     /// <summary>Explicit join with Order. The canonical read source for ordered
     /// display ("Preston & Child"). Written only through <see cref="AssignAuthorship"/>.</summary>
-    public List<WorkAuthor> WorkAuthors { get; private set; } = [];
+    public IReadOnlyCollection<WorkAuthor> WorkAuthors => _workAuthors;
 
     /// <summary>Skip-navigation through WorkAuthor — convenient for "any author of this work" semantics; does NOT preserve Order.</summary>
-    public List<Author> Authors { get; private set; } = [];
+    public IReadOnlyCollection<Author> Authors => _authors;
 
     /// <summary>The year/date the Work was first published — distinct from any specific Edition's print date.</summary>
     public DateOnly? FirstPublishedDate { get; private set; }
@@ -67,23 +75,23 @@ public class Work
     /// <summary>How precise <see cref="FirstPublishedDate"/> is — drives display formatting.</summary>
     public DatePrecision FirstPublishedDatePrecision { get; private set; } = DatePrecision.Day;
 
-    /// <summary>Replaced only through <see cref="SetGenres"/>; the setter is private,
-    /// but the list's contents are still added to from outside (the work merge)
-    /// until the collections slice encapsulates it.</summary>
-    public List<Genre> Genres { get; private set; } = [];
+    /// <summary>Written only through <see cref="SetGenres"/> and
+    /// <see cref="AdoptGenresFrom"/>.</summary>
+    public IReadOnlyCollection<Genre> Genres => _genres;
 
     // Series membership is NOT a Work concept — it lives on the Book (the book
     // is installment N of a publication series). See Book.SeriesId.
 
     /// <summary>Skip-navigation over the Book↔Work join — "which books contain
-    /// this work" semantics. Does NOT carry per-book display order.</summary>
-    public List<Book> Books { get; private set; } = [];
+    /// this work" semantics. Does NOT carry per-book display order. Written only
+    /// through <see cref="LeaveAllBooks"/>.</summary>
+    public IReadOnlyCollection<Book> Books => _books;
 
     /// <summary>Explicit join rows (the per-book <see cref="BookWork.Order"/>
     /// lives here). Mostly read from the Book side; present for symmetry and so
     /// <see cref="Book.AttachWork"/> can keep both ends of the graph consistent.
     /// Written only through <see cref="Book.AttachWork"/> and <see cref="RemoveFrom"/>.</summary>
-    public List<BookWork> BookWorks { get; private set; } = [];
+    public IReadOnlyCollection<BookWork> BookWorks => _bookWorks;
 
     // --- Aggregate behaviour -------------------------------------------------
     // A Work is the durable creative unit; it OWNS its Book↔Work membership and
@@ -169,19 +177,43 @@ public class Work
     /// <c>Include(w =&gt; w.BookWorks)</c> (and the book's, for the shared-book case).</summary>
     public bool RemoveFrom(Book book)
     {
-        var link = BookWorks.FirstOrDefault(bw => bw.Book == book || (book.Id != 0 && bw.BookId == book.Id));
+        var link = _bookWorks.FirstOrDefault(bw => bw.Book == book || (book.Id != 0 && bw.BookId == book.Id));
         if (link is not null)
         {
-            BookWorks.Remove(link);
+            _bookWorks.Remove(link);
             book.BookWorks.Remove(link);
         }
-        return BookWorks.Count == 0;
+        return _bookWorks.Count == 0;
     }
+
+    /// <summary>The Work's end of <see cref="Book.AttachWork"/>, which builds
+    /// the join row and adds it to the Book's end.</summary>
+    internal void AddBookWork(BookWork link) => _bookWorks.Add(link);
+
+    /// <summary>Drops this Work from every Book in <see cref="Books"/> (the
+    /// caller loads them), so EF deletes the join rows on save. The loser's
+    /// side of a work merge, after its books have taken the winner.</summary>
+    public void LeaveAllBooks() => _books.Clear();
 
     public void SetGenres(IReadOnlyList<Genre> genres)
     {
-        Genres.Clear();
-        foreach (var g in genres) Genres.Add(g);
+        _genres.Clear();
+        foreach (var g in genres) _genres.Add(g);
+    }
+
+    /// <summary>Adds each of <paramref name="other"/>'s genres this Work does
+    /// not already have, matched by id. Returns how many were added (a work
+    /// merge, where this Work is the winner).</summary>
+    public int AdoptGenresFrom(Work other)
+    {
+        var have = _genres.Select(g => g.Id).ToHashSet();
+        var added = 0;
+        foreach (var g in other.Genres.Where(g => !have.Contains(g.Id)).ToList())
+        {
+            _genres.Add(g);
+            added++;
+        }
+        return added;
     }
 
     /// <summary>Rebuilds WorkAuthors: one Author-role row per author (Order 0+),
@@ -198,9 +230,9 @@ public class Work
         if (authors.Count == 0 && !hasNonAuthor)
             throw new DomainRuleException("A work needs at least one contributor (author, editor, or other role).");
 
-        WorkAuthors.Clear();
+        _workAuthors.Clear();
         for (var i = 0; i < authors.Count; i++)
-            WorkAuthors.Add(new WorkAuthor(authors[i], i, AuthorRole.Author));
+            _workAuthors.Add(new WorkAuthor(authors[i], i, AuthorRole.Author));
 
         if (additionalContributors is null || additionalContributors.Count == 0) return;
 
@@ -214,7 +246,7 @@ public class Work
             if (role == AuthorRole.Author) continue;
             if (!seen.Add((person, role))) continue;
             var next = orderByRole.GetValueOrDefault(role, 0);
-            WorkAuthors.Add(new WorkAuthor(person, next, role));
+            _workAuthors.Add(new WorkAuthor(person, next, role));
             orderByRole[role] = next + 1;
         }
     }
