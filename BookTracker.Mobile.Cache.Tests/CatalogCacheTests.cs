@@ -372,6 +372,52 @@ public class CatalogCacheTests
     }
 
     [Fact]
+    public async Task WipeAsync_ClearsCatalogMetaWishlistAndCoverFiles_ThenPopulateWorksAgain()
+    {
+        var cache = await NewCacheAsync();
+        var snapshot = SampleSnapshot(
+            books: [new(1, "Foundation", "Isaac Asimov", ["Isaac Asimov"], "Read", 5,
+                ["9780553293357"], null, null, "https://covers.example/foundation.jpg")],
+            authors: [new(1, "Isaac Asimov", 1, 1)],
+            latestUpdatedAt: new DateTime(2026, 5, 14, 8, 0, 0, DateTimeKind.Utc));
+        await cache.PopulateAsync(snapshot);
+        await cache.PopulateWishlistAsync(new BookTracker.Shared.Wishlist.WishlistSnapshot(
+            "test-v1",
+            new DateTime(2026, 5, 25, 12, 0, 0, DateTimeKind.Utc),
+            [new(7, "Dune", "Frank Herbert", "High", null, null, null,
+                new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc), null, ["9780441013593"])]));
+        await cache.MarkBoughtLocallyAsync(7);
+        var coverPath = await cache.EnsureCoverCachedAsync(1, HttpClientReturning(MakePngBytes(100, 150)));
+        Assert.NotNull(coverPath);
+        Assert.True(File.Exists(coverPath));
+
+        await cache.WipeAsync();
+
+        Assert.Null(await cache.LookupByIsbnAsync("9780553293357"));
+        Assert.Empty(await cache.SearchBooksByTitleAsync("foundation", 10));
+        Assert.Empty(await cache.LookupByAuthorAsync(1));
+        Assert.Null(await cache.GetMetaAsync());
+        Assert.Empty(await cache.GetWishlistAsync());
+        Assert.False(await cache.IsWishlistedIsbnAsync("9780441013593"));
+        Assert.False(File.Exists(coverPath));
+
+        await cache.PopulateAsync(snapshot);
+
+        Assert.NotNull(await cache.LookupByIsbnAsync("9780553293357"));
+        Assert.Single(await cache.SearchBooksByTitleAsync("foundation", 10));
+        Assert.Single(await cache.LookupByAuthorAsync(1));
+        Assert.NotNull((await cache.GetMetaAsync())!.LatestUpdatedAt);
+    }
+
+    [Fact]
+    public async Task WipeAsync_OnAnEmptyCache_DoesNotThrow()
+    {
+        var cache = await NewCacheAsync();
+        await cache.WipeAsync();
+        Assert.Null(await cache.GetMetaAsync());
+    }
+
+    [Fact]
     public async Task ApplyDeltaAsync_UpsertsExistingBook_PreservesCoverPathWhenCoverUrlUnchanged()
     {
         // The cover-cache payoff. After a successful EnsureCoverCachedAsync

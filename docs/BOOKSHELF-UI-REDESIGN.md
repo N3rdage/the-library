@@ -291,6 +291,7 @@ The screen that answers "what does this author have, and do I own it?" — one o
 - **Connectivity row:** Online (Online pair, `ti-wifi`) / Offline (MissTag pair, `ti-wifi-off`) + sub-label.
 - **Stats card:** Last synced (age) · Books cached · Authors · Editions · Wishlist count. **No pre-counted "pending updates"** — the count is reported *after* a refresh as a result ("synced · 12 new items"), not polled ahead of time.
 - **`PrimaryButton` "Refresh now"** (56 dp) — fires the existing `?since` watermark delta-sync.
+- **`OutlinedButton` "Reset local cache"** — confirms ("Reset local cache?"), then `WipeAsync` clears the catalog, wishlist, meta and cover files; stays signed in; the next refresh is a full load. Disabled while a sync runs.
 - **Footer:** build/version (11 px).
 - **Data:** `GetMeta` (counts + last-synced), `Connectivity` (state).
 

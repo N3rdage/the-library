@@ -22,6 +22,14 @@ public interface ICatalogCache
     /// (server <c>Version</c> mismatch — deploy invalidated cache).</summary>
     Task PopulateAsync(CatalogSnapshot snapshot);
 
+    /// <summary>Deletes every row from every catalog, wishlist (including
+    /// local bought marks) and meta table in one transaction, then the
+    /// cached cover files. Tables are kept (no schema change); nothing
+    /// outside the cache is touched. With the watermark gone, the next
+    /// sync takes the no-watermark full <see cref="PopulateAsync"/> path.
+    /// Safe on an empty cache.</summary>
+    Task WipeAsync();
+
     /// <summary>Merges a delta-shaped snapshot into the existing
     /// cache. Upserts incoming Books (preserves <c>CoverPath</c> when
     /// <c>CoverUrl</c> hasn't changed, clears it when it has so
