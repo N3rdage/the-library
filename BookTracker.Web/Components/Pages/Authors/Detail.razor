@@ -37,13 +37,6 @@
                       CloseIconClicked="@(() => { VM.SuccessMessage = null; StateHasChanged(); })"
                       Class="mb-3">@VM.SuccessMessage</MudAlert>
         }
-        @if (!string.IsNullOrEmpty(VM.ErrorMessage))
-        {
-            <MudAlert Severity="Severity.Error"
-                      ShowCloseIcon="true"
-                      CloseIconClicked="@(() => { VM.ErrorMessage = null; StateHasChanged(); })"
-                      Class="mb-3">@VM.ErrorMessage</MudAlert>
-        }
 
         <MudPaper Elevation="1" Class="pa-3 mb-3">
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-2">
@@ -100,6 +93,9 @@
                     }
                 </MudStack>
             }
+
+            @* The page's one Error alert, with the rename / alias actions it reports on. *@
+            <ActionError Message="@VM.Error" />
 
             @if (VM.Detail.AliasNames.Count > 0)
             {

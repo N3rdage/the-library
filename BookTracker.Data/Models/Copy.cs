@@ -38,7 +38,8 @@ public class Copy
     /// <summary>Every loan of this copy, open and returned. Written only through
     /// <see cref="LendTo"/> and <see cref="MarkReturned"/>; callers that lend or
     /// return must load it so the open-loan check sees the real set.</summary>
-    public List<Loan> Loans { get; private set; } = [];
+    public IReadOnlyCollection<Loan> Loans => _loans;
+    private readonly List<Loan> _loans = [];
 
     /// <summary>The loan not yet returned, or null when the copy is on the
     /// shelf. Computed from <see cref="Loans"/>; not mapped.</summary>
@@ -74,7 +75,7 @@ public class Copy
             throw new DomainRuleException("The due date cannot be before the lend date.");
 
         var loan = new Loan(name, lentOn, dueOn);
-        Loans.Add(loan);
+        _loans.Add(loan);
         return loan;
     }
 

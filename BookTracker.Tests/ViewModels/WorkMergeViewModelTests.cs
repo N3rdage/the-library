@@ -77,7 +77,7 @@ public class WorkMergeViewModelTests
 
         await vm.MergeAsync();
 
-        Assert.Equal("boom", vm.ErrorMessage);
+        Assert.Equal("boom", vm.Error);
     }
 
     [Fact]

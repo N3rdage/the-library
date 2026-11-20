@@ -108,7 +108,7 @@ public class WorkAggregateTests
         Assert.Equal(new DateOnly(1990, 1, 1), work.FirstPublishedDate);
         Assert.Equal(DatePrecision.Year, work.FirstPublishedDatePrecision);
         Assert.Equal(2, work.WorkAuthors.Count);
-        Assert.Same(editor, work.WorkAuthors[1]);
+        Assert.Same(editor, work.WorkAuthors.ElementAt(1));
         Assert.Same(genre, Assert.Single(work.Genres));
         Assert.Empty(work.BookWorks);
     }
@@ -159,8 +159,21 @@ public class WorkAggregateTests
         var work = TestWorks.Work("T", genres: [new Genre { Id = 1, Name = "Old" }]);
         var fantasy = new Genre { Id = 2, Name = "Fantasy" };
         work.SetGenres([fantasy]);
-        Assert.Single(work.Genres);
-        Assert.Same(fantasy, work.Genres[0]);
+        Assert.Same(fantasy, Assert.Single(work.Genres));
+    }
+
+    [Fact]
+    public void AdoptGenresFrom_addsOnlyTheGenresThisWorkLacks()
+    {
+        var fantasy = new Genre { Id = 1, Name = "Fantasy" };
+        var horror = new Genre { Id = 2, Name = "Horror" };
+        var winner = TestWorks.Work("W", genres: [fantasy]);
+        var loser = TestWorks.Work("L", genres: [new Genre { Id = 1, Name = "Fantasy" }, horror]);
+
+        var added = winner.AdoptGenresFrom(loser);
+
+        Assert.Equal(1, added);
+        Assert.Equal([fantasy, horror], winner.Genres);
     }
 
     // --- AssignAuthorship (moved from AuthorResolver.AssignAuthors) ----------
@@ -174,11 +187,12 @@ public class WorkAggregateTests
 
         work.AssignAuthorship([preston, child]);
 
-        Assert.Equal(2, work.WorkAuthors.Count);
-        Assert.Same(preston, work.WorkAuthors[0].Author);
-        Assert.Equal(0, work.WorkAuthors[0].Order);
-        Assert.Same(child, work.WorkAuthors[1].Author);
-        Assert.Equal(1, work.WorkAuthors[1].Order);
+        var rows = work.WorkAuthors.ToList();
+        Assert.Equal(2, rows.Count);
+        Assert.Same(preston, rows[0].Author);
+        Assert.Equal(0, rows[0].Order);
+        Assert.Same(child, rows[1].Author);
+        Assert.Equal(1, rows[1].Order);
     }
 
     [Fact]

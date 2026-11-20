@@ -3,7 +3,6 @@
    intentionally absent here. Triggered via IDialogService. *@
 
 @inject BookEditDialogViewModel VM
-@inject ISnackbar Snackbar
 
 <MudDialog>
     <DialogContent>
@@ -60,6 +59,7 @@
                 }
             </MudStack>
         }
+        <ActionError Message="@VM.Error" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
@@ -86,12 +86,7 @@
         saving = true;
         try
         {
-            await VM.SaveAsync();
-            MudDialog.Close(DialogResult.Ok(true));
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Couldn't save: {ex.Message}", Severity.Error);
+            if (await VM.SaveAsync()) MudDialog.Close(DialogResult.Ok(true));
         }
         finally
         {

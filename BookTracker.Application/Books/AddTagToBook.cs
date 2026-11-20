@@ -24,11 +24,7 @@ public sealed class AddTagToBookHandler(IDbContextFactory<BookTrackerDbContext> 
         if (book is null) return null;
 
         var tag = await TagResolver.FindOrCreateAsync(command.TagName, db, ct);
-
-        // Attach only if not already present. tag.Id == 0 is a brand-new
-        // (unsaved) tag, which by definition isn't on the book yet.
-        if (tag.Id == 0 || book.Tags.All(t => t.Id != tag.Id))
-            book.Tags.Add(tag);
+        book.AddTag(tag); // no-op when the book already carries it
 
         await db.SaveChangesAsync(ct);
         return new TagDetail(tag.Id, tag.Name);

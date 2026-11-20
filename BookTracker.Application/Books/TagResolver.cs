@@ -44,11 +44,7 @@ public static class TagResolver
     {
         foreach (var name in tagNames.Select(Normalize).Where(n => n.Length > 0).Distinct())
         {
-            var tag = await FindOrCreateAsync(name, db, ct);
-            // tag.Id == 0 is a brand-new (unsaved) tag, which by definition isn't
-            // on the book yet.
-            if (tag.Id == 0 || book.Tags.All(t => t.Id != tag.Id))
-                book.Tags.Add(tag);
+            book.AddTag(await FindOrCreateAsync(name, db, ct));
         }
     }
 }

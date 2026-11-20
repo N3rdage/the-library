@@ -6,9 +6,9 @@ namespace BookTracker.Web.ViewModels;
 // Backs /duplicates/merge/author/{idA}/{idB}. Loads both Author details with
 // work/alias counts + sample titles for the review cards, then dispatches the
 // MergeAuthors command when the user confirms a winner. Errors (incompatible
-// aliases, missing entities) flow back through ErrorMessage. Dispatcher-only:
+// aliases, missing entities) flow back through Error. Dispatcher-only:
 // reads via GetAuthorMergePreview, writes via MergeAuthors.
-public class AuthorMergeViewModel(IDispatcher dispatcher)
+public class AuthorMergeViewModel(IDispatcher dispatcher) : DispatchingViewModel
 {
     public bool Loading { get; private set; } = true;
     public bool Merging { get; private set; }
@@ -17,7 +17,6 @@ public class AuthorMergeViewModel(IDispatcher dispatcher)
     public AuthorMergeDetail? Higher { get; private set; }
 
     public string? IncompatibilityReason { get; private set; }
-    public string? ErrorMessage { get; private set; }
 
     public int? SelectedWinnerId { get; set; }
 
@@ -42,14 +41,14 @@ public class AuthorMergeViewModel(IDispatcher dispatcher)
     public async Task LoadAsync(int idA, int idB)
     {
         Loading = true;
-        ErrorMessage = null;
+        Error = null;
         var result = await dispatcher.Query(new GetAuthorMergePreview(idA, idB));
         Lower = result.Lower;
         Higher = result.Higher;
         IncompatibilityReason = result.IncompatibilityReason;
         if (Lower is null || Higher is null)
         {
-            ErrorMessage = "One or both authors could not be loaded — they may have been merged or deleted already.";
+            Error = "One or both authors could not be loaded — they may have been merged or deleted already.";
         }
         Loading = false;
     }
@@ -61,11 +60,8 @@ public class AuthorMergeViewModel(IDispatcher dispatcher)
         Merging = true;
         try
         {
-            var result = await dispatcher.Send(new MergeAuthors(SelectedWinnerId.Value, LoserId.Value));
-            if (!result.Success)
-            {
-                ErrorMessage = result.ErrorMessage;
-            }
+            var result = await DispatchAsync(() => dispatcher.Send(new MergeAuthors(SelectedWinnerId.Value, LoserId.Value)));
+            if (result is { Success: false }) Error = result.ErrorMessage;
             return result;
         }
         finally

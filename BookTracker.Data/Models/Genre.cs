@@ -11,7 +11,11 @@ public class Genre
 
     public int? ParentGenreId { get; set; }
     public Genre? ParentGenre { get; set; }
-    public List<Genre> Children { get; set; } = [];
+    /// <summary>EF fills it from each child's <see cref="ParentGenreId"/>.</summary>
+    public IReadOnlyCollection<Genre> Children => _children;
+    private readonly List<Genre> _children = [];
 
-    public List<Work> Works { get; set; } = [];
+    /// <summary>EF fills it; written from the Work side through <see cref="Work.SetGenres"/>.</summary>
+    public IReadOnlyCollection<Work> Works => _works;
+    private readonly List<Work> _works = [];
 }

@@ -94,7 +94,7 @@ public class BookDetailViewModelTests
             var author = Author.Create("William Shakespeare");
             // Series membership is a per-Book concept — the compendium sits in the
             // collection as one installment; its Works carry no series of their own.
-            var series = new Series { Name = "Shakespeare's Plays", Type = SeriesType.Collection };
+            var series = TestSeries.Series("Shakespeare's Plays", SeriesType.Collection);
             var book = TestBooks.Book("Complete Works", series: series);
             // Capture order deliberately differs from alphabetical (Hamlet would be
             // first if sorted by title) — the read must preserve capture order.
@@ -412,7 +412,7 @@ public class BookDetailViewModelTests
             await db.SaveChangesAsync();
             bookId = book.Id;
             editionId = edition.Id;
-            copyToDelete = edition.Copies[0].Id;
+            copyToDelete = edition.Copies.First().Id;
         }
 
         var vm = CreateVm(factory);
@@ -442,7 +442,7 @@ public class BookDetailViewModelTests
             await db.SaveChangesAsync();
             bookId = book.Id;
             editionId = edition.Id;
-            copyToDelete = edition.Copies[0].Id;
+            copyToDelete = edition.Copies.First().Id;
         }
 
         var vm = CreateVm(factory);
@@ -545,7 +545,7 @@ public class BookDetailViewModelTests
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
-            editionId = book.Editions[0].Id;
+            editionId = book.Editions.Single().Id;
         }
 
         var storage = Substitute.For<IBookCoverStorage>();
@@ -594,7 +594,7 @@ public class BookDetailViewModelTests
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
-            editionId = book.Editions[0].Id;
+            editionId = book.Editions.Single().Id;
         }
 
         var storage = Substitute.For<IBookCoverStorage>();
@@ -630,7 +630,7 @@ public class BookDetailViewModelTests
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
-            editionId = book.Editions[0].Id;
+            editionId = book.Editions.Single().Id;
         }
 
         var storage = Substitute.For<IBookCoverStorage>();
@@ -917,7 +917,7 @@ public class BookDetailViewModelTests
         Assert.All(christies, w =>
         {
             Assert.Single(w.WorkAuthors);
-            Assert.Equal("Agatha Christie", w.WorkAuthors[0].Author.Name);
+            Assert.Equal("Agatha Christie", w.WorkAuthors.Single().Author.Name);
         });
     }
 
@@ -966,10 +966,10 @@ public class BookDetailViewModelTests
     }
 
     [Fact]
-    public async Task AttachMultipleWorksAsync_RowWithNoContributors_ThrowsWithUserFacingMessage()
+    public async Task AttachMultipleWorksAsync_RowWithNoContributors_SetsErrorWithUserFacingMessage()
     {
         // A row with a title but no authors AND no contributors is a
-        // validation failure — the dialog's catch surfaces the .Message
+        // validation failure — the VM puts the handler's message in Error
         // verbatim. Lock the message shape.
         var factory = new TestDbContextFactory();
         int bookId;
@@ -991,14 +991,15 @@ public class BookDetailViewModelTests
             new() { Title = "Untitled Story", Authors = [] },
         };
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            vm.AttachMultipleWorksAsync(rows, false, false, [], []));
-        Assert.Contains("contributor", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Untitled Story", ex.Message);
+        var added = await vm.AttachMultipleWorksAsync(rows, false, false, [], []);
+
+        Assert.Equal(0, added);
+        Assert.Contains("contributor", vm.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Untitled Story", vm.Error);
     }
 
     [Fact]
-    public async Task AttachMultipleWorksAsync_AllBlankRows_ThrowsWithUserFacingMessage()
+    public async Task AttachMultipleWorksAsync_AllBlankRows_SetsErrorWithUserFacingMessage()
     {
         // Every row blank (no title, no attach) is a dialog-state error —
         // surface the "add at least one work" message rather than silently
@@ -1024,9 +1025,10 @@ public class BookDetailViewModelTests
             new() { Title = "   ", Authors = [] },
         };
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            vm.AttachMultipleWorksAsync(rows, false, false, [], []));
-        Assert.Contains("at least one work", ex.Message, StringComparison.OrdinalIgnoreCase);
+        var added = await vm.AttachMultipleWorksAsync(rows, false, false, [], []);
+
+        Assert.Equal(0, added);
+        Assert.Contains("at least one work", vm.Error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1100,8 +1102,7 @@ public class BookDetailViewModelTests
         using var verify = factory.CreateDbContext();
         var work = await verify.Works.Include(w => w.Books).FirstOrDefaultAsync(w => w.Id == workId);
         Assert.NotNull(work);
-        Assert.Single(work!.Books);
-        Assert.Equal(otherBookId, work.Books[0].Id);
+        Assert.Equal(otherBookId, Assert.Single(work!.Books).Id);
     }
 
     [Fact]
@@ -1277,5 +1278,74 @@ public class BookDetailViewModelLoanTests
 
         Assert.Equal(new LendDialogViewModel.LendCopyOption(11, "Dune", "Hardcover · 9780441013593", BookCondition.VeryGood), option);
         Assert.Null(vm.LendOptionFor(999));
+    }
+
+    private static CopyDetail Free(int id) => new(id, BookCondition.Good, null, null);
+
+    private static CopyDetail Out(int id, int loanId, string borrower) =>
+        new(id, BookCondition.Good, null, null, new CopyLoanDetail(loanId, borrower, Today.AddDays(-3), null));
+
+    [Fact]
+    public async Task NoCopies_hasNothingToLend_andNoLentLabel()
+    {
+        var vm = await LoadedVmAsync();
+
+        Assert.Null(vm.FirstFreeCopyId);
+        Assert.False(vm.AllCopiesLent);
+        Assert.Null(vm.LentToLabel);
+    }
+
+    [Fact]
+    public async Task OneFreeCopy_isTheSeed()
+    {
+        var vm = await LoadedVmAsync(Free(11));
+
+        Assert.Equal(11, vm.FirstFreeCopyId);
+        Assert.False(vm.AllCopiesLent);
+        Assert.Null(vm.LentToLabel);
+    }
+
+    [Fact]
+    public async Task SeveralCopies_seedWithTheFirstOneNotOnLoan()
+    {
+        var vm = await LoadedVmAsync(Out(10, 1, "Ann"), Free(11), Free(12));
+
+        Assert.Equal(11, vm.FirstFreeCopyId);
+        Assert.False(vm.AllCopiesLent);
+        Assert.Null(vm.LentToLabel);
+    }
+
+    [Fact]
+    public async Task EveryCopyLent_hasNoSeed_andNamesTheBorrower()
+    {
+        var vm = await LoadedVmAsync(Out(10, 1, "Ann"));
+
+        Assert.Null(vm.FirstFreeCopyId);
+        Assert.True(vm.AllCopiesLent);
+        Assert.Equal("Lent to Ann", vm.LentToLabel);
+    }
+
+    [Fact]
+    public async Task EveryCopyLentToDifferentPeople_listsEachBorrowerOnce()
+    {
+        var vm = await LoadedVmAsync(Out(10, 1, "Ann"), Out(11, 2, "Bob"), Out(12, 3, "Ann"));
+
+        Assert.Equal("Lent to Ann, Bob", vm.LentToLabel);
+    }
+
+    [Fact]
+    public async Task ReturnAllLoansAsync_returnsEveryOpenLoanTodayAndReloadsOnce()
+    {
+        var vm = await LoadedVmAsync(Out(10, 1, "Ann"), Out(11, 2, "Bob"));
+        _dispatcher.ClearReceivedCalls();
+
+        await vm.ReturnAllLoansAsync();
+
+        await _dispatcher.Received(1).Send(
+            Arg.Is<ReturnLoan>(c => c!.LoanId == 1 && c.ReturnedOn == Today), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).Send(
+            Arg.Is<ReturnLoan>(c => c!.LoanId == 2 && c.ReturnedOn == Today), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).Query(
+            Arg.Any<BookTracker.Application.Books.GetBookDetail>(), Arg.Any<CancellationToken>());
     }
 }

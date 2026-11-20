@@ -17,14 +17,13 @@ namespace BookTracker.Web.ViewModels;
 // search, GetSeriesBookRow builds the row after AddBookToSeries; create/edit/
 // delete and the book-membership ops dispatch commands. The in-memory Books
 // list is kept in sync after each mutation so the page doesn't reload.
-public class SeriesEditViewModel(IDispatcher dispatcher)
+public class SeriesEditViewModel(IDispatcher dispatcher) : DispatchingViewModel
 {
     public SeriesFormInput? Input { get; private set; }
     public List<SeriesBookRow> Books { get; private set; } = [];
     public bool NotFound { get; private set; }
     public bool Saving { get; private set; }
     public string? SuccessMessage { get; set; }
-    public string? ErrorMessage { get; set; }
     public bool IsNew { get; private set; }
 
     public bool ConfirmingDeleteSeries { get; set; }
@@ -66,9 +65,8 @@ public class SeriesEditViewModel(IDispatcher dispatcher)
     public async Task<int?> SaveAsync(int? seriesId)
     {
         Saving = true;
-        // Clear both banners so a prior success + a new failure (or vice-versa)
-        // can't render at once.
-        ErrorMessage = null;
+        // Clear the success banner so a prior success + a new failure (or
+        // vice-versa) can't render at once; the dispatch clears Error.
         SuccessMessage = null;
         // The aggregate normalises (trims name, nulls blank author/description,
         // drops ExpectedCount for a Collection), so pass the raw form values.
@@ -76,28 +74,17 @@ public class SeriesEditViewModel(IDispatcher dispatcher)
         {
             if (IsNew)
             {
-                return await dispatcher.Send(new CreateSeries(
-                    Input!.Name!, Input.Author, Input.Type, Input.ExpectedCount, Input.Description));
+                return await DispatchAsync<int?>(async () => await dispatcher.Send(new CreateSeries(
+                    Input!.Name!, Input.Author, Input.Type, Input.ExpectedCount, Input.Description)));
             }
-            else
+
+            if (!await DispatchAsync(() => dispatcher.Send(new UpdateSeries(
+                    seriesId!.Value, Input!.Name!, Input.Author, Input.Type, Input.ExpectedCount, Input.Description))))
             {
-                await dispatcher.Send(new UpdateSeries(
-                    seriesId!.Value, Input!.Name!, Input.Author, Input.Type, Input.ExpectedCount, Input.Description));
-                SuccessMessage = "Series saved successfully.";
-                return seriesId;
+                return null;
             }
-        }
-        catch (DomainRuleException ex)
-        {
-            // Duplicate (or blank) name — surface the friendly message and stay put.
-            ErrorMessage = ex.Message;
-            return null;
-        }
-        catch (NotFoundException)
-        {
-            // Series deleted out from under the editor between load and save.
-            NotFound = true;
-            return null;
+            SuccessMessage = "Series saved successfully.";
+            return seriesId;
         }
         finally
         {

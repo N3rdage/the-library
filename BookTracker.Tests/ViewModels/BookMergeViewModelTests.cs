@@ -1,8 +1,10 @@
 using BookTracker.Application;
 using BookTracker.Application.Books;
+using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.ViewModels;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace BookTracker.Tests.ViewModels;
 
@@ -100,5 +102,40 @@ public class BookMergeViewModelTests
         await _dispatcher.Received(1).Send(
             Arg.Is<MergeBooks>(c => c!.WinnerId == 1 && c.LoserId == 2),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task MergeAsync_domain_refusal_sets_Error_and_returns_null()
+    {
+        _dispatcher.Query(Arg.Any<GetBookMergePreview>(), Arg.Any<CancellationToken>())
+            .Returns(new BookMergeLoadResult(Detail(1, "W"), Detail(2, "L")));
+        _dispatcher.Send(Arg.Any<MergeBooks>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DomainRuleException("A copy is lent out."));
+        var vm = CreateVm();
+        await vm.LoadAsync(1, 2);
+        vm.SelectedWinnerId = 1;
+
+        var result = await vm.MergeAsync();
+
+        Assert.Null(result);
+        Assert.Equal("A copy is lent out.", vm.Error);
+        Assert.False(vm.Merging);
+    }
+
+    [Fact]
+    public async Task MergeAsync_fault_propagates_and_leaves_Error_clear()
+    {
+        _dispatcher.Query(Arg.Any<GetBookMergePreview>(), Arg.Any<CancellationToken>())
+            .Returns(new BookMergeLoadResult(Detail(1, "W"), Detail(2, "L")));
+        _dispatcher.Send(Arg.Any<MergeBooks>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("db down"));
+        var vm = CreateVm();
+        await vm.LoadAsync(1, 2);
+        vm.SelectedWinnerId = 1;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => vm.MergeAsync());
+
+        Assert.Null(vm.Error);
+        Assert.False(vm.Merging);
     }
 }

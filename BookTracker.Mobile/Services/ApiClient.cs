@@ -98,4 +98,57 @@ public class ApiClient(HttpClient http, IAuthService auth) : IApiClient
             return null;
         }
     }
+
+    public async Task<OnlineAuthorWorks?> GetAuthorWorksOnlineAsync(string author, CancellationToken ct = default)
+    {
+        try
+        {
+            var token = await auth.AcquireTokenSilentAsync()
+                ?? await auth.SignInAsync();
+
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get, $"/api/online/author-works?author={Uri.EscapeDataString(author)}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            using var response = await http.SendAsync(request, ct);
+            // 400 (no name) and 5xx are failures; the page keeps its owned list.
+            if (!response.IsSuccessStatusCode) return null;
+
+            return await response.Content.ReadFromJsonAsync<OnlineAuthorWorks>(JsonOptions, ct);
+        }
+        catch (Exception)
+        {
+            // Same reasoning as LookupIsbnOnlineAsync: the bibliography is
+            // extra on top of the owned list already on screen, so a failure
+            // (sign-in cancelled, no network, timeout, bad JSON) means "no
+            // online list" rather than an error.
+            return null;
+        }
+    }
+
+    public async Task<OnlineWorkEditions?> GetWorkEditionsOnlineAsync(string workKey, CancellationToken ct = default)
+    {
+        try
+        {
+            var token = await auth.AcquireTokenSilentAsync()
+                ?? await auth.SignInAsync();
+
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get, $"/api/online/work-editions?workKey={Uri.EscapeDataString(workKey)}");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            using var response = await http.SendAsync(request, ct);
+            // 400 (bad key) and 5xx are failures; the page keeps its disabled row.
+            if (!response.IsSuccessStatusCode) return null;
+
+            return await response.Content.ReadFromJsonAsync<OnlineWorkEditions>(JsonOptions, ct);
+        }
+        catch (Exception)
+        {
+            // Same reasoning as GetAuthorWorksOnlineAsync: the other editions
+            // are extra on top of the answer already on screen, so a failure
+            // means "no list" rather than an error.
+            return null;
+        }
+    }
 }

@@ -11,13 +11,11 @@ namespace BookTracker.Web.ViewModels;
 // date from LoanDates, so the overdue flag and the return date agree with the
 // rest of the lending surface. A return removes the row in place; a refused
 // return (already returned, loan gone) shows the message and reloads the list.
-public class LoansViewModel(IDispatcher dispatcher, TimeProvider clock)
+public class LoansViewModel(IDispatcher dispatcher, TimeProvider clock) : DispatchingViewModel
 {
     public List<BorrowerLoans> Groups { get; private set; } = [];
     public bool Loaded { get; private set; }
     public DateOnly Today { get; private set; }
-
-    public string? ErrorMessage { get; set; }
 
     /// <summary>Loans with a return in flight, so the page can disable their
     /// buttons against a double click.</summary>
@@ -42,24 +40,19 @@ public class LoansViewModel(IDispatcher dispatcher, TimeProvider clock)
     public async Task ReturnAsync(int loanId)
     {
         if (!ReturningLoanIds.Add(loanId)) return;
-        ErrorMessage = null;
         try
         {
-            await dispatcher.Send(new ReturnLoan(loanId, LoanDates.Today(clock)));
-            foreach (var group in Groups)
-                group.Loans.RemoveAll(l => l.LoanId == loanId);
-            Groups.RemoveAll(g => g.Loans.Count == 0);
-            if (HistoryLoaded) await ReloadHistoryAsync();
-        }
-        catch (DomainRuleException ex)
-        {
-            ErrorMessage = ex.Message;
-            await LoadAsync();
-        }
-        catch (NotFoundException)
-        {
-            ErrorMessage = "That loan no longer exists.";
-            await LoadAsync();
+            if (await DispatchAsync(() => dispatcher.Send(new ReturnLoan(loanId, LoanDates.Today(clock)))))
+            {
+                foreach (var group in Groups)
+                    group.Loans.RemoveAll(l => l.LoanId == loanId);
+                Groups.RemoveAll(g => g.Loans.Count == 0);
+                if (HistoryLoaded) await ReloadHistoryAsync();
+            }
+            else
+            {
+                await LoadAsync();
+            }
         }
         finally
         {

@@ -11,27 +11,50 @@ public enum SeriesType
     Collection
 }
 
+// Series' fields are written only through Create and UpdateDetails (private
+// setters; EF materialises through them regardless of accessibility), so a
+// handler cannot bypass the ExpectedCount/Type invariant and the compiler
+// enforces it. The internal constructor serves the tests' seed builder
+// (InternalsVisibleTo), and BookTracker.Application cannot reach it. Id stays
+// public for EF and the tests' in-memory graphs.
 public class Series
 {
+    // EF materialisation, and Create.
+    private Series() { }
+
+    /// <summary>Stores exactly the values given: nothing is trimmed or
+    /// normalised here (unlike <see cref="UpdateDetails"/>, which also drops a
+    /// Collection's count), so a test seed gets exactly what it passes.</summary>
+    internal Series(string name, SeriesType type, string? author, int? expectedCount, string? description)
+    {
+        Name = name;
+        Type = type;
+        Author = author;
+        ExpectedCount = expectedCount;
+        Description = description;
+    }
+
     public int Id { get; set; }
 
     [Required, MaxLength(300)]
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; private set; } = string.Empty;
 
     [MaxLength(200)]
-    public string? Author { get; set; }
+    public string? Author { get; private set; }
 
-    public SeriesType Type { get; set; } = SeriesType.Series;
+    public SeriesType Type { get; private set; } = SeriesType.Series;
 
     /// <summary>Expected number of works in a Series. Null for Collections or unknown.</summary>
-    public int? ExpectedCount { get; set; }
+    public int? ExpectedCount { get; private set; }
 
-    public string? Description { get; set; }
+    public string? Description { get; private set; }
 
     // Series membership lives on the Book — the Book is installment N of a
     // publication series (a series of short-story collections is unmanageable at
     // Work grain). Books is the inverse navigation; Work carries no series.
-    public List<Book> Books { get; set; } = [];
+    // Membership is written through Book.AssignToSeries / ClearSeries.
+    public IReadOnlyCollection<Book> Books => _books;
+    private readonly List<Book> _books = [];
 
     // --- Aggregate behaviour -------------------------------------------------
     // Series is a thin aggregate: no shared m2m, no ref-count lifecycle (Book

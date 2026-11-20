@@ -9,5 +9,7 @@ public class Tag
     [Required, MaxLength(100)]
     public string Name { get; set; } = string.Empty;
 
-    public List<Book> Books { get; set; } = [];
+    /// <summary>EF fills it; written from the Book side through <see cref="Book.AddTag"/>.</summary>
+    public IReadOnlyCollection<Book> Books => _books;
+    private readonly List<Book> _books = [];
 }

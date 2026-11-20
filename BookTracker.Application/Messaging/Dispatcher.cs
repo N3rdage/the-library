@@ -10,8 +10,8 @@ namespace BookTracker.Application;
 /// The invoke goes through <c>dynamic</c> rather than <c>MethodInfo.Invoke</c>
 /// on purpose: reflection's Invoke wraps any exception a handler throws *before*
 /// its first <c>await</c> in a <see cref="System.Reflection.TargetInvocationException"/>,
-/// which would defeat the page's friendly-message snackbars and typed catches
-/// like <c>catch (NotFoundException)</c>. The DLR call propagates the original
+/// which would defeat the dispatching view models' typed catches
+/// for <c>NotFoundException</c> and <c>DomainRuleException</c>. The DLR call propagates the original
 /// exception unwrapped, so correctness no longer depends on every handler
 /// happening to await first. (No package needed — Microsoft.CSharp ships in the
 /// shared framework.)

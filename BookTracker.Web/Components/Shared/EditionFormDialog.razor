@@ -7,7 +7,6 @@
 @using BookTracker.Application.Publishers
 @using Microsoft.Extensions.Logging
 @inject EditionFormDialogViewModel VM
-@inject ISnackbar Snackbar
 @inject IDispatcher Dispatcher
 @inject ILogger<EditionFormDialog> Logger
 
@@ -100,6 +99,7 @@
                 }
             </MudStack>
         }
+        <ActionError Message="@VM.Error" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
@@ -160,10 +160,6 @@
         {
             var id = await VM.SaveAsync();
             if (id is int) MudDialog.Close(DialogResult.Ok(id));
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Couldn't save: {ex.Message}", Severity.Error);
         }
         finally
         {

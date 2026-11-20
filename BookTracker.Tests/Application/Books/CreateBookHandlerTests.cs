@@ -1,5 +1,6 @@
 using BookTracker.Application.Books;
 using BookTracker.Application.Works;
+using BookTracker.Data;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -46,7 +47,7 @@ public class CreateBookHandlerTests
     private async Task<int> SeedSeriesAsync(string name)
     {
         await using var db = _factory.CreateDbContext();
-        var series = new Series { Name = name, Type = SeriesType.Series };
+        var series = TestSeries.Series(name, SeriesType.Series);
         db.Series.Add(series);
         await db.SaveChangesAsync();
         return series.Id;
@@ -106,7 +107,7 @@ public class CreateBookHandlerTests
         Assert.All(saved.Works, w =>
         {
             Assert.Single(w.WorkAuthors);
-            Assert.Equal("Stephen King", w.WorkAuthors[0].Author.Name);
+            Assert.Equal("Stephen King", w.WorkAuthors.Single().Author.Name);
         });
         // One shared Author row, not one per work.
         Assert.Equal(1, await db.Authors.CountAsync(a => a.Name == "Stephen King"));
@@ -139,7 +140,7 @@ public class CreateBookHandlerTests
         var works = new WorkCollection([NewRow("Story A", [])],
             SingleAuthor: true, SingleGenre: false, SharedAuthors: [], SharedGenreIds: []);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => CreateAsync(BookTitled("Untitled Collection"), works));
+        var ex = await Assert.ThrowsAsync<DomainRuleException>(() => CreateAsync(BookTitled("Untitled Collection"), works));
 
         Assert.Contains("Single-Author", ex.Message);
         await using var db = _factory.CreateDbContext();
@@ -582,7 +583,7 @@ public class CreateBookHandlerTests
     [Fact]
     public async Task Collection_allRowsEmpty_throws()
     {
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<DomainRuleException>(() =>
             CreateAsync(BookTitled("Empty Collection"), Collection(NewRow(null, []), NewRow(null, []))));
 
         Assert.Contains("at least one work", ex.Message);
@@ -593,7 +594,7 @@ public class CreateBookHandlerTests
     [Fact]
     public async Task Collection_rowWithOnlyBlankAuthorEntries_throwsNamingTheRow()
     {
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<DomainRuleException>(() =>
             CreateAsync(BookTitled("Anthology"), Collection(
                 NewRow("Fine Story", ["Author A"]),
                 NewRow("Odd Story", ["   "]))));
@@ -606,11 +607,11 @@ public class CreateBookHandlerTests
     [Fact]
     public async Task SingleWork_noContributors_throwsWithUserFacingMessage()
     {
-        // The Add page shows an InvalidOperationException's message as-is
+        // The Add page shows a DomainRuleException's message as-is
         // (e.g. Enter on the ISBN field submitting a sparse form). Post-2026-05-24
         // the check is "at least one contributor of any role", so editor-only
         // Works save.
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<DomainRuleException>(() =>
             CreateAsync(BookTitled("Untitled"), OneWork("Untitled", [])));
 
         Assert.Contains("contributor", ex.Message, StringComparison.OrdinalIgnoreCase);

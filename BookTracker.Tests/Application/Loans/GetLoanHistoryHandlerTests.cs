@@ -50,7 +50,7 @@ public class GetLoanHistoryHandlerTests
 
         var row = Assert.Single(await History());
 
-        Assert.Equal(copy.Loans[0].Id, row.LoanId);
+        Assert.Equal(copy.Loans.Single().Id, row.LoanId);
         Assert.Equal(book.Id, row.BookId);
         Assert.Equal("Dune", row.Title);
         Assert.Equal("Sam", row.BorrowerName);

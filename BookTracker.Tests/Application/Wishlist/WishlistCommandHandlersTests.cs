@@ -18,7 +18,7 @@ public class WishlistCommandHandlersTests
     private async Task<int> SeedSeriesAsync(string name = "Discworld", string? author = "Terry Pratchett")
     {
         await using var db = _factory.CreateDbContext();
-        var s = new Series { Name = name, Type = SeriesType.Series, Author = author };
+        var s = TestSeries.Series(name, SeriesType.Series, author: author);
         db.Series.Add(s);
         await db.SaveChangesAsync();
         return s.Id;
@@ -28,12 +28,9 @@ public class WishlistCommandHandlersTests
         int? seriesId = null, int? seriesOrder = null)
     {
         await using var db = _factory.CreateDbContext();
-        var item = new WishlistItem
-        {
-            Title = title, Author = author, Isbn = isbn,
-            SeriesId = seriesId, SeriesOrder = seriesOrder,
-            Isbns = isbn is null ? [] : [new WishlistItemIsbn { Isbn = isbn }],
-        };
+        var item = TestWishlistItems.Item(
+            title, author, isbn: isbn, isbns: isbn is null ? null : [isbn],
+            seriesId: seriesId, seriesOrder: seriesOrder);
         db.WishlistItems.Add(item);
         await db.SaveChangesAsync();
         return item.Id;

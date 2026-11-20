@@ -26,11 +26,11 @@ public class GetWishlistHandlerTests
         using (var db = _factory.CreateDbContext())
         {
             db.WishlistItems.AddRange(
-                new WishlistItem { Title = "Mort", Author = "A", Priority = WishlistPriority.Low },
-                new WishlistItem { Title = "Sourcery", Author = "A", Priority = WishlistPriority.High },
-                new WishlistItem { Title = "Eric", Author = "A", Priority = WishlistPriority.Medium },
-                new WishlistItem { Title = "Anathem", Author = "A", Priority = WishlistPriority.High },
-                new WishlistItem { Title = "Bloodchild", Author = "A", Priority = WishlistPriority.Low });
+                TestWishlistItems.Item("Mort", "A", WishlistPriority.Low),
+                TestWishlistItems.Item("Sourcery", "A", WishlistPriority.High),
+                TestWishlistItems.Item("Eric", "A", WishlistPriority.Medium),
+                TestWishlistItems.Item("Anathem", "A", WishlistPriority.High),
+                TestWishlistItems.Item("Bloodchild", "A", WishlistPriority.Low));
             await db.SaveChangesAsync();
         }
 
@@ -48,15 +48,13 @@ public class GetWishlistHandlerTests
         int linkedId, plainId;
         using (var db = _factory.CreateDbContext())
         {
-            var foundation = new Series { Name = "Foundation", Type = SeriesType.Series, ExpectedCount = 7 };
+            var foundation = TestSeries.Series("Foundation", SeriesType.Series, expectedCount: 7);
             db.Series.Add(foundation);
-            var linked = new WishlistItem
-            {
-                Title = "Foundation #3", Author = "Isaac Asimov", Priority = WishlistPriority.High,
-                Isbn = "9780553293371", CoverUrl = "https://c/f3.jpg",
-                Series = foundation, SeriesOrder = 3,
-            };
-            var plain = new WishlistItem { Title = "Snow Crash", Author = "Neal Stephenson", Priority = WishlistPriority.Medium };
+            var linked = TestWishlistItems.Item(
+                "Foundation #3", "Isaac Asimov", WishlistPriority.High,
+                isbn: "9780553293371", coverUrl: "https://c/f3.jpg",
+                series: foundation, seriesOrder: 3);
+            var plain = TestWishlistItems.Item("Snow Crash", "Neal Stephenson", WishlistPriority.Medium);
             db.WishlistItems.AddRange(linked, plain);
             await db.SaveChangesAsync();
             linkedId = linked.Id;

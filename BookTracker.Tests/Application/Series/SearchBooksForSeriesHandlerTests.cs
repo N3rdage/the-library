@@ -54,7 +54,7 @@ public class SearchBooksForSeriesHandlerTests
         int seriesId;
         using (var db = _factory.CreateDbContext())
         {
-            var s = new Series { Name = "Discworld", Type = SeriesType.Series };
+            var s = TestSeries.Series("Discworld", SeriesType.Series);
             db.Series.Add(s);
             await db.SaveChangesAsync();
             seriesId = s.Id;

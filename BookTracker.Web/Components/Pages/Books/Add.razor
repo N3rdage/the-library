@@ -4,7 +4,6 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject IDialogService DialogService
-@inject ILogger<Add> Logger
 
 <PageTitle>Add a book - Bookcase</PageTitle>
 
@@ -159,6 +158,7 @@
                                 <strong>@VM.ExistingBook.Title</strong> by @VM.ExistingBook.Authors —
                                 @VM.ExistingBook.CopyCount cop@(VM.ExistingBook.CopyCount == 1 ? "y" : "ies") on file.
                             </MudText>
+                            <ActionError Message="@(VM.AddCopyRefused ? VM.Error : null)" />
                             <MudStack Row="true" Spacing="2">
                                 <MudButton Size="Size.Small"
                                            Variant="Variant.Filled"
@@ -372,10 +372,10 @@
             <EditionCopyForm EditionInput="VM.EditionInput" CopyInput="VM.CopyInput" Title="First edition & copy" />
         </MudItem>
 
-        @if (!string.IsNullOrEmpty(saveErrorMessage))
+        @if (!VM.AddCopyRefused && !string.IsNullOrEmpty(VM.Error))
         {
             <MudItem xs="12">
-                <MudAlert Severity="Severity.Error" Dense="true">@saveErrorMessage</MudAlert>
+                <ActionError Message="@VM.Error" />
             </MudItem>
         }
 
@@ -402,14 +402,6 @@
     private List<int> selectedGenreIds = [];
     private MudGenrePicker? genrePicker;
     private bool addAnother;
-
-    // Save-error surface for #44 — when VM.SaveAsync throws, the
-    // catch in SaveAsync below stashes the user-facing message here
-    // so the alert above the Save button renders it. Cleared at the
-    // start of each Save attempt; not cleared on field edit (the user
-    // can read the message AND keep typing — clearing on every keypress
-    // would just flash the alert away mid-correction).
-    private string? saveErrorMessage;
 
     // After Enter on a title grows the CollectionWorks list (or an
     // existing-Work pick advances to the next row), the new row's DOM
@@ -561,27 +553,7 @@
 
     private async Task SaveAsync()
     {
-        saveErrorMessage = null;
-        int? savedId;
-        try
-        {
-            savedId = await VM.SaveAsync(selectedGenreIds);
-        }
-        catch (InvalidOperationException ex)
-        {
-            // Deliberate VM throws for validation-style problems —
-            // missing authors, collection rows without title/author etc.
-            // Messages are user-facing by construction; surface as-is.
-            saveErrorMessage = ex.Message;
-            return;
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Unexpected error saving book from Add page");
-            saveErrorMessage = "Save failed — your input is preserved. Try again, or see logs for details.";
-            return;
-        }
-
+        var savedId = await VM.SaveAsync(selectedGenreIds);
         if (savedId is null) return;
 
         if (addAnother)

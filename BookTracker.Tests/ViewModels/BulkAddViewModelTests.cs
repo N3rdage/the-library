@@ -2,6 +2,7 @@ using BookTracker.Application;
 using BookTracker.Application.Books;
 using BookTracker.Application.Genres;
 using BookTracker.Application.Series;
+using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.ViewModels;
@@ -675,5 +676,76 @@ public class BulkAddViewModelTests
         await vm.AcceptRowAsync(row);
 
         Assert.Equal(new SeriesChoice(null, null, null), Assert.Single(Sent<CreateBook>()).Series);
+    }
+
+    private static BulkAddViewModel.DiscoveryRow FoundRow(string isbn, string title) => new()
+    {
+        Isbn = isbn,
+        Title = title,
+        Author = "Some Author",
+        Status = BulkAddViewModel.RowStatus.Found,
+    };
+
+    [Fact]
+    public async Task AcceptRowAsync_DomainRefusal_SetsErrorAndKeepsTheRow()
+    {
+        _dispatcher.Send(Arg.Is<CreateBook>(c => c != null), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DomainRuleException("A title is required."));
+        var vm = CreateVm();
+        var row = FoundRow("111", "Some Book");
+        vm.Rows.Add(row);
+
+        var accepted = await vm.AcceptRowAsync(row);
+
+        Assert.False(accepted);
+        Assert.Equal("A title is required.", vm.Error);
+        Assert.Same(row, Assert.Single(vm.Rows));
+    }
+
+    [Fact]
+    public async Task AcceptRowAsync_Fault_PropagatesAndKeepsTheRow()
+    {
+        _dispatcher.Send(Arg.Is<CreateBook>(c => c != null), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new TimeoutException("db down"));
+        var vm = CreateVm();
+        var row = FoundRow("111", "Some Book");
+        vm.Rows.Add(row);
+
+        await Assert.ThrowsAsync<TimeoutException>(() => vm.AcceptRowAsync(row));
+
+        Assert.Null(vm.Error);
+        Assert.Single(vm.Rows);
+    }
+
+    [Fact]
+    public async Task AcceptRowAsync_ScannedCopyNotFound_SetsErrorWithoutCreatingABook()
+    {
+        _dispatcher.Send(Arg.Is<AddScannedCopy>(c => c != null), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new NotFoundException("Edition not found."));
+        var vm = CreateVm();
+        var row = FoundRow("111", "Some Book");
+        vm.Rows.Add(row);
+
+        Assert.False(await vm.AcceptRowAsync(row));
+
+        Assert.Equal("Edition not found.", vm.Error);
+        Assert.Empty(Sent<CreateBook>());
+        Assert.Single(vm.Rows);
+    }
+
+    [Fact]
+    public async Task AcceptAllFoundAsync_StopsAtTheFirstRefusal()
+    {
+        _dispatcher.Send(Arg.Is<CreateBook>(c => c != null), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DomainRuleException("A title is required."));
+        var vm = CreateVm();
+        vm.Rows.Add(FoundRow("111", "One"));
+        vm.Rows.Add(FoundRow("222", "Two"));
+
+        await vm.AcceptAllFoundAsync();
+
+        Assert.Equal("A title is required.", vm.Error);
+        Assert.Equal(2, vm.Rows.Count);
+        Assert.Single(Sent<CreateBook>());
     }
 }

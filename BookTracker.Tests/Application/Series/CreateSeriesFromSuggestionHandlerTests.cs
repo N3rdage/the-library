@@ -24,7 +24,7 @@ public class CreateSeriesFromSuggestionHandlerTests
         int seriesedBookId;
         await using (var db = _factory.CreateDbContext())
         {
-            var other = new Series { Name = "AIA Other", Type = SeriesType.Series };
+            var other = TestSeries.Series("AIA Other", SeriesType.Series);
             db.Series.Add(other);
             await db.SaveChangesAsync();
             var b = TestBooks.Book("Already Seriesed");
@@ -60,7 +60,7 @@ public class CreateSeriesFromSuggestionHandlerTests
     {
         await using (var db = _factory.CreateDbContext())
         {
-            db.Series.Add(new Series { Name = "AIA Dup", Type = SeriesType.Collection });
+            db.Series.Add(TestSeries.Series("AIA Dup", SeriesType.Collection));
             db.Books.Add(NewBook("Lonely", Author.Create("Someone")));
             await db.SaveChangesAsync();
         }
@@ -82,7 +82,7 @@ public class CreateSeriesFromSuggestionHandlerTests
         // unique-index violation on insert.
         await using (var db = _factory.CreateDbContext())
         {
-            db.Series.Add(new Series { Name = "AIA Dup", Type = SeriesType.Collection });
+            db.Series.Add(TestSeries.Series("AIA Dup", SeriesType.Collection));
             db.Books.Add(NewBook("Lonely", Author.Create("Someone")));
             await db.SaveChangesAsync();
         }

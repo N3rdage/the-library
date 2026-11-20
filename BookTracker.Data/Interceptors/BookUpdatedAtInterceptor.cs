@@ -73,8 +73,8 @@ public class BookUpdatedAtInterceptor : SaveChangesInterceptor
         // UpdatedAt modified explicitly.
         foreach (var entry in context.ChangeTracker.Entries().ToList())
         {
-            // Book is special: skip-nav changes (Book.Tags.Add(tag),
-            // Book.Works.Add(work)) leave Book.State = Unchanged but
+            // Book is special: skip-nav changes (Book.AddTag(tag),
+            // Book.RemoveTag(id)) leave Book.State = Unchanged but
             // mark the Collection navigation IsModified. We bump on
             // either signal.
             if (entry.Entity is Book book)

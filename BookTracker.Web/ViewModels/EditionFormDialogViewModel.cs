@@ -24,7 +24,7 @@ namespace BookTracker.Web.ViewModels;
 // pre-1974 editions save without one.
 public class EditionFormDialogViewModel(
     IBookLookupService lookup,
-    IDispatcher dispatcher)
+    IDispatcher dispatcher) : DispatchingViewModel
 {
     public bool IsNew { get; private set; }
     public bool NotFound { get; private set; }
@@ -148,34 +148,26 @@ public class EditionFormDialogViewModel(
         }
     }
 
-    /// <returns>The new or updated Edition id.</returns>
     /// <returns>The new or updated Edition id; null if the dialog state is stale
-    /// (book/edition gone). Publisher find-or-create now lives in the handler.</returns>
+    /// or the domain refused (see <see cref="DispatchingViewModel.Error"/>).
+    /// Publisher find-or-create lives in the handler.</returns>
     public async Task<int?> SaveAsync()
     {
         if (NotFound || !CoverUrlAcceptable) return null;
 
         var datePrinted = PartialDateParser.TryParse(FirstPublishedOrPrintedDate) ?? PartialDate.Empty;
         var coverUrl = string.IsNullOrWhiteSpace(CoverUrl) ? null : CoverUrl.Trim();
-        try
+        if (IsNew)
         {
-            if (IsNew)
-            {
-                return await dispatcher.Send(new AddEditionToBook(
-                    BookId, Isbn, Format, datePrinted.Date, datePrinted.Precision,
-                    Publisher, coverUrl, FirstCopyCondition));
-            }
+            return await DispatchAsync<int?>(async () => await dispatcher.Send(new AddEditionToBook(
+                BookId, Isbn, Format, datePrinted.Date, datePrinted.Precision,
+                Publisher, coverUrl, FirstCopyCondition)));
+        }
 
-            if (EditionId is not int id) return null;
-            await dispatcher.Send(new UpdateEdition(
-                id, Isbn, Format, datePrinted.Date, datePrinted.Precision, Publisher, coverUrl));
-            return id;
-        }
-        catch (NotFoundException)
-        {
-            // Book/Edition deleted between opening the dialog and saving — no-op,
-            // matching the old FindAsync-returns-null path.
-            return null;
-        }
+        if (EditionId is not int id) return null;
+        return await DispatchAsync(() => dispatcher.Send(new UpdateEdition(
+            id, Isbn, Format, datePrinted.Date, datePrinted.Precision, Publisher, coverUrl)))
+            ? id
+            : null;
     }
 }

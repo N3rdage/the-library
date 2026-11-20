@@ -43,14 +43,11 @@ public static class TestBooks
         else if (seriesOrder is not null || seriesOrderDisplay is not null)
             book.SetSeriesOrder(seriesOrder, seriesOrderDisplay);
 
-        // Collections are assigned exactly as an initialiser would, not routed
-        // through AttachWork: seeds carry explicit BookWork.Order values (and
-        // Works-only seeds rely on EF's Order-0 default) that AttachWork would
-        // renumber. The collection setters stay public until the collections
-        // slice (E6) revisits every seed that writes them.
-        if (works is not null) book.Works = works.ToList();
-        if (editions is not null) book.Editions = editions.ToList();
-        if (tags is not null) book.Tags = tags.ToList();
+        // Collections are stored exactly as given (internal SeedCollections), not
+        // routed through AttachWork: seeds carry explicit BookWork.Order values
+        // (and Works-only seeds rely on EF's Order-0 default) that AttachWork
+        // would renumber.
+        book.SeedCollections(works, editions, tags);
 
         // The timestamps have internal setters (the interceptor stamps UpdatedAt;
         // SoftDelete stamps DeletedAt); BookTracker.Data's InternalsVisibleTo lets

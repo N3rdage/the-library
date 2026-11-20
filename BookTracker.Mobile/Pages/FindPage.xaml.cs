@@ -275,7 +275,7 @@ public partial class FindPage : ContentPage
             Content = new VerticalStackLayout { Spacing = 4, Children = { name, count } },
         };
         var tap = new TapGestureRecognizer();
-        tap.Tapped += async (_, _) => await Navigation.PushAsync(new AuthorWorksPage(_cache, _httpFactory, author));
+        tap.Tapped += async (_, _) => await Navigation.PushAsync(new AuthorWorksPage(_cache, _httpFactory, _api, author));
         border.GestureRecognizers.Add(tap);
         return border;
     }

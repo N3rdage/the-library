@@ -4,16 +4,9 @@
    one LendCopies for every listed copy; a refused lend shows its message here
    and leaves the dialog open. *@
 
-@inject ISnackbar Snackbar
-
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3" Style="min-width: 280px;">
-            @if (VM.ErrorMessage is not null)
-            {
-                <MudAlert Severity="Severity.Error" Dense="true">@VM.ErrorMessage</MudAlert>
-            }
-
             <MudAutocomplete T="string"
                              @bind-Value="VM.BorrowerName"
                              SearchFunc="@SuggestBorrowersAsync"
@@ -73,7 +66,7 @@
                              ValueChanged="OnCopyPickedAsync"
                              SearchFunc="@SearchCopiesAsync"
                              ToStringFunc="@(o => o?.Display ?? string.Empty)"
-                             Label="Add another book"
+                             Label="@(VM.Copies.Count == 0 ? "Find a book" : "Add another book")"
                              Placeholder="Type a title..."
                              Variant="Variant.Outlined"
                              Margin="Margin.Dense"
@@ -92,6 +85,7 @@
                 </ItemTemplate>
             </MudAutocomplete>
         </MudStack>
+        <ActionError Message="@VM.Error" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel" Disabled="@VM.Saving">Cancel</MudButton>
@@ -131,16 +125,9 @@
 
     private async Task ConfirmAsync()
     {
-        try
+        if (await VM.ConfirmAsync())
         {
-            if (await VM.ConfirmAsync())
-            {
-                MudDialog.Close(DialogResult.Ok(true));
-            }
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Couldn't lend: {ex.Message}", Severity.Error);
+            MudDialog.Close(DialogResult.Ok(true));
         }
     }
 

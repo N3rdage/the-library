@@ -1,6 +1,7 @@
 using BookTracker.Application;
 using BookTracker.Application.Books;
 using BookTracker.Application.Works;
+using BookTracker.Data;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -278,7 +279,7 @@ public class WorkCommandHandlersTests
         var bookId = await SeedBareBookAsync();
         var rows = new List<WorkRow> { new(null, "   ", null, null, DatePrecision.Day, [], [], []) };
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<DomainRuleException>(() =>
             new AttachWorksToBookHandler(_factory).HandleAsync(
                 new AttachWorksToBook(bookId, rows, false, false, [], [])));
         Assert.Contains("at least one work", ex.Message, StringComparison.OrdinalIgnoreCase);
@@ -337,7 +338,7 @@ public class WorkCommandHandlersTests
             var horror = new Genre { Name = "Horror" };
             db.Genres.AddRange(fantasy, horror);
             var work = await db.Works.Include(w => w.Genres).FirstAsync(w => w.Id == workId);
-            work.Genres.Add(fantasy); // starts with Fantasy
+            work.SetGenres([fantasy]); // starts with Fantasy
             await db.SaveChangesAsync();
             horrorId = horror.Id;
         }

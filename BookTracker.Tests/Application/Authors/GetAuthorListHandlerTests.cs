@@ -77,8 +77,8 @@ public class GetAuthorListHandlerTests
         {
             var pratchett = Author.Create("Terry Pratchett");
             db.Authors.Add(pratchett);
-            var discworld = new Series { Name = "Discworld", Type = SeriesType.Collection };
-            var bromeliad = new Series { Name = "Bromeliad", Type = SeriesType.Series };
+            var discworld = TestSeries.Series("Discworld", SeriesType.Collection);
+            var bromeliad = TestSeries.Series("Bromeliad", SeriesType.Series);
             db.Series.AddRange(discworld, bromeliad);
 
             db.Books.AddRange(

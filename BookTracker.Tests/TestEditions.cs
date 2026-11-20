@@ -30,14 +30,13 @@ public static class TestEditions
         // Fully qualified: inside this class the simple name Edition is the method.
         var edition = new global::BookTracker.Data.Models.Edition(
             isbn, format, editionNumber, datePrinted, datePrintedPrecision,
-            coverUrl, isUserSupplied, publisher);
+            coverUrl, isUserSupplied, publisher, copies);
 
         // Navigations and keys only when given, so an unset one stays the
         // entity default (null / 0) rather than being written as such.
         if (publisherId is not null) edition.ReassignPublisher(publisherId.Value);
         if (book is not null) edition.Book = book;
         if (bookId is not null) edition.MoveToBook(bookId.Value);
-        if (copies is not null) edition.Copies.AddRange(copies);
 
         return edition;
     }

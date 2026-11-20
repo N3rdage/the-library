@@ -26,6 +26,8 @@
     </div>
 }
 
+<ActionError Message="@VM.Error" />
+
 @* Search and add — populate the wishlist from external lookups. *@
 <div class="card mb-4">
     <div class="card-header bg-white">
@@ -489,6 +491,7 @@
         try
         {
             var added = await VM.AddSeriesSlotsToWishlistAsync(seriesId, slots);
+            if (added is null) return;
             _selectedSlots.Remove(seriesId);
             _notice = added == 0
                 ? "Selected slots were already on your wishlist — nothing new added."
@@ -536,6 +539,7 @@
         try
         {
             var added = await VM.AddSeriesSlotsToWishlistAsync(open.SeriesId, slots);
+            if (added is null) return;
             _notice = added == 0
                 ? $"All {n} slots were already on your wishlist — nothing new added."
                 : $"Added {added} {(added == 1 ? "stub" : "stubs")} from {open.SeriesName} to your wishlist.";

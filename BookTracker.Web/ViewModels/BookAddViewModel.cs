@@ -15,7 +15,7 @@ public class BookAddViewModel(
     IBookLookupService lookup,
     SeriesMatchService seriesMatch,
     IDispatcher dispatcher,
-    ILogger<BookAddViewModel> logger)
+    ILogger<BookAddViewModel> logger) : DispatchingViewModel
 {
     /// <summary>Search existing Works for the collection-row autocomplete.
     /// Returns matches as the user types so they can attach an already-
@@ -307,10 +307,16 @@ public class BookAddViewModel(
     public ExistingBookMatch? ExistingBook { get; private set; }
     public bool AddingCopy { get; private set; }
 
+    /// <summary>True when the current <see cref="DispatchingViewModel.Error"/> came from the
+    /// add-another-copy action, so the page shows it beside that button only.</summary>
+    public bool AddCopyRefused { get; private set; }
+
     public async Task LookupAsync()
     {
         LookupMessage = null;
         ExistingBook = null;
+        Error = null;
+        AddCopyRefused = false;
         if (string.IsNullOrWhiteSpace(LookupIsbn))
         {
             LookupMessage = "Enter an ISBN to look up.";
@@ -413,9 +419,10 @@ public class BookAddViewModel(
         AddingCopy = true;
         try
         {
-            await dispatcher.Send(new AddCopyToEdition(
-                ExistingBook.EditionId, CopyInput.Condition, DateAcquired: null, Notes: null));
-            return ExistingBook.BookId;
+            await DispatchAsync(() => dispatcher.Send(new AddCopyToEdition(
+                ExistingBook.EditionId, CopyInput.Condition, DateAcquired: null, Notes: null)));
+            AddCopyRefused = Error is not null;
+            return Error is null ? ExistingBook.BookId : null;
         }
         finally
         {
@@ -434,6 +441,8 @@ public class BookAddViewModel(
         LookupMessage = null;
         LookupCandidates = [];
         ExistingBook = null;
+        Error = null;
+        AddCopyRefused = false;
         SeriesSuggestion = null;
         SeriesSuggestionDismissed = false;
         ClearSeriesSelection();
@@ -516,11 +525,14 @@ public class BookAddViewModel(
     {
         // The page's EditForm validates its own model on submit, not these nested
         // inputs, so the cover URL rule is enforced here too and surfaces through
-        // the page's save-error alert.
+        // Error.
+        Error = null;
+        AddCopyRefused = false;
         if (!CoverFetchPolicy.IsAcceptableCoverUrl(BookInput.DefaultCoverArtUrl)
             || !CoverFetchPolicy.IsAcceptableCoverUrl(EditionInput.CoverUrl))
         {
-            throw new InvalidOperationException(CoverUrlAttribute.Message);
+            Error = CoverUrlAttribute.Message;
+            return null;
         }
 
         Saving = true;
@@ -533,7 +545,7 @@ public class BookAddViewModel(
             // typeahead) lands on the Book in both modes: a collection is still
             // installment N of a publication series.
             var datePrinted = PartialDateParser.TryParse(EditionInput.DatePrinted) ?? PartialDate.Empty;
-            return await dispatcher.Send(new CreateBook(
+            var bookId = await DispatchAsync(() => dispatcher.Send(new CreateBook(
                 new NewBook(
                     BookInput.Title ?? string.Empty,
                     BookInput.Category,
@@ -552,7 +564,8 @@ public class BookAddViewModel(
                     EditionInput.CoverUrl),
                 CopyInput.Condition,
                 new SeriesChoice(AcceptedSeriesId, AcceptedSeriesName, AcceptedSeriesOrderLabel),
-                []));
+                [])));
+            return Error is null ? bookId : null;
         }
         finally
         {

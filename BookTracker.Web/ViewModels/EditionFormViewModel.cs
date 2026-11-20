@@ -6,7 +6,7 @@ using BookTracker.Web.Validation;
 
 namespace BookTracker.Web.ViewModels;
 
-public class EditionFormViewModel(IDispatcher dispatcher)
+public class EditionFormViewModel(IDispatcher dispatcher) : DispatchingViewModel
 {
     // A mutable copy: a publisher created from the form is appended to it.
     public List<PublisherOption> ExistingPublishers { get; private set; } = [];

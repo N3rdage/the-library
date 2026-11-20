@@ -1,8 +1,10 @@
 using BookTracker.Application;
 using BookTracker.Application.Duplicates;
+using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.ViewModels;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace BookTracker.Tests.ViewModels;
 
@@ -92,6 +94,86 @@ public class DuplicatesViewModelTests
         await _dispatcher.Received(1).Send(new RestoreDismissedDuplicate(42), Arg.Any<CancellationToken>());
         await _dispatcher.Received(1).Query(Arg.Any<GetDuplicateReport>(), Arg.Any<CancellationToken>());
         Assert.NotNull(vm.SuccessMessage);
+    }
+
+    [Fact]
+    public async Task DismissAsync_domain_refusal_sets_Error_and_skips_the_success_message_and_reload()
+    {
+        ReturnsReport(new DuplicateReport([], [], [], []));
+        var vm = CreateVm();
+        await vm.LoadAsync();
+        _dispatcher.ClearReceivedCalls();
+        _dispatcher.Send(Arg.Any<DismissDuplicatePair>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DomainRuleException("Pair is already dismissed."));
+
+        await vm.DismissAsync(DuplicateEntityType.Author, 1, 2);
+
+        Assert.Equal("Pair is already dismissed.", vm.Error);
+        Assert.Null(vm.SuccessMessage);
+        await _dispatcher.DidNotReceive().Query(Arg.Any<GetDuplicateReport>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DismissAsync_refusal_after_success_clears_the_earlier_success_message()
+    {
+        ReturnsReport(new DuplicateReport([], [], [], []));
+        var vm = CreateVm();
+        await vm.LoadAsync();
+        await vm.UnignoreAsync(42);
+        Assert.NotNull(vm.SuccessMessage);
+        _dispatcher.Send(Arg.Any<DismissDuplicatePair>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DomainRuleException("Pair is already dismissed."));
+
+        await vm.DismissAsync(DuplicateEntityType.Author, 1, 2);
+
+        Assert.Null(vm.SuccessMessage);
+        Assert.Equal("Pair is already dismissed.", vm.Error);
+    }
+
+    [Fact]
+    public async Task UnignoreAsync_refusal_after_success_clears_the_earlier_success_message()
+    {
+        ReturnsReport(new DuplicateReport([], [], [], []));
+        var vm = CreateVm();
+        await vm.LoadAsync();
+        await vm.DismissAsync(DuplicateEntityType.Author, 1, 2);
+        Assert.NotNull(vm.SuccessMessage);
+        _dispatcher.Send(Arg.Any<RestoreDismissedDuplicate>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new NotFoundException("Dismissal 42 not found."));
+
+        await vm.UnignoreAsync(42);
+
+        Assert.Null(vm.SuccessMessage);
+        Assert.Equal("Dismissal 42 not found.", vm.Error);
+    }
+
+    [Fact]
+    public async Task UnignoreAsync_not_found_sets_Error()
+    {
+        ReturnsReport(new DuplicateReport([], [], [], []));
+        var vm = CreateVm();
+        await vm.LoadAsync();
+        _dispatcher.Send(Arg.Any<RestoreDismissedDuplicate>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new NotFoundException("Dismissal 42 not found."));
+
+        await vm.UnignoreAsync(42);
+
+        Assert.Equal("Dismissal 42 not found.", vm.Error);
+        Assert.Null(vm.SuccessMessage);
+    }
+
+    [Fact]
+    public async Task DismissAsync_fault_propagates()
+    {
+        ReturnsReport(new DuplicateReport([], [], [], []));
+        var vm = CreateVm();
+        await vm.LoadAsync();
+        _dispatcher.Send(Arg.Any<DismissDuplicatePair>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new TimeoutException("db down"));
+
+        await Assert.ThrowsAsync<TimeoutException>(() => vm.DismissAsync(DuplicateEntityType.Author, 1, 2));
+
+        Assert.Null(vm.Error);
     }
 
     [Fact]

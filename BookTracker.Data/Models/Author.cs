@@ -23,14 +23,20 @@ public class Author
     public int? CanonicalAuthorId { get; private set; }
     public Author? CanonicalAuthor { get; set; }
 
-    /// <summary>Inverse of CanonicalAuthorId — pen names that resolve to this Author.</summary>
-    public List<Author> Aliases { get; set; } = [];
+    /// <summary>Inverse of CanonicalAuthorId — pen names that resolve to this Author.
+    /// EF fixes it up from each alias's key; the alias side is written through
+    /// <see cref="MarkAliasOf"/> and <see cref="PromoteToCanonical"/>.</summary>
+    public IReadOnlyCollection<Author> Aliases => _aliases;
+    private readonly List<Author> _aliases = [];
 
     /// <summary>Skip-navigation through WorkAuthor (M:N). Includes works where this Author is a co-author, not just the lead.</summary>
-    public List<Work> Works { get; set; } = [];
+    public IReadOnlyCollection<Work> Works => _works;
+    private readonly List<Work> _works = [];
 
-    /// <summary>Explicit join collection — useful when the Order field matters or when iterating join rows directly.</summary>
-    public List<WorkAuthor> WorkAuthors { get; set; } = [];
+    /// <summary>Explicit join collection — useful when the Order field matters or when iterating join rows directly.
+    /// EF fills it; the rows are written through <see cref="Work.AssignAuthorship"/>.</summary>
+    public IReadOnlyCollection<WorkAuthor> WorkAuthors => _workAuthors;
+    private readonly List<WorkAuthor> _workAuthors = [];
 
     // --- Aggregate behaviour -------------------------------------------------
     // The entity owns its name rule (required, trimmed) and its alias pointer.

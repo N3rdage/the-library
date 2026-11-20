@@ -7,7 +7,7 @@ namespace BookTracker.Web.ViewModels;
 // Backs the /duplicates page. Holds the most recent detection report and
 // exposes Dismiss / Un-ignore commands; the page reloads the report after
 // each mutation (recompute-on-demand, no caching by design).
-public class DuplicatesViewModel(IDispatcher dispatcher)
+public class DuplicatesViewModel(IDispatcher dispatcher) : DispatchingViewModel
 {
     public bool Loading { get; private set; } = true;
     public DuplicateReport? Report { get; private set; }
@@ -17,21 +17,23 @@ public class DuplicatesViewModel(IDispatcher dispatcher)
     public async Task LoadAsync()
     {
         Loading = true;
-        await dispatcher.Send(new SweepOrphanedDismissals());
+        await DispatchAsync(() => dispatcher.Send(new SweepOrphanedDismissals()));
         Report = await dispatcher.Query(new GetDuplicateReport());
         Loading = false;
     }
 
     public async Task DismissAsync(DuplicateEntityType type, int idA, int idB, string? note = null)
     {
-        await dispatcher.Send(new DismissDuplicatePair(type, idA, idB, note));
+        SuccessMessage = null;
+        if (!await DispatchAsync(() => dispatcher.Send(new DismissDuplicatePair(type, idA, idB, note)))) return;
         SuccessMessage = "Pair dismissed — you can un-ignore it from the Dismissed section.";
         await LoadAsync();
     }
 
     public async Task UnignoreAsync(int ignoredDuplicateId)
     {
-        await dispatcher.Send(new RestoreDismissedDuplicate(ignoredDuplicateId));
+        SuccessMessage = null;
+        if (!await DispatchAsync(() => dispatcher.Send(new RestoreDismissedDuplicate(ignoredDuplicateId)))) return;
         SuccessMessage = "Pair un-ignored — back in the active list.";
         await LoadAsync();
     }

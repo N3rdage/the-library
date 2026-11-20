@@ -1,6 +1,10 @@
 @page "/loans"
 @using BookTracker.Application.Loans
 @inject LoansViewModel VM
+@inject LendDialogViewModel LendVM
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IBrowserViewportService Viewport
 
 <PageTitle>On loan - Bookcase</PageTitle>
 
@@ -10,15 +14,20 @@
 
 <MudContainer MaxWidth="MaxWidth.Medium" Class="py-3">
 
-    <MudText Typo="Typo.h4" Class="mb-3">On loan</MudText>
+    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center" Class="mb-3">
+        <MudText Typo="Typo.h4" Class="flex-grow-1">On loan</MudText>
+        <MudButton OnClick="OpenLendDialogAsync"
+                   Disabled="@_dialogOpening"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Outbox">
+            Lend a book
+        </MudButton>
+    </MudStack>
 
-    @if (!string.IsNullOrEmpty(VM.ErrorMessage))
-    {
-        <MudAlert Severity="Severity.Error"
-                  ShowCloseIcon="true"
-                  CloseIconClicked="@(() => { VM.ErrorMessage = null; StateHasChanged(); })"
-                  Class="mb-3">@VM.ErrorMessage</MudAlert>
-    }
+    @* The page's one Error alert: a refused return, directly under the header
+       with the Lend button. *@
+    <ActionError Message="@VM.Error" />
 
     @if (!VM.Loaded)
     {
@@ -28,7 +37,10 @@
     }
     else if (VM.Groups.Count == 0)
     {
-        <MudText Color="Color.Secondary" Class="py-3">Nothing is out on loan.</MudText>
+        <MudText Color="Color.Secondary" Class="pt-3">Nothing is out on loan.</MudText>
+        <MudText Color="Color.Secondary" Class="pb-3">
+            To lend a book, use the Lend a book button above: choose the book, then enter who is borrowing it. You can also press Lend on a book's own page.
+        </MudText>
     }
     else
     {
@@ -142,8 +154,41 @@
 
 @code {
     private bool _historyOpen;
+    private bool _dialogOpening;
 
     protected override Task OnInitializedAsync() => VM.LoadAsync();
+
+    // The page's own LendDialogViewModel, started empty: the dialog's book
+    // search picks the copies. Full screen on a phone-width viewport.
+    private async Task OpenLendDialogAsync()
+    {
+        if (_dialogOpening) return;
+        _dialogOpening = true;
+        try
+        {
+            LendVM.Initialize();
+            var parameters = new DialogParameters<LendDialog> { { x => x.VM, LendVM } };
+            var breakpoint = await Viewport.GetCurrentBreakpointAsync();
+            var options = new DialogOptions
+            {
+                MaxWidth = MaxWidth.Small,
+                FullWidth = true,
+                CloseButton = true,
+                FullScreen = breakpoint == Breakpoint.Xs,
+            };
+            var dialog = await DialogService.ShowAsync<LendDialog>("Lend", parameters, options);
+            var result = await dialog.Result;
+            if (result is not null && !result.Canceled)
+            {
+                Snackbar.Add(LendVM.LentMessage, Severity.Success);
+                await VM.LoadAsync();
+            }
+        }
+        finally
+        {
+            _dialogOpening = false;
+        }
+    }
 
     private async Task OnHistoryExpandedChanged(bool expanded)
     {

@@ -13,7 +13,7 @@ namespace BookTracker.Application.Books;
 /// book, its works (a single new Work, or a collection of new and existing
 /// Works), its first Edition with one Copy, its series membership and its tags
 /// (find-or-create by name). Returns the new Book's id.
-/// Throws <see cref="InvalidOperationException"/> with a user-facing message when
+/// Throws <see cref="DomainRuleException"/> with a user-facing message when
 /// the works carry no usable contributor or no usable collection row.</summary>
 public sealed record CreateBook(
     NewBook Book,
@@ -132,7 +132,7 @@ public sealed class CreateBookHandler(IDbContextFactory<BookTrackerDbContext> db
             contributors.Add((await AuthorResolver.FindOrCreateAsync(entry.Name, db, ct), entry.Role));
         }
         if (authors.Count == 0 && contributors.Count == 0)
-            throw new InvalidOperationException(
+            throw new DomainRuleException(
                 "At least one contributor (author, editor, or other role) is required to save a Work.");
 
         var genres = await CreateWorkOnBookHandler.ResolveGenresAsync(db, work.GenreIds, ct);
@@ -159,7 +159,7 @@ public sealed class CreateBookHandler(IDbContextFactory<BookTrackerDbContext> db
             .ToList();
         if (orderedRows.Count == 0)
         {
-            throw new InvalidOperationException(collection.SingleAuthor
+            throw new DomainRuleException(collection.SingleAuthor
                 ? "A collection in Single-Author mode needs at least one work with a title, plus at least one shared author. (Or attach an existing work.)"
                 : "A collection must contain at least one work with a title and an author. (Or attach an existing work.)");
         }
@@ -214,7 +214,7 @@ public sealed class CreateBookHandler(IDbContextFactory<BookTrackerDbContext> db
                 .ToList();
             if (rowAuthors.Count == 0 && rowContributors.Count == 0)
             {
-                throw new InvalidOperationException(
+                throw new DomainRuleException(
                     $"Each work in the collection needs at least one contributor (work \"{row.Title}\" had none).");
             }
             var rowGenres = GenresFor(row)

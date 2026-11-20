@@ -81,9 +81,8 @@ We are taking the **spine** of DDD + CQRS, not the cathedral. Out of scope:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The Web layer matches the diagram apart from the C1 exceptions named below. The Data layer's
-encapsulation does not match it yet; [Rich aggregates](#rich-aggregates-in-booktrackerdata)
-below says where.
+The code matches the diagram apart from the C1 exceptions named below;
+[Rich aggregates](#rich-aggregates-in-booktrackerdata) below describes the Data layer.
 
 ### The one rule that buys the most
 
@@ -164,19 +163,23 @@ public sealed class GetBookDetailHandler(IDbContextFactory<BookTrackerDbContext>
 
 ### Rich aggregates (in BookTracker.Data)
 
-The target is entities that carry behaviour and have no public setters on invariant-bearing
-fields:
+Entities carry their behaviour, and their invariant-bearing fields have private setters, so every
+write goes through a method and the compiler enforces it. Every entity collection is
+`IReadOnlyCollection<T>` over a private backing field (C7):
 
 - `Book`'s scalar fields (title, category, status, rating, notes, cover, series membership) are
   written only through its methods (`Create`, `Rate`, `MarkRead`, `UpdateDetails`, `SetCover`,
   `AssignToSeries`, `SoftDelete`, …): the setters are private, `UpdatedAt` / `DeletedAt` internal
   for the interceptor and `SoftDelete`, and the compiler enforces it. `BookTracker.Tests` alone
   sees the internals (to seed a watermark or a tombstone); `BookTracker.Application` does not.
-  The collections (`Editions`, `Tags`, `Works`, `BookWorks`) keep public setters until the
-  collections slice (E6) encapsulates them.
+  Its collections (`Editions`, `Tags`, `Works`, `BookWorks`) are written only through its
+  methods: `AddEdition`, `RemoveCopy` and `MoveEditionsTo` (the book merge) for editions,
+  `AddTag`, `RemoveTag` and `AdoptTagsFrom` (the book merge) for tags, `AttachWork` and
+  `Work.RemoveFrom` for the work links, and `SoftDelete`. The tests' seed builder `TestBooks`
+  stores seeded collections as given through the internal `SeedCollections`.
 - `Edition`'s and `Copy`'s scalar fields are written only through their methods, and the
-  compiler enforces it: the setters are private (`Id` stays public, as on `Book`), as are
-  `Edition.Copies`' setter and the foreign keys `Edition.BookId` and `Copy.EditionId`.
+  compiler enforces it: the setters are private (`Id` stays public, as on `Book`), as are the
+  foreign keys `Edition.BookId` and `Copy.EditionId`.
   `Edition` has `UpdateDetails`, `SetCover`, `ReplaceCoverUrl` (the cover mirror's URL swap,
   which leaves `IsUserSupplied` alone), `ChangeFormat`, `ReassignPublisher`, `MoveToBook`,
   `FillBlanksFrom` and `AdoptCopiesFrom` (the edition merge), `AddCopy` and `RemoveCopy`;
@@ -188,31 +191,41 @@ fields:
   detached seed to its parent through them; `BookTracker.Application` cannot set them.
 - `Work`'s scalar fields and `WorkAuthor` rows are written only through `Work`'s methods (`Create`,
   `UpdateDetails`, `SetFirstPublished`, `FillBlanksFrom`, `SetGenres`, `AssignAuthorship`,
-  `AppearsIn`, `RemoveFrom`), and the compiler enforces it: the scalar setters are private (`Id`
-  stays public, as on `Book`), and `WorkAuthor.Order` and `Role` are set only by `AssignAuthorship`.
-  `Work`'s collections have private setters, but their contents are still added to from outside
-  (`MergeWorks` adds genres, `Book.AttachWork` adds the link) until the collections slice
-  encapsulates them, as with `Book`'s collections. Each has a private parameterless constructor for EF and an
+  `AdoptGenresFrom`, `AppearsIn`, `RemoveFrom`, `LeaveAllBooks`), and the compiler enforces it: the
+  scalar setters are private (`Id` stays public, as on `Book`), and `WorkAuthor.Order` and `Role`
+  are set only by `AssignAuthorship`. `Work`'s collections (`WorkAuthors`, `Authors`, `Genres`,
+  `Books`, `BookWorks`) are `IReadOnlyCollection<T>` over private backing fields; `Book.AttachWork`
+  adds the join row to the Work's end through the internal `AddBookWork`. Each has a private parameterless constructor for EF and an
   internal one that stores the values as given, used by the tests' seed builder `TestWorks` (and,
   for `WorkAuthor`, by `AssignAuthorship`).
-- `Book` (root) owns `Editions`; `Edition` owns `Copies`. Exposed as
-  `IReadOnlyCollection<>`; mutated only through methods (`AddCopy`, `AddEdition`, …).
+- `Series`' fields are written only through `Create` and `UpdateDetails`, which keep the
+  ExpectedCount/Type pairing; name uniqueness stays in the handlers (`SeriesNameGuard`).
+  `WishlistItem`'s fields are written only through `Create`, `CreateSeriesSlot` (which links the
+  item to its series and slot) and `SetIsbns` (the ISBN dual-write). The setters are private on
+  both (`Id` stays public, as on `Book`); `Series.Books` membership is written
+  through `Book.AssignToSeries` / `ClearSeries`. Each has a private parameterless constructor for
+  EF and an internal one that stores the values as given, used by the tests' seed builders
+  `TestSeries` and `TestWishlistItems`.
+- `Book` (root) owns `Editions`; `Edition` owns `Copies`; `Copy` owns `Loans`. Exposed as
+  `IReadOnlyCollection<>`; mutated only through methods (`AddCopy`, `AddEdition`, `LendTo`, …).
+  The inverse collections on `Author`, `Genre`, `Publisher` and `Tag` are read-only too: EF
+  fills them, and writes go through the owning side (`Work.AssignAuthorship`, `Work.SetGenres`,
+  `Edition.ReassignPublisher`, `Book.AddTag`).
 - Invariants live on the aggregate and are unit-testable.
-- EF maps to **backing fields** for encapsulated collections (`UsePropertyAccessMode(Field)`).
-- The `UpdatedAt` interceptor stays — it's a cross-cutting persistence concern, not a domain rule.
+- EF maps every collection navigation, skip navigations included, to its **backing field**
+  (`HasField` + `UsePropertyAccessMode(Field)`). `BookTracker.Tests/Architecture/EntityCollectionTests.cs`
+  fails when an entity exposes a collection as anything but `IReadOnlyCollection<>` /
+  `IEnumerable<>` or with a public setter.
+- The `UpdatedAt` interceptor is a cross-cutting persistence concern, not a domain rule.
 
-The code meets the behaviour half: `Book`, `Edition` and `Work` carry the mutator methods
-(`Book.AddEdition`, `Edition.AddCopy`, `Work.Create`, `Work.RemoveFrom`, …), most handlers go
-through them, and the invariants are unit-tested under `BookTracker.Tests/Domain/`. It does not
-meet the encapsulation half yet: every property on `Book`, `Edition`, `Copy` and `Work` still has
-a public setter, their collections are public `List<>` properties, no backing fields are mapped,
-and the merge handlers assign fields directly. Closing that gap (C7) is tracked in the backlog.
+Every handler, the five merges included, writes through these methods: a merge calls the
+entity methods named above (for example `MergeBooks` calls `Book.UpdateNotes`, `SetCover`, `Rate`,
+`AssignToSeries`, `AttachWork`, `AdoptTagsFrom`, `MoveEditionsTo` and `SoftDelete`), and none
+assigns a field directly. The invariants are unit-tested under `BookTracker.Tests/Domain/`.
 
 ## Conventions
 
-These are binding for all Application-layer work. C7 is also a target that existing code
-does not meet yet (see Rich aggregates above); the gap is tracked in the backlog, and new code
-must not widen it.
+These are binding for all Application-layer work.
 
 | # | Rule |
 |---|------|
@@ -222,7 +235,7 @@ must not widen it.
 | C4 | One handler per file. File name = command/query name. Handlers are `sealed`. |
 | C5 | Read handlers use `AsNoTracking()` and project to a DTO. Write handlers load a tracked aggregate, mutate via aggregate methods, `SaveChanges`. Never mix in one handler. |
 | C6 | Invariants live **on the aggregate**, not in the handler. Handlers orchestrate; aggregates enforce. |
-| C7 | Aggregate-owned collections are encapsulated (`IReadOnlyCollection<>` + mutator methods + EF backing fields). No public `List<>` setters on roots. |
+| C7 | Entity collections are encapsulated: `IReadOnlyCollection<>` over a private backing field that EF maps with `UsePropertyAccessMode(Field)`, written only through the entity's methods. No entity exposes a `List<>` / `ICollection<>` or a collection setter; `EntityCollectionTests` (`BookTracker.Tests/Architecture/EntityCollectionTests.cs`) enforces it. |
 | C8 | Domain unit tests cover every invariant/calculation with **no EF / no container**. Handlers get integration tests against the MSSQL Testcontainer. |
 | C9 | Flat lookup tables with no invariants (`Tag`, `Publisher`, `Genre`) stay plain — do not over-aggregate. |
 | C10 | Commands model **user intentions/gestures, not table columns**. A gesture that sets several fields at once is *one* command (e.g. `MarkBookRead` = status + rating + notes), not three — atomic, one save, one `UpdatedAt` bump. A field-level command is correct only when the UI fires that field on its own (e.g. the detail page's independent inline rating / status / notes auto-saves). Never reflexively emit a CRUD command per property. |
@@ -254,18 +267,18 @@ must not widen it.
   The five merges (`MergeBooks`, `MergeWorks`, `MergeAuthors`, `MergeEditions`,
   `MergePublishers`) also open an explicit `BeginTransactionAsync` around their single save. No
   handler dispatches another command or saves twice.
-- **Exception → UI mapping (open question).** How a failed command or query reaches the user
-  is undecided; a consistent design is pending Drew's choice, and callers stay as they are until
-  then. Today: handlers throw `NotFoundException` when the root they mutate is
-  gone; aggregates (`Book`, `Work`, `Series`, `WishlistItem`) and `SeriesNameGuard` throw
-  `DomainRuleException` for a broken rule; soft outcomes come back as nullable returns or result
-  records. There is no central mapping: each caller catches what it expects. The edit-dialog
-  ViewModels (`BookEditDialogViewModel`, `WorkEditDialogViewModel`, `EditionFormDialogViewModel`,
-  `CopyFormDialogViewModel`), `SeriesEditViewModel` and `BookDetailViewModel`'s cover upload catch
-  `NotFoundException` and turn it into a no-op, a failure result or a not-found state;
-  `SeriesEditViewModel` and `AIAssistantViewModel` (creating a series from a suggestion) show a
-  `DomainRuleException`'s message inline; and many pages and dialogs wrap their save calls in a
-  `catch (Exception)` that shows the message in a MudBlazor snackbar.
+- **Exception → UI mapping.** Handlers throw `NotFoundException` when the root they mutate is
+  gone; the aggregates (`Book`, `Work`, `Copy`, `Series`, `WishlistItem`, `Author`), the handlers
+  `CreateBook` and `AttachWorksToBook`, and `SeriesNameGuard` throw `DomainRuleException` for a
+  broken rule; soft outcomes come back as nullable returns or result records. A
+  `DomainRuleException` or `NotFoundException` from a dispatch is an expected outcome: every view
+  model that takes `IDispatcher` derives from `DispatchingViewModel` (enforced by
+  `DispatchingViewModelLayeringTests`), whose `DispatchAsync` clears `Error`, runs the dispatch,
+  and turns those two exception types into `Error` plus a `false` (or default) result. The
+  component renders `Error` through the shared `ActionError` alert where the user acted, and
+  snackbars are for successes only. Any other exception is a fault: it propagates to
+  `PageErrorBoundary` in `MainLayout`, which logs it with a trace id and shows one page-level
+  message that keeps the circuit alive.
 
 ---
 

@@ -69,7 +69,7 @@ public class GetBookEditFormHandlerTests
         int bookId, seriesId;
         using (var db = _factory.CreateDbContext())
         {
-            var series = new Series { Name = "Witcher", Type = SeriesType.Series };
+            var series = TestSeries.Series("Witcher", SeriesType.Series);
             db.Series.Add(series);
             var book = TestBooks.Book(
                 "T",

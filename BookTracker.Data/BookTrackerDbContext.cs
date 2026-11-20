@@ -105,6 +105,11 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .HasForeignKey(c => c.EditionId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        modelBuilder.Entity<Edition>()
+            .Navigation(e => e.Copies)
+            .HasField("_copies")
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+
         // Loan: part of the Book aggregate through Copy, so it goes when the
         // Copy goes. The filtered unique index allows any number of returned
         // loans per copy but at most one open one (ReturnedOn IS NULL).
@@ -155,6 +160,11 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .WithMany(w => w.Isbns)
             .HasForeignKey(i => i.WishlistItemId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<WishlistItem>()
+            .Navigation(w => w.Isbns)
+            .HasField("_isbns")
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
 
         modelBuilder.Entity<WishlistItemIsbn>()
             .HasIndex(i => i.Isbn);
@@ -217,6 +227,11 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .HasForeignKey(b => b.SeriesId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        modelBuilder.Entity<Series>()
+            .Navigation(s => s.Books)
+            .HasField("_books")
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+
         // Work ↔ Author is many-to-many through the WorkAuthor join entity.
         // Composite PK on (WorkId, AuthorId, Role) — the same Author can't
         // appear twice on a single Work in the same role, but CAN hold
@@ -247,6 +262,29 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
                     j.Property(wa => wa.Role).HasDefaultValue(AuthorRole.Author);
                 });
 
+        var work = modelBuilder.Entity<Work>();
+        work.Navigation(w => w.WorkAuthors).HasField("_workAuthors").UsePropertyAccessMode(PropertyAccessMode.Field);
+        work.Navigation(w => w.Authors).HasField("_authors").UsePropertyAccessMode(PropertyAccessMode.Field);
+        work.Navigation(w => w.Genres).HasField("_genres").UsePropertyAccessMode(PropertyAccessMode.Field);
+        work.Navigation(w => w.Books).HasField("_books").UsePropertyAccessMode(PropertyAccessMode.Field);
+        work.Navigation(w => w.BookWorks).HasField("_bookWorks").UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        var book = modelBuilder.Entity<Book>();
+        book.Navigation(b => b.Editions).HasField("_editions").UsePropertyAccessMode(PropertyAccessMode.Field);
+        book.Navigation(b => b.Tags).HasField("_tags").UsePropertyAccessMode(PropertyAccessMode.Field);
+        book.Navigation(b => b.Works).HasField("_works").UsePropertyAccessMode(PropertyAccessMode.Field);
+        book.Navigation(b => b.BookWorks).HasField("_bookWorks").UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        // The inverse collections on the other entities: EF fills them, and
+        // every write goes through the owning side's methods.
+        modelBuilder.Entity<Author>().Navigation(a => a.Works).HasField("_works").UsePropertyAccessMode(PropertyAccessMode.Field);
+        modelBuilder.Entity<Author>().Navigation(a => a.WorkAuthors).HasField("_workAuthors").UsePropertyAccessMode(PropertyAccessMode.Field);
+        modelBuilder.Entity<Genre>().Navigation(g => g.Children).HasField("_children").UsePropertyAccessMode(PropertyAccessMode.Field);
+        modelBuilder.Entity<Genre>().Navigation(g => g.Works).HasField("_works").UsePropertyAccessMode(PropertyAccessMode.Field);
+        modelBuilder.Entity<Publisher>().Navigation(p => p.Editions).HasField("_editions").UsePropertyAccessMode(PropertyAccessMode.Field);
+        modelBuilder.Entity<Tag>().Navigation(t => t.Books).HasField("_books").UsePropertyAccessMode(PropertyAccessMode.Field);
+        modelBuilder.Entity<Copy>().Navigation(c => c.Loans).HasField("_loans").UsePropertyAccessMode(PropertyAccessMode.Field);
+
         modelBuilder.Entity<Author>()
             .HasIndex(a => a.Name)
             .IsUnique();
@@ -260,6 +298,11 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .WithMany(a => a.Aliases)
             .HasForeignKey(a => a.CanonicalAuthorId)
             .OnDelete(DeleteBehavior.NoAction);
+
+        modelBuilder.Entity<Author>()
+            .Navigation(a => a.Aliases)
+            .HasField("_aliases")
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
 
         // IgnoredDuplicate pairs: unique on (EntityType, LowerId, HigherId)
         // so the same pair can't be dismissed twice. Pair IDs are normalised
