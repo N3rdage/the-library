@@ -314,7 +314,7 @@ public class BookUpdatedAtInterceptorTests
         {
             var book = await db.Books.Include(b => b.Tags).FirstAsync(b => b.Id == bookId);
             var tag = await db.Tags.SingleAsync(t => t.Name == "favourites");
-            book.Tags.Add(tag);
+            book.AddTag(tag);
             await db.SaveChangesAsync();
         }
 

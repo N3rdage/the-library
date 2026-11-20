@@ -545,7 +545,7 @@ public class BookDetailViewModelTests
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
-            editionId = book.Editions[0].Id;
+            editionId = book.Editions.Single().Id;
         }
 
         var storage = Substitute.For<IBookCoverStorage>();
@@ -594,7 +594,7 @@ public class BookDetailViewModelTests
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
-            editionId = book.Editions[0].Id;
+            editionId = book.Editions.Single().Id;
         }
 
         var storage = Substitute.For<IBookCoverStorage>();
@@ -630,7 +630,7 @@ public class BookDetailViewModelTests
             db.Books.Add(book);
             await db.SaveChangesAsync();
             bookId = book.Id;
-            editionId = book.Editions[0].Id;
+            editionId = book.Editions.Single().Id;
         }
 
         var storage = Substitute.For<IBookCoverStorage>();

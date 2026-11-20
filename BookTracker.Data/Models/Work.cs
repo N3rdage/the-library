@@ -181,7 +181,7 @@ public class Work
         if (link is not null)
         {
             _bookWorks.Remove(link);
-            book.BookWorks.Remove(link);
+            book.RemoveBookWork(link);
         }
         return _bookWorks.Count == 0;
     }

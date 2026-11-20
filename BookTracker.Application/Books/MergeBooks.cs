@@ -119,26 +119,12 @@ public sealed class MergeBooksHandler(IDbContextFactory<BookTrackerDbContext> db
         if (orphaned.Count > 0) db.Works.RemoveRange(orphaned);
 
         // ─── Union Tags ────────────────────────────────────────────────
-        var winnerTagIds = winner.Tags.Select(t => t.Id).ToHashSet();
-        var tagsUnioned = 0;
-        foreach (var tag in loser.Tags.Where(t => !winnerTagIds.Contains(t.Id)).ToList())
-        {
-            winner.Tags.Add(tag);
-            winnerTagIds.Add(tag.Id);
-            tagsUnioned++;
-        }
-        loser.Tags.Clear();
+        var tagsUnioned = winner.AdoptTagsFrom(loser);
 
         // ─── Reassign Editions ─────────────────────────────────────────
         // Editions (and their Copies, which belong to Edition not Book)
         // move as a unit by flipping the BookId FK.
-        var editionsReassigned = 0;
-        foreach (var edition in loser.Editions.ToList())
-        {
-            edition.MoveToBook(winner.Id);
-            editionsReassigned++;
-        }
-        loser.Editions.Clear();
+        var editionsReassigned = loser.MoveEditionsTo(winner);
 
         var staleIgnores = await db.IgnoredDuplicates
             .Where(d => d.EntityType == DuplicateEntityType.Book

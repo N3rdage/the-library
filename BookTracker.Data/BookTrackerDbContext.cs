@@ -269,6 +269,22 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
         work.Navigation(w => w.Books).HasField("_books").UsePropertyAccessMode(PropertyAccessMode.Field);
         work.Navigation(w => w.BookWorks).HasField("_bookWorks").UsePropertyAccessMode(PropertyAccessMode.Field);
 
+        var book = modelBuilder.Entity<Book>();
+        book.Navigation(b => b.Editions).HasField("_editions").UsePropertyAccessMode(PropertyAccessMode.Field);
+        book.Navigation(b => b.Tags).HasField("_tags").UsePropertyAccessMode(PropertyAccessMode.Field);
+        book.Navigation(b => b.Works).HasField("_works").UsePropertyAccessMode(PropertyAccessMode.Field);
+        book.Navigation(b => b.BookWorks).HasField("_bookWorks").UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        // The inverse collections on the other entities: EF fills them, and
+        // every write goes through the owning side's methods.
+        modelBuilder.Entity<Author>().Navigation(a => a.Works).HasField("_works").UsePropertyAccessMode(PropertyAccessMode.Field);
+        modelBuilder.Entity<Author>().Navigation(a => a.WorkAuthors).HasField("_workAuthors").UsePropertyAccessMode(PropertyAccessMode.Field);
+        modelBuilder.Entity<Genre>().Navigation(g => g.Children).HasField("_children").UsePropertyAccessMode(PropertyAccessMode.Field);
+        modelBuilder.Entity<Genre>().Navigation(g => g.Works).HasField("_works").UsePropertyAccessMode(PropertyAccessMode.Field);
+        modelBuilder.Entity<Publisher>().Navigation(p => p.Editions).HasField("_editions").UsePropertyAccessMode(PropertyAccessMode.Field);
+        modelBuilder.Entity<Tag>().Navigation(t => t.Books).HasField("_books").UsePropertyAccessMode(PropertyAccessMode.Field);
+        modelBuilder.Entity<Copy>().Navigation(c => c.Loans).HasField("_loans").UsePropertyAccessMode(PropertyAccessMode.Field);
+
         modelBuilder.Entity<Author>()
             .HasIndex(a => a.Name)
             .IsUnique();

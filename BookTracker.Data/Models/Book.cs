@@ -32,9 +32,16 @@ public enum BookCategory
 // The scalar fields are written only through the methods below (private
 // setters; EF materialises through them regardless of accessibility), so a
 // handler cannot bypass an invariant and the compiler enforces it. Id stays
-// public for EF and the tests' in-memory graphs.
+// public for EF and the tests' in-memory graphs. Its collections are read-only
+// over private backing fields that EF reads and writes directly, so every
+// change to them goes through the methods below.
 public class Book
 {
+    private readonly List<Edition> _editions = [];
+    private readonly List<Tag> _tags = [];
+    private readonly List<Work> _works = [];
+    private readonly List<BookWork> _bookWorks = [];
+
     public int Id { get; set; }
 
     [Required, MaxLength(300)]
@@ -78,28 +85,27 @@ public class Book
     [MaxLength(500)]
     public string? DefaultCoverArtUrl { get; private set; }
 
-    // Collection setters stay public until the collections slice (C7):
-    // seeds assign them wholesale, and AttachWork / AddEdition / SoftDelete
-    // are the ordered write paths in the meantime.
-    public List<Edition> Editions { get; set; } = [];
+    /// <summary>Written only through <see cref="AddEdition"/>,
+    /// <see cref="RemoveCopy"/>, <see cref="MoveEditionsTo"/> and
+    /// <see cref="SoftDelete"/>.</summary>
+    public IReadOnlyCollection<Edition> Editions => _editions;
 
-    public List<Tag> Tags { get; set; } = [];
+    /// <summary>Written only through <see cref="AddTag"/>, <see cref="RemoveTag"/>,
+    /// <see cref="AdoptTagsFrom"/> and <see cref="SoftDelete"/>.</summary>
+    public IReadOnlyCollection<Tag> Tags => _tags;
 
     /// <summary>Skip-navigation over the Book↔Work join — convenient for "does
     /// this book contain work X" / search / aggregation queries. Does NOT carry
     /// the per-book display order; read <see cref="BookWorks"/> when order matters.
-    /// <para><b>Read-only in practice — do NOT write to this.</b> Adding here
-    /// (<c>book.Works.Add(work)</c> or a <c>Works = [...]</c> initializer) inserts
-    /// a <see cref="BookWork"/> with Order defaulting to 0, colliding with the
-    /// existing Order-0 row and corrupting display order. Route every attach
-    /// through <see cref="AttachWork"/> so the work appends (Order = max + 1).
-    /// (Setter stays public pending the C7 encapsulation lock-down.)</para></summary>
-    public List<Work> Works { get; set; } = [];
+    /// EF fills it; every attach goes through <see cref="AttachWork"/>, which
+    /// assigns the order.</summary>
+    public IReadOnlyCollection<Work> Works => _works;
 
     /// <summary>Explicit join rows carrying each Work's per-book display
-    /// <see cref="BookWork.Order"/>. The canonical source for ordered display and
-    /// the write path for appends (see <see cref="AttachWork"/>).</summary>
-    public List<BookWork> BookWorks { get; set; } = [];
+    /// <see cref="BookWork.Order"/>. The canonical source for ordered display.
+    /// Written only through <see cref="AttachWork"/> and
+    /// <see cref="Work.RemoveFrom"/>.</summary>
+    public IReadOnlyCollection<BookWork> BookWorks => _bookWorks;
 
     // Series membership lives on the Book — a Book is installment N of a
     // publication series ("The Last Wish" is Witcher #1), whether it holds a
@@ -127,8 +133,7 @@ public class Book
     // --- Aggregate behaviour -------------------------------------------------
     // Invariant-bearing operations live here so the rules are enforced in one
     // place and are unit-testable without EF. See docs/BACKEND-REFACTOR-DESIGN.md.
-    // Every scalar write goes through these methods; the collections are the
-    // remaining public surface (see the note above Editions).
+    // Every write, scalar or collection, goes through these methods.
 
     /// <summary>Creates a Book from the Add page's book fields. Title is required
     /// and trimmed; notes and cover trim to null. The rating is stored as given,
@@ -243,12 +248,12 @@ public class Book
     {
         // Dedup by id for saved works; by reference for a brand-new (Id 0) work
         // that can't already be attached but wouldn't match on id.
-        if (BookWorks.Any(bw => bw.Work == work || (work.Id != 0 && bw.WorkId == work.Id)))
+        if (_bookWorks.Any(bw => bw.Work == work || (work.Id != 0 && bw.WorkId == work.Id)))
             return false;
 
-        var next = BookWorks.Count == 0 ? 0 : BookWorks.Max(bw => bw.Order) + 1;
+        var next = _bookWorks.Count == 0 ? 0 : _bookWorks.Max(bw => bw.Order) + 1;
         var link = new BookWork { Book = this, Work = work, Order = next };
-        BookWorks.Add(link);
+        _bookWorks.Add(link);
         work.AddBookWork(link);
         return true;
     }
@@ -275,19 +280,79 @@ public class Book
             isUserSupplied: false,
             publisher);
         edition.AddCopy(firstCopyCondition, null, null);
-        Editions.Add(edition);
+        _editions.Add(edition);
         return edition;
     }
+
+    /// <summary>The Book's end of <see cref="Work.RemoveFrom"/>, which finds the
+    /// join row and removes it from the Work's end.</summary>
+    internal void RemoveBookWork(BookWork link) => _bookWorks.Remove(link);
 
     /// <summary>Removes a Copy from the book. If it was the Edition's last
     /// Copy, the Edition goes too — an Edition with zero Copies represents
     /// nothing ownable. Throws if the Copy isn't part of this book.</summary>
     public void RemoveCopy(int copyId)
     {
-        var edition = Editions.FirstOrDefault(e => e.Copies.Any(c => c.Id == copyId))
+        var edition = _editions.FirstOrDefault(e => e.Copies.Any(c => c.Id == copyId))
             ?? throw new DomainRuleException("That copy isn't part of this book.");
         if (edition.RemoveCopy(copyId))
-            Editions.Remove(edition);
+            _editions.Remove(edition);
+    }
+
+    /// <summary>Moves every Edition (their Copies and loans go with them) to
+    /// <paramref name="winner"/> by re-pointing each Edition's key, then empties
+    /// this Book's collection; EF fixes up the winner's side from the key. The
+    /// loser's side of a book merge. Returns how many Editions moved.</summary>
+    public int MoveEditionsTo(Book winner)
+    {
+        var moved = _editions.Count;
+        foreach (var edition in _editions)
+            edition.MoveToBook(winner.Id);
+        _editions.Clear();
+        return moved;
+    }
+
+    /// <summary>Attaches <paramref name="tag"/> unless this Book already carries
+    /// it, matched by id; a new (unsaved) tag is always attached. Requires
+    /// <see cref="Tags"/> to be loaded (a new Book's empty list is correct).
+    /// Returns whether it was attached.</summary>
+    public bool AddTag(Tag tag)
+    {
+        if (tag.Id != 0 && _tags.Any(t => t.Id == tag.Id))
+            return false;
+        _tags.Add(tag);
+        return true;
+    }
+
+    /// <summary>Detaches the tag with id <paramref name="tagId"/>, leaving the
+    /// Tag row for other books. Returns false when this Book doesn't carry it.</summary>
+    public bool RemoveTag(int tagId)
+    {
+        var tag = _tags.FirstOrDefault(t => t.Id == tagId);
+        return tag is not null && _tags.Remove(tag);
+    }
+
+    /// <summary>Attaches each of <paramref name="other"/>'s tags this Book does
+    /// not already carry, matched by id, and detaches them all from
+    /// <paramref name="other"/>. Returns how many were attached (a book merge,
+    /// where this Book is the winner).</summary>
+    public int AdoptTagsFrom(Book other)
+    {
+        var added = 0;
+        foreach (var tag in other._tags)
+            if (AddTag(tag)) added++;
+        other._tags.Clear();
+        return added;
+    }
+
+    /// <summary>Stores the collections exactly as given, with no ordering or
+    /// dedup: the tests' seed builder (InternalsVisibleTo) seeds Works without
+    /// join rows, so EF's Order-0 default applies as it would to an initialiser.</summary>
+    internal void SeedCollections(IEnumerable<Work>? works, IEnumerable<Edition>? editions, IEnumerable<Tag>? tags)
+    {
+        if (works is not null) _works.AddRange(works);
+        if (editions is not null) _editions.AddRange(editions);
+        if (tags is not null) _tags.AddRange(tags);
     }
 
     /// <summary>Soft-deletes the book: hard-removes the Editions (their Copies
@@ -300,14 +365,14 @@ public class Book
     /// copy. Callers load Editions → Copies → Loans so the check sees them.</summary>
     public void SoftDelete()
     {
-        if (Editions.Any(e => e.Copies.Any(c => c.OpenLoan is not null)))
+        if (_editions.Any(e => e.Copies.Any(c => c.OpenLoan is not null)))
             throw new DomainRuleException("A copy of this book is lent out. Return the loan first.");
 
         // Severing the required Book→Edition relationship orphan-deletes each
         // Edition (and its Copies cascade at the DB level) — same mechanism
         // RemoveCopy already relies on.
-        Editions.Clear();
-        Tags.Clear();
+        _editions.Clear();
+        _tags.Clear();
         DeletedAt = DateTime.UtcNow;
     }
 }

@@ -164,8 +164,7 @@ public class BookAggregateTests
         var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
         var edition = book.AddEdition("  978-1  ", BookFormat.Hardcover, null, null, DatePrecision.Day, null, null, BookCondition.Fine);
 
-        Assert.Single(book.Editions);
-        Assert.Same(edition, book.Editions[0]);
+        Assert.Same(edition, Assert.Single(book.Editions));
         Assert.Equal("978-1", edition.Isbn);
         Assert.Equal(BookCondition.Fine, Assert.Single(edition.Copies).Condition);
     }
@@ -243,9 +242,8 @@ public class BookAggregateTests
     [Fact]
     public void RemoveCopy_notLast_keepsEdition()
     {
-        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
         var edition = EditionWithCopies(1, 10, 11);
-        book.Editions.Add(edition);
+        var book = TestBooks.Book("X", editions: [edition]);
 
         book.RemoveCopy(10);
 
@@ -256,8 +254,7 @@ public class BookAggregateTests
     [Fact]
     public void RemoveCopy_last_removesEdition()
     {
-        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
-        book.Editions.Add(EditionWithCopies(1, 10));
+        var book = TestBooks.Book("X", editions: [EditionWithCopies(1, 10)]);
 
         book.RemoveCopy(10);
 
@@ -267,8 +264,7 @@ public class BookAggregateTests
     [Fact]
     public void RemoveCopy_unknownCopy_throws()
     {
-        var book = Book.Create("X", BookCategory.Fiction, BookStatus.Unread, 0, null, null);
-        book.Editions.Add(EditionWithCopies(1, 10));
+        var book = TestBooks.Book("X", editions: [EditionWithCopies(1, 10)]);
 
         Assert.Throws<DomainRuleException>(() => book.RemoveCopy(999));
     }
@@ -337,6 +333,56 @@ public class BookAggregateTests
 
         Assert.Equal(BookCondition.Poor, copy.Condition);
         Assert.Null(copy.Notes);
+    }
+
+    [Fact]
+    public void AddTag_skipsATagAlreadyCarriedById_butAlwaysAddsANewTag()
+    {
+        var saved = new Tag { Id = 7, Name = "signed" };
+        var book = TestBooks.Book("X", tags: [saved]);
+
+        Assert.False(book.AddTag(new Tag { Id = 7, Name = "signed" }));
+        Assert.True(book.AddTag(new Tag { Name = "new" }));
+        Assert.True(book.AddTag(new Tag { Name = "new" }));
+
+        Assert.Equal(3, book.Tags.Count);
+    }
+
+    [Fact]
+    public void RemoveTag_detachesByIdAndReportsWhetherItWasThere()
+    {
+        var book = TestBooks.Book("X", tags: [new Tag { Id = 7, Name = "signed" }]);
+
+        Assert.False(book.RemoveTag(8));
+        Assert.True(book.RemoveTag(7));
+        Assert.Empty(book.Tags);
+    }
+
+    [Fact]
+    public void AdoptTagsFrom_addsTheMissingTagsAndEmptiesTheOtherBook()
+    {
+        var shared = new Tag { Id = 1, Name = "a" };
+        var winner = TestBooks.Book("W", tags: [shared]);
+        var loser = TestBooks.Book("L", tags: [shared, new Tag { Id = 2, Name = "b" }]);
+
+        Assert.Equal(1, winner.AdoptTagsFrom(loser));
+
+        Assert.Equal([1, 2], winner.Tags.Select(t => t.Id).Order());
+        Assert.Empty(loser.Tags);
+    }
+
+    [Fact]
+    public void MoveEditionsTo_repointsEachEditionAndEmptiesThisBook()
+    {
+        var winner = TestBooks.Book("W");
+        winner.Id = 5;
+        var loser = TestBooks.Book("L", editions: [EditionWithCopies(1, 10), EditionWithCopies(2, 20)]);
+        var editions = loser.Editions.ToList();
+
+        Assert.Equal(2, loser.MoveEditionsTo(winner));
+
+        Assert.Empty(loser.Editions);
+        Assert.All(editions, e => Assert.Equal(5, e.BookId));
     }
 
     private static Edition EditionWithCopies(int editionId, params int[] copyIds)
