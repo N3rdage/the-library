@@ -74,6 +74,9 @@
                     <li class="nav-item">
                         <NavLink class="nav-link" href="manual">Manual</NavLink>
                     </li>
+                    <li class="nav-item">
+                        <NavLink class="nav-link" href="help">Help</NavLink>
+                    </li>
                 </ul>
             </div>
         </div>
@@ -112,6 +115,7 @@
            wrap point. *@
         <span class="d-inline-block">&copy; 2026 - Bookcase</span>
         <span class="d-inline-block">- <a href="privacy">Privacy</a></span>
+        <span class="d-inline-block">- <a href="help">Help</a></span>
         @if (BuildInfo.ShortSha is { } sha)
         {
             <span class="d-inline-block">- Version: <a href="@BuildInfo.CommitUrl" target="_blank" rel="noopener noreferrer" class="text-muted">@sha</a></span>

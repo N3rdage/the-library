@@ -26,7 +26,7 @@ Bookcase is a web app for the books you own. You record each book once, then sea
 
 ## Navigation
 
-The top bar lists, in order: Home, Library, Add book, Bulk add, Series, Shelf order, Authors, Publishers, Wishlist, On loan, Bookshop, AI Assistant, Duplicates, Privacy and Manual. On a narrow screen the bar collapses into a menu button. The brand name Bookcase links back to Home.
+The top bar lists, in order: Home, Library, Add book, Bulk add, Series, Shelf order, Authors, Publishers, Wishlist, On loan, Bookshop, AI Assistant, Duplicates, Privacy, Manual and Help. On a narrow screen the bar collapses into a menu button. The brand name Bookcase links back to Home.
 
 ## Home
 
@@ -235,6 +235,10 @@ What a merge moves: an author merge moves works and aliases. A work merge moves 
 ## Privacy
 
 Privacy is a placeholder page. It holds no settings.
+
+## Help
+
+Help lists every page in the top bar with a one-line description, and the key concepts in short. Each entry has a link to the matching section of this manual. A Help link also sits in the footer.
 
 ## Book page
 
