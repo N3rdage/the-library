@@ -67,6 +67,13 @@
                     WidthRequest="160"
                     Margin="0,8,0,0" />
 
+            <Button x:Name="ResetButton"
+                    Text="Reset local cache"
+                    Clicked="OnResetClicked"
+                    Style="{StaticResource OutlinedButton}"
+                    HorizontalOptions="Center"
+                    WidthRequest="200" />
+
             <Label x:Name="BuildFooter"
                    FontSize="11"
                    HorizontalTextAlignment="Center"

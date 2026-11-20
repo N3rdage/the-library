@@ -291,7 +291,7 @@ Bookshelf holds a copy of your library on the phone, so it answers without a sig
 
 ### Sync and sign-in
 
-The chip at the top right of Find shows how long ago you synced, or "offline". Tap it to open **Sync & account**. The sheet shows whether you are online, how many books and authors are cached, and when you last synced. **Refresh now** pulls changes from Bookcase and needs sign-in and a connection. **Sign in** and **Sign out** manage your account. Signing out keeps the cached data. You sign in only to refresh. The tabs work without signing in. **Close** returns. The Wishlist and Gaps screens also have a **Sync** button in their toolbar that opens the same sheet.
+The chip at the top right of Find shows how long ago you synced, or "offline". Tap it to open **Sync & account**. The sheet shows whether you are online, how many books and authors are cached, and when you last synced. **Refresh now** pulls changes from Bookcase and needs sign-in and a connection. **Sign in** and **Sign out** manage your account. Signing out keeps the cached data. **Reset local cache** asks for confirmation, then deletes the cached catalogue, wishlist and covers from the phone, including the Bought marks you made on the phone, and keeps you signed in; the next **Refresh now** downloads the full catalogue again. You sign in only to refresh. The tabs work without signing in. **Close** returns. The Wishlist and Gaps screens also have a **Sync** button in their toolbar that opens the same sheet.
 
 ### Find
 

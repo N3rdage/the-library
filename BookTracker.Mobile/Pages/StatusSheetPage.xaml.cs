@@ -70,6 +70,17 @@ public partial class StatusSheetPage : ContentPage
         RefreshButton.IsEnabled = !_busy && _sync.IsSignedIn && _sync.IsOnline;
         AuthButton.Text = _sync.IsSignedIn ? "Sign out" : "Sign in";
         AuthButton.IsEnabled = !_busy;
+        ResetButton.IsEnabled = !_busy;
+    }
+
+    private async void OnResetClicked(object? sender, EventArgs e)
+    {
+        var confirmed = await DisplayAlertAsync(
+            "Reset local cache?",
+            "The next sync downloads the full catalogue again. Wishlist items you marked Bought on this phone lose that mark.",
+            "Reset", "Cancel");
+        if (!confirmed) return;
+        await RunBusyAsync("Resetting…", () => _sync.ResetCacheAsync());
     }
 
     private async void OnRefreshClicked(object? sender, EventArgs e) =>

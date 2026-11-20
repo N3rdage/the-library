@@ -255,6 +255,45 @@ public class CatalogCache : ICatalogCache
         });
     }
 
+    public async Task WipeAsync()
+    {
+        // Every row of every table in one transaction (tables stay, so no
+        // schema change): catalog, meta (watermark included) and the wishlist
+        // tables, bought-local marks too. No watermark afterwards means the
+        // next sync takes the full-PopulateAsync path.
+        await Db.RunInTransactionAsync(conn =>
+        {
+            conn.DeleteAll<CachedBook>();
+            conn.DeleteAll<CachedBookIsbn>();
+            conn.DeleteAll<CachedBookEdition>();
+            conn.DeleteAll<CachedBookWork>();
+            conn.DeleteAll<CachedAuthor>();
+            conn.DeleteAll<CachedSeries>();
+            conn.DeleteAll<CachedMeta>();
+            conn.DeleteAll<CachedWishlistItem>();
+            conn.DeleteAll<CachedWishlistItemIsbn>();
+            conn.DeleteAll<WishlistBoughtLocal>();
+        });
+
+        // Cached cover thumbnails: empty the directory, keep the directory.
+        if (_coversDir is not null && Directory.Exists(_coversDir))
+        {
+            foreach (var file in Directory.EnumerateFiles(_coversDir))
+            {
+                try
+                {
+                    File.Delete(file);
+                }
+                catch (Exception ex)
+                {
+                    // The rows are gone, so a leftover thumbnail is unreferenced
+                    // and gets overwritten if its book id comes back.
+                    _logger.LogWarning(ex, "Cover file delete failed during wipe: {Path}", file);
+                }
+            }
+        }
+    }
+
     public async Task ApplyDeltaAsync(CatalogSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);

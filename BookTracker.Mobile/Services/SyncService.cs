@@ -30,6 +30,10 @@ public interface ISyncService
     /// decision tree) and refreshes <see cref="Meta"/>. Returns a status line.</summary>
     Task<string> SyncCatalogAsync();
     Task RefreshMetaAsync();
+    /// <summary>Wipes the local cache (catalog, wishlist, covers, watermark) and
+    /// refreshes <see cref="Meta"/> so the next sync is a full load. Stays signed
+    /// in. Returns a status line; backs off while a sync is running.</summary>
+    Task<string> ResetCacheAsync();
 }
 
 public sealed class SyncService : ISyncService
@@ -96,6 +100,26 @@ public sealed class SyncService : ISyncService
         try { Meta = await _cache.GetMetaAsync(); }
         catch { Meta = null; } // corrupt / un-init'd cache — render as "no cache".
         Raise();
+    }
+
+    public async Task<string> ResetCacheAsync()
+    {
+        // Same gate as sync: never wipe under a running Populate/ApplyDelta.
+        if (!await _syncGate.WaitAsync(0))
+            return "Sync already in progress…";
+        try
+        {
+            await _cache.WipeAsync();
+            // The delta-vs-full decision reads the in-memory Meta, not the DB,
+            // so it must be reloaded (now null) or the next sync would still
+            // send the old watermark against an empty cache.
+            await RefreshMetaAsync();
+            return "Local cache reset. Tap Refresh now to download the full catalogue.";
+        }
+        finally
+        {
+            _syncGate.Release();
+        }
     }
 
     public async Task<string> SyncCatalogAsync()
