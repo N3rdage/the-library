@@ -1,0 +1,44 @@
+@page "/manual"
+@page "/style"
+@using BookTracker.Web.Services
+@inject IMarkdownDocumentService Documents
+@inject NavigationManager Nav
+
+<PageTitle>@title - Bookcase</PageTitle>
+
+@if (document is null)
+{
+    <MudAlert Severity="Severity.Warning" id="document-not-found">That document does not exist.</MudAlert>
+}
+else
+{
+    @if (document.Headings.Count > 0)
+    {
+        <MudPaper Class="pa-3 mb-3" Outlined="true" id="document-toc">
+            <MudText Typo="Typo.subtitle1">Contents</MudText>
+            <ul class="mb-0">
+                @foreach (var heading in document.Headings)
+                {
+                    <li><a href="#@heading.Id">@heading.Text</a></li>
+                }
+            </ul>
+        </MudPaper>
+    }
+
+    <article class="markdown-document">
+        @((MarkupString)document.Html)
+    </article>
+}
+
+@code {
+    private MarkdownDocument? document;
+    private string title = "Manual";
+
+    protected override void OnParametersSet()
+    {
+        var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].Trim('/');
+        var isStyle = string.Equals(path, "style", StringComparison.OrdinalIgnoreCase);
+        title = isStyle ? "Style guide" : "User manual";
+        document = Documents.Get(isStyle ? "style-guide" : "user-guide");
+    }
+}

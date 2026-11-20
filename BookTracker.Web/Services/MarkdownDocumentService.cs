@@ -1,0 +1,90 @@
+using System.Collections.Concurrent;
+using Markdig;
+using Markdig.Renderers.Html;
+using Markdig.Syntax;
+using Markdig.Syntax.Inlines;
+
+namespace BookTracker.Web.Services;
+
+/// <summary>One <c>##</c> heading: its plain text and the anchor id Markdig generated.</summary>
+public sealed record MarkdownHeading(string Text, string Id);
+
+/// <summary>A rendered markdown document plus its table of contents.</summary>
+public sealed record MarkdownDocument(string Name, string Html, IReadOnlyList<MarkdownHeading> Headings);
+
+/// <summary>
+/// Renders the shipped markdown docs (user guide, style guide) for in-app
+/// pages. Only a fixed allow-list of names is served; the name is never used
+/// as a path.
+/// </summary>
+public interface IMarkdownDocumentService
+{
+    /// <summary>The rendered document, or null when <paramref name="name"/> is not on the allow-list.</summary>
+    MarkdownDocument? Get(string name);
+}
+
+public sealed class MarkdownDocumentService : IMarkdownDocumentService
+{
+    private static readonly IReadOnlyDictionary<string, string> Documents =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["user-guide"] = "USER-GUIDE.md",
+            ["style-guide"] = "STYLE-GUIDE.md",
+        };
+
+    // Raw HTML in the source is escaped, not emitted; only pipe tables and
+    // heading anchors are switched on.
+    private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
+        .DisableHtml()
+        .UsePipeTables()
+        .UseAutoIdentifiers()
+        .Build();
+
+    private readonly string[] roots;
+    private readonly ConcurrentDictionary<string, MarkdownDocument> cache = new(StringComparer.Ordinal);
+
+    // The linked docs are copied next to the binaries (AppContext.BaseDirectory)
+    // in dev, test and publish runs; the content root covers a host whose
+    // content root is the publish folder.
+    public MarkdownDocumentService(IWebHostEnvironment environment)
+        : this([AppContext.BaseDirectory, environment.ContentRootPath])
+    {
+    }
+
+    internal MarkdownDocumentService(string[] roots) => this.roots = roots;
+
+    public MarkdownDocument? Get(string name)
+    {
+        if (!Documents.TryGetValue(name, out var fileName))
+        {
+            return null;
+        }
+        return cache.GetOrAdd(name, _ => Load(name, fileName));
+    }
+
+    private MarkdownDocument Load(string name, string fileName)
+    {
+        var path = roots
+            .Select(root => Path.Combine(root, "docs", fileName))
+            .FirstOrDefault(File.Exists)
+            ?? throw new FileNotFoundException($"Document '{fileName}' was not found under docs\\ in any of: {string.Join(", ", roots)}");
+
+        var ast = Markdown.Parse(File.ReadAllText(path), Pipeline);
+        var headings = ast.OfType<HeadingBlock>()
+            .Where(h => h.Level == 2 && h.GetAttributes().Id is not null)
+            .Select(h => new MarkdownHeading(PlainText(h), h.GetAttributes().Id!))
+            .ToList();
+
+        return new MarkdownDocument(name, ast.ToHtml(Pipeline), headings);
+    }
+
+    private static string PlainText(HeadingBlock heading) =>
+        heading.Inline is null
+            ? string.Empty
+            : string.Concat(heading.Inline.Descendants().Select(i => i switch
+            {
+                LiteralInline literal => literal.Content.ToString(),
+                CodeInline code => code.Content,
+                _ => string.Empty,
+            }));
+}
