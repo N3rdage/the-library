@@ -208,6 +208,7 @@ Lightweight JSON surface consumed by Bookshelf (MAUI) and `/bookshop` (PWA). Eac
 | `GenrePicker.razor` | Hierarchical genre checkbox grid with fuzzy matching from ISBN lookup |
 | `EditionCopyForm.razor` | Edition fields (ISBN, format, publisher, date, cover) + copy condition |
 | `AIProviderToggle.razor` | Dropdown to switch AI provider at runtime + call counter badge |
+| `HelpDialog.razor` | Static help note for a `HelpTopic` (series order, Add book, Bulk add), opened from the ? button beside a page title; links to the matching manual section |
 
 ## Services
 
