@@ -62,20 +62,35 @@ public static class ProgramSetup
         options.Preload = false;
     }
 
-    private static void ConfigureServices(WebApplicationBuilder builder)
+    /// <summary>
+    /// Application Insights 3.x: an OpenTelemetry pipeline with the Azure Monitor
+    /// exporter, registered explicitly so structured ILogger output (message-template
+    /// properties like {Isbn}) becomes custom dimensions. The connection string comes
+    /// from APPLICATIONINSIGHTS_CONNECTION_STRING (set in app-config.bicep). Without
+    /// one (local dev, tests) nothing is registered, because the exporter refuses to
+    /// start with no connection string. UserActivityProcessor stamps the authenticated
+    /// user onto every Activity as enduser.id (Application Insights' authenticated user
+    /// id); processors run in the order they are added, so it is registered before the
+    /// exporter and the tag is on the Activity before the export processor sees it end.
+    /// </summary>
+    internal static bool AddApplicationInsights(WebApplicationBuilder builder)
     {
-        // Application Insights 3.x: an OpenTelemetry pipeline with the Azure Monitor
-        // exporter, registered explicitly so structured ILogger output (message-template
-        // properties like {Isbn}) becomes custom dimensions. Connection string
-        // resolves from APPLICATIONINSIGHTS_CONNECTION_STRING (set in
-        // app-config.bicep). UserActivityProcessor stamps the authenticated user
-        // onto every Activity as enduser.id (Application Insights' authenticated user id).
-        // Processors run in the order they are added, so it is registered before the
-        // Application Insights exporter: the tag is on the Activity before the export
-        // processor sees it end.
-        builder.Services.AddHttpContextAccessor();
+        var connectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]
+            ?? builder.Configuration["ApplicationInsights:ConnectionString"];
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return false;
+        }
+
         builder.Services.ConfigureOpenTelemetryTracerProvider(tracing => tracing.AddProcessor<UserActivityProcessor>());
         builder.Services.AddApplicationInsightsTelemetry();
+        return true;
+    }
+
+    private static void ConfigureServices(WebApplicationBuilder builder)
+    {
+        builder.Services.AddHttpContextAccessor();
+        AddApplicationInsights(builder);
 
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
