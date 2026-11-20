@@ -19,7 +19,8 @@ else
             <ul class="mb-0">
                 @foreach (var heading in document.Headings)
                 {
-                    <li><a href="#@heading.Id">@heading.Text</a></li>
+                    @* Relative to <base href="/">, so the route goes in front of the anchor. *@
+                    <li><a href="@($"{route}#{heading.Id}")">@heading.Text</a></li>
                 }
             </ul>
         </MudPaper>
@@ -33,11 +34,13 @@ else
 @code {
     private MarkdownDocument? document;
     private string title = "Manual";
+    private string route = "manual";
 
     protected override void OnParametersSet()
     {
         var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].Trim('/');
         var isStyle = string.Equals(path, "style", StringComparison.OrdinalIgnoreCase);
+        route = isStyle ? "style" : "manual";
         title = isStyle ? "Style guide" : "User manual";
         document = Documents.Get(isStyle ? "style-guide" : "user-guide");
     }

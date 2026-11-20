@@ -66,6 +66,16 @@ public sealed class MarkdownDocumentServiceTests : IDisposable
     }
 
     [Fact]
+    public void AnchorLinks_carryTheDocumentsRoute_otherLinksDoNot()
+    {
+        var doc = ServiceWith("See [Duplicates](#duplicates) and [site](https://example.org/#x).").Get("user-guide");
+
+        Assert.NotNull(doc);
+        Assert.Contains("href=\"manual#duplicates\"", doc.Html);
+        Assert.Contains("href=\"https://example.org/#x\"", doc.Html);
+    }
+
+    [Fact]
     public void PipeTables_render()
     {
         var doc = ServiceWith("| a | b |\n|---|---|\n| 1 | 2 |\n").Get("user-guide");

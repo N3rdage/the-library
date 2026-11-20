@@ -33,7 +33,8 @@ public class ManualPageTests : ComponentTestBase
         Assert.Equal("Alpha", cut.Find("article h2#alpha").TextContent);
         Assert.Equal("Beta", cut.Find("article h2#beta").TextContent);
         var links = cut.FindAll("#document-toc a");
-        Assert.Equal(["#alpha", "#beta"], links.Select(a => a.GetAttribute("href")));
+        // The app has <base href="/">, so a bare "#alpha" would resolve to the home page.
+        Assert.Equal(["manual#alpha", "manual#beta"], links.Select(a => a.GetAttribute("href")));
     }
 
     [Fact]
@@ -47,6 +48,7 @@ public class ManualPageTests : ComponentTestBase
         var cut = Render<Document>();
 
         Assert.NotEmpty(cut.FindAll("article h2#alpha"));
+        Assert.Equal("style#alpha", cut.Find("#document-toc a").GetAttribute("href"));
         service.Received().Get("style-guide");
         service.DidNotReceive().Get("user-guide");
     }

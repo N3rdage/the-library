@@ -25,11 +25,12 @@ public interface IMarkdownDocumentService
 
 public sealed class MarkdownDocumentService : IMarkdownDocumentService
 {
-    private static readonly IReadOnlyDictionary<string, string> Documents =
-        new Dictionary<string, string>(StringComparer.Ordinal)
+    // Name -> (file under docs\, the route the document is served at).
+    private static readonly IReadOnlyDictionary<string, (string FileName, string Route)> Documents =
+        new Dictionary<string, (string FileName, string Route)>(StringComparer.Ordinal)
         {
-            ["user-guide"] = "USER-GUIDE.md",
-            ["style-guide"] = "STYLE-GUIDE.md",
+            ["user-guide"] = ("USER-GUIDE.md", "manual"),
+            ["style-guide"] = ("STYLE-GUIDE.md", "style"),
         };
 
     // Raw HTML in the source is escaped, not emitted; only pipe tables and
@@ -55,14 +56,14 @@ public sealed class MarkdownDocumentService : IMarkdownDocumentService
 
     public MarkdownDocument? Get(string name)
     {
-        if (!Documents.TryGetValue(name, out var fileName))
+        if (!Documents.TryGetValue(name, out var document))
         {
             return null;
         }
-        return cache.GetOrAdd(name, _ => Load(name, fileName));
+        return cache.GetOrAdd(name, _ => Load(name, document.FileName, document.Route));
     }
 
-    private MarkdownDocument Load(string name, string fileName)
+    private MarkdownDocument Load(string name, string fileName, string route)
     {
         var path = roots
             .Select(root => Path.Combine(root, "docs", fileName))
@@ -70,6 +71,16 @@ public sealed class MarkdownDocumentService : IMarkdownDocumentService
             ?? throw new FileNotFoundException($"Document '{fileName}' was not found under docs\\ in any of: {string.Join(", ", roots)}");
 
         var ast = Markdown.Parse(File.ReadAllText(path), Pipeline);
+
+        // The app has <base href="/">, so a bare "#anchor" link would resolve to
+        // the home page; put the document's route in front of it.
+        foreach (var link in ast.Descendants<LinkInline>())
+        {
+            if (link.Url is { } url && url.StartsWith('#'))
+            {
+                link.Url = route + url;
+            }
+        }
         var headings = ast.OfType<HeadingBlock>()
             .Where(h => h.Level == 2 && h.GetAttributes().Id is not null)
             .Select(h => new MarkdownHeading(PlainText(h), h.GetAttributes().Id!))
