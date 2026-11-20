@@ -174,6 +174,7 @@ A short-lived context is created per operation. Never inject `DbContext` directl
 | `/shopping` | Shopping Mode | Earlier mobile-optimised page covering scan + series gaps + wishlist. Overlaps with `/bookshop`; TODO #28 tracks the consolidation. |
 | `/assistant` | AI Assistant | Book advisor (Opus), genre cleanup, collection cataloguing, shopping suggestions (Sonnet). |
 | `/manual` | User manual | `docs/USER-GUIDE.md` rendered through Markdig, with a contents list linking to its `##` headings. |
+| `/help` | Help | Static page listing every nav page with a one-line description and a `manual#<section>` link, plus the key concepts. No service or data access. |
 | `/style` | Style guide | `docs/STYLE-GUIDE.md` rendered the same way as `/manual`. |
 | `/authors` | Authors | MudBlazor list with per-row drill-down to Works/Books, alias rollup on canonical rows, inline rename / merge / alias-resolve. Deep-linked from Home top-10. |
 | `/authors/{id}` | Author Detail | Per-author drill-down — works list, alias graph, attached books. |
