@@ -103,7 +103,7 @@ public class AIAssistantViewModelTests
 
         await vm.CreateCollectionFromSuggestionAsync(new CollectionGrouping("  ", "Series", "r", ["A"]));
 
-        Assert.Equal("Series name is required.", vm.CreateCollectionError);
+        Assert.Equal("Series name is required.", vm.Error);
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public class AIAssistantViewModelTests
         await vm.CreateCollectionFromSuggestionAsync(new CollectionGrouping("  ", "Series", "r", ["A"]));
         await vm.CreateCollectionFromSuggestionAsync(new CollectionGrouping("Fine", "Series", "r", ["A"]));
 
-        Assert.Null(vm.CreateCollectionError);
+        Assert.Null(vm.Error);
     }
 
     [Fact]

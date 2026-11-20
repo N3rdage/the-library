@@ -14,7 +14,7 @@ namespace BookTracker.Web.ViewModels;
 // of a publication series. Notes have inline auto-save on the View page
 // and are deliberately absent here. Genres live on the Work and are
 // edited via WorkEditDialogViewModel.
-public class BookEditDialogViewModel(IDispatcher dispatcher)
+public class BookEditDialogViewModel(IDispatcher dispatcher) : DispatchingViewModel
 {
     public bool NotFound { get; private set; }
     public int BookId { get; private set; }
@@ -86,25 +86,19 @@ public class BookEditDialogViewModel(IDispatcher dispatcher)
         SeriesOrderInput = null;
     }
 
-    public async Task SaveAsync()
+    /// <summary>True when saved; false when the dialog state is stale or the
+    /// domain refused (see <see cref="DispatchingViewModel.Error"/>).</summary>
+    public async Task<bool> SaveAsync()
     {
-        if (NotFound || string.IsNullOrWhiteSpace(Title) || !CoverUrlAcceptable) return;
+        if (NotFound || string.IsNullOrWhiteSpace(Title) || !CoverUrlAcceptable) return false;
 
         int? seriesOrder = null;
         string? seriesOrderDisplay = null;
         if (SelectedSeriesId.HasValue)
             (seriesOrder, seriesOrderDisplay) = SeriesOrderParser.Parse(SeriesOrderInput);
 
-        try
-        {
-            await dispatcher.Send(new UpdateBookDetails(
-                BookId, Title, Category, string.IsNullOrWhiteSpace(CoverUrl) ? null : CoverUrl.Trim(),
-                SelectedSeriesId, seriesOrder, seriesOrderDisplay));
-        }
-        catch (NotFoundException)
-        {
-            // Book deleted between opening the dialog and saving — no-op, matching
-            // the old FindAsync-returns-null path.
-        }
+        return await DispatchAsync(() => dispatcher.Send(new UpdateBookDetails(
+            BookId, Title, Category, string.IsNullOrWhiteSpace(CoverUrl) ? null : CoverUrl.Trim(),
+            SelectedSeriesId, seriesOrder, seriesOrderDisplay)));
     }
 }

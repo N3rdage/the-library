@@ -227,9 +227,9 @@
         }
         else if (VM.CollectionSuggestion is not null)
         {
-            @if (VM.CreateCollectionError is not null)
+            @if (VM.Error is not null)
             {
-                <div class="alert alert-warning py-2 small mb-3">@VM.CreateCollectionError</div>
+                <div class="alert alert-warning py-2 small mb-3">@VM.Error</div>
             }
 
             @if (!string.IsNullOrEmpty(VM.CollectionSuggestion.Summary))

@@ -3,10 +3,13 @@
    series + order, and genres (via MudGenrePicker — PR B). *@
 
 @inject WorkEditDialogViewModel VM
-@inject ISnackbar Snackbar
 
 <MudDialog>
     <DialogContent>
+        @if (VM.Error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@VM.Error</MudAlert>
+        }
         @if (VM.NotFound)
         {
             <MudAlert Severity="Severity.Warning">Work not found.</MudAlert>
@@ -77,12 +80,7 @@
         saving = true;
         try
         {
-            await VM.SaveAsync();
-            MudDialog.Close(DialogResult.Ok(true));
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Couldn't save: {ex.Message}", Severity.Error);
+            if (await VM.SaveAsync()) MudDialog.Close(DialogResult.Ok(true));
         }
         finally
         {

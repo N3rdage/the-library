@@ -81,7 +81,7 @@ public class LoansViewModelTests
 
         await _dispatcher.Received(1).Send(new ReturnLoan(2, Today), Arg.Any<CancellationToken>());
         Assert.Equal(new[] { 3 }, vm.Groups.Single(g => g.BorrowerName == "Sam").Loans.Select(l => l.LoanId));
-        Assert.Null(vm.ErrorMessage);
+        Assert.Null(vm.Error);
         Assert.Empty(vm.ReturningLoanIds);
         // No reload: the open-loans query ran once, for the initial load.
         await _dispatcher.Received(1).Query(Arg.Any<GetOpenLoans>(), Arg.Any<CancellationToken>());
@@ -107,7 +107,7 @@ public class LoansViewModelTests
 
         await vm.ReturnAsync(1);
 
-        Assert.Equal("This loan has already been returned.", vm.ErrorMessage);
+        Assert.Equal("This loan has already been returned.", vm.Error);
         Assert.Equal(new[] { "Sam" }, vm.Groups.Select(g => g.BorrowerName));
         Assert.Empty(vm.ReturningLoanIds);
         await _dispatcher.Received(2).Query(Arg.Any<GetOpenLoans>(), Arg.Any<CancellationToken>());
@@ -123,7 +123,7 @@ public class LoansViewModelTests
 
         await vm.ReturnAsync(1);
 
-        Assert.False(string.IsNullOrEmpty(vm.ErrorMessage));
+        Assert.False(string.IsNullOrEmpty(vm.Error));
         Assert.Empty(vm.Groups);
         await _dispatcher.Received(2).Query(Arg.Any<GetOpenLoans>(), Arg.Any<CancellationToken>());
     }

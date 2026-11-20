@@ -2,10 +2,13 @@
    IsNew picks between flows. Fields: condition, date acquired, notes. *@
 
 @inject CopyFormDialogViewModel VM
-@inject ISnackbar Snackbar
 
 <MudDialog>
     <DialogContent>
+        @if (VM.Error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@VM.Error</MudAlert>
+        }
         @if (VM.NotFound)
         {
             <MudAlert Severity="Severity.Warning">Copy not found.</MudAlert>
@@ -81,10 +84,6 @@
         {
             var id = await VM.SaveAsync();
             if (id is int) MudDialog.Close(DialogResult.Ok(id));
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Couldn't save: {ex.Message}", Severity.Error);
         }
         finally
         {

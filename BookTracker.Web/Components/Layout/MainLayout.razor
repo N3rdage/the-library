@@ -10,7 +10,6 @@
    theme/popover/dialog/snackbar. Harmless for Bootstrap-only pages. *@
 <MudThemeProvider Theme="BookTrackerTheme.Default" />
 <MudPopoverProvider />
-<MudDialogProvider />
 <MudSnackbarProvider />
 
 <header>
@@ -79,7 +78,26 @@
 </header>
 <div class="container">
     <main role="main" class="pb-3">
-        @Body
+        @* Dialogs render in the provider, so it sits inside the boundary: a
+           fault in a dialog reaches the boundary too. *@
+        <PageErrorBoundary @ref="errorBoundary">
+            <ChildContent>
+                <MudDialogProvider />
+                @Body
+            </ChildContent>
+            <ErrorContent Context="ex">
+                @{ var message = ErrorMessageMapper.Map(ex); }
+                <div class="alert alert-danger" role="alert">
+                    <h1 class="h4">@message.Title</h1>
+                    <p>@message.Body</p>
+                    @if (errorBoundary?.TraceId is { } traceId)
+                    {
+                        <p class="small mb-3">Trace ID: <code>@traceId</code></p>
+                    }
+                    <button type="button" class="btn btn-primary" @onclick="() => errorBoundary?.Recover()">Recover</button>
+                </div>
+            </ErrorContent>
+        </PageErrorBoundary>
     </main>
 </div>
 
@@ -105,6 +123,8 @@
 </div>
 
 @code {
+    private PageErrorBoundary? errorBoundary;
+
     protected override void OnInitialized()
     {
         // Close the mobile Bootstrap navbar collapse on every navigation.
@@ -115,6 +135,8 @@
 
     private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
+        // Moving to another page clears a fault shown by the boundary.
+        await InvokeAsync(() => errorBoundary?.Recover());
         try { await JS.InvokeVoidAsync("NavbarCollapse.close"); }
         catch (JSDisconnectedException) { /* circuit tearing down — nothing to do */ }
         catch (TaskCanceledException) { /* ditto */ }

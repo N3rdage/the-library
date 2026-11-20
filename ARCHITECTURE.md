@@ -127,6 +127,8 @@ TODO #55):
 - **Razor components** are thin views that inject a VM and bind to its properties. UI concerns only: JS interop, navigation, Blazor lifecycle.
 - **Services** handle only external concerns: ISBN lookup (Open Library / Google Books / Trove), the LLM calls behind the AI features, and cover storage. They hold no library reads: a service that needs library facts dispatches a query through `IDispatcher`, as a ViewModel does. Merges are commands (see below).
 
+How a failure reaches the user: a ViewModel that dispatches commands derives from `DispatchingViewModel` and routes each dispatch through its `DispatchAsync`. A `DomainRuleException` or `NotFoundException` is an expected outcome, so `DispatchAsync` clears `Error` at the start of each attempt, catches those two, sets `Error` to the message the domain wrote and returns false (or the default result); the component renders `Error` where the user acted. Any other exception is a fault and propagates to `PageErrorBoundary`, the single `ErrorBoundary` around the page body and `MudDialogProvider` in `MainLayout.razor`: it logs the exception with a trace id, shows the `ErrorMessageMapper` title and body with that id and a Recover button, and keeps the circuit alive. Navigating to another page recovers it. `/Error` remains for failures outside a circuit.
+
 VM lifetime:
 - **Transient**: most VMs — each component instance gets its own.
 - **Scoped**: `AIAssistantViewModel` and `IAIAssistantService` — shared across the Blazor circuit so the call counter and prompt cache persist per session.
