@@ -44,11 +44,11 @@ Acknowledged costs: Apple Developer account ($99/yr) + a Mac in the build path f
 │                                     │    │                              │
 │  • MSAL (AAD interactive sign-in)   │───▶│  • /api/catalog-snapshot     │
 │  • HttpClient + bearer token        │    │  • /api/wishlist-snapshot    │
-│  • SQLite local cache (catalog +    │    │                              │
-│    wishlist + series)               │    │  • Easy Auth (token-aud      │
-│  • ZXing.Net.Maui scanner           │    │     mode, accepts the        │
-│  • Tabs: Find / Wishlist / Gaps     │    │     mobile audience)         │
-│    (+ status sheet)                 │    │                              │
+│  • SQLite local cache (catalog +    │    │  • /api/online/* (isbn,      │
+│    wishlist + series)               │    │    author-works, editions)   │
+│  • ZXing.Net.Maui scanner           │    │  • Easy Auth (token-aud      │
+│  • Tabs: Find / Wishlist / Gaps     │    │     mode, accepts the        │
+│    (+ status sheet)                 │    │     mobile audience)         │
 └─────────────────────────────────────┘    └──────────────────────────────┘
 ```
 
@@ -67,7 +67,7 @@ What IS needed is one-time AAD-side setup (manual Azure Portal click-ops; runboo
 Then in MAUI:
 
 4. **MSAL.NET** (`Microsoft.Identity.Client`; `MainActivity` forwards the sign-in result to MSAL) does the interactive sign-in once via Chrome Custom Tabs, refresh-token from then on. Tokens stay in MSAL.NET's own built-in mobile cache in the app's private storage; the app adds no cache serializer and does not use `SecureStorage`. MSAL.NET's documentation calls that mechanism secure but does not say whether it is encrypted at rest, so the cache is treated as protected by the app sandbox rather than by the Keystore. `Platforms/Android/AndroidManifest.xml` sets `android:allowBackup="false"`, so the app's data, the token cache included, is left out of Android's cloud Auto Backup. The manifest declares no data-extraction rules, and on Android 12 and later `allowBackup` does not govern device-to-device transfer.
-5. **`ApiClient`** acquires a token silently before each request, falls back to interactive sign-in when silent acquisition returns none, and attaches `Authorization: Bearer <token>`. A 401 response is not handled specially: `EnsureSuccessStatusCode` throws and the caller shows the failure.
+5. **`ApiClient`** acquires a token silently before each request, falls back to interactive sign-in when silent acquisition returns none, and attaches `Authorization: Bearer <token>`. For the two snapshot calls (`GetAuthorisedAsync`), a 401 means the API rejected the cached token: the cached account is signed out, `SignInAsync` goes interactive, and the request is retried exactly once with the new token; a second 401, or any other failure status, throws from `EnsureSuccessStatusCode` and the caller shows the failure. The three online calls treat any non-success status or exception as "no online answer" and return null, so the page keeps its offline answer.
 
 The browser flow on `/bookshop` keeps working through the same cookie-mode Easy Auth until that route is retired.
 
@@ -75,6 +75,9 @@ The browser flow on `/bookshop` keeps working through the same cookie-mode Easy 
 
 - `GET /api/catalog-snapshot` — books, authors, series; consumed by `/bookshop` and Bookshelf. `BookSnapshot` carries `seriesId` + `seriesOrder` and `CatalogSnapshot` has a top-level `series` array (id, name, type, expectedCount), which enables the "missing books in series" view client-side.
 - `GET /api/wishlist-snapshot` — wishlist rows (id, title, author, isbn, priority, seriesId, seriesOrder). Read-only.
+- `GET /api/online/isbn/{isbn}` — an ISBN the phone does not own, resolved by Bookcase against its provider chain; `ResultPage` calls it on a cache miss while online.
+- `GET /api/online/author-works?author=<name>` — an author's online bibliography; `AuthorWorksPage` calls it while online.
+- `GET /api/online/work-editions?workKey=<key>` — the editions of a work; `ResultPage` calls it for the other-editions row.
 - "Favourite authors" — there is no favourites model, and Bookshelf has no favourites view. The nearest thing is Bookcase's top-10 authors card on the `/` dashboard.
 
 Deferred to v2 if the use case actually surfaces:

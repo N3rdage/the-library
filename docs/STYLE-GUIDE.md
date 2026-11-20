@@ -5,7 +5,7 @@ Visual and interaction conventions covering both surfaces of the product:
 - **Web** — `BookTracker.Web` (Blazor Web App, MudBlazor + Bootstrap holdouts during the convert-as-we-touch migration).
 - **Mobile** — `BookTracker.Mobile` (.NET MAUI Android companion).
 
-This document **describes** what's already in the code. The canonical source of truth for theme values is `BookTracker.Web/Theme/BookTrackerTheme.cs` for Web and the design tokens in `BookTracker.Mobile/Resources/Styles/Colors.xaml` for Mobile, with the semantic styles built on them in `Resources/Styles/Styles.xaml` (the Mobile values mirror the Web values manually — see [Known inconsistencies](#known-inconsistencies) for the long-term plan to close that gap). When something here disagrees with the code, the code wins; the doc was the one that got stale.
+This document **describes** what's already in the code. The canonical source of truth for theme values is `BookTracker.Web/Theme/BookTrackerTheme.cs` for Web and the design tokens in `BookTracker.Mobile/Resources/Styles/Colors.xaml` for Mobile, with the semantic styles built on them in `Resources/Styles/Styles.xaml` (the Mobile values mirror the Web values manually — see [Known inconsistencies](#known-inconsistencies) for the long-term plan to close that gap). When something here disagrees with the code, the code wins.
 
 **Update convention.** When a UI change introduces a new colour, font size, spacing value, component pattern, or layout shape — update this doc in the same PR. The `convert-as-we-touch` discipline applies here too: don't pre-emptively rewrite the doc to match a future ideal; do update it when you're touching the thing it describes.
 
@@ -60,7 +60,7 @@ Deliberately muted so they sit inside the palette rather than shouting over it. 
 
 Each app's launcher icon is its own brand mark, deliberately distinct from the in-app palette so a phone with both apps installed reads them as different things at a glance.
 
-**Bookcase PWA** uses Material You purple — a holdover from before the leather palette was settled. **These two values are intentionally outside the in-app palette** — they live only in the Web icon SVG and the PWA manifest `theme_color`.
+**Bookcase PWA** uses Material You purple, which is not part of the leather palette. **These two values are intentionally outside the in-app palette** — they live only in the Web icon SVG and the PWA manifest `theme_color`.
 
 | Name | Hex | Where |
 |---|---|---|
@@ -389,7 +389,7 @@ The honest version: not everything is consistent yet. These are the gaps the doc
 
 ### Brand-mark purple vs in-app leather palette
 
-The Bookcase PWA launcher icon and `theme_color` use Material You purple (`#6750A4` / `#4F378B`) — a holdover from before the leather/brass palette was decided for the in-app UI. Tap the purple icon, land on a parchment-and-leather screen: not visually continuous.
+The Bookcase PWA launcher icon and `theme_color` use Material You purple (`#6750A4` / `#4F378B`), which is outside the leather/brass palette of the in-app UI. Tap the purple icon, land on a parchment-and-leather screen: not visually continuous.
 
 **Bookshelf MAUI uses the in-app palette** for its launcher icon (espresso bg + brass spine + parchment text lines), so two purple icons don't sit side by side in the launcher. Bookshelf is consistent end-to-end; Bookcase has the purple gap.
 
