@@ -221,7 +221,7 @@ public class GetCatalogSnapshotHandlerTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
-            var foundationSeries = new Series { Name = "Foundation", Type = SeriesType.Series, ExpectedCount = 7 };
+            var foundationSeries = TestSeries.Series("Foundation", SeriesType.Series, expectedCount: 7);
             db.Series.Add(foundationSeries);
             await db.SaveChangesAsync();
 
@@ -261,7 +261,7 @@ public class GetCatalogSnapshotHandlerTests
         {
             var sanderson = Author.Create("Brandon Sanderson");
             db.Authors.Add(sanderson);
-            var stormlight = new Series { Name = "The Stormlight Archive", Type = SeriesType.Series, ExpectedCount = 5 };
+            var stormlight = TestSeries.Series("The Stormlight Archive", SeriesType.Series, expectedCount: 5);
             db.Series.Add(stormlight);
             await db.SaveChangesAsync();
 
@@ -297,7 +297,7 @@ public class GetCatalogSnapshotHandlerTests
         {
             var author = Author.Create("Andrzej Sapkowski");
             db.Authors.Add(author);
-            var witcher = new Series { Name = "The Witcher", Type = SeriesType.Series, ExpectedCount = 8 };
+            var witcher = TestSeries.Series("The Witcher", SeriesType.Series, expectedCount: 8);
             db.Series.Add(witcher);
             await db.SaveChangesAsync();
             seriesId = witcher.Id;
@@ -337,8 +337,8 @@ public class GetCatalogSnapshotHandlerTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
-            var foundation = new Series { Name = "Foundation", Type = SeriesType.Series, ExpectedCount = 7 };
-            var emptySeries = new Series { Name = "Empire of Light", Type = SeriesType.Series, ExpectedCount = 3 };
+            var foundation = TestSeries.Series("Foundation", SeriesType.Series, expectedCount: 7);
+            var emptySeries = TestSeries.Series("Empire of Light", SeriesType.Series, expectedCount: 3);
             db.Series.AddRange(foundation, emptySeries);
             await db.SaveChangesAsync();
 
@@ -446,7 +446,7 @@ public class GetCatalogSnapshotHandlerTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
-            db.Series.Add(new Series { Name = "Foundation", Type = SeriesType.Series, ExpectedCount = 7 });
+            db.Series.Add(TestSeries.Series("Foundation", SeriesType.Series, expectedCount: 7));
             db.Books.Add(TestBooks.Book("Foundation", works: [TestWorks.Work("Foundation", asimov)]));
             await db.SaveChangesAsync();
         }

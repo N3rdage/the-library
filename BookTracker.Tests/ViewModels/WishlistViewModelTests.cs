@@ -133,12 +133,7 @@ public class WishlistViewModelTests
         int wishlistId;
         using (var db = _factory.CreateDbContext())
         {
-            var item = new WishlistItem
-            {
-                Title = "Foundation",
-                Author = "Asimov",
-                Isbns = [new WishlistItemIsbn { Isbn = "9780553293357" }],
-            };
+            var item = TestWishlistItems.Item("Foundation", "Asimov", isbns: ["9780553293357"]);
             db.WishlistItems.Add(item);
             await db.SaveChangesAsync();
             wishlistId = item.Id;
@@ -461,7 +456,7 @@ public class WishlistViewModelTests
         int seriesId;
         using (var db = _factory.CreateDbContext())
         {
-            var series = new Series { Name = "Foundation", Author = "Isaac Asimov", Type = SeriesType.Series, ExpectedCount = 7 };
+            var series = TestSeries.Series("Foundation", SeriesType.Series, author: "Isaac Asimov", expectedCount: 7);
             db.Series.Add(series);
             await db.SaveChangesAsync();
             seriesId = series.Id;
@@ -490,17 +485,12 @@ public class WishlistViewModelTests
         int seriesId;
         using (var db = _factory.CreateDbContext())
         {
-            var series = new Series { Name = "Foundation", Type = SeriesType.Series, ExpectedCount = 7 };
+            var series = TestSeries.Series("Foundation", SeriesType.Series, expectedCount: 7);
             db.Series.Add(series);
             await db.SaveChangesAsync();
             seriesId = series.Id;
-            db.WishlistItems.Add(new WishlistItem
-            {
-                Title = "Foundation #4",
-                Author = "Asimov",
-                SeriesId = seriesId,
-                SeriesOrder = 4,
-            });
+            db.WishlistItems.Add(TestWishlistItems.Item(
+                "Foundation #4", "Asimov", seriesId: seriesId, seriesOrder: 4));
             await db.SaveChangesAsync();
         }
 
@@ -523,7 +513,7 @@ public class WishlistViewModelTests
         int seriesId;
         using (var db = _factory.CreateDbContext())
         {
-            var series = new Series { Name = "Mystery Series", Type = SeriesType.Series, ExpectedCount = 5, Author = null };
+            var series = TestSeries.Series("Mystery Series", SeriesType.Series, author: null, expectedCount: 5);
             db.Series.Add(series);
             await db.SaveChangesAsync();
             seriesId = series.Id;
@@ -556,7 +546,7 @@ public class WishlistViewModelTests
         using (var db = _factory.CreateDbContext())
         {
             var author = Author.Create("Brandon Sanderson");
-            var series = new Series { Name = "The Stormlight Archive", Author = "Brandon Sanderson", Type = SeriesType.Series, ExpectedCount = 5 };
+            var series = TestSeries.Series("The Stormlight Archive", SeriesType.Series, author: "Brandon Sanderson", expectedCount: 5);
             foreach (var (order, display) in new (int?, string?)[] { (1, null), (2, null), (3, null), (5, null), (4, "4.5") })
             {
                 var work = TestWorks.Work($"Work {display ?? order?.ToString()}", author);
@@ -591,7 +581,7 @@ public class WishlistViewModelTests
         using (var db = _factory.CreateDbContext())
         {
             var author = Author.Create("Andrzej Sapkowski");
-            var witcher = new Series { Name = "The Witcher", Author = "Andrzej Sapkowski", Type = SeriesType.Series, ExpectedCount = 3 };
+            var witcher = TestSeries.Series("The Witcher", SeriesType.Series, author: "Andrzej Sapkowski", expectedCount: 3);
             db.Series.Add(witcher);
             await db.SaveChangesAsync();
             seriesId = witcher.Id;
@@ -629,7 +619,7 @@ public class WishlistViewModelTests
         using (var db = _factory.CreateDbContext())
         {
             var author = Author.Create("Terry Pratchett");
-            var discworld = new Series { Name = "Discworld", Author = "Terry Pratchett", Type = SeriesType.Series, ExpectedCount = null };
+            var discworld = TestSeries.Series("Discworld", SeriesType.Series, author: "Terry Pratchett", expectedCount: null);
             db.Series.Add(discworld);
             await db.SaveChangesAsync();
 
@@ -660,7 +650,7 @@ public class WishlistViewModelTests
         // OpenSeriesList — the user has nothing to extrapolate from.
         using (var db = _factory.CreateDbContext())
         {
-            db.Series.Add(new Series { Name = "Empty Series", Type = SeriesType.Series, ExpectedCount = null });
+            db.Series.Add(TestSeries.Series("Empty Series", SeriesType.Series, expectedCount: null));
             await db.SaveChangesAsync();
         }
 

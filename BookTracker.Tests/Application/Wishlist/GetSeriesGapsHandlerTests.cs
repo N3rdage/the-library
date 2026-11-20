@@ -26,7 +26,7 @@ public class GetSeriesGapsHandlerTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            var foundation = new Series { Name = "Foundation", Author = "Isaac Asimov", Type = SeriesType.Series, ExpectedCount = 5 };
+            var foundation = TestSeries.Series("Foundation", SeriesType.Series, author: "Isaac Asimov", expectedCount: 5);
             db.Series.Add(foundation);
             // Added out of order so the owned-books ordering is the handler's, not insert order.
             db.Books.AddRange(
@@ -55,7 +55,7 @@ public class GetSeriesGapsHandlerTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            var s = new Series { Name = "Dune", Type = SeriesType.Series, ExpectedCount = 4 };
+            var s = TestSeries.Series("Dune", SeriesType.Series, expectedCount: 4);
             db.Series.Add(s);
             db.Books.AddRange(
                 NewBook(s, "Dune", 1),
@@ -77,9 +77,9 @@ public class GetSeriesGapsHandlerTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            var complete = new Series { Name = "Complete", Type = SeriesType.Series, ExpectedCount = 2 };
-            var collection = new Series { Name = "Collection", Type = SeriesType.Collection, ExpectedCount = 3 };
-            var partial = new Series { Name = "Partial", Type = SeriesType.Series, ExpectedCount = 2 };
+            var complete = TestSeries.Series("Complete", SeriesType.Series, expectedCount: 2);
+            var collection = TestSeries.Series("Collection", SeriesType.Collection, expectedCount: 3);
+            var partial = TestSeries.Series("Partial", SeriesType.Series, expectedCount: 2);
             db.Series.AddRange(complete, collection, partial);
             var deleted = NewBook(partial, "Tombstoned #2", 2);
             deleted.SoftDelete();
@@ -106,8 +106,8 @@ public class GetSeriesGapsHandlerTests
         using (var db = _factory.CreateDbContext())
         {
             db.Series.AddRange(
-                new Series { Name = "Zelazny Amber", Type = SeriesType.Series, ExpectedCount = 2 },
-                new Series { Name = "Asimov Robots", Type = SeriesType.Series, ExpectedCount = 3 });
+                TestSeries.Series("Zelazny Amber", SeriesType.Series, expectedCount: 2),
+                TestSeries.Series("Asimov Robots", SeriesType.Series, expectedCount: 3));
             await db.SaveChangesAsync();
         }
 
@@ -124,10 +124,10 @@ public class GetSeriesGapsHandlerTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            var discworld = new Series { Name = "Discworld", Author = "Terry Pratchett", Type = SeriesType.Series };
-            var culture = new Series { Name = "Culture", Type = SeriesType.Series };
-            var empty = new Series { Name = "Empty Open", Type = SeriesType.Series };
-            var openCollection = new Series { Name = "Open Collection", Type = SeriesType.Collection };
+            var discworld = TestSeries.Series("Discworld", SeriesType.Series, author: "Terry Pratchett");
+            var culture = TestSeries.Series("Culture", SeriesType.Series);
+            var empty = TestSeries.Series("Empty Open", SeriesType.Series);
+            var openCollection = TestSeries.Series("Open Collection", SeriesType.Collection);
             db.Series.AddRange(discworld, culture, empty, openCollection);
             db.Books.AddRange(
                 NewBook(discworld, "Mort", 4),
@@ -160,7 +160,7 @@ public class GetSeriesGapsHandlerTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            var s = new Series { Name = "Ghost", Type = SeriesType.Series };
+            var s = TestSeries.Series("Ghost", SeriesType.Series);
             db.Series.Add(s);
             var b = NewBook(s, "Gone", 1);
             b.SoftDelete();

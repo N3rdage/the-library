@@ -26,11 +26,9 @@ public class GetSeriesDetailHandlerTests
         int seriesId;
         using (var db = _factory.CreateDbContext())
         {
-            var series = new Series
-            {
-                Name = "Foundation", Author = "Isaac Asimov", Type = SeriesType.Series,
-                ExpectedCount = 7, Description = "Psychohistory",
-            };
+            var series = TestSeries.Series(
+                "Foundation", SeriesType.Series, author: "Isaac Asimov",
+                expectedCount: 7, description: "Psychohistory");
             var asimov = Author.Create("Isaac Asimov");
             Book B(string title, int? order, string? display = null) => TestBooks.Book(
                 title, series: series, seriesOrder: order, seriesOrderDisplay: display,
@@ -70,7 +68,7 @@ public class GetSeriesDetailHandlerTests
         int seriesId;
         using (var db = _factory.CreateDbContext())
         {
-            var series = new Series { Name = "Pendergast", Type = SeriesType.Series };
+            var series = TestSeries.Series("Pendergast", SeriesType.Series);
             var preston = Author.Create("Douglas Preston");
             var child = Author.Create("Lincoln Child");
             var editor = Author.Create("Ed Itor");
@@ -105,7 +103,7 @@ public class GetSeriesDetailHandlerTests
         int seriesId;
         using (var db = _factory.CreateDbContext())
         {
-            var series = new Series { Name = "Discworld", Type = SeriesType.Series };
+            var series = TestSeries.Series("Discworld", SeriesType.Series);
             db.Books.AddRange(
                 TestBooks.Book("Mort", series: series, seriesOrder: 4),
                 TestBooks.Book("Gone", series: series, seriesOrder: 5, deletedAt: DateTime.UtcNow));

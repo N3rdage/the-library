@@ -51,7 +51,7 @@ public class AiQueryHandlerTests
         {
             var gaiman = Author.Create("Neil Gaiman");
             var pratchett = Author.Create("Terry Pratchett");
-            var series = new Series { Name = "Discworld", Type = SeriesType.Series };
+            var series = TestSeries.Series("Discworld", SeriesType.Series);
             var omens = TestBooks.Book(
                 "Good Omens",
                 works: [TestWorks.Work("Good Omens", authorships: [TestWorks.Authorship(pratchett), TestWorks.Authorship(gaiman, 1)])]);
@@ -113,8 +113,8 @@ public class AiQueryHandlerTests
             var asimov = Author.Create("Isaac Asimov");
             var leGuin = Author.Create("Ursula K. Le Guin");
             // Added out of name order: the gaps come back in GetSeriesGaps' name order.
-            var zeta = new Series { Name = "Zeta", Type = SeriesType.Series, ExpectedCount = 2 };
-            var foundation = new Series { Name = "Foundation", Author = "Isaac Asimov", Type = SeriesType.Series, ExpectedCount = 3 };
+            var zeta = TestSeries.Series("Zeta", SeriesType.Series, expectedCount: 2);
+            var foundation = TestSeries.Series("Foundation", SeriesType.Series, author: "Isaac Asimov", expectedCount: 3);
             db.Series.AddRange(zeta, foundation);
             var interquel = NewBook("Interlude", asimov, 2, foundation, 2);
             interquel.SetSeriesOrder(2, "2.5");

@@ -15,7 +15,7 @@ public class SeriesCommandHandlersTests
     private async Task<int> SeedSeriesAsync(string name = "Discworld", SeriesType type = SeriesType.Series)
     {
         await using var db = _factory.CreateDbContext();
-        var s = new Series { Name = name, Type = type };
+        var s = TestSeries.Series(name, type);
         db.Series.Add(s);
         await db.SaveChangesAsync();
         return s.Id;
