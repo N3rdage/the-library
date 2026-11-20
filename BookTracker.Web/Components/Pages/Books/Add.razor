@@ -7,7 +7,14 @@
 
 <PageTitle>Add a book - Bookcase</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-3">Add a book</MudText>
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+    <MudText Typo="Typo.h4">Add a book</MudText>
+    <MudIconButton Icon="@Icons.Material.Outlined.HelpOutline"
+                   Size="Size.Small"
+                   aria-label="Help"
+                   title="Help: adding a book"
+                   OnClick="ShowHelpAsync" />
+</MudStack>
 
 <EditForm Model="this" OnValidSubmit="SaveAsync" FormName="addBook">
     <DataAnnotationsValidator />
@@ -527,6 +534,10 @@
         VM.IsCollection = newValue;
         await InvokeAsync(StateHasChanged);
     }
+
+    private Task ShowHelpAsync() => DialogService.ShowAsync<HelpDialog>(
+        HelpDialog.TitleFor(HelpTopic.AddBook),
+        new DialogParameters<HelpDialog> { { x => x.Topic, HelpTopic.AddBook } });
 
     private async Task LookupAsync()
     {
