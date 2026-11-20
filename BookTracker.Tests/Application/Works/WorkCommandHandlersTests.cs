@@ -338,7 +338,7 @@ public class WorkCommandHandlersTests
             var horror = new Genre { Name = "Horror" };
             db.Genres.AddRange(fantasy, horror);
             var work = await db.Works.Include(w => w.Genres).FirstAsync(w => w.Id == workId);
-            work.Genres.Add(fantasy); // starts with Fantasy
+            work.SetGenres([fantasy]); // starts with Fantasy
             await db.SaveChangesAsync();
             horrorId = horror.Id;
         }

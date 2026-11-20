@@ -917,7 +917,7 @@ public class BookDetailViewModelTests
         Assert.All(christies, w =>
         {
             Assert.Single(w.WorkAuthors);
-            Assert.Equal("Agatha Christie", w.WorkAuthors[0].Author.Name);
+            Assert.Equal("Agatha Christie", w.WorkAuthors.Single().Author.Name);
         });
     }
 
@@ -1102,8 +1102,7 @@ public class BookDetailViewModelTests
         using var verify = factory.CreateDbContext();
         var work = await verify.Works.Include(w => w.Books).FirstOrDefaultAsync(w => w.Id == workId);
         Assert.NotNull(work);
-        Assert.Single(work!.Books);
-        Assert.Equal(otherBookId, work.Books[0].Id);
+        Assert.Equal(otherBookId, Assert.Single(work!.Books).Id);
     }
 
     [Fact]

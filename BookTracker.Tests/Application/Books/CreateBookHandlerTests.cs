@@ -107,7 +107,7 @@ public class CreateBookHandlerTests
         Assert.All(saved.Works, w =>
         {
             Assert.Single(w.WorkAuthors);
-            Assert.Equal("Stephen King", w.WorkAuthors[0].Author.Name);
+            Assert.Equal("Stephen King", w.WorkAuthors.Single().Author.Name);
         });
         // One shared Author row, not one per work.
         Assert.Equal(1, await db.Authors.CountAsync(a => a.Name == "Stephen King"));

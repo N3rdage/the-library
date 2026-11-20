@@ -180,11 +180,11 @@ outside writes to their contents until the collections slice (E6) encapsulates t
   detached seed to its parent through them; `BookTracker.Application` cannot set them.
 - `Work`'s scalar fields and `WorkAuthor` rows are written only through `Work`'s methods (`Create`,
   `UpdateDetails`, `SetFirstPublished`, `FillBlanksFrom`, `SetGenres`, `AssignAuthorship`,
-  `AppearsIn`, `RemoveFrom`), and the compiler enforces it: the scalar setters are private (`Id`
-  stays public, as on `Book`), and `WorkAuthor.Order` and `Role` are set only by `AssignAuthorship`.
-  `Work`'s collections have private setters, but their contents are still added to from outside
-  (`MergeWorks` adds genres, `Book.AttachWork` adds the link) until the collections slice
-  encapsulates them, as with `Book`'s collections. Each has a private parameterless constructor for EF and an
+  `AdoptGenresFrom`, `AppearsIn`, `RemoveFrom`, `LeaveAllBooks`), and the compiler enforces it: the
+  scalar setters are private (`Id` stays public, as on `Book`), and `WorkAuthor.Order` and `Role`
+  are set only by `AssignAuthorship`. `Work`'s collections (`WorkAuthors`, `Authors`, `Genres`,
+  `Books`, `BookWorks`) are `IReadOnlyCollection<T>` over private backing fields; `Book.AttachWork`
+  adds the join row to the Work's end through the internal `AddBookWork`. Each has a private parameterless constructor for EF and an
   internal one that stores the values as given, used by the tests' seed builder `TestWorks` (and,
   for `WorkAuthor`, by `AssignAuthorship`).
 - `Series`' fields are written only through `Create` and `UpdateDetails`, which keep the

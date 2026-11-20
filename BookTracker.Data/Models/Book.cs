@@ -249,7 +249,7 @@ public class Book
         var next = BookWorks.Count == 0 ? 0 : BookWorks.Max(bw => bw.Order) + 1;
         var link = new BookWork { Book = this, Work = work, Order = next };
         BookWorks.Add(link);
-        work.BookWorks.Add(link);
+        work.AddBookWork(link);
         return true;
     }
 
