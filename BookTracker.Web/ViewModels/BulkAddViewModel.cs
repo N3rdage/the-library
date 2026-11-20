@@ -16,7 +16,7 @@ public class BulkAddViewModel(
     SeriesMatchService seriesMatch,
     AIProviderFactory providerFactory,
     ILogger<BulkAddViewModel> logger,
-    IDispatcher dispatcher)
+    IDispatcher dispatcher) : DispatchingViewModel
 {
     /// <summary>
     /// Callback for the component to marshal state changes back to the UI thread.
@@ -135,16 +135,18 @@ public class BulkAddViewModel(
             await OnStateChanged();
     }
 
-    public async Task AcceptRowAsync(DiscoveryRow row)
+    // A row leaves the grid only once its save succeeded; a refused save keeps
+    // the row and sets Error.
+    public async Task<bool> AcceptRowAsync(DiscoveryRow row)
     {
-        await SaveBookAsync(row, followUp: false);
+        if (!await SaveBookAsync(row, followUp: false)) return false;
         Rows.Remove(row);
+        return true;
     }
 
     public async Task FollowUpRowAsync(DiscoveryRow row)
     {
-        await SaveBookAsync(row, followUp: true);
-        Rows.Remove(row);
+        if (await SaveBookAsync(row, followUp: true)) Rows.Remove(row);
     }
 
     public async Task FollowUpNotFoundAsync(DiscoveryRow row)
@@ -153,8 +155,7 @@ public class BulkAddViewModel(
         {
             row.Title = $"Unknown book — {row.Isbn}";
         }
-        await SaveBookAsync(row, followUp: true);
-        Rows.Remove(row);
+        if (await SaveBookAsync(row, followUp: true)) Rows.Remove(row);
     }
 
     public async Task AcceptAllFoundAsync()
@@ -162,11 +163,11 @@ public class BulkAddViewModel(
         var pending = Rows.Where(r => r.Status == RowStatus.Found && r.Action == RowAction.Pending && !r.IsDuplicate).ToList();
         foreach (var row in pending)
         {
-            await AcceptRowAsync(row);
+            if (!await AcceptRowAsync(row)) return;
         }
     }
 
-    private async Task SaveBookAsync(DiscoveryRow row, bool followUp)
+    private async Task<bool> SaveBookAsync(DiscoveryRow row, bool followUp)
     {
         IReadOnlyList<string> tagNames = followUp ? [FollowUpTag] : [];
 
@@ -176,10 +177,11 @@ public class BulkAddViewModel(
         // second one's saved the first row may have already been accepted
         // and inserted the Edition — in which case we want to add a Copy,
         // not crash on the unique-ISBN constraint.
-        if (!string.IsNullOrWhiteSpace(row.Isbn)
-            && await dispatcher.Send(new AddScannedCopy(row.Isbn, tagNames)) is not null)
+        if (!string.IsNullOrWhiteSpace(row.Isbn))
         {
-            return;
+            var addedCopy = await DispatchAsync(() => dispatcher.Send(new AddScannedCopy(row.Isbn, tagNames)));
+            if (Error is not null) return false;
+            if (addedCopy is not null) return true;
         }
 
         var bookTitle = (row.Title ?? $"Unknown book — {row.Isbn}").Trim();
@@ -190,7 +192,7 @@ public class BulkAddViewModel(
         var authorNames = AuthorResolver.ParseNames(row.Author);
         if (authorNames.Count == 0) authorNames = ["Unknown"];
 
-        await dispatcher.Send(new CreateBook(
+        await DispatchAsync(() => dispatcher.Send(new CreateBook(
             new NewBook(bookTitle, BookCategory.Fiction, BookStatus.Unread, 0, null, row.CoverUrl),
             new SingleWork(bookTitle, row.Subtitle, null, DatePrecision.Day, authorNames, [], row.Genres.Select(g => g.Id).ToList()),
             new NewEdition(
@@ -208,7 +210,8 @@ public class BulkAddViewModel(
             row.SeriesSuggestionAccepted
                 ? new SeriesChoice(row.AcceptedSeriesId, row.AcceptedSeriesName, row.AcceptedSeriesOrderLabel)
                 : new SeriesChoice(null, null, null),
-            tagNames));
+            tagNames)));
+        return Error is null;
     }
 
     /// <summary>

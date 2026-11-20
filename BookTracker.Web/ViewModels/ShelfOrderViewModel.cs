@@ -5,7 +5,7 @@ namespace BookTracker.Web.ViewModels;
 
 // Display VM for /shelf-order: dispatches GetShelfOrder and formats each row's
 // trailing detail. The grouping and order are decided in Application.
-public class ShelfOrderViewModel(IDispatcher dispatcher)
+public class ShelfOrderViewModel(IDispatcher dispatcher) : DispatchingViewModel
 {
     public bool Loading { get; private set; } = true;
     public ShelfOrderView? View { get; private set; }

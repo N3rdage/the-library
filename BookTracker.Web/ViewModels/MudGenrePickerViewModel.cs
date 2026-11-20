@@ -11,7 +11,7 @@ namespace BookTracker.Web.ViewModels;
 // full genre catalog and the search/projection helpers; selection
 // state is owned by the component (passed in as a parameter, kept
 // in sync via a callback).
-public class MudGenrePickerViewModel(IDispatcher dispatcher)
+public class MudGenrePickerViewModel(IDispatcher dispatcher) : DispatchingViewModel
 {
     public List<GenreRow> AllGenres { get; private set; } = [];
     private Dictionary<int, GenreRow> _byId = [];

@@ -31,6 +31,8 @@
                   Class="mb-3">@VM.SuccessMessage</MudAlert>
     }
 
+    <ActionError Message="@VM.Error" />
+
     @if (VM.Loading)
     {
         <MudStack AlignItems="AlignItems.Center" Class="py-5">

@@ -8,7 +8,7 @@ namespace BookTracker.Web.ViewModels;
 // View model for Home: the dashboard counts and top-10 lists, plus the "Due
 // back" panel (GetDueBack). "Today" is the owner's calendar date from
 // LoanDates, so the overdue flag agrees with /loans.
-public class HomeViewModel(IDispatcher dispatcher, TimeProvider clock)
+public class HomeViewModel(IDispatcher dispatcher, TimeProvider clock) : DispatchingViewModel
 {
     public int TotalBooks { get; private set; }
     public int TotalAuthors { get; private set; }

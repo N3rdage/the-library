@@ -4,7 +4,7 @@ using BookTracker.Data.Models;
 
 namespace BookTracker.Web.ViewModels;
 
-public class SeriesListViewModel(IDispatcher dispatcher)
+public class SeriesListViewModel(IDispatcher dispatcher) : DispatchingViewModel
 {
     public bool Loading { get; private set; } = true;
     public IReadOnlyList<SeriesListItem> AllSeries { get; private set; } = [];
