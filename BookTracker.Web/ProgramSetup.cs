@@ -173,6 +173,9 @@ public static class ProgramSetup
         // "once" (see WarmupEndpoints).
         builder.Services.AddSingleton<WarmupState>();
 
+        // /manual and /style: rendered markdown docs, cached per process.
+        builder.Services.AddSingleton<IMarkdownDocumentService, MarkdownDocumentService>();
+
         builder.Services.Configure<AIOptions>(
             builder.Configuration.GetSection(AIOptions.SectionName));
         builder.Services.AddScoped<AIProviderFactory>(sp =>

@@ -26,7 +26,7 @@ Bookcase is a web app for the books you own. You record each book once, then sea
 
 ## Navigation
 
-The top bar lists, in order: Home, Library, Add book, Bulk add, Series, Shelf order, Authors, Publishers, Wishlist, On loan, Bookshop, AI Assistant, Duplicates and Privacy. On a narrow screen the bar collapses into a menu button. The brand name Bookcase links back to Home.
+The top bar lists, in order: Home, Library, Add book, Bulk add, Series, Shelf order, Authors, Publishers, Wishlist, On loan, Bookshop, AI Assistant, Duplicates, Privacy and Manual. On a narrow screen the bar collapses into a menu button. The brand name Bookcase links back to Home.
 
 ## Home
 
@@ -76,7 +76,7 @@ Add book records one book with its first edition and copy. Fill in what you know
 
 - **Look up by ISBN** and **Look up** search Open Library, then Google Books, and fill the form. You can edit anything before saving. Press Enter in the box to look up.
 - The switch **No ISBN (pre-1974 book)** swaps the ISBN box for **Title** and **Author** boxes and a **Search** button. Search lists candidates from Open Library. Press **Use this** on one to fill the form. You still need to enter the format, print date and publisher from the book in your hand.
-- If you already own the ISBN, a warning says "You already own this book" and shows how many copies you have. **Add another copy** adds a Copy to the existing Book. **View existing book** opens it. A fresh lookup clears an old refusal message.
+- If you already own the ISBN, a warning says "You already own this book" and shows how many copies you have. **Add another copy** adds a Copy to the existing Book and opens that book's page (with **Add another?** ticked it stays on the Add page instead). **View existing book** opens it. A fresh lookup clears an old refusal message.
 - If the lookup suggests a series, a **Series suggestion** banner appears. **Use this** fills the Series field and the position. Close it with the X to ignore it.
 
 ### The form

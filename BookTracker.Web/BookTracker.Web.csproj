@@ -17,6 +17,7 @@
          managed identity when CoverStorage:ServiceUri is set without a connection string. -->
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
     <PackageReference Include="Azure.Storage.Blobs" Version="12.30.1" />
+    <PackageReference Include="Markdig" Version="1.6.0" />
     <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.23.0" />
     <!-- SkiaSharp: cover image decode/resize/encode (replaces SixLabors.ImageSharp,
          which moved to a build-time licence key in v4). NoDependencies on Linux
@@ -34,6 +35,13 @@
     <!-- Same Pkcs pin as BookTracker.Data (this project references EF Core SqlServer directly too). -->
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
     <PackageReference Include="MudBlazor" Version="9.14.0" />
+  </ItemGroup>
+
+  <!-- Rendered in-app at /manual and /style by MarkdownDocumentService. Linked so
+       they land at docs\ beside the binaries (dotnet run) and in the publish output. -->
+  <ItemGroup>
+    <Content Include="..\docs\USER-GUIDE.md" Link="docs\USER-GUIDE.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\docs\STYLE-GUIDE.md" Link="docs\STYLE-GUIDE.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
