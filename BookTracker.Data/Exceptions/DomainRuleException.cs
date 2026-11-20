@@ -4,7 +4,7 @@ namespace BookTracker.Data;
 /// Thrown by an aggregate method when a caller asks it to enter an invalid
 /// state (a rating outside 0–5, a blank title, removing a copy that isn't
 /// part of the book). The <see cref="System.Exception.Message"/> is
-/// user-safe — pages surface it directly in an error snackbar.
+/// user-safe — the dispatching view model shows it where the user acted.
 ///
 /// Lives in BookTracker.Data because aggregates throw it; the application
 /// layer lets it propagate but never needs to construct it. Distinct from

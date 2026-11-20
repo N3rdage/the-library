@@ -7,7 +7,7 @@ namespace BookTracker.Web.ViewModels;
 // VMs. Auto-fill-empties semantics plus Works/Tags union. Dispatcher-only:
 // reads the preview via the GetBookMergePreview query, writes via the
 // MergeBooks command.
-public class BookMergeViewModel(IDispatcher dispatcher)
+public class BookMergeViewModel(IDispatcher dispatcher) : DispatchingViewModel
 {
     public bool Loading { get; private set; } = true;
     public bool Merging { get; private set; }
@@ -15,7 +15,6 @@ public class BookMergeViewModel(IDispatcher dispatcher)
     public BookMergeDetail? Lower { get; private set; }
     public BookMergeDetail? Higher { get; private set; }
 
-    public string? ErrorMessage { get; private set; }
 
     public int? SelectedWinnerId { get; set; }
 
@@ -88,13 +87,13 @@ public class BookMergeViewModel(IDispatcher dispatcher)
     public async Task LoadAsync(int idA, int idB)
     {
         Loading = true;
-        ErrorMessage = null;
+        Error = null;
         var result = await dispatcher.Query(new GetBookMergePreview(idA, idB));
         Lower = result.Lower;
         Higher = result.Higher;
         if (Lower is null || Higher is null)
         {
-            ErrorMessage = "One or both Books could not be loaded — they may have been merged or deleted already.";
+            Error = "One or both Books could not be loaded — they may have been merged or deleted already.";
         }
         Loading = false;
     }
@@ -106,11 +105,8 @@ public class BookMergeViewModel(IDispatcher dispatcher)
         Merging = true;
         try
         {
-            var result = await dispatcher.Send(new MergeBooks(SelectedWinnerId.Value, LoserId.Value));
-            if (!result.Success)
-            {
-                ErrorMessage = result.ErrorMessage;
-            }
+            var result = await DispatchAsync(() => dispatcher.Send(new MergeBooks(SelectedWinnerId.Value, LoserId.Value)));
+            if (result is { Success: false }) Error = result.ErrorMessage;
             return result;
         }
         finally

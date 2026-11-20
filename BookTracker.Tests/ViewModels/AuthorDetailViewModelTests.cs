@@ -2,11 +2,12 @@ using BookTracker.Application;
 using BookTracker.Application.Authors;
 using BookTracker.Web.ViewModels;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace BookTracker.Tests.ViewModels;
 
 // Thin unit tests for the VM-side of /authors/{id}: the not-found mapping, the
-// dispatch guards, and the success/error toast + reload wiring. The data reads
+// dispatch guards, and the success message, Error and reload wiring. The data reads
 // and write effects are covered by GetAuthorDetailHandlerTests /
 // AuthorAdminCommandsTests.
 [Trait("Category", TestCategories.Unit)]
@@ -62,6 +63,22 @@ public class AuthorDetailViewModelTests
     }
 
     [Fact]
+    public async Task RenameAsync_NotFound_SetsErrorAndDoesNotReload()
+    {
+        StubDetail(1, Result(1, "Alice"));
+        _dispatcher.Send(Arg.Any<RenameAuthor>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new NotFoundException("Author 1 not found."));
+        var vm = new AuthorDetailViewModel(_dispatcher);
+        await vm.LoadAsync(1);
+
+        await vm.RenameAsync("Bob");
+
+        Assert.Equal("Author 1 not found.", vm.Error);
+        Assert.Null(vm.SuccessMessage);
+        await _dispatcher.Received(1).Query(Arg.Is<GetAuthorDetail>(q => q!.AuthorId == 1), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task RenameAsync_OnError_SetsErrorAndDoesNotReload()
     {
         StubDetail(1, Result(1, "Alice"));
@@ -72,17 +89,17 @@ public class AuthorDetailViewModelTests
 
         await vm.RenameAsync("Bob");
 
-        Assert.NotNull(vm.ErrorMessage);
+        Assert.NotNull(vm.Error);
         // No reload — still only the initial load dispatch.
         await _dispatcher.Received(1).Query(Arg.Is<GetAuthorDetail>(q => q!.AuthorId == 1), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Apply_SuccessAfterError_ClearsStaleErrorMessage()
+    public async Task Apply_SuccessAfterError_ClearsStaleError()
     {
         // Regression: Apply must own both channels so a failed action's red error
         // can't render alongside a later action's green success (Detail.razor shows
-        // SuccessMessage and ErrorMessage as two independent alerts).
+        // SuccessMessage and Error as two independent alerts).
         StubDetail(1, Result(1, "Alice"));
         _dispatcher.Send(Arg.Any<RenameAuthor>(), Arg.Any<CancellationToken>())
             .Returns(AuthorAdminResult.Error("An author named \"Bob\" already exists."));
@@ -91,13 +108,13 @@ public class AuthorDetailViewModelTests
         var vm = new AuthorDetailViewModel(_dispatcher);
         await vm.LoadAsync(1);
 
-        await vm.RenameAsync("Bob");        // fails → ErrorMessage set
-        Assert.NotNull(vm.ErrorMessage);
+        await vm.RenameAsync("Bob");        // fails → Error set
+        Assert.NotNull(vm.Error);
 
         await vm.MarkAsAliasOfAsync(2);     // succeeds → must clear the stale error
 
         Assert.Equal("linked", vm.SuccessMessage);
-        Assert.Null(vm.ErrorMessage);
+        Assert.Null(vm.Error);
     }
 
     [Fact]

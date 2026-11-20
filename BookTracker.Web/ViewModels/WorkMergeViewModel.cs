@@ -10,7 +10,7 @@ namespace BookTracker.Web.ViewModels;
 // The preview surfaces which fields will be auto-filled so the user can
 // override (by editing the winner) before confirming. Dispatcher-only: reads
 // via GetWorkMergePreview, writes via MergeWorks.
-public class WorkMergeViewModel(IDispatcher dispatcher)
+public class WorkMergeViewModel(IDispatcher dispatcher) : DispatchingViewModel
 {
     public bool Loading { get; private set; } = true;
     public bool Merging { get; private set; }
@@ -19,7 +19,6 @@ public class WorkMergeViewModel(IDispatcher dispatcher)
     public WorkMergeDetail? Higher { get; private set; }
 
     public string? IncompatibilityReason { get; private set; }
-    public string? ErrorMessage { get; private set; }
 
     public int SharedBookCount { get; private set; }
 
@@ -80,7 +79,7 @@ public class WorkMergeViewModel(IDispatcher dispatcher)
     public async Task LoadAsync(int idA, int idB)
     {
         Loading = true;
-        ErrorMessage = null;
+        Error = null;
         var result = await dispatcher.Query(new GetWorkMergePreview(idA, idB));
         Lower = result.Lower;
         Higher = result.Higher;
@@ -88,7 +87,7 @@ public class WorkMergeViewModel(IDispatcher dispatcher)
         SharedBookCount = result.SharedBookCount;
         if (Lower is null || Higher is null)
         {
-            ErrorMessage = "One or both Works could not be loaded — they may have been merged or deleted already.";
+            Error = "One or both Works could not be loaded — they may have been merged or deleted already.";
         }
         Loading = false;
     }
@@ -100,11 +99,8 @@ public class WorkMergeViewModel(IDispatcher dispatcher)
         Merging = true;
         try
         {
-            var result = await dispatcher.Send(new MergeWorks(SelectedWinnerId.Value, LoserId.Value));
-            if (!result.Success)
-            {
-                ErrorMessage = result.ErrorMessage;
-            }
+            var result = await DispatchAsync(() => dispatcher.Send(new MergeWorks(SelectedWinnerId.Value, LoserId.Value)));
+            if (result is { Success: false }) Error = result.ErrorMessage;
             return result;
         }
         finally

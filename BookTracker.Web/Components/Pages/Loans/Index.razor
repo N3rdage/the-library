@@ -25,13 +25,9 @@
         </MudButton>
     </MudStack>
 
-    @if (!string.IsNullOrEmpty(VM.Error))
-    {
-        <MudAlert Severity="Severity.Error"
-                  ShowCloseIcon="true"
-                  CloseIconClicked="@(() => { VM.Error = null; StateHasChanged(); })"
-                  Class="mb-3">@VM.Error</MudAlert>
-    }
+    @* The page's one Error alert: a refused return, directly under the header
+       with the Lend button. *@
+    <ActionError Message="@VM.Error" />
 
     @if (!VM.Loaded)
     {

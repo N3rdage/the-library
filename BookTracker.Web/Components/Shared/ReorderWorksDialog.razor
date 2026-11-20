@@ -51,6 +51,7 @@
                 </ItemRenderer>
             </MudDropContainer>
         </MudStack>
+        <ActionError Message="@VM.Error" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel" Disabled="@saving">Cancel</MudButton>
@@ -131,12 +132,12 @@
         try
         {
             await VM.ReorderWorksAsync(_rows.Select(r => r.Id).ToList());
+            if (VM.Error is not null) return;
             Snackbar.Add("Order saved.", Severity.Success);
             MudDialog.Close();
         }
-        catch (Exception ex)
+        finally
         {
-            Snackbar.Add($"Couldn't save the order: {ex.Message}", Severity.Error);
             saving = false;
         }
     }

@@ -4,7 +4,6 @@
 @inject BookListViewModel VM
 @inject NavigationManager Nav
 @inject IDialogService DialogService
-@inject ISnackbar Snackbar
 
 <PageTitle>Library - Bookcase</PageTitle>
 
@@ -172,6 +171,10 @@
             </MudItem>
         </MudGrid>
     </MudPaper>
+
+    @* The inline status / rating / mark-read actions report a refusal here,
+       directly above the rows they act on. *@
+    <ActionError Message="@VM.Error" />
 
     @if (VM.Loading)
     {
@@ -412,8 +415,7 @@
             return;
         }
 
-        try { await VM.SetStatusAsync(book.Id, status); }
-        catch (Exception ex) { Snackbar.Add($"Couldn't update status: {ex.Message}", Severity.Error); }
+        await VM.SetStatusAsync(book.Id, status);
     }
 
     private async Task OpenMarkReadDialog(BookListItem book)
@@ -428,16 +430,11 @@
         var result = await dialog.Result;
         if (result is not null && !result.Canceled && result.Data is MarkReadDialog.MarkReadResult r)
         {
-            try { await VM.MarkReadAsync(book.Id, r.Rating, r.Notes); }
-            catch (Exception ex) { Snackbar.Add($"Couldn't update status: {ex.Message}", Severity.Error); }
+            await VM.MarkReadAsync(book.Id, r.Rating, r.Notes);
         }
     }
 
-    private async Task OnRatingPicked(BookListItem book, int rating)
-    {
-        try { await VM.SetRatingAsync(book.Id, rating); }
-        catch (Exception ex) { Snackbar.Add($"Couldn't save rating: {ex.Message}", Severity.Error); }
-    }
+    private Task OnRatingPicked(BookListItem book, int rating) => VM.SetRatingAsync(book.Id, rating);
 
     private RenderFragment RenderEmptyState =>
     @<text>

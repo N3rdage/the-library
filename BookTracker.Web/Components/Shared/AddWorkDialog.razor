@@ -96,6 +96,7 @@
                                 SelectedGenreIdsChanged="ids => selectedGenreIds = ids" />
             </div>
         </MudStack>
+        <ActionError Message="@VM.Error" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
@@ -164,10 +165,6 @@
                 Snackbar.Add($"Attached \"{attachedTitle}\".", Severity.Success);
                 MudDialog.Close(DialogResult.Ok(true));
             }
-            else
-            {
-                Snackbar.Add("Couldn't attach that work — it may already be on this book.", Severity.Warning);
-            }
         }
         finally
         {
@@ -194,10 +191,6 @@
             {
                 Snackbar.Add($"Added \"{title!.Trim()}\".", Severity.Success);
                 MudDialog.Close(DialogResult.Ok(true));
-            }
-            else
-            {
-                Snackbar.Add("Couldn't save the work — check that you provided a title and at least one contributor.", Severity.Warning);
             }
         }
         finally

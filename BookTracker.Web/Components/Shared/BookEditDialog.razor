@@ -6,10 +6,6 @@
 
 <MudDialog>
     <DialogContent>
-        @if (VM.Error is not null)
-        {
-            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@VM.Error</MudAlert>
-        }
         @if (VM.NotFound)
         {
             <MudAlert Severity="Severity.Warning">Book not found.</MudAlert>
@@ -63,6 +59,7 @@
                 }
             </MudStack>
         }
+        <ActionError Message="@VM.Error" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>

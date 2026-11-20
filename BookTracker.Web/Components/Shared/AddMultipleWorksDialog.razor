@@ -78,11 +78,8 @@
                 </MudButton>
             </div>
 
-            @if (!string.IsNullOrEmpty(error))
-            {
-                <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Dense="true">@error</MudAlert>
-            }
         </MudStack>
+        <ActionError Message="@VM.Error" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
@@ -111,7 +108,6 @@
     private List<int> sharedGenreIds = [];
     private List<WorkFormViewModel.WorkFormInput> rows = [new()];
     private bool saving;
-    private string? error;
     private DotNetObjectReference<AddMultipleWorksDialog>? _selfRef;
 
     private bool HasUsableRow => rows.Any(r =>
@@ -201,7 +197,7 @@
 
     private async Task SaveAsync()
     {
-        error = null;
+        VM.Error = null;
         saving = true;
         try
         {
@@ -214,7 +210,7 @@
 
             if (added == 0)
             {
-                error = "Nothing to add — every row was either empty or already attached to this book.";
+                VM.Error ??= "Nothing to add — every row was either empty or already attached to this book.";
             }
             else
             {
@@ -224,7 +220,7 @@
         }
         catch (InvalidOperationException ex)
         {
-            error = ex.Message;
+            VM.Error = ex.Message;
         }
         finally
         {
