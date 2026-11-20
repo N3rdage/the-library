@@ -77,7 +77,7 @@ public partial class StatusSheetPage : ContentPage
     {
         var confirmed = await DisplayAlertAsync(
             "Reset local cache?",
-            "The next sync downloads the full catalogue again.",
+            "The next sync downloads the full catalogue again. Wishlist items you marked Bought on this phone lose that mark.",
             "Reset", "Cancel");
         if (!confirmed) return;
         await RunBusyAsync("Resetting…", () => _sync.ResetCacheAsync());
