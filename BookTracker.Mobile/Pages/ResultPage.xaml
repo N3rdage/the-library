@@ -158,6 +158,27 @@
                         <VerticalStackLayout x:Name="OnlineEditionsLayout" Spacing="6" />
                     </VerticalStackLayout>
 
+                    <!-- Other editions of the provider's work. Disabled with an
+                         "online only" caption until the editions arrive; then
+                         tapping the header expands the list. -->
+                    <VerticalStackLayout x:Name="OtherEditionsSection" IsVisible="False" Spacing="6">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <VerticalStackLayout Grid.Column="0" Spacing="0">
+                                <Label x:Name="OtherEditionsTitle" FontSize="14" FontAttributes="Bold"
+                                       TextColor="{AppThemeBinding Light={StaticResource TextMutedL}, Dark={StaticResource TextMutedD}}" />
+                                <Label x:Name="OtherEditionsCaption" FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource TextMutedL}, Dark={StaticResource TextMutedD}}" />
+                            </VerticalStackLayout>
+                            <Label x:Name="OtherEditionsChevron" Grid.Column="1" FontSize="16"
+                                   VerticalOptions="Center" IsVisible="False"
+                                   TextColor="{AppThemeBinding Light={StaticResource BrassTextL}, Dark={StaticResource BrassTextD}}" />
+                            <Grid.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnOtherEditionsTapped" />
+                            </Grid.GestureRecognizers>
+                        </Grid>
+                        <VerticalStackLayout x:Name="OtherEditionsLayout" IsVisible="False" Spacing="6" />
+                    </VerticalStackLayout>
+
                     <HorizontalStackLayout Spacing="8">
                         <Button x:Name="OnlineOpenInAppButton" Text="Open in app →" Clicked="OnOpenInAppClicked"
                                 IsVisible="False"

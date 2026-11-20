@@ -41,4 +41,11 @@ public interface IApiClient
     /// any failure — the Author-works page then keeps its owned list, so this
     /// never throws.</summary>
     Task<OnlineAuthorWorks?> GetAuthorWorksOnlineAsync(string author, CancellationToken ct = default);
+
+    /// <summary>Calls GET /api/online/work-editions?workKey={key} with the
+    /// cached bearer token: the other editions of an Open Library work, each
+    /// flagged with the owned Book when the library holds that ISBN. Returns
+    /// null on any failure — the Result page then keeps its disabled row, so
+    /// this never throws.</summary>
+    Task<OnlineWorkEditions?> GetWorkEditionsOnlineAsync(string workKey, CancellationToken ct = default);
 }
