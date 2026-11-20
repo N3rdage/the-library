@@ -25,7 +25,7 @@ public class GetSeriesBookRowHandlerTests
         int bookId;
         using (var db = _factory.CreateDbContext())
         {
-            var series = new Series { Name = "Stormlight", Type = SeriesType.Series };
+            var series = TestSeries.Series("Stormlight", SeriesType.Series);
             var book = TestBooks.Book(
                 "Edgedancer",
                 series: series,

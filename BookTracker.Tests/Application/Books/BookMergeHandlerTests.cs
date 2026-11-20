@@ -223,7 +223,7 @@ public class BookMergeHandlerTests
         // along on the unioned Works. A series-less winner takes the loser's series.
         using var db = _factory.CreateDbContext();
         var author = Author.Create("A");
-        var series = new Series { Name = "Dune Chronicles", Type = SeriesType.Series };
+        var series = TestSeries.Series("Dune Chronicles", SeriesType.Series);
         db.Series.Add(series);
         var winner = TestBooks.Book("Dune", works: [TestWorks.Work("Dune", author)]);
         var loser = TestBooks.Book(

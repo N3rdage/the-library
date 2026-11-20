@@ -16,8 +16,8 @@ public class GetSeriesOptionsHandlerTests
         using (var db = _factory.CreateDbContext())
         {
             db.Series.AddRange(
-                new Series { Name = "Witcher", Type = SeriesType.Series },
-                new Series { Name = "Discworld", Type = SeriesType.Collection });
+                TestSeries.Series("Witcher", SeriesType.Series),
+                TestSeries.Series("Discworld", SeriesType.Collection));
             await db.SaveChangesAsync();
         }
 

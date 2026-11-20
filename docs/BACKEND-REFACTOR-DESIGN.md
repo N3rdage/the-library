@@ -155,7 +155,9 @@ near-unchanged and becomes the template for read handlers.
 
 ### Rich aggregates (in BookTracker.Data)
 
-Entities gain behaviour and lose public setters on invariant-bearing fields:
+Entities carry their behaviour, and their invariant-bearing fields have private setters, so every
+write goes through a method and the compiler enforces it; collections keep public setters or
+outside writes to their contents until the collections slice (E6) encapsulates them:
 
 - `Book`'s scalar fields (title, category, status, rating, notes, cover, series membership) are
   written only through its methods (`Create`, `Rate`, `MarkRead`, `UpdateDetails`, `SetCover`,
@@ -185,6 +187,14 @@ Entities gain behaviour and lose public setters on invariant-bearing fields:
   encapsulates them, as with `Book`'s collections. Each has a private parameterless constructor for EF and an
   internal one that stores the values as given, used by the tests' seed builder `TestWorks` (and,
   for `WorkAuthor`, by `AssignAuthorship`).
+- `Series`' fields are written only through `Create` and `UpdateDetails`, which keep the
+  ExpectedCount/Type pairing; name uniqueness stays in the handlers (`SeriesNameGuard`).
+  `WishlistItem`'s fields are written only through `Create`, `CreateSeriesSlot` (which links the
+  item to its series and slot) and `SetIsbns` (the ISBN dual-write). The setters are private on
+  both (`Id` stays public, as on `Book`), as is `Series.Books`' setter; book membership is written
+  through `Book.AssignToSeries` / `ClearSeries`. Each has a private parameterless constructor for
+  EF and an internal one that stores the values as given, used by the tests' seed builders
+  `TestSeries` and `TestWishlistItems`.
 - `Book` (root) owns `Editions`; `Edition` owns `Copies`. Exposed as
   `IReadOnlyCollection<>`; mutated only through methods (`AddCopy`, `AddEdition`, …).
 - Invariants currently enforced procedurally move onto the aggregate and become unit-testable.

@@ -131,7 +131,7 @@ public class BookCommandHandlersTests
         int seriesId;
         await using (var db = _factory.CreateDbContext())
         {
-            var series = new Series { Name = "Discworld", Type = SeriesType.Series };
+            var series = TestSeries.Series("Discworld", SeriesType.Series);
             db.Series.Add(series);
             await db.SaveChangesAsync();
             seriesId = series.Id;
