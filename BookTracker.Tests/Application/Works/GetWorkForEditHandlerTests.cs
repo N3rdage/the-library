@@ -25,14 +25,12 @@ public class GetWorkForEditHandlerTests
         int workId;
         using (var db = _factory.CreateDbContext())
         {
-            var work = new Work
-            {
-                Title = "Mort",
-                Subtitle = "A Discworld Novel",
-                WorkAuthors = [new WorkAuthor { Author = Author.Create("Terry Pratchett"), Order = 0 }],
-                FirstPublishedDate = new DateOnly(1987, 11, 12),
-                FirstPublishedDatePrecision = DatePrecision.Day,
-            };
+            var work = TestWorks.Work(
+                "Mort",
+                Author.Create("Terry Pratchett"),
+                subtitle: "A Discworld Novel",
+                firstPublishedDate: new DateOnly(1987, 11, 12),
+                firstPublishedDatePrecision: DatePrecision.Day);
             db.Books.Add(TestBooks.Book("Mort", works: [work]));
             await db.SaveChangesAsync();
             workId = work.Id;
@@ -58,18 +56,16 @@ public class GetWorkForEditHandlerTests
         int workId;
         using (var db = _factory.CreateDbContext())
         {
-            var work = new Work
-            {
-                Title = "Good Omens",
-                WorkAuthors =
+            var work = TestWorks.Work(
+                "Good Omens",
+                authorships:
                 [
-                    new WorkAuthor { Author = Author.Create("Neil Gaiman"), Order = 1 },
-                    new WorkAuthor { Author = Author.Create("Terry Pratchett"), Order = 0 },
-                    new WorkAuthor { Author = Author.Create("Ann Translator"), Role = AuthorRole.Translator, Order = 0 },
-                    new WorkAuthor { Author = Author.Create("Zed Editor"), Role = AuthorRole.Editor, Order = 1 },
-                    new WorkAuthor { Author = Author.Create("Amy Editor"), Role = AuthorRole.Editor, Order = 0 },
-                ],
-            };
+                    TestWorks.Authorship(Author.Create("Neil Gaiman"), 1),
+                    TestWorks.Authorship(Author.Create("Terry Pratchett"), 0),
+                    TestWorks.Authorship(Author.Create("Ann Translator"), 0, AuthorRole.Translator),
+                    TestWorks.Authorship(Author.Create("Zed Editor"), 1, AuthorRole.Editor),
+                    TestWorks.Authorship(Author.Create("Amy Editor"), 0, AuthorRole.Editor),
+                ]);
             db.Books.Add(TestBooks.Book("Good Omens", works: [work]));
             await db.SaveChangesAsync();
             workId = work.Id;
@@ -97,12 +93,7 @@ public class GetWorkForEditHandlerTests
             var fantasy = new Genre { Name = "Fantasy" };
             var horror = new Genre { Name = "Horror" };
             db.Genres.AddRange(fantasy, horror, new Genre { Name = "Unused" });
-            var work = new Work
-            {
-                Title = "w",
-                WorkAuthors = [new WorkAuthor { Author = Author.Create("a"), Order = 0 }],
-                Genres = [fantasy, horror],
-            };
+            var work = TestWorks.Work("w", Author.Create("a"), genres: [fantasy, horror]);
             db.Books.Add(TestBooks.Book("B", works: [work]));
             await db.SaveChangesAsync();
             workId = work.Id;

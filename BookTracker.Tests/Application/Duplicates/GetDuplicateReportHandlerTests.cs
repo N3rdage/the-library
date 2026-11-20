@@ -152,7 +152,7 @@ public class GetDuplicateReportHandlerTests
         // have been one Book with two Editions" case.
         using var db = _factory.CreateDbContext();
         var author = Author.Create("J.R.R. Tolkien");
-        var work = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var work = TestWorks.Work("The Hobbit", author);
         db.Books.Add(TestBooks.Book("Hobbit HB", works: [work]));
         db.Books.Add(TestBooks.Book("Hobbit PB", works: [work]));
         await db.SaveChangesAsync();
@@ -169,7 +169,7 @@ public class GetDuplicateReportHandlerTests
         // Same title AND same work-set: dedup so the pair appears once.
         using var db = _factory.CreateDbContext();
         var author = Author.Create("J.R.R. Tolkien");
-        var work = new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var work = TestWorks.Work("The Hobbit", author);
         db.Books.Add(TestBooks.Book("The Hobbit", works: [work]));
         db.Books.Add(TestBooks.Book("The Hobbit", works: [work]));
         await db.SaveChangesAsync();
@@ -186,7 +186,7 @@ public class GetDuplicateReportHandlerTests
     {
         using var db = _factory.CreateDbContext();
         var author = Author.Create("Agatha Christie");
-        var work = new Work { Title = "Murder on the Orient Express", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var work = TestWorks.Work("Murder on the Orient Express", author);
         var publisher = new Publisher { Name = "Collins Crime Club" };
         var book = TestBooks.Book(
             "Murder on the Orient Express",
@@ -209,7 +209,7 @@ public class GetDuplicateReportHandlerTests
     {
         using var db = _factory.CreateDbContext();
         var author = Author.Create("Agatha Christie");
-        var work = new Work { Title = "Murder on the Orient Express", WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] };
+        var work = TestWorks.Work("Murder on the Orient Express", author);
         var publisher = new Publisher { Name = "Collins Crime Club" };
         var book = TestBooks.Book(
             "Murder on the Orient Express",
@@ -245,7 +245,7 @@ public class GetDuplicateReportHandlerTests
         var author = existing ?? Author.Create(authorName);
         var book = TestBooks.Book(
             title,
-            works: [new Work { Title = title, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]);
+            works: [TestWorks.Work(title, author)]);
         db.Books.Add(book);
         await db.SaveChangesAsync();
     }

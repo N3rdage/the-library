@@ -265,16 +265,15 @@ public class Book
         Publisher? publisher,
         BookCondition firstCopyCondition)
     {
-        var edition = new Edition
-        {
-            Isbn = isbn.TrimToNull(),
-            Format = format,
-            EditionNumber = editionNumber,
-            DatePrinted = datePrinted,
-            DatePrintedPrecision = datePrintedPrecision,
-            Publisher = publisher,
-            CoverUrl = coverUrl.TrimToNull(),
-        };
+        var edition = new Edition(
+            isbn.TrimToNull(),
+            format,
+            editionNumber,
+            datePrinted,
+            datePrintedPrecision,
+            coverUrl.TrimToNull(),
+            isUserSupplied: false,
+            publisher);
         edition.AddCopy(firstCopyCondition, null, null);
         Editions.Add(edition);
         return edition;
@@ -296,9 +295,14 @@ public class Book
     /// survives, hidden by the global query filter, so the delta-sync endpoint can
     /// emit it in <c>deletedIds[]</c>. Works are NOT touched here — they're a
     /// shared aggregate with a ref-count lifecycle, so DeleteBookHandler detaches
-    /// them and deletes any that become orphaned.</summary>
+    /// them and deletes any that become orphaned.
+    /// Throws while any copy is lent out: the open loan would vanish with the
+    /// copy. Callers load Editions → Copies → Loans so the check sees them.</summary>
     public void SoftDelete()
     {
+        if (Editions.Any(e => e.Copies.Any(c => c.OpenLoan is not null)))
+            throw new DomainRuleException("A copy of this book is lent out. Return the loan first.");
+
         // Severing the required Book→Edition relationship orphan-deletes each
         // Edition (and its Copies cascade at the DB level) — same mechanism
         // RemoveCopy already relies on.

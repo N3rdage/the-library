@@ -42,9 +42,12 @@ public record GroupRow(string Key, string Label, int Count)
     public const string NoneKey = "_none";
 }
 
+// LentTo is the borrower of an open loan on any copy of the book (the lowest
+// loan id when several copies are out), or null when every copy is on the shelf.
 public record BookListItem(
     int Id, string Title, string? Subtitle, string Author, string? CoverUrl,
-    BookStatus Status, int Rating, int WorkCount, List<string> Genres, List<string> Tags);
+    BookStatus Status, int Rating, int WorkCount, List<string> Genres, List<string> Tags,
+    string? LentTo = null);
 
 public record GenreOption(int Id, string Name, int? ParentGenreId);
 public record TagOption(int Id, string Name);

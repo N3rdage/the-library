@@ -22,7 +22,7 @@ public class FindEditionByIsbnHandlerTests
         {
             var book = TestBooks.Book(
                 "The Hobbit",
-                works: [new Work { Title = "The Hobbit", WorkAuthors = [new WorkAuthor { Author = Author.Create("Tolkien"), Order = 0 }] }],
+                works: [TestWorks.Work("The Hobbit", Author.Create("Tolkien"))],
                 editions: [TestEditions.Edition(isbn: "9780345391803", copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
             db.Books.Add(book);
             await db.SaveChangesAsync();
@@ -58,22 +58,15 @@ public class FindEditionByIsbnHandlerTests
                         publisher: new Publisher { Name = "Pinnacle" },
                         copies: [TestEditions.Copy(condition: BookCondition.Good)]),
                 ]);
-            book.AttachWork(new Work
-            {
-                Title = "Funny Money",
-                Subtitle = "The Destroyer #54",
-                WorkAuthors =
+            book.AttachWork(TestWorks.Work(
+                "Funny Money",
+                subtitle: "The Destroyer #54",
+                authorships:
                 [
-                    new WorkAuthor { Author = Author.Create("Richard Sapir"), Order = 0 },
-                    new WorkAuthor { Author = Author.Create("Some Editor"), Order = 0, Role = AuthorRole.Editor },
-                ],
-            });
-            book.AttachWork(new Work
-            {
-                Title = "Second Story",
-                Subtitle = "not the lead",
-                WorkAuthors = [new WorkAuthor { Author = Author.Create("Warren Murphy"), Order = 0 }],
-            });
+                    TestWorks.Authorship(Author.Create("Richard Sapir")),
+                    TestWorks.Authorship(Author.Create("Some Editor"), 0, AuthorRole.Editor),
+                ]));
+            book.AttachWork(TestWorks.Work("Second Story", Author.Create("Warren Murphy"), subtitle: "not the lead"));
             db.Books.Add(book);
             await db.SaveChangesAsync();
         }
@@ -157,21 +150,15 @@ public class FindEditionByIsbnHandlerTests
             var preston = Author.Create("Douglas Preston");
             var child = Author.Create("Lincoln Child");
             var editor = Author.Create("Some Editor");
-            var first = new Work
-            {
-                Title = "Relic",
-                WorkAuthors =
+            var first = TestWorks.Work(
+                "Relic",
+                authorships:
                 [
-                    new WorkAuthor { Author = child, Order = 1, Role = AuthorRole.Author },
-                    new WorkAuthor { Author = preston, Order = 0, Role = AuthorRole.Author },
-                    new WorkAuthor { Author = editor, Order = 0, Role = AuthorRole.Editor },
-                ],
-            };
-            var second = new Work
-            {
-                Title = "Reliquary",
-                WorkAuthors = [new WorkAuthor { Author = child, Order = 0, Role = AuthorRole.Author }],
-            };
+                    TestWorks.Authorship(child, 1),
+                    TestWorks.Authorship(preston),
+                    TestWorks.Authorship(editor, 0, AuthorRole.Editor),
+                ]);
+            var second = TestWorks.Work("Reliquary", child);
             var book = TestBooks.Book(
                 "Relic & Reliquary",
                 editions: [TestEditions.Edition(isbn: "9780000000001", copies: [TestEditions.Copy()])]);
@@ -191,11 +178,9 @@ public class FindEditionByIsbnHandlerTests
     {
         await using (var db = _factory.CreateDbContext())
         {
-            var work = new Work
-            {
-                Title = "Concise Oxford English Dictionary",
-                WorkAuthors = [new WorkAuthor { Author = Author.Create("Catherine Soanes"), Order = 0, Role = AuthorRole.Editor }],
-            };
+            var work = TestWorks.Work(
+                "Concise Oxford English Dictionary",
+                authorships: [TestWorks.Authorship(Author.Create("Catherine Soanes"), 0, AuthorRole.Editor)]);
             var book = TestBooks.Book(
                 "Concise Oxford English Dictionary",
                 editions: [TestEditions.Edition(isbn: "9780199601080", copies: [TestEditions.Copy()])]);

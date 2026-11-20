@@ -55,11 +55,7 @@ public class CreateBookHandlerTests
     private async Task<int> SeedWorkOnOtherBookAsync(string workTitle, string author)
     {
         await using var db = _factory.CreateDbContext();
-        var existing = new Work
-        {
-            Title = workTitle,
-            WorkAuthors = [new WorkAuthor { Author = Author.Create(author), Order = 0 }],
-        };
+        var existing = TestWorks.Work(workTitle, Author.Create(author));
         db.Books.Add(TestBooks.Book("Other Anthology", works: [existing]));
         await db.SaveChangesAsync();
         return existing.Id;

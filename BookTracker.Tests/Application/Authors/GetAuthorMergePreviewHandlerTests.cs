@@ -80,7 +80,7 @@ public class GetAuthorMergePreviewHandlerTests
             {
                 db.Books.Add(TestBooks.Book(
                     t,
-                    works: [new Work { Title = t, WorkAuthors = [new WorkAuthor { Author = author, Order = 0 }] }]));
+                    works: [TestWorks.Work(t, author)]));
             }
             authors.Add(author);
         }

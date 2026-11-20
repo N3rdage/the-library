@@ -45,7 +45,7 @@ Here's what was already paid for by the time the mobile arc started.
 
 **The barcode debounce timing.** Three seconds. Same-ISBN within that window is ignored to prevent a held-in-frame code from firing ten lookups per second. We tested-and-shipped that number in `BookTracker.Web/wwwroot/js/barcode-scanner.js` weeks ago. PR 5's `ScanPage.xaml.cs` literally has the comment *"mirrors the 3s window from BookTracker.Web/wwwroot/js/barcode-scanner.js"* next to the constant.
 
-**The Easy Auth audience-mode toggle.** The production API is fronted by Azure's [Easy Auth](https://learn.microsoft.com/en-us/azure/app-service/overview-authentication-authorization), which has handled browser sessions for the Web app since prod went live. To accept *mobile-issued AAD tokens* — different audience, different validation path — we needed to flip Easy Auth into "token-audience mode": add the mobile client ID to `validation.allowedAudiences` on the Library-Patrons API app registration. That's a Bicep + portal config change, not a new auth design. The auth work I'd done securing the API for the Web app was the same work the mobile app would benefit from; we just had to extend the trust boundary, not redraw it.
+**The Easy Auth audience-mode toggle.** The production API is fronted by Azure's [Easy Auth](https://learn.microsoft.com/en-us/azure/app-service/overview-authentication-authorization), which has handled browser sessions for the Web app since prod went live. To accept *mobile-issued AAD tokens* — different audience, different validation path — we needed to flip Easy Auth into "token-audience mode": add the mobile client ID to `validation.allowedAudiences` on the API's sign-in app registration. That's a Bicep + portal config change, not a new auth design. The auth work I'd done securing the API for the Web app was the same work the mobile app would benefit from; we just had to extend the trust boundary, not redraw it.
 
 **The alias-rollup query for pen names.** BookTracker handles author aliases natively — Stephen King's `Richard Bachman` is its own `Author` row with a `CanonicalAuthorId` pointing back at King, so a search for "Bachman" finds *The Long Walk* but the analytics aggregations roll up under King. That logic lives in `AuthorService.GetWithAliasesAsync` on the Web side. The mobile cache mirrors it directly: `CachedAuthor` carries `CanonicalAuthorId`; `LookupByAuthorAsync` does the rollup join inline. Different language, identical algorithm.
 
@@ -77,13 +77,13 @@ The 20 hours weren't friction-free. Two moments in particular cost real time. Bo
 
 ### The AAD broker hang
 
-PR 3 — sign-in flow — almost shipped. MSAL.NET wired up against the mobile client registration; redirect URI registered in the Library-Patrons app reg with the keystore's SHA-1 hash. Tap "Sign in" on the device → Microsoft Authenticator pops a toast: *"Are you trying to sign in to BookTracker Mobile?"* → tap the toast → ... nothing.
+PR 3 — sign-in flow — almost shipped. MSAL.NET wired up against the mobile client registration; redirect URI registered in the sign-in app registration with the keystore's SHA-1 hash. Tap "Sign in" on the device → Microsoft Authenticator pops a toast asking whether I'm trying to sign in to the mobile app → tap the toast → ... nothing.
 
 No exception. No `MsalException` caught downstream. No logcat line indicating mismatch. The toast just sat there.
 
 The bug took about 45 minutes to isolate. The fix is a two-front change:
 
-1. The redirect URI we'd registered was URL-encoded: `msauth://com.thelibrary.mobile/%2FdMdWTcw8hf5TVPEfRB%2Bm0JPyUDs%3D`. Android's intent handler decodes the path before matching, so the literal redirect MSAL was asking to be called back on was `msauth://com.thelibrary.mobile//dMdWTcw8hf5TVPEfRB+m0JPyUDs=` — with raw `+` and `=`. The two strings didn't match. The handshake silently failed.
+1. The redirect URI we'd registered was URL-encoded: `msauth://com.thelibrary.mobile/%2F<url-encoded-signature-hash>`. Android's intent handler decodes the path before matching, so the literal redirect MSAL was asking to be called back on was `msauth://com.thelibrary.mobile//<signature-hash>` — with raw `+` and `=`. The two strings didn't match. The handshake silently failed.
 2. With Microsoft Authenticator installed on the device, MSAL was *also* trying to route through the Authenticator broker, which has its own URI matching that was failing for similar reasons. `.WithBroker(false)` on the `PublicClientApplication` builder skipped the broker entirely.
 
 Both fixes had to land together. Either alone left the symptom in place.

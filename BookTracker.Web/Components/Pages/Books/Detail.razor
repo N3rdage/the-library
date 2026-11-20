@@ -5,6 +5,8 @@
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject LendDialogViewModel LendVM
+@inject IBrowserViewportService Viewport
 
 @* Book detail / View page — browse-first, MudBlazor pilot continuation.
    PR 1 shipped read-only. PR 2 adds inline auto-save for rating, status,
@@ -440,9 +442,50 @@
                                                     {
                                                         <MudText Typo="Typo.caption" Color="Color.Secondary" Style="white-space: pre-wrap;">@copy.Notes</MudText>
                                                     }
+                                                    @if (copy.OpenLoan is { } loan)
+                                                    {
+                                                        <MudText Typo="Typo.body2" Class="mt-1">
+                                                            Lent to <b>@loan.BorrowerName</b> since @loan.LentOn.ToString("d MMM yyyy")
+                                                        </MudText>
+                                                        if (VM.IsOverdue(loan))
+                                                        {
+                                                            <MudText Typo="Typo.caption" Color="Color.Error">
+                                                                overdue, due @loan.DueOn!.Value.ToString("d MMM yyyy")
+                                                            </MudText>
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                                @(loan.DueOn is { } due ? $"due {due:d MMM yyyy}" : "no return date")
+                                                            </MudText>
+                                                        }
+                                                    }
                                                     <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" Class="mt-1">
                                                         @if (!confirming)
                                                         {
+                                                            if (copy.OpenLoan is { } openLoan)
+                                                            {
+                                                                var loanId = openLoan.LoanId;
+                                                                <MudButton OnClick="@(() => ReturnLoanAsync(loanId))"
+                                                                           Disabled="@dialogOpening"
+                                                                           Variant="Variant.Text"
+                                                                           Color="Color.Primary"
+                                                                           Size="Size.Small"
+                                                                           StartIcon="@Icons.Material.Filled.AssignmentReturn">
+                                                                    Returned
+                                                                </MudButton>
+                                                            }
+                                                            else
+                                                            {
+                                                                <MudButton OnClick="@(() => OpenLendDialog(copyId))"
+                                                                           Disabled="@dialogOpening"
+                                                                           Variant="Variant.Text"
+                                                                           Color="Color.Primary"
+                                                                           Size="Size.Small"
+                                                                           StartIcon="@Icons.Material.Filled.Outbox">
+                                                                    Lend
+                                                                </MudButton>
+                                                            }
                                                             <MudButton OnClick="@(() => OpenEditCopyDialog(copyId))"
                                                                        Disabled="@dialogOpening"
                                                                        Variant="Variant.Text"
@@ -924,6 +967,50 @@
         {
             Snackbar.Add("Copy saved", Severity.Success);
             await VM.InitializeAsync(BookId);
+        }
+    });
+
+    // The page's own LendDialogViewModel, seeded with the clicked copy and
+    // handed to the dialog as a parameter. Full screen on a phone-width
+    // viewport so the date pickers and the copy list have room.
+    private Task OpenLendDialog(int copyId) => OpenDialogGuardedAsync(async () =>
+    {
+        var first = VM.LendOptionFor(copyId);
+        if (first is null) return;
+        LendVM.Initialize(first);
+
+        var parameters = new DialogParameters<LendDialog>
+        {
+            { x => x.VM, LendVM },
+        };
+        var breakpoint = await Viewport.GetCurrentBreakpointAsync();
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseButton = true,
+            FullScreen = breakpoint == Breakpoint.Xs,
+        };
+        var dialog = await DialogService.ShowAsync<LendDialog>("Lend", parameters, options);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            var count = LendVM.Copies.Count;
+            Snackbar.Add(count == 1 ? $"Lent to {LendVM.BorrowerName?.Trim()}" : $"{count} copies lent to {LendVM.BorrowerName?.Trim()}", Severity.Success);
+            await VM.InitializeAsync(BookId);
+        }
+    });
+
+    private Task ReturnLoanAsync(int loanId) => OpenDialogGuardedAsync(async () =>
+    {
+        try
+        {
+            await VM.ReturnLoanAsync(loanId);
+            Snackbar.Add("Marked returned", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Couldn't mark returned: {ex.Message}", Severity.Error);
         }
     });
 

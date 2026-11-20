@@ -50,6 +50,9 @@ public sealed class MergeBooksHandler(IDbContextFactory<BookTrackerDbContext> db
         var loser = await db.Books
             .Include(b => b.Editions)
             .Include(b => b.Works)
+            // Each Work's own BookWorks so RemoveFrom can ref-count it across
+            // its other books.
+            .Include(b => b.BookWorks).ThenInclude(bw => bw.Work).ThenInclude(w => w.BookWorks)
             .Include(b => b.Tags)
             .FirstOrDefaultAsync(b => b.Id == command.LoserId, ct);
         if (winner is null || loser is null)
@@ -106,7 +109,14 @@ public sealed class MergeBooksHandler(IDbContextFactory<BookTrackerDbContext> db
             winnerWorkIds.Add(work.Id);
             worksUnioned++;
         }
-        loser.Works.Clear();
+
+        // Detach every Work from the loser through the ref-count lifecycle; a
+        // Work in no book now is orphaned and deleted. Every loser Work is on
+        // the winner by this point, so none is orphaned in practice.
+        var orphaned = new List<Work>();
+        foreach (var work in loser.BookWorks.Select(bw => bw.Work).ToList())
+            if (work.RemoveFrom(loser)) orphaned.Add(work);
+        if (orphaned.Count > 0) db.Works.RemoveRange(orphaned);
 
         // ─── Union Tags ────────────────────────────────────────────────
         var winnerTagIds = winner.Tags.Select(t => t.Id).ToHashSet();
@@ -125,7 +135,7 @@ public sealed class MergeBooksHandler(IDbContextFactory<BookTrackerDbContext> db
         var editionsReassigned = 0;
         foreach (var edition in loser.Editions.ToList())
         {
-            edition.BookId = winner.Id;
+            edition.MoveToBook(winner.Id);
             editionsReassigned++;
         }
         loser.Editions.Clear();
@@ -138,7 +148,7 @@ public sealed class MergeBooksHandler(IDbContextFactory<BookTrackerDbContext> db
 
         // Soft-delete the loser: the row is kept as a tombstone for the
         // catalog snapshot's deletedIds[]. The merge has already moved
-        // Editions to the winner and cleared Works/Tags on the loser, so
+        // Editions to the winner, detached its Works and cleared its Tags, so
         // SoftDelete's own Editions/Tags clear finds both collections empty
         // and the husk row owns no aggregate. The global HasQueryFilter
         // hides the loser from all subsequent queries.
