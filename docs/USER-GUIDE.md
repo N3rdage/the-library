@@ -70,7 +70,7 @@ A changed row stays in place until the next reload, even if it no longer matches
 
 ## Add book
 
-Add book records one book with its first edition and copy. Fill in what you know and press **Save book**. After saving, you go to Home. Tick **Add another?** first to stay on the page with a blank form.
+Add book records one book with its first edition and copy. Fill in what you know and press **Save book**. After saving, you go to Home. Tick **Add another?** first to stay on the page with a blank form. The **?** button beside the page title opens a short help note.
 
 ### Finding the book
 
@@ -99,7 +99,7 @@ Switch on **This is a collection (multiple works in one book)** for a compendium
 
 ## Bulk add
 
-Bulk add is for capturing a pile of books by ISBN. It looks each ISBN up and gives you a grid to confirm.
+Bulk add is for capturing a pile of books by ISBN. It looks each ISBN up and gives you a grid to confirm. The **?** button beside the page title opens a short help note.
 
 ### Getting ISBNs in
 
@@ -129,7 +129,7 @@ Each row shows the ISBN, title, author, source, and a status chip: **Searching..
 
 The Series page lists every Series and Collection. Search by name or author, filter by **Type**, and use the X to clear. **New series** opens an empty form. Each row shows the type and a progress badge: "3 / 7" when a Series has an expected count, or "3 books" otherwise. The badge is green when you have them all.
 
-Click a row to edit it.
+Click a row to edit it. On the edit page, the **?** button beside the title opens a short help note about book positions.
 
 - **Details**: Name, Author, Type, **Expected books** (Series only) and Description. The author here is only a display label.
 - **Books in this series**: the **#** box on each row is the position. Type a whole number, or a label such as "4.5" for a book that sits between 4 and 5, or "1A". Books sort by the leading whole number, and the label you typed is what you see. Numbers below 1 are ignored. Position labels also show on the Shelf order, Wishlist and Authors pages.

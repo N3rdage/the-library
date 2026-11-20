@@ -2,6 +2,7 @@
 @page "/series/{SeriesId:int}"
 @inject SeriesEditViewModel VM
 @inject NavigationManager Nav
+@inject IDialogService DialogService
 
 <PageTitle>@(VM.IsNew ? "New series" : "Edit series") - Bookcase</PageTitle>
 
@@ -21,7 +22,14 @@ else if (VM.Input is null)
 }
 else
 {
-    <h1 class="mb-3">@(VM.IsNew ? "New series" : "Edit series")</h1>
+    <div class="d-flex align-items-center gap-2 mb-3">
+        <h1 class="mb-0">@(VM.IsNew ? "New series" : "Edit series")</h1>
+        <MudIconButton Icon="@Icons.Material.Outlined.HelpOutline"
+                       Size="Size.Small"
+                       aria-label="Help"
+                       title="Help: series order"
+                       OnClick="ShowHelpAsync" />
+    </div>
 
     @if (!string.IsNullOrEmpty(VM.SuccessMessage))
     {
@@ -213,6 +221,10 @@ else
         else
             VM.InitializeNew();
     }
+
+    private Task ShowHelpAsync() => DialogService.ShowAsync<HelpDialog>(
+        HelpDialog.TitleFor(HelpTopic.SeriesOrder),
+        new DialogParameters<HelpDialog> { { x => x.Topic, HelpTopic.SeriesOrder } });
 
     private async Task SaveAsync()
     {
