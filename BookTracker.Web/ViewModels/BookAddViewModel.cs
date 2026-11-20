@@ -315,6 +315,8 @@ public class BookAddViewModel(
     {
         LookupMessage = null;
         ExistingBook = null;
+        Error = null;
+        AddCopyRefused = false;
         if (string.IsNullOrWhiteSpace(LookupIsbn))
         {
             LookupMessage = "Enter an ISBN to look up.";
@@ -439,6 +441,8 @@ public class BookAddViewModel(
         LookupMessage = null;
         LookupCandidates = [];
         ExistingBook = null;
+        Error = null;
+        AddCopyRefused = false;
         SeriesSuggestion = null;
         SeriesSuggestionDismissed = false;
         ClearSeriesSelection();

@@ -453,6 +453,40 @@ public class BookAddViewModelTests
     }
 
     [Fact]
+    public async Task LookupAsync_AfterAddCopyRefusal_ClearsErrorAndAddCopyRefused()
+    {
+        _dispatcher.Query(Arg.Any<FindEditionByIsbn>(), Arg.Any<CancellationToken>()).Returns(HobbitMatch());
+        _dispatcher.Send(Arg.Any<AddCopyToEdition>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new NotFoundException("Edition 5 not found."));
+        var vm = CreateVm();
+        vm.LookupIsbn = "9780261102217";
+        await vm.LookupAsync();
+        await vm.AddCopyToExistingAsync();
+
+        await vm.LookupAsync();
+
+        Assert.Null(vm.Error);
+        Assert.False(vm.AddCopyRefused);
+    }
+
+    [Fact]
+    public async Task Reset_AfterAddCopyRefusal_ClearsErrorAndAddCopyRefused()
+    {
+        _dispatcher.Query(Arg.Any<FindEditionByIsbn>(), Arg.Any<CancellationToken>()).Returns(HobbitMatch());
+        _dispatcher.Send(Arg.Any<AddCopyToEdition>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new NotFoundException("Edition 5 not found."));
+        var vm = CreateVm();
+        vm.LookupIsbn = "9780261102217";
+        await vm.LookupAsync();
+        await vm.AddCopyToExistingAsync();
+
+        vm.Reset();
+
+        Assert.Null(vm.Error);
+        Assert.False(vm.AddCopyRefused);
+    }
+
+    [Fact]
     public void AddCollectionWorkRow_StartsEmpty_RegardlessOfPreviousRowGenres()
     {
         // Mirror of the author inheritance kill — the SingleGenre toggle
