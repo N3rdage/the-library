@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using BookTracker.Web.Services;
 
 namespace BookTracker.Tests.Services;
@@ -73,6 +74,39 @@ public sealed class MarkdownDocumentServiceTests : IDisposable
         Assert.NotNull(doc);
         Assert.Contains("href=\"manual#duplicates\"", doc.Html);
         Assert.Contains("href=\"https://example.org/#x\"", doc.Html);
+    }
+
+    [Fact]
+    public void Headings_getGitHubStyleIds()
+    {
+        var doc = ServiceWith("## Scope & intent\n\n[s](#scope--intent)\n").Get("user-guide");
+
+        Assert.NotNull(doc);
+        Assert.Contains("id=\"scope--intent\"", doc.Html);
+    }
+
+    [Fact]
+    public void DocumentWithItsOwnContentsSection_getsNoSecondContentsList()
+    {
+        var doc = ServiceWith("# Title\n\n## Contents\n\n1. [Palette](#palette)\n\n## Palette\n").Get("user-guide");
+
+        Assert.NotNull(doc);
+        Assert.Empty(doc.Headings);
+    }
+
+    [Theory]
+    [InlineData("user-guide", "manual")]
+    [InlineData("style-guide", "style")]
+    public void ShippedDocuments_everyAnchorLinkNamesAHeadingId(string name, string route)
+    {
+        // The shipped files, as copied beside the binaries.
+        var doc = new MarkdownDocumentService([AppContext.BaseDirectory]).Get(name);
+
+        Assert.NotNull(doc);
+        var ids = Regex.Matches(doc.Html, "id=\"([^\"]+)\"").Select(m => m.Groups[1].Value).ToHashSet();
+        var anchors = Regex.Matches(doc.Html, $"href=\"{route}#([^\"]+)\"").Select(m => m.Groups[1].Value).ToList();
+        Assert.All(anchors, anchor => Assert.Contains(anchor, ids));
+        Assert.All(doc.Headings, heading => Assert.Contains(heading.Id, ids));
     }
 
     [Fact]

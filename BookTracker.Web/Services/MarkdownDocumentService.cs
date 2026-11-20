@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Markdig;
+using Markdig.Extensions.AutoIdentifiers;
 using Markdig.Renderers.Html;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
@@ -9,7 +10,10 @@ namespace BookTracker.Web.Services;
 /// <summary>One <c>##</c> heading: its plain text and the anchor id Markdig generated.</summary>
 public sealed record MarkdownHeading(string Text, string Id);
 
-/// <summary>A rendered markdown document plus its table of contents.</summary>
+/// <summary>
+/// A rendered markdown document plus its table of contents: the <c>##</c>
+/// headings, or none when the document has its own <c>## Contents</c> section.
+/// </summary>
 public sealed record MarkdownDocument(string Name, string Html, IReadOnlyList<MarkdownHeading> Headings);
 
 /// <summary>
@@ -34,11 +38,12 @@ public sealed class MarkdownDocumentService : IMarkdownDocumentService
         };
 
     // Raw HTML in the source is escaped, not emitted; only pipe tables and
-    // heading anchors are switched on.
+    // heading anchors are switched on. GitHub-style ids, so the documents' own
+    // links ("#scope--intent") work in the app as they do on GitHub.
     private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
         .DisableHtml()
         .UsePipeTables()
-        .UseAutoIdentifiers()
+        .UseAutoIdentifiers(AutoIdentifierOptions.GitHub)
         .Build();
 
     private readonly string[] roots;
@@ -81,10 +86,18 @@ public sealed class MarkdownDocumentService : IMarkdownDocumentService
                 link.Url = route + url;
             }
         }
+
         var headings = ast.OfType<HeadingBlock>()
             .Where(h => h.Level == 2 && h.GetAttributes().Id is not null)
             .Select(h => new MarkdownHeading(PlainText(h), h.GetAttributes().Id!))
             .ToList();
+
+        // A document that carries its own "## Contents" section needs no second
+        // list from the page, so it gets an empty one.
+        if (headings.Any(h => string.Equals(h.Text.Trim(), "Contents", StringComparison.OrdinalIgnoreCase)))
+        {
+            headings = [];
+        }
 
         return new MarkdownDocument(name, ast.ToHtml(Pipeline), headings);
     }
