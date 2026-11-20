@@ -7,11 +7,6 @@
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3" Style="min-width: 280px;">
-            @if (VM.Error is not null)
-            {
-                <MudAlert Severity="Severity.Error" Dense="true">@VM.Error</MudAlert>
-            }
-
             <MudAutocomplete T="string"
                              @bind-Value="VM.BorrowerName"
                              SearchFunc="@SuggestBorrowersAsync"
@@ -90,6 +85,7 @@
                 </ItemTemplate>
             </MudAutocomplete>
         </MudStack>
+        <ActionError Message="@VM.Error" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel" Disabled="@VM.Saving">Cancel</MudButton>

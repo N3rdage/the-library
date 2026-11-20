@@ -9,7 +9,7 @@ namespace BookTracker.Web.ViewModels;
 // GetLibraryGroups, and the inline writes dispatch SetBookStatus / MarkBookRead /
 // RateBook. The VM owns presentation + URL state only — the bound filter fields,
 // pagination, the filter ⇄ query-string mapping, and the group-drill routing.
-public class BookListViewModel(IDispatcher dispatcher)
+public class BookListViewModel(IDispatcher dispatcher) : DispatchingViewModel
 {
     // Mirrors the page size the read handler paginates by, so the page's
     // "showing X–Y of Z" label keys off one source of truth.
@@ -205,8 +205,8 @@ public class BookListViewModel(IDispatcher dispatcher)
     /// paging / navigation).</summary>
     public async Task SetStatusAsync(int bookId, BookStatus status)
     {
-        await dispatcher.Send(new SetBookStatus(bookId, status));
-        PatchLoadedItem(bookId, item => item with { Status = status });
+        if (await DispatchAsync(() => dispatcher.Send(new SetBookStatus(bookId, status))))
+            PatchLoadedItem(bookId, item => item with { Status = status });
     }
 
     /// <summary>Mark-Read quick action: status + rating + notes in one gesture
@@ -216,16 +216,16 @@ public class BookListViewModel(IDispatcher dispatcher)
     /// existing notes intact.</summary>
     public async Task MarkReadAsync(int bookId, int rating, string? notes)
     {
-        await dispatcher.Send(new MarkBookRead(bookId, rating, notes));
-        PatchLoadedItem(bookId, item => item with { Status = BookStatus.Read, Rating = rating });
+        if (await DispatchAsync(() => dispatcher.Send(new MarkBookRead(bookId, rating, notes))))
+            PatchLoadedItem(bookId, item => item with { Status = BookStatus.Read, Rating = rating });
     }
 
     /// <summary>Inline rating set from the Library row (independent of status —
     /// rating changes never hide a row, since there's no rating filter).</summary>
     public async Task SetRatingAsync(int bookId, int rating)
     {
-        await dispatcher.Send(new RateBook(bookId, rating));
-        PatchLoadedItem(bookId, item => item with { Rating = rating });
+        if (await DispatchAsync(() => dispatcher.Send(new RateBook(bookId, rating))))
+            PatchLoadedItem(bookId, item => item with { Rating = rating });
     }
 
     // Replace the matching row in the flat list (records are immutable) so an

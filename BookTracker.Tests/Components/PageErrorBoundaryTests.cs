@@ -6,13 +6,14 @@ using Microsoft.AspNetCore.Components.Rendering;
 namespace BookTracker.Tests.Components;
 
 // The page-level boundary: a child that throws while rendering is replaced by
-// the error content (with a trace id), and Recover puts the child back.
+// the error content (with a trace id), and Recover puts the child back. The
+// last test renders it the way MainLayout uses it.
 [Trait("Category", TestCategories.Component)]
 public class PageErrorBoundaryTests : ComponentTestBase
 {
     private sealed class FlakyChild : ComponentBase
     {
-        public static bool Throw;
+        [Parameter] public bool Throw { get; set; }
 
         protected override void BuildRenderTree(RenderTreeBuilder builder)
         {
@@ -21,17 +22,22 @@ public class PageErrorBoundaryTests : ComponentTestBase
         }
     }
 
-    private IRenderedComponent<PageErrorBoundary> RenderBoundary() =>
+    private static RenderFragment Flaky(Func<bool> shouldThrow) => builder =>
+    {
+        builder.OpenComponent<FlakyChild>(0);
+        builder.AddComponentParameter(1, nameof(FlakyChild.Throw), shouldThrow());
+        builder.CloseComponent();
+    };
+
+    private IRenderedComponent<PageErrorBoundary> RenderBoundary(Func<bool> shouldThrow) =>
         Render<PageErrorBoundary>(p => p
-            .AddChildContent<FlakyChild>()
+            .Add(b => b.ChildContent, Flaky(shouldThrow))
             .Add(b => b.ErrorContent, (RenderFragment<Exception>)(ex => b => b.AddContent(0, $"error: {ex.Message}"))));
 
     [Fact]
     public void ThrowingChild_showsErrorContent_withTraceId()
     {
-        FlakyChild.Throw = true;
-
-        var cut = RenderBoundary();
+        var cut = RenderBoundary(() => true);
 
         cut.WaitForAssertion(() => Assert.Contains("error: render failed", cut.Markup));
         Assert.Empty(cut.FindAll("#child"));
@@ -41,14 +47,32 @@ public class PageErrorBoundaryTests : ComponentTestBase
     [Fact]
     public void Recover_rendersTheChildAgain()
     {
-        FlakyChild.Throw = true;
-        var cut = RenderBoundary();
+        var throwing = true;
+        var cut = RenderBoundary(() => throwing);
         cut.WaitForAssertion(() => Assert.Contains("error: render failed", cut.Markup));
 
-        FlakyChild.Throw = false;
+        throwing = false;
         cut.InvokeAsync(() => cut.Instance.Recover());
 
         cut.WaitForAssertion(() => Assert.Equal("child ok", cut.Find("#child").TextContent));
         Assert.DoesNotContain("error:", cut.Markup);
+    }
+
+    [Fact]
+    public void MainLayout_aFaultInTheBody_showsTheMappedError_withTraceId_andRecover()
+    {
+        var throwing = true;
+
+        var cut = Render<MainLayout>(p => p.Add(l => l.Body, Flaky(() => throwing)));
+
+        cut.WaitForAssertion(() => Assert.Contains("Trace ID:", cut.Markup));
+        Assert.Empty(cut.FindAll("#child"));
+        Assert.Contains("Bookcase", cut.Markup);
+
+        throwing = false;
+        cut.Find("main button.btn-primary").Click();
+
+        cut.WaitForAssertion(() => Assert.Equal("child ok", cut.Find("#child").TextContent));
+        Assert.DoesNotContain("Trace ID:", cut.Markup);
     }
 }

@@ -7,8 +7,8 @@ namespace BookTracker.Web.ViewModels;
 // per-author drill-down (Works / Books). Reads go through GetAuthorDetail;
 // writes dispatch RenameAuthor / MarkAuthorAsAliasOf / PromoteAuthorToCanonical
 // (PR6b-2). The VM keeps only presentation state — the Works/Books toggle,
-// the loading/not-found flags, and the success/error toast strings.
-public class AuthorDetailViewModel(IDispatcher dispatcher)
+// the loading/not-found flags, and the success message.
+public class AuthorDetailViewModel(IDispatcher dispatcher) : DispatchingViewModel
 {
     public bool Loading { get; private set; } = true;
     public bool NotFound { get; private set; }
@@ -20,7 +20,6 @@ public class AuthorDetailViewModel(IDispatcher dispatcher)
     public IReadOnlyList<CanonicalCandidate> CanonicalCandidates { get; private set; } = [];
 
     public string? SuccessMessage { get; set; }
-    public string? ErrorMessage { get; set; }
 
     public async Task LoadAsync(int authorId)
     {
@@ -47,36 +46,34 @@ public class AuthorDetailViewModel(IDispatcher dispatcher)
     {
         if (Header is null) return;
 
-        var result = await dispatcher.Send(new RenameAuthor(Header.Id, newName));
-        Apply(result);
-        if (result.Success) await LoadAsync(Header.Id);
+        var result = await DispatchAsync(() => dispatcher.Send(new RenameAuthor(Header.Id, newName)));
+        if (Apply(result)) await LoadAsync(Header.Id);
     }
 
     public async Task MarkAsAliasOfAsync(int canonicalId)
     {
         if (Header is null || Header.Id == canonicalId) return;
 
-        var result = await dispatcher.Send(new MarkAuthorAsAliasOf(Header.Id, canonicalId));
-        Apply(result);
-        if (result.Success) await LoadAsync(Header.Id);
+        var result = await DispatchAsync(() => dispatcher.Send(new MarkAuthorAsAliasOf(Header.Id, canonicalId)));
+        if (Apply(result)) await LoadAsync(Header.Id);
     }
 
     public async Task PromoteToCanonicalAsync()
     {
         if (Header is null || Header.CanonicalAuthorId is null) return;
 
-        var result = await dispatcher.Send(new PromoteAuthorToCanonical(Header.Id));
-        Apply(result);
-        if (result.Success) await LoadAsync(Header.Id);
+        var result = await DispatchAsync(() => dispatcher.Send(new PromoteAuthorToCanonical(Header.Id)));
+        if (Apply(result)) await LoadAsync(Header.Id);
     }
 
-    private void Apply(AuthorAdminResult result)
+    // Each admin action owns exactly one channel (the success message or Error), so
+    // a stale alert from a prior action can't sit next to the new one. A null
+    // result means the domain refused the dispatch and Error is already set.
+    private bool Apply(AuthorAdminResult? result)
     {
-        // Each admin action owns exactly one channel — clear the opposite one so a
-        // stale alert from a prior action can't sit next to the new one (both render
-        // simultaneously in Detail.razor).
-        SuccessMessage = result.SuccessMessage;
-        ErrorMessage = result.ErrorMessage;
+        SuccessMessage = result?.SuccessMessage;
+        if (result?.ErrorMessage is { } message) Error = message;
+        return result is { Success: true };
     }
 
     public enum AuthorViewMode { Works, Books }

@@ -101,6 +101,11 @@
                     </MudStack>
                 </MudStack>
 
+                @* The page's one Error alert, directly above the header action buttons:
+                   rating, status, notes, tags, copy delete, return, work removal and
+                   book delete all report a refusal here. *@
+                <ActionError Message="@VM.Error" />
+
                 <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center" Class="mt-3">
                     @if (VM.LentToLabel is { } lentTo)
                     {
@@ -660,17 +665,9 @@
             .ToList();
     }
 
-    private async Task OnRatingChanged(int value)
-    {
-        try { await VM.SetRatingAsync(value); }
-        catch (Exception ex) { Snackbar.Add($"Couldn't save rating: {ex.Message}", Severity.Error); }
-    }
+    private Task OnRatingChanged(int value) => VM.SetRatingAsync(value);
 
-    private async Task OnStatusChanged(BookStatus value)
-    {
-        try { await VM.SetStatusAsync(value); }
-        catch (Exception ex) { Snackbar.Add($"Couldn't save status: {ex.Message}", Severity.Error); }
-    }
+    private Task OnStatusChanged(BookStatus value) => VM.SetStatusAsync(value);
 
     private void OnNotesDirty()
     {
@@ -695,19 +692,18 @@
             await SaveNotesImmediateAsync();
         }
         catch (TaskCanceledException) { /* superseded by a newer keystroke */ }
+        catch (Exception ex)
+        {
+            // Not inside an event handler, so hand the fault to the renderer: it
+            // reaches the page error boundary like any other fault.
+            await DispatchExceptionAsync(ex);
+        }
     }
 
     private async Task SaveNotesImmediateAsync()
     {
-        try
-        {
-            await VM.SaveNotesAsync();
-            await InvokeAsync(StateHasChanged);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Couldn't save notes: {ex.Message}", Severity.Error);
-        }
+        await VM.SaveNotesAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task<IEnumerable<string>> SearchTagsAsync(string query, CancellationToken ct)
@@ -736,22 +732,11 @@
     {
         var name = newTagText;
         if (string.IsNullOrWhiteSpace(name)) return;
-        try
-        {
-            await VM.AddTagAsync(name);
-            newTagText = null;
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Couldn't add tag: {ex.Message}", Severity.Error);
-        }
+        await VM.AddTagAsync(name);
+        if (VM.Error is null) newTagText = null;
     }
 
-    private async Task OnRemoveTagAsync(int tagId)
-    {
-        try { await VM.RemoveTagAsync(tagId); }
-        catch (Exception ex) { Snackbar.Add($"Couldn't remove tag: {ex.Message}", Severity.Error); }
-    }
+    private Task OnRemoveTagAsync(int tagId) => VM.RemoveTagAsync(tagId);
 
     // Dialog-opener guard. Wraps the whole show-dialog-then-refresh sequence,
     // so `dialogOpening` stays true until the dialog closes AND the page has
@@ -815,6 +800,7 @@
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
         var dialog = await DialogService.ShowAsync<AddWorkDialog>("Add work", parameters, options);
         await dialog.Result;
+        VM.Error = null;
     });
 
     private Task OpenAddMultipleWorksDialog() => OpenDialogGuardedAsync(async () =>
@@ -831,6 +817,7 @@
         var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
         var dialog = await DialogService.ShowAsync<AddMultipleWorksDialog>("Add multiple works", parameters, options);
         await dialog.Result;
+        VM.Error = null;
     });
 
     private Task OpenReorderWorksDialog() => OpenDialogGuardedAsync(async () =>
@@ -846,6 +833,7 @@
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
         var dialog = await DialogService.ShowAsync<ReorderWorksDialog>("Reorder works", parameters, options);
         await dialog.Result;
+        VM.Error = null;
     });
 
     private Task ConfirmRemoveWorkAsync(int workId, string workTitle) => OpenDialogGuardedAsync(async () =>
@@ -862,22 +850,8 @@
             cancelText: "Cancel");
         if (confirmed != true) return;
 
-        try
-        {
-            var removed = await VM.RemoveWorkFromBookAsync(workId);
-            if (removed is not null)
-            {
-                Snackbar.Add($"Removed \"{removed}\".", Severity.Success);
-            }
-            else
-            {
-                Snackbar.Add("Couldn't remove the work.", Severity.Warning);
-            }
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Couldn't remove the work: {ex.Message}", Severity.Error);
-        }
+        var removed = await VM.RemoveWorkFromBookAsync(workId);
+        if (removed is not null) Snackbar.Add($"Removed \"{removed}\".", Severity.Success);
     });
 
     private Task ConfirmDeleteBookAsync() => OpenDialogGuardedAsync(async () =>
@@ -890,22 +864,10 @@
             cancelText: "Cancel");
         if (confirmed != true) return;
 
-        try
+        if (await VM.DeleteBookAsync())
         {
-            var ok = await VM.DeleteBookAsync();
-            if (ok)
-            {
-                Snackbar.Add("Book deleted.", Severity.Success);
-                Nav.NavigateTo("/books");
-            }
-            else
-            {
-                Snackbar.Add("Couldn't delete the book.", Severity.Error);
-            }
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Couldn't delete the book: {ex.Message}", Severity.Error);
+            Snackbar.Add("Book deleted.", Severity.Success);
+            Nav.NavigateTo("/books");
         }
     });
 
@@ -974,6 +936,7 @@
         // which calls InitializeAsync on success — so the page already has fresh
         // data by the time we get back here. No extra refresh needed.
         await dialog.Result;
+        VM.Error = null;
     });
 
     private Task OpenEditCopyDialog(int copyId) => OpenDialogGuardedAsync(async () =>
@@ -1029,10 +992,7 @@
 
     private Task ReturnGuardedAsync(Func<Task<bool>> returnLoans) => OpenDialogGuardedAsync(async () =>
     {
-        if (await returnLoans())
-            Snackbar.Add("Marked returned", Severity.Success);
-        else
-            Snackbar.Add($"Couldn't mark returned: {VM.Error}", Severity.Error);
+        if (await returnLoans()) Snackbar.Add("Marked returned", Severity.Success);
     });
 
     // Delete uses the same guard — the inline Delete confirm button lives
@@ -1040,17 +1000,11 @@
     // protection (a double-tap would otherwise fire two deletes in sequence).
     private Task ConfirmDeleteCopyAsync(int copyId) => OpenDialogGuardedAsync(async () =>
     {
-        try
-        {
-            await VM.DeleteCopyAsync(copyId);
-            confirmingDeleteCopyId = null;
-            Snackbar.Add("Copy deleted", Severity.Success);
-            await VM.InitializeAsync(BookId);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Couldn't delete copy: {ex.Message}", Severity.Error);
-        }
+        await VM.DeleteCopyAsync(copyId);
+        confirmingDeleteCopyId = null;
+        if (VM.Error is not null) return;
+        Snackbar.Add("Copy deleted", Severity.Success);
+        await VM.InitializeAsync(BookId);
     });
 
     private static Color StatusColor(BookStatus status) => status switch

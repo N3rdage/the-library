@@ -1,0 +1,12 @@
+@* The one place a form or dialog shows a refused action: directly above its
+   action buttons (the bottom of a dialog's content, the end of a page form).
+   Bound to a dispatching view model's Error, which clears on the next attempt. *@
+
+@if (!string.IsNullOrEmpty(Message))
+{
+    <MudAlert Severity="Severity.Error" Dense="true" Class="mt-3">@Message</MudAlert>
+}
+
+@code {
+    [Parameter] public string? Message { get; set; }
+}

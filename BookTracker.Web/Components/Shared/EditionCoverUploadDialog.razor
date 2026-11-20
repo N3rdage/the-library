@@ -64,6 +64,7 @@
                 }
             }
         </MudStack>
+        <ActionError Message="@ViewModel.Error" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel" Disabled="@uploading">Cancel</MudButton>
@@ -110,11 +111,7 @@
                 MudDialog.Close(DialogResult.Ok(true));
                 return;
             }
-            Snackbar.Add(result.ErrorMessage ?? "Upload failed.", Severity.Error);
-        }
-        catch (Exception)
-        {
-            Snackbar.Add("Upload failed unexpectedly.", Severity.Error);
+            ViewModel.Error = result.ErrorMessage ?? "Upload failed.";
         }
         finally
         {

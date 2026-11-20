@@ -28,7 +28,7 @@ public class AuthorMergeViewModelTests
         Assert.Equal("A", vm.Lower!.Name);
         Assert.Equal("B", vm.Higher!.Name);
         Assert.Null(vm.IncompatibilityReason);
-        Assert.Null(vm.ErrorMessage);
+        Assert.Null(vm.Error);
     }
 
     [Fact]
@@ -40,7 +40,7 @@ public class AuthorMergeViewModelTests
         var vm = CreateVm();
         await vm.LoadAsync(1, 2);
 
-        Assert.NotNull(vm.ErrorMessage);
+        Assert.NotNull(vm.Error);
     }
 
     [Fact]
@@ -120,7 +120,7 @@ public class AuthorMergeViewModelTests
 
         await vm.MergeAsync();
 
-        Assert.Equal("boom", vm.ErrorMessage);
+        Assert.Equal("boom", vm.Error);
     }
 
     [Fact]

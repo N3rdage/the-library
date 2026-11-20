@@ -17,11 +17,6 @@
         already has stay. The loser Book row is then deleted.
     </MudText>
 
-    @if (!string.IsNullOrEmpty(VM.ErrorMessage))
-    {
-        <MudAlert Severity="Severity.Error" Class="mb-3">@VM.ErrorMessage</MudAlert>
-    }
-
     @if (VM.Loading)
     {
         <MudStack AlignItems="AlignItems.Center" Class="py-10">
@@ -30,7 +25,8 @@
     }
     else if (VM.Lower is null || VM.Higher is null)
     {
-        <MudButton Variant="Variant.Outlined" Href="/duplicates">Back to duplicates</MudButton>
+        <ActionError Message="@VM.Error" />
+        <MudButton Variant="Variant.Outlined" Href="/duplicates" Class="mt-3">Back to duplicates</MudButton>
     }
     else
     {
@@ -76,7 +72,9 @@
             </MudAlert>
         }
 
-        <MudStack Row Spacing="2">
+        <ActionError Message="@VM.Error" />
+
+        <MudStack Row Spacing="2" Class="mt-3">
             <MudButton Variant="Variant.Filled" Color="Color.Primary"
                        Disabled="@(!VM.CanMerge || VM.Merging)"
                        OnClick="OnMergeClickAsync">

@@ -5,10 +5,6 @@
 
 <MudDialog>
     <DialogContent>
-        @if (VM.Error is not null)
-        {
-            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@VM.Error</MudAlert>
-        }
         @if (VM.NotFound)
         {
             <MudAlert Severity="Severity.Warning">Copy not found.</MudAlert>
@@ -43,6 +39,7 @@
                               Placeholder="e.g. signed, dust jacket, gift from..." />
             </MudStack>
         }
+        <ActionError Message="@VM.Error" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>

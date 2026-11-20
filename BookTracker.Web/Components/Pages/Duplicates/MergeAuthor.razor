@@ -14,11 +14,6 @@
     page first.
 </p>
 
-@if (!string.IsNullOrEmpty(VM.ErrorMessage))
-{
-    <div class="alert alert-danger">@VM.ErrorMessage</div>
-}
-
 @if (VM.Loading)
 {
     <div class="text-center py-5">
@@ -27,6 +22,7 @@
 }
 else if (VM.Lower is null || VM.Higher is null)
 {
+    <ActionError Message="@VM.Error" />
     <a href="/duplicates" class="btn btn-outline-secondary">Back to duplicates</a>
 }
 else if (!string.IsNullOrEmpty(VM.IncompatibilityReason))
@@ -58,7 +54,9 @@ else
         </div>
     }
 
-    <div class="d-flex gap-2">
+    <ActionError Message="@VM.Error" />
+
+    <div class="d-flex gap-2 mt-3">
         <button type="button" class="btn btn-primary"
                 disabled="@(!VM.CanMerge || VM.Merging)"
                 @onclick="OnMergeClickAsync">

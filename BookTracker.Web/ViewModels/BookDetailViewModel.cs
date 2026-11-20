@@ -73,15 +73,15 @@ public class BookDetailViewModel(
     public async Task SetRatingAsync(int rating)
     {
         if (Book is null) return;
-        await dispatcher.Send(new RateBook(Book.Id, rating));
-        CurrentRating = rating;
+        if (await DispatchAsync(() => dispatcher.Send(new RateBook(Book.Id, rating))))
+            CurrentRating = rating;
     }
 
     public async Task SetStatusAsync(BookStatus status)
     {
         if (Book is null) return;
-        await dispatcher.Send(new SetBookStatus(Book.Id, status));
-        CurrentStatus = status;
+        if (await DispatchAsync(() => dispatcher.Send(new SetBookStatus(Book.Id, status))))
+            CurrentStatus = status;
     }
 
     public void MarkNotesDirty() => NotesDirty = true;
@@ -93,8 +93,8 @@ public class BookDetailViewModel(
         NotesSaving = true;
         try
         {
-            await dispatcher.Send(new UpdateBookNotes(Book.Id, CurrentNotes));
-            NotesDirty = false;
+            if (await DispatchAsync(() => dispatcher.Send(new UpdateBookNotes(Book.Id, CurrentNotes))))
+                NotesDirty = false;
         }
         finally
         {
@@ -113,13 +113,15 @@ public class BookDetailViewModel(
         var trimmed = name.Trim();
         if (CurrentTags.Any(t => t.Name.Equals(trimmed, StringComparison.OrdinalIgnoreCase)))
         {
+            // Nothing to dispatch, but the attempt still clears an earlier refusal.
+            Error = null;
             return null;
         }
 
         // The handler returns the tag's actual stored Name — which can differ in
         // casing from the input when it resolved to an existing row — so the
         // optimistic chip matches what a reload will show.
-        var detail = await dispatcher.Send(new AddTagToBook(Book.Id, name));
+        var detail = await DispatchAsync(() => dispatcher.Send(new AddTagToBook(Book.Id, name)));
         if (detail is null) return null;
 
         CurrentTags.Add(detail);
@@ -135,7 +137,7 @@ public class BookDetailViewModel(
     public async Task DeleteCopyAsync(int copyId)
     {
         if (Book is null) return;
-        await dispatcher.Send(new DeleteCopy(Book.Id, copyId));
+        await DispatchAsync(() => dispatcher.Send(new DeleteCopy(Book.Id, copyId)));
     }
 
     /// <summary>Today's date for loans (see <see cref="LoanDates.Today"/>).</summary>
@@ -278,8 +280,8 @@ public class BookDetailViewModel(
     {
         if (Book is null) return;
 
-        await dispatcher.Send(new RemoveTagFromBook(Book.Id, tagId));
-        CurrentTags.RemoveAll(t => t.Id == tagId);
+        if (await DispatchAsync(() => dispatcher.Send(new RemoveTagFromBook(Book.Id, tagId))))
+            CurrentTags.RemoveAll(t => t.Id == tagId);
     }
 
     /// <summary>Search Works to attach to this Book — used by the
@@ -300,8 +302,9 @@ public class BookDetailViewModel(
     public async Task<string?> AttachExistingWorkAsync(int workId)
     {
         if (Book is null) return null;
-        var title = await dispatcher.Send(new AttachWorkToBook(Book.Id, workId));
+        var title = await DispatchAsync(() => dispatcher.Send(new AttachWorkToBook(Book.Id, workId)));
         if (title is not null) await InitializeAsync(Book.Id);
+        else Error ??= "Couldn't attach that work — it may already be on this book.";
         return title;
     }
 
@@ -327,10 +330,11 @@ public class BookDetailViewModel(
             .Select(c => new ContributorInput(c.Name, c.Role))
             .ToList();
 
-        var id = await dispatcher.Send(new CreateWorkOnBook(
+        var id = await DispatchAsync(() => dispatcher.Send(new CreateWorkOnBook(
             Book.Id, title, subtitle, authorNames, contributorInputs,
-            firstPub.Date, firstPub.Precision, genreIds));
+            firstPub.Date, firstPub.Precision, genreIds)));
         if (id is not null) await InitializeAsync(Book.Id);
+        else Error ??= "Couldn't save the work — check that you provided a title and at least one contributor.";
         return id;
     }
 
@@ -383,8 +387,8 @@ public class BookDetailViewModel(
                 r.GenreIds);
         }).ToList();
 
-        var count = await dispatcher.Send(new AttachWorksToBook(
-            Book.Id, mappedRows, singleAuthor, singleGenre, sharedAuthors, sharedGenreIds));
+        var count = await DispatchAsync(() => dispatcher.Send(new AttachWorksToBook(
+            Book.Id, mappedRows, singleAuthor, singleGenre, sharedAuthors, sharedGenreIds)));
         await InitializeAsync(Book.Id);
         return count;
     }
@@ -398,8 +402,9 @@ public class BookDetailViewModel(
     public async Task<string?> RemoveWorkFromBookAsync(int workId)
     {
         if (Book is null) return null;
-        var title = await dispatcher.Send(new RemoveWorkFromBook(Book.Id, workId));
+        var title = await DispatchAsync(() => dispatcher.Send(new RemoveWorkFromBook(Book.Id, workId)));
         if (title is not null) await InitializeAsync(Book.Id);
+        else Error ??= "Couldn't remove the work.";
         return title;
     }
 
@@ -411,7 +416,7 @@ public class BookDetailViewModel(
     {
         if (Book is null) return;
         ArgumentNullException.ThrowIfNull(orderedWorkIds);
-        await dispatcher.Send(new ReorderWorks(Book.Id, orderedWorkIds));
+        if (!await DispatchAsync(() => dispatcher.Send(new ReorderWorks(Book.Id, orderedWorkIds)))) return;
         await InitializeAsync(Book.Id);
     }
 
@@ -428,8 +433,7 @@ public class BookDetailViewModel(
     public async Task<bool> DeleteBookAsync()
     {
         if (Book is null) return false;
-        await dispatcher.Send(new DeleteBook(Book.Id));
-        return true;
+        return await DispatchAsync(() => dispatcher.Send(new DeleteBook(Book.Id)));
     }
 
     /// <summary>Tag autocomplete — returns existing tags not already assigned, filtered by substring.</summary>
