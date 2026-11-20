@@ -374,6 +374,10 @@ In prod, secret App Settings resolve via `@Microsoft.KeyVault(SecretUri=…)` re
 
 Dev config templates: `appsettings.Example.json`, `appsettings.Development.Example.json`. Copy and fill in secrets. Only configure providers you want to use — the toggle auto-detects available providers.
 
+## Telemetry
+
+Bookcase reports to Application Insights through `Microsoft.ApplicationInsights.AspNetCore` 3.x, which is an OpenTelemetry pipeline with the Azure Monitor exporter: `AddApplicationInsightsTelemetry()` in `ProgramSetup.cs` registers request, dependency and `ILogger` collection, and the connection string comes from `APPLICATIONINSIGHTS_CONNECTION_STRING` (set in `app-config.bicep`). `UserActivityProcessor` (`BookTracker.Web/Telemetry/`, a `BaseProcessor<Activity>` registered through `ConfigureOpenTelemetryTracerProvider`) tags each Activity with the Easy Auth user name as `enduser.id` when the request is authenticated, which Application Insights shows as the authenticated user id. It stamps in `OnEnd` because the request Activity starts before authentication runs.
+
 ## Infrastructure
 
 - Docker Compose for local SQL Server 2022 Developer + Azurite (cover-storage blob emulator)

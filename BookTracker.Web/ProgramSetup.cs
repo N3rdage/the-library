@@ -8,12 +8,12 @@ using BookTracker.Web.Services;
 using BookTracker.Web.Services.Covers;
 using BookTracker.Web.Telemetry;
 using BookTracker.Web.ViewModels;
-using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Options;
 using MudBlazor.Services;
+using OpenTelemetry.Trace;
 
 namespace BookTracker.Web;
 
@@ -64,15 +64,15 @@ public static class ProgramSetup
 
     private static void ConfigureServices(WebApplicationBuilder builder)
     {
-        // Application Insights: explicit SDK registration (the App Service codeless
-        // attach gives baseline request/dependency telemetry but NOT structured
-        // ILogger output — message-template properties like {Isbn} only become
-        // custom dimensions once the SDK is wired here). Connection string
+        // Application Insights 3.x: an OpenTelemetry pipeline with the Azure Monitor
+        // exporter, registered explicitly so structured ILogger output (message-template
+        // properties like {Isbn}) becomes custom dimensions. Connection string
         // resolves from APPLICATIONINSIGHTS_CONNECTION_STRING (set in
-        // app-config.bicep).
+        // app-config.bicep). UserActivityProcessor stamps the authenticated user
+        // onto every Activity as enduser.id (Application Insights' authenticated user id).
         builder.Services.AddApplicationInsightsTelemetry();
         builder.Services.AddHttpContextAccessor();
-        builder.Services.AddSingleton<ITelemetryInitializer, UserTelemetryInitializer>();
+        builder.Services.ConfigureOpenTelemetryTracerProvider(tracing => tracing.AddProcessor<UserActivityProcessor>());
 
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
