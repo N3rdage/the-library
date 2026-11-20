@@ -33,13 +33,9 @@ public class GetWishlistSnapshotHandlerTests
         // BookSnapshot.Status.
         using (var db = _factory.CreateDbContext())
         {
-            db.WishlistItems.Add(new WishlistItem
-            {
-                Title = "The Dawn of Everything",
-                Author = "David Graeber, David Wengrow",
-                Priority = WishlistPriority.High,
-                Isbn = "9780374157357",
-            });
+            db.WishlistItems.Add(TestWishlistItems.Item(
+                "The Dawn of Everything", "David Graeber, David Wengrow", WishlistPriority.High,
+                isbn: "9780374157357"));
             await db.SaveChangesAsync();
         }
 
@@ -62,10 +58,10 @@ public class GetWishlistSnapshotHandlerTests
             var earlier = DateTime.UtcNow.AddDays(-5);
             var later = DateTime.UtcNow.AddDays(-1);
             db.WishlistItems.AddRange(
-                new WishlistItem { Title = "Low older", Author = "x", Priority = WishlistPriority.Low, DateAdded = earlier },
-                new WishlistItem { Title = "High newer", Author = "x", Priority = WishlistPriority.High, DateAdded = later },
-                new WishlistItem { Title = "High older", Author = "x", Priority = WishlistPriority.High, DateAdded = earlier },
-                new WishlistItem { Title = "Medium newer", Author = "x", Priority = WishlistPriority.Medium, DateAdded = later });
+                TestWishlistItems.Item("Low older", "x", WishlistPriority.Low, dateAdded: earlier),
+                TestWishlistItems.Item("High newer", "x", WishlistPriority.High, dateAdded: later),
+                TestWishlistItems.Item("High older", "x", WishlistPriority.High, dateAdded: earlier),
+                TestWishlistItems.Item("Medium newer", "x", WishlistPriority.Medium, dateAdded: later));
             await db.SaveChangesAsync();
         }
 
@@ -80,18 +76,13 @@ public class GetWishlistSnapshotHandlerTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            var series = new Series { Name = "Cosmere", Type = SeriesType.Collection };
+            var series = TestSeries.Series("Cosmere", SeriesType.Collection);
             db.Series.Add(series);
             await db.SaveChangesAsync();
 
-            db.WishlistItems.Add(new WishlistItem
-            {
-                Title = "Wind and Truth",
-                Author = "Brandon Sanderson",
-                Priority = WishlistPriority.Medium,
-                SeriesId = series.Id,
-                SeriesOrder = 5,
-            });
+            db.WishlistItems.Add(TestWishlistItems.Item(
+                "Wind and Truth", "Brandon Sanderson", WishlistPriority.Medium,
+                seriesId: series.Id, seriesOrder: 5));
             await db.SaveChangesAsync();
         }
 
@@ -113,22 +104,13 @@ public class GetWishlistSnapshotHandlerTests
         // case-insensitively.
         using (var db = _factory.CreateDbContext())
         {
-            db.WishlistItems.Add(new WishlistItem
-            {
-                Title = "Foundation",
-                Author = "Asimov",
-                Priority = WishlistPriority.High,
-                Isbn = "9780553293357", // legacy single column
-                CoverUrl = "https://covers.example/foundation.jpg",
-                Isbns =
-                [
-                    // New table — overlaps with legacy on the first; the
-                    // union should de-dupe to three.
-                    new WishlistItemIsbn { Isbn = "9780553293357" },
-                    new WishlistItemIsbn { Isbn = "9780553382570" },
-                    new WishlistItemIsbn { Isbn = "9780586010822" },
-                ],
-            });
+            db.WishlistItems.Add(TestWishlistItems.Item(
+                "Foundation", "Asimov", WishlistPriority.High,
+                isbn: "9780553293357", // legacy single column
+                coverUrl: "https://covers.example/foundation.jpg",
+                // New table — overlaps with legacy on the first; the
+                // union should de-dupe to three.
+                isbns: ["9780553293357", "9780553382570", "9780586010822"]));
             await db.SaveChangesAsync();
         }
 
@@ -152,13 +134,9 @@ public class GetWishlistSnapshotHandlerTests
         // scan-flag covers them without a data migration.
         using (var db = _factory.CreateDbContext())
         {
-            db.WishlistItems.Add(new WishlistItem
-            {
-                Title = "Legacy Row",
-                Author = "Pre-PR-B",
-                Priority = WishlistPriority.Medium,
-                Isbn = "9781234567897",
-            });
+            db.WishlistItems.Add(TestWishlistItems.Item(
+                "Legacy Row", "Pre-PR-B", WishlistPriority.Medium,
+                isbn: "9781234567897"));
             await db.SaveChangesAsync();
         }
 

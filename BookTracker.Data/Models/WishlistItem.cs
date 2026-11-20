@@ -10,36 +10,74 @@ public enum WishlistPriority
     High
 }
 
+// WishlistItem's fields are written only through Create, CreateSeriesSlot and
+// SetIsbns (private setters; EF materialises through them regardless of
+// accessibility), so a handler cannot bypass the ISBN dual-write or the series
+// link and the compiler enforces it. The internal constructor serves the tests'
+// seed builder (InternalsVisibleTo), and BookTracker.Application cannot reach it.
+// Id stays public for EF and the tests' in-memory graphs.
 public class WishlistItem
 {
+    // EF materialisation, Create and CreateSeriesSlot.
+    private WishlistItem() { }
+
+    /// <summary>Stores exactly the values given: nothing is trimmed or
+    /// normalised here, and the legacy <see cref="Isbn"/> column and the
+    /// <see cref="Isbns"/> table are written independently (unlike
+    /// <see cref="SetIsbns"/>), so a test seed can stand for a legacy row. An
+    /// omitted <paramref name="dateAdded"/> keeps the default of now.</summary>
+    internal WishlistItem(
+        string title,
+        string author,
+        WishlistPriority priority,
+        string? isbn,
+        IEnumerable<string>? isbns,
+        string? coverUrl,
+        DateTime? dateAdded,
+        Series? series,
+        int? seriesId,
+        int? seriesOrder)
+    {
+        Title = title;
+        Author = author;
+        Priority = priority;
+        Isbn = isbn;
+        if (isbns is not null) Isbns = isbns.Select(i => new WishlistItemIsbn { Isbn = i }).ToList();
+        CoverUrl = coverUrl;
+        if (dateAdded is not null) DateAdded = dateAdded.Value;
+        Series = series;
+        SeriesId = seriesId;
+        SeriesOrder = seriesOrder;
+    }
+
     public int Id { get; set; }
 
     [Required, MaxLength(300)]
-    public string Title { get; set; } = string.Empty;
+    public string Title { get; private set; } = string.Empty;
 
     [Required, MaxLength(200)]
-    public string Author { get; set; } = string.Empty;
+    public string Author { get; private set; } = string.Empty;
 
-    public WishlistPriority Priority { get; set; } = WishlistPriority.Medium;
+    public WishlistPriority Priority { get; private set; } = WishlistPriority.Medium;
 
     [Column(TypeName = "decimal(10,2)")]
-    public decimal? Price { get; set; }
+    public decimal? Price { get; private set; }
 
-    public DateTime DateAdded { get; set; } = DateTime.UtcNow;
+    public DateTime DateAdded { get; private set; } = DateTime.UtcNow;
 
     /// <summary>Legacy single-ISBN column from the original /shopping
     /// wishlist shape. New entries (post-2026-05-25 search-and-add) write
     /// to <see cref="Isbns"/> instead, but this column stays for back-compat
     /// with rows captured via the previous QuickAdd UI.</summary>
     [MaxLength(20)]
-    public string? Isbn { get; set; }
+    public string? Isbn { get; private set; }
 
     /// <summary>Every known ISBN for this wishlisted book. Search-and-add
     /// populates from the BookLookupService result (Open Library / Google
     /// Books / Trove can each surface different ISBNs for the same work).
     /// Backs the PR D scan-flag lookup — when Drew scans a book in a
     /// bookshop, ANY of these ISBNs matching means "on your wishlist".</summary>
-    public List<WishlistItemIsbn> Isbns { get; set; } = [];
+    public List<WishlistItemIsbn> Isbns { get; private set; } = [];
 
     /// <summary>Upstream cover URL captured at add time. Lightweight
     /// (not mirrored to blob storage like Book/Edition covers — wishlist
@@ -47,13 +85,13 @@ public class WishlistItem
     /// rotate is acceptable). Null when the search candidate had no
     /// cover or for legacy QuickAdd rows.</summary>
     [MaxLength(500)]
-    public string? CoverUrl { get; set; }
+    public string? CoverUrl { get; private set; }
 
-    public int? SeriesId { get; set; }
-    public Series? Series { get; set; }
+    public int? SeriesId { get; private set; }
+    public Series? Series { get; private set; }
 
     /// <summary>Position in the series this item would fill.</summary>
-    public int? SeriesOrder { get; set; }
+    public int? SeriesOrder { get; private set; }
 
     // --- Aggregate behaviour -------------------------------------------------
     // WishlistItem is a small aggregate. Its one non-obvious invariant is the

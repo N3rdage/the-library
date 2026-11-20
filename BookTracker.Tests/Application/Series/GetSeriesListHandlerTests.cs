@@ -21,8 +21,8 @@ public class GetSeriesListHandlerTests
         using var db = _factory.CreateDbContext();
         var pratchett = Author.Create("Terry Pratchett");
         db.Authors.Add(pratchett);
-        var discworld = new Series { Name = "Discworld", Author = "Terry Pratchett", Type = SeriesType.Collection, ExpectedCount = 41 };
-        var foundation = new Series { Name = "Foundation", Author = "Isaac Asimov", Type = SeriesType.Series, ExpectedCount = 7 };
+        var discworld = TestSeries.Series("Discworld", SeriesType.Collection, author: "Terry Pratchett", expectedCount: 41);
+        var foundation = TestSeries.Series("Foundation", SeriesType.Series, author: "Isaac Asimov", expectedCount: 7);
         db.Series.AddRange(discworld, foundation);
         db.Books.AddRange(
             TestBooks.Book("Mort", series: discworld, seriesOrder: 4, works: [TestWorks.Work("Mort", pratchett)]),

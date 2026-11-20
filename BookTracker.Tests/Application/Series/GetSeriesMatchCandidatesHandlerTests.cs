@@ -20,7 +20,7 @@ public class GetSeriesMatchCandidatesHandlerTests
         int id;
         using (var db = _factory.CreateDbContext())
         {
-            var s = new Series { Name = "Discworld", Author = "Terry Pratchett", Type = SeriesType.Collection };
+            var s = TestSeries.Series("Discworld", SeriesType.Collection, author: "Terry Pratchett");
             db.Series.Add(s);
             await db.SaveChangesAsync();
             id = s.Id;
@@ -46,10 +46,10 @@ public class GetSeriesMatchCandidatesHandlerTests
     {
         using (var db = _factory.CreateDbContext())
         {
-            db.Series.Add(new Series { Name = "Discworld", Author = "Terry Pratchett", Type = SeriesType.Collection });
-            db.Series.Add(new Series { Name = "Long Earth", Author = "Terry Pratchett", Type = SeriesType.Series });
-            db.Series.Add(new Series { Name = "Foundation", Author = "Isaac Asimov", Type = SeriesType.Series });
-            db.Series.Add(new Series { Name = "No Author", Type = SeriesType.Series });
+            db.Series.Add(TestSeries.Series("Discworld", SeriesType.Collection, author: "Terry Pratchett"));
+            db.Series.Add(TestSeries.Series("Long Earth", SeriesType.Series, author: "Terry Pratchett"));
+            db.Series.Add(TestSeries.Series("Foundation", SeriesType.Series, author: "Isaac Asimov"));
+            db.Series.Add(TestSeries.Series("No Author", SeriesType.Series));
             await db.SaveChangesAsync();
         }
 
@@ -66,7 +66,7 @@ public class GetSeriesMatchCandidatesHandlerTests
         using (var db = _factory.CreateDbContext())
         {
             var author = Author.Create("Some Author");
-            var series = new Series { Name = "Existing Series", Type = SeriesType.Series };
+            var series = TestSeries.Series("Existing Series", SeriesType.Series);
             db.Books.AddRange(
                 TestBooks.Book("Book A", works: [TestWorks.Work("Book A", author)]),
                 TestBooks.Book("Book B", works: [TestWorks.Work("Book B", author)]),

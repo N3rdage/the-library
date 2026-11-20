@@ -30,9 +30,9 @@ public class AiLibraryContextTests
 
             // Inserted in name order so the gap lines read the same whatever
             // order the series come back in.
-            var foundation = new Series { Name = "Foundation", Author = "Isaac Asimov", Type = SeriesType.Series, ExpectedCount = 3 };
-            var zeta = new Series { Name = "Zeta", Type = SeriesType.Series, ExpectedCount = 1 };
-            var open = new Series { Name = "Open Ended", Type = SeriesType.Series };
+            var foundation = TestSeries.Series("Foundation", SeriesType.Series, author: "Isaac Asimov", expectedCount: 3);
+            var zeta = TestSeries.Series("Zeta", SeriesType.Series, expectedCount: 1);
+            var open = TestSeries.Series("Open Ended", SeriesType.Series);
             db.Series.AddRange(foundation, zeta, open);
 
             db.Books.AddRange(

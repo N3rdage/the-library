@@ -94,7 +94,7 @@ public class BookDetailViewModelTests
             var author = Author.Create("William Shakespeare");
             // Series membership is a per-Book concept — the compendium sits in the
             // collection as one installment; its Works carry no series of their own.
-            var series = new Series { Name = "Shakespeare's Plays", Type = SeriesType.Collection };
+            var series = TestSeries.Series("Shakespeare's Plays", SeriesType.Collection);
             var book = TestBooks.Book("Complete Works", series: series);
             // Capture order deliberately differs from alphabetical (Hamlet would be
             // first if sorted by title) — the read must preserve capture order.

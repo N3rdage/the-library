@@ -28,7 +28,7 @@ public class BookListViewModelTests
         var mystery = new Genre { Name = "Mystery" };
         db.Genres.AddRange(horror, mystery);
 
-        var poirot = new Series { Name = "Hercule Poirot", Type = SeriesType.Collection };
+        var poirot = TestSeries.Series("Hercule Poirot", SeriesType.Collection);
         db.Series.Add(poirot);
 
         db.Books.AddRange(
@@ -158,7 +158,7 @@ public class BookListViewModelTests
         {
             var herbert = Author.Create("Frank Herbert");
             db.Authors.Add(herbert);
-            var dune = new Series { Name = "Dune", Type = SeriesType.Series };
+            var dune = TestSeries.Series("Dune", SeriesType.Series);
             db.Series.Add(dune);
             db.Books.AddRange(
                 TestBooks.Book("Dune Messiah", series: dune, seriesOrder: 2, works: [TestWorks.Work("Dune Messiah", herbert)]),
@@ -192,7 +192,7 @@ public class BookListViewModelTests
         using (var db = factory.CreateDbContext())
         {
             var herbert = Author.Create("Frank Herbert");
-            var dune = new Series { Name = "Dune", Type = SeriesType.Series };
+            var dune = TestSeries.Series("Dune", SeriesType.Series);
             db.Books.AddRange(
                 TestBooks.Book("Dune Messiah", series: dune, seriesOrder: 2, works: [TestWorks.Work("Dune Messiah", herbert)]),
                 TestBooks.Book("Dune", series: dune, seriesOrder: 1, works: [TestWorks.Work("Dune", herbert)]));
@@ -224,7 +224,7 @@ public class BookListViewModelTests
         using (var db = factory.CreateDbContext())
         {
             var herbert = Author.Create("Frank Herbert");
-            var dune = new Series { Name = "Dune", Type = SeriesType.Series };
+            var dune = TestSeries.Series("Dune", SeriesType.Series);
             db.Books.Add(TestBooks.Book(
                 "Dune Omnibus",
                 series: dune,

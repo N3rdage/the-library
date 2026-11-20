@@ -46,7 +46,7 @@ public class CreateBookHandlerTests
     private async Task<int> SeedSeriesAsync(string name)
     {
         await using var db = _factory.CreateDbContext();
-        var series = new Series { Name = name, Type = SeriesType.Series };
+        var series = TestSeries.Series(name, SeriesType.Series);
         db.Series.Add(series);
         await db.SaveChangesAsync();
         return series.Id;
