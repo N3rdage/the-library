@@ -101,7 +101,30 @@
                     </MudStack>
                 </MudStack>
 
-                <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" Class="mt-3">
+                <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center" Class="mt-3">
+                    @if (VM.LentToLabel is { } lentTo)
+                    {
+                        <MudText Typo="Typo.body2" Style="min-width: 0; word-break: break-word;">@lentTo</MudText>
+                        <MudButton OnClick="ReturnAllLoansAsync"
+                                   Disabled="@dialogOpening"
+                                   Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.AssignmentReturn"
+                                   Size="Size.Small">
+                            Returned
+                        </MudButton>
+                    }
+                    else if (VM.FirstFreeCopyId is { } freeCopyId)
+                    {
+                        <MudButton OnClick="@(() => OpenLendDialog(freeCopyId))"
+                                   Disabled="@dialogOpening"
+                                   Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Outbox"
+                                   Size="Size.Small">
+                            Lend
+                        </MudButton>
+                    }
                     <MudButton OnClick="OpenBookEditDialog"
                                Disabled="@dialogOpening"
                                Variant="Variant.Outlined"
@@ -995,17 +1018,20 @@
         var result = await dialog.Result;
         if (result is not null && !result.Canceled)
         {
-            var count = LendVM.Copies.Count;
-            Snackbar.Add(count == 1 ? $"Lent to {LendVM.BorrowerName?.Trim()}" : $"{count} copies lent to {LendVM.BorrowerName?.Trim()}", Severity.Success);
+            Snackbar.Add(LendVM.LentMessage, Severity.Success);
             await VM.InitializeAsync(BookId);
         }
     });
 
-    private Task ReturnLoanAsync(int loanId) => OpenDialogGuardedAsync(async () =>
+    private Task ReturnLoanAsync(int loanId) => ReturnGuardedAsync(() => VM.ReturnLoanAsync(loanId));
+
+    private Task ReturnAllLoansAsync() => ReturnGuardedAsync(VM.ReturnAllLoansAsync);
+
+    private Task ReturnGuardedAsync(Func<Task> returnLoans) => OpenDialogGuardedAsync(async () =>
     {
         try
         {
-            await VM.ReturnLoanAsync(loanId);
+            await returnLoans();
             Snackbar.Add("Marked returned", Severity.Success);
         }
         catch (Exception ex)

@@ -7,7 +7,7 @@ using BookTracker.Data.Models;
 namespace BookTracker.Web.ViewModels;
 
 // View model for LendDialog. The page that opens the dialog creates one,
-// seeds it with the copy whose "Lend" was pressed (Initialize), and passes it
+// seeds it with the copy whose "Lend" was pressed, or with none (Initialize), and passes it
 // in as a parameter. The user names the borrower, sets the dates, adds or
 // removes copies, and ConfirmAsync lends every chosen copy in one LendCopies.
 // A rule the handler refuses (already lent, blank name, due before lent, a
@@ -37,13 +37,26 @@ public class LendDialogViewModel(IDispatcher dispatcher, TimeProvider clock)
     public void Initialize(LendCopyOption first)
     {
         ArgumentNullException.ThrowIfNull(first);
-        Copies = [first];
+        Reset([first]);
+    }
+
+    /// <summary>Starts with no copy chosen, for the /loans "Lend a book" entry
+    /// point: the user finds the books with the dialog's search.</summary>
+    public void Initialize() => Reset([]);
+
+    private void Reset(List<LendCopyOption> copies)
+    {
+        Copies = copies;
         BorrowerName = null;
         LentOn = LoanDates.Today(clock).ToDateTime(TimeOnly.MinValue);
         DueOn = null;
         ErrorMessage = null;
         Saving = false;
     }
+
+    /// <summary>The success snackbar text after <see cref="ConfirmAsync"/> returned true.</summary>
+    public string LentMessage =>
+        Copies.Count == 1 ? $"Lent to {BorrowerName?.Trim()}" : $"{Copies.Count} copies lent to {BorrowerName?.Trim()}";
 
     public async Task<IEnumerable<string>> SuggestBorrowersAsync(string? prefix, CancellationToken ct) =>
         await dispatcher.Query(new GetBorrowerNames(prefix), ct);
