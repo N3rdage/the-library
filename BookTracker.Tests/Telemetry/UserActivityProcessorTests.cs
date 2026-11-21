@@ -16,6 +16,24 @@ public class UserActivityProcessorTests
         return new UserActivityProcessor(accessor);
     }
 
+    // Activity.Kind can only be set by ActivitySource.StartActivity, which
+    // returns null unless a listener samples the source; one source and one
+    // listener serve the whole class.
+    private static readonly ActivitySource Source = CreateSampledSource();
+
+    private static ActivitySource CreateSampledSource()
+    {
+        var source = new ActivitySource(nameof(UserActivityProcessorTests));
+        ActivitySource.AddActivityListener(new ActivityListener
+        {
+            ShouldListenTo = s => s == source,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+        });
+        return source;
+    }
+
+    private static Activity StartActivity(ActivityKind kind) => Source.StartActivity("test", kind)!;
+
     [Fact]
     public void EndUserIdTag_IsTheKeyTheAzureMonitorExporterMapsToAuthenticatedUserId()
     {
@@ -99,8 +117,7 @@ public class UserActivityProcessorTests
         ctx.Request.Scheme = "https";
         ctx.Request.Host = new HostString("books-staging.example.com", 443);
 
-        var activity = new Activity("test");
-        activity.SetKind(ActivityKind.Server);
+        using var activity = StartActivity(ActivityKind.Server);
         ProcessorFor(ctx).OnEnd(activity);
 
         Assert.Equal("books-staging.example.com", activity.GetTagItem(UserActivityProcessor.ServerAddressTag));
@@ -113,8 +130,7 @@ public class UserActivityProcessorTests
         var ctx = new DefaultHttpContext();
         ctx.Request.Host = new HostString("other.example.com");
 
-        var activity = new Activity("test");
-        activity.SetKind(ActivityKind.Server);
+        using var activity = StartActivity(ActivityKind.Server);
         activity.SetTag(UserActivityProcessor.ServerAddressTag, "set.example.com");
         ProcessorFor(ctx).OnEnd(activity);
 
@@ -128,8 +144,7 @@ public class UserActivityProcessorTests
         ctx.Request.Scheme = "https";
         ctx.Request.Host = new HostString("books-staging.example.com");
 
-        var activity = new Activity("test");
-        activity.SetKind(ActivityKind.Client);
+        using var activity = StartActivity(ActivityKind.Client);
         ProcessorFor(ctx).OnEnd(activity);
 
         Assert.Null(activity.GetTagItem(UserActivityProcessor.ServerAddressTag));
