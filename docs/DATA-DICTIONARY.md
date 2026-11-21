@@ -32,14 +32,14 @@ The physical-object grouping. Carries reading state + cover art + series members
 | `Id` | int (PK) | |
 | `Title` | string (≤300, required) | For single-Work books, mirrors the sole Work's title. For compendiums, this is the *volume* title — distinct from Work titles inside. |
 | `Category` | enum `BookCategory` | `Fiction` / `NonFiction`. Display-level only — orthogonal to genre. |
-| `Status` | enum `BookStatus` | `Unread` / `Reading` / `Read`. Default `Read` (most Adds are post-read). **Semantically meaningless for reference books** (dictionaries, encyclopaedias, atlases) — convention is to leave them `Unread`. See TODO #51. |
+| `Status` | enum `BookStatus` | `Unread` / `Reading` / `Read` / `Reference`. Default `Unread` (the entity, the Add form and Bulk Add all start there; `Read` is set by `Book.MarkRead`). `Reference` marks reference books (dictionaries, encyclopaedias, atlases), where read-state is meaningless. |
 | `Rating` | int 0–5 | 0 = unrated, 1–5 = stars. |
 | `Notes` | string (nullable, MAX) | Personal reading notes ("recommended by X, finished in two days, didn't love the ending"). High-signal for analysis but personal. |
 | `DateAdded` | DateTime (UTC) | When the row was created. |
 | `UpdatedAt` | DateTime (UTC, indexed, default `GETUTCDATE()`) | Auto-bumped by `BookUpdatedAtInterceptor` on **any** change to this Book OR any aggregate child (Edition, Copy, Loan, Work, WorkAuthor, Tag join). Drives delta-sync to Bookshelf. Value converter pins `Kind=Utc` on read. |
 | `DeletedAt` | DateTime? (UTC, filtered index) | Soft-delete tombstone. Non-null = hidden from every normal query via a global EF `HasQueryFilter`. Husk survives only so the catalog snapshot emits the Id in `deletedIds[]` for Bookshelf to drop locally. Aggregate children (Editions / Copies / joins) are *hard*-removed at delete time. The JSON snapshot **excludes** soft-deleted rows. |
 | `DefaultCoverArtUrl` | string? (≤500) | Falls back to the first Edition's `CoverUrl` for display when not set. |
-| `SeriesId` | int? (FK) | Optional link to a `Series` — the book is installment N of a publication series. Null = standalone. Set-null on Series delete. Series membership is a **per-Book** concept (moved Work→Book in TODO #56). |
+| `SeriesId` | int? (FK) | Optional link to a `Series` — the book is installment N of a publication series. Null = standalone. Set-null on Series delete. Series membership is a **per-Book** concept. |
 | `SeriesOrder` | int? | Position in the Series (1-based). Floored from a non-integer display order for sort + gap detection. |
 | `SeriesOrderDisplay` | string? (≤50) | Human-facing order label overriding `SeriesOrder` when the position isn't a plain integer ("4.5" interquel *Edgedancer*, "1A" hierarchical). Null for ordinary integer orders. |
 | `Editions` | List | 1-to-many. Most books have one Edition. |
@@ -53,7 +53,7 @@ The physical-object grouping. Carries reading state + cover art + series members
 ### Enums
 
 ```
-BookStatus    = { Unread, Reading, Read }              ← default: Read
+BookStatus    = { Unread, Reading, Read, Reference }   ← default: Unread
 BookCategory  = { Fiction, NonFiction }                ← default: Fiction
 ```
 
@@ -67,7 +67,7 @@ The abstract creative unit. Authorship + subtitle + genres live here. (Series me
 |-------|------|-------|
 | `Id` | int (PK) | |
 | `Title` | string (≤300, required) | The story / novel / play title. |
-| `Subtitle` | string? (≤300) | Often used as the stopgap for "edition number" labels on reference books ("(3rd ed.)"), since `Edition` has no edition-number field. See TODO #51. |
+| `Subtitle` | string? (≤300) | The Work's subtitle. Edition numbers belong on `Edition.EditionNumber`, not here. |
 | `FirstPublishedDate` | DateOnly? | The Work's first-publish date (distinct from any Edition's `DatePrinted` — *Hamlet* was first published c. 1603 regardless of when the paperback in your hand was printed). |
 | `FirstPublishedDatePrecision` | enum `DatePrecision` | `Day` / `Month` / `Year`. Old works often only have a year. |
 | `WorkAuthors` | List | M:N via explicit `WorkAuthor` join with `Order` field — canonical read source for ordered display ("Preston & Child"). |
@@ -79,10 +79,9 @@ The abstract creative unit. Authorship + subtitle + genres live here. (Series me
 
 Co-authored works (Preston & Child writing *Relic*) use `WorkAuthor` rows with `Order` = 0 for lead, 1+ for additional authors. Display surfaces (Library, search) join in order; aggregations join through skip-navigation.
 
-### What's *not* on Work today
+### Contributor roles
 
-- **No `Role` enum** for `WorkAuthor` (Author / Editor / Translator / Illustrator). Edited references (Oxford Companion to X, encyclopaedias, anthologies, many cookbooks) currently get credited as authors and conflate with the genuine author rollup. See TODO #51.
-- **No `EditionNumber` on `Edition`** (separate concept) — *Joy of Cooking 1975 vs 2019* is materially different content; today this lives in `Subtitle` or is implicit in `DatePrinted`. See TODO #51.
+`WorkAuthor` carries a `Role` (enum `AuthorRole` in `BookTracker.Data/Models/WorkAuthor.cs`: Author / Editor / Translator / Illustrator / …). Editors of edited references (Oxford Companion to X, encyclopaedias, anthologies, many cookbooks) are credited as `Editor`, so they don't conflate with the genuine author rollup; "lead author" means the first `Author`-role contributor by `Order`.
 
 ---
 
@@ -121,7 +120,8 @@ A specific printing of a Book. ISBN-keyed.
 | `Format` | enum `BookFormat` | See below. Default `TradePaperback`. |
 | `DatePrinted` | DateOnly? | When this *specific printing* was published — not the Work's first-publish date. |
 | `DatePrintedPrecision` | enum `DatePrecision` | Old prints often only give a year. |
-| `CoverUrl` | string? (≤500) | URL into Azure Blob Storage `book-covers` container after mirror; was an upstream URL before `CoverMirrorBackgroundService` ran. |
+| `EditionNumber` | int? | Edition number ("3rd ed.") — matters most for reference works (DSM-IV vs DSM-V; *Joy of Cooking 1975 vs 2019*). Null when not stated. |
+| `CoverUrl` | string? (≤500) | URL into Azure Blob Storage `book-covers` container once mirrored; an upstream URL until `CoverMirrorBackgroundService` mirrors it. |
 | `IsUserSupplied` | bool (default false) | True = the cover is a photo Drew uploaded (typically because no online cover existed for a rare/old edition). Used to (a) flag with a "your photo" badge in display surfaces, (b) skip re-mirror passes that re-fetch upstream URLs. |
 | `PublisherId` | int? (FK) | Optional. Delete-restricted (Publisher can't be deleted while Editions reference it). |
 | `Copies` | List | 1-to-many. Cascade-delete on Edition removal. |
@@ -135,7 +135,6 @@ DatePrecision = { Day, Month, Year }                                            
 
 ### What `Edition` does *not* capture
 
-- **Edition number** ("2nd edition", "Revised edition") — matters most for reference works (DSM-IV vs DSM-V; *Joy of Cooking 1975 vs 2019*). Stopgap: put "(3rd ed.)" in `Work.Subtitle`. See TODO #51.
 - **Box-set membership** — multi-volume sets (Britannica's 24 volumes) are modelled today as a `Series(SeriesType=Series, ExpectedCount=24)` of single-Work Books, not as a first-class "Set" concept.
 
 ---
@@ -194,7 +193,7 @@ A named grouping that Books belong to. Two flavours.
 
 ### Series membership is per-Book
 
-The Book is installment N of a publication series — whether it holds a single Work or a whole short-story collection. A single-Work novel and a multi-Work compendium both sit in the series as **one** installment; the constituent Works carry no series of their own. (Historically this lived on the Work; it moved to the Book in TODO #56 once a series of short-story-collection books proved unmanageable at Work grain.) The corner case: a Christie Poirot story that also appears in a Christie *collection* — the story is a Work inside two Books, and it's each **Book** that's the series member, not the Work. A richer "series of books vs series of works/stories" model (they answer different reader questions) is the multi-series rework, TODO #13.
+The Book is installment N of a publication series — whether it holds a single Work or a whole short-story collection. A single-Work novel and a multi-Work compendium both sit in the series as **one** installment; the constituent Works carry no series of their own (a series of short-story-collection books is unmanageable at Work grain). The corner case: a Christie Poirot story that also appears in a Christie *collection* — the story is a Work inside two Books, and it's each **Book** that's the series member, not the Work. A richer "series of books vs series of works/stories" model (they answer different reader questions) is the multi-series rework, TODO #13.
 
 ---
 
@@ -231,22 +230,22 @@ Seeded rows:
 | Id | Name | Purpose |
 |----|------|---------|
 | 1 | `follow-up` | Flag books needing later attention. |
-| 2 | `format:graphic-novel` | Format indicator — replaces the former `Graphic Novels` genre. |
-| 3 | `format:short-stories` | Format indicator — replaces the former `Short Story Collections` genre. |
-| 4 | `format:reference` | Reference works (dictionaries, encyclopaedias, atlases, field guides). Signals `Status` is semantically irrelevant — reporting should exclude from "unread queue" counts (see TODO #51). |
+| 2 | `format:graphic-novel` | Format indicator — graphic novels are a format, not a genre. |
+| 3 | `format:short-stories` | Format indicator — short-story collections are a format, not a genre. |
+| 4 | `format:reference` | Reference works (dictionaries, encyclopaedias, atlases, field guides). Signals `Status` is semantically irrelevant — reporting should exclude from "unread queue" counts. |
 | 5 | `format:notebook` | Primary-source notebooks / journals / lecture notes (e.g. Darwin's *Beagle* journal, Einstein's lectures). Genre carries the *subject*; this tag carries the *form*. |
 | 6 | `format:script` | Published play / screenplay / teleplay scripts. Applied to Books whose Works carry the Performing Arts genre. |
 | 7 | `format:textbook` | Academic / instructional volumes — CS manuals, anatomy texts, learn-to-play. Distinguishes textbook treatment from popular treatment of the same topic. |
 | 8 | `format:illustrated` | Significant illustration content beyond decorative covers — Horrible Histories, illustrated children's reference, illustrated atlases. |
 
-Tag ID 9 is reserved for the eventual `shelf:*` work (TODO #9) — start that block from ID 9 or later when it ships.
+Tag ID 9 is reserved for the `shelf:*` work (TODO #9) — start that block from ID 9 or later.
 
 ### Tag conventions
 
 Two prefix conventions are reserved by convention (not enforced by constraint):
 
 - **`format:*`** — physical-or-structural format indicators that aren't genres. Currently `format:graphic-novel`, `format:short-stories`, `format:reference`, `format:notebook`, `format:script`, `format:textbook`, `format:illustrated`. Applied at the Book level even though the constituent Works carry the *thematic* genres (e.g. a Christie short-story compendium has `format:short-stories` on the Book + `Mystery` genre on each Work). Tags within this convention are **additive** — a Book may carry multiple `format:*` tags where applicable (e.g. an illustrated atlas = `format:reference` + `format:illustrated`).
-- **`shelf:*`** — physical-shelf membership. **Not yet shipped** — captured in TODO #9 as part of the shelf-organisation work. When it ships, exactly one `shelf:*` tag per Book (convention, not constraint).
+- **`shelf:*`** — physical-shelf membership, reserved for the shelf-organisation work (TODO #9; no rows yet). The convention is exactly one `shelf:*` tag per Book (convention, not constraint).
 
 Any other tag is free-form user attention markers (e.g. `follow-up`).
 
@@ -345,7 +344,7 @@ These exist as conventional EF M:N joins — no extra fields. The JSON snapshot 
 - `BookWork` — `(BookId, WorkId)`
 - `BookTag` — `(BookId, TagId)`
 - `GenreWork` — `(GenreId, WorkId)`
-- `WorkAuthor` — `(WorkId, AuthorId, Order)` — **carries `Order` field**, distinct from the others
+- `WorkAuthor` — `(WorkId, AuthorId, Order, Role)` — **carries `Order` and `Role` fields**, distinct from the others
 
 ---
 
@@ -361,7 +360,7 @@ These exist as conventional EF M:N joins — no extra fields. The JSON snapshot 
 
 5. **`Edition.Isbn` uniqueness is filtered** — count distinct ISBNs only over `WHERE Isbn IS NOT NULL`, otherwise you'll over-count the null bucket.
 
-6. **`Book.Status` is meaningless for reference books** by convention. Don't infer "Drew hasn't read this dictionary" from `Status = Unread`.
+6. **Read-state is meaningless for reference books.** They carry `Status = Reference` and/or the `format:reference` tag; don't infer "Drew hasn't read this dictionary" from their status.
 
 7. **`Series.Author` is a string, not a FK.** Don't try to join it to the Author table — it's display-only.
 
@@ -369,11 +368,11 @@ These exist as conventional EF M:N joins — no extra fields. The JSON snapshot 
 
 ---
 
-## Known gaps surfaced by capture experience
+## Known gaps from capture experience
 
 Tracked in [`TODO.md`](../TODO.md):
 
-- **#51 — Reference book capture nuances:** editor role on `WorkAuthor`, `EditionNumber` on `Edition`, `BookStatus.Reference` value, multi-volume sets as a first-class concept, corporate-author handling.
+- **#51 — Reference book capture nuances:** multi-volume sets as a first-class concept, corporate-author handling.
 - **#13 — Multi-series membership + the series-of-books-vs-works remodel:** a Book can't currently belong to more than one series/collection (a Discworld book in both "Discworld" and "Discworld: City Watch"), and a series is modelled only as a set of *books* — not the separate "set of works/stories regardless of print" question. Needs a design session, not just a schema bump.
 - **#47 — eBook format:** `BookFormat` is physical-only; digital titles aren't modelled.
 

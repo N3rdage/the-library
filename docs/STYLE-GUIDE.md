@@ -5,7 +5,7 @@ Visual and interaction conventions covering both surfaces of the product:
 - **Web** — `BookTracker.Web` (Blazor Web App, MudBlazor + Bootstrap holdouts during the convert-as-we-touch migration).
 - **Mobile** — `BookTracker.Mobile` (.NET MAUI Android companion).
 
-This document **describes** what's already in the code. The canonical source of truth for theme values is `BookTracker.Web/Theme/BookTrackerTheme.cs` for Web and the inline hex literals in MAUI XAML for Mobile (which mirror the Web values manually — see [Known inconsistencies](#known-inconsistencies) for the long-term plan to close that gap). When something here disagrees with the code, the code wins; the doc was the one that got stale.
+This document **describes** what's already in the code. The canonical source of truth for theme values is `BookTracker.Web/Theme/BookTrackerTheme.cs` for Web and the design tokens in `BookTracker.Mobile/Resources/Styles/Colors.xaml` for Mobile, with the semantic styles built on them in `Resources/Styles/Styles.xaml` (the Mobile values mirror the Web values manually — see [Known inconsistencies](#known-inconsistencies) for the long-term plan to close that gap). When something here disagrees with the code, the code wins.
 
 **Update convention.** When a UI change introduces a new colour, font size, spacing value, component pattern, or layout shape — update this doc in the same PR. The `convert-as-we-touch` discipline applies here too: don't pre-emptively rewrite the doc to match a future ideal; do update it when you're touching the thing it describes.
 
@@ -26,22 +26,24 @@ This document **describes** what's already in the code. The canonical source of 
 
 BookTracker is one product across two surfaces. A user with both installed should feel the visual and interaction continuity — the cream-and-leather palette, the espresso header bar, the brass accents on primary in-bookshop actions. Mobile isn't a sibling brand; it's the same brand in a different container.
 
-What this guide is **not**: an exhaustive design system. There's no published component library or token registry yet — BookTracker is one developer's personal project at the time of writing. The conventions captured here are the ones that exist *de facto* in the code; the guide makes them explicit so they don't drift the next time something is touched without the other side getting the same treatment.
+What this guide is **not**: an exhaustive design system. There's no published component library or token registry yet — BookTracker is one developer's personal project. The conventions captured here are the ones that exist *de facto* in the code; the guide makes them explicit so they don't drift the next time something is touched without the other side getting the same treatment.
 
 ## Palette
 
 The library palette — leather spines, brass fixtures, parchment pages, espresso ink. Mirrored from `BookTracker.Web/Theme/BookTrackerTheme.cs:11–52`.
 
-| Name | Hex | Semantic role | Web token | Mobile usage |
+Mobile names the light-mode value of each colour as a token in `BookTracker.Mobile/Resources/Styles/Colors.xaml` (each `…L` token has a `…D` dark-mode partner).
+
+| Name | Hex | Semantic role | Web token | Mobile token and usage |
 |---|---|---|---|---|
-| Leather | `#6B2737` | Primary actions, primary text accent (e.g. panel headings) | `Primary` | `MainPage.xaml:48` (Sign in btn bg), spinner colour |
-| Parchment (light) | `#FAF6EC` | Page background, primary-button text | `Background`, `PrimaryContrastText` | `MainPage.xaml:7` (page bg), `#F2EADB` button text via theme contrast |
-| Brass | `#A67B3A` | Secondary CTA bg, accent borders, active nav-link colour | `Secondary` | `MainPage.xaml:62` (Scan ISBN bg), `MainPage.xaml:90` (stats panel border) |
-| Ink | `#2C2416` | Primary text on parchment / on brass | `TextPrimary`, `SecondaryContrastText` | `MainPage.xaml:62` (Scan text colour on brass bg) |
-| Espresso | `#3E2723` | Top app bar / mobile header banner | `AppbarBackground` | `MainPage.xaml:25` (header banner bg) |
-| Aged parchment | `#F2EADB` | Card / panel surface, drawer bg, espresso text colour | `Surface`, `BackgroundGray`, `AppbarText` | `MainPage.xaml:91` (stats panel bg) |
-| Faded ink | `#6B5D4A` | Secondary text, drawer icon, status / hint labels | `TextSecondary`, `DrawerIcon`, `ActionDefault` | `MainPage.xaml:114` (StatusLabel), `MainPage.xaml:131` (Sign out text) |
-| Green leather | `#3D5A3F` | Tertiary (rare); reserved for state colours / chart accents | `Tertiary` | Not yet used in Mobile |
+| Leather | `#6B2737` | Primary actions, primary text accent (e.g. panel headings) | `Primary` | `LeatherL`: `PrimaryButton` style background, the "Cached catalog" heading and spinner in `StatusSheetPage.xaml` |
+| Parchment (light) | `#FAF6EC` | Page background, primary-button text | `Background`, `PrimaryContrastText` | `PageBgL` (the `Page` style), `OnLeather` (text on leather buttons and on the Find banner) |
+| Brass | `#A67B3A` | Secondary CTA bg, accent borders, active nav-link colour | `Secondary` | `Brass`: the Scan button fill and the search-field and sync-chip borders in `FindPage.xaml`; `BorderL` (card and outlined-button borders) |
+| Ink | `#2C2416` | Primary text on parchment / on brass | `TextPrimary`, `SecondaryContrastText` | `TextL` (body text), `InkOnBrass` (Scan button text) |
+| Espresso | `#3E2723` | Top app bar / mobile header banner | `AppbarBackground` | `HeaderL`: the Find banner (`FindPage.xaml`) and the Shell tab bar (`AppShell.xaml`) |
+| Aged parchment | `#F2EADB` | Card / panel surface, drawer bg, espresso text colour | `Surface`, `BackgroundGray`, `AppbarText` | `SurfaceL` (the `Card` style background) |
+| Faded ink | `#6B5D4A` | Secondary text, drawer icon, status / hint labels | `TextSecondary`, `DrawerIcon`, `ActionDefault` | `TextMutedL`: status and hint labels, `OutlinedButton` text |
+| Green leather | `#3D5A3F` | Tertiary (rare); reserved for state colours / chart accents | `Tertiary` | `GreenL`: the series progress-bar fill in `SeriesGapsPage.xaml.cs` |
 
 ### Muted status colours
 
@@ -58,7 +60,7 @@ Deliberately muted so they sit inside the palette rather than shouting over it. 
 
 Each app's launcher icon is its own brand mark, deliberately distinct from the in-app palette so a phone with both apps installed reads them as different things at a glance.
 
-**Bookcase PWA** uses Material You purple — a holdover from before the leather palette was settled. **These two values are intentionally outside the in-app palette** — they live only in the Web icon SVG and the PWA manifest `theme_color`.
+**Bookcase PWA** uses Material You purple, which is not part of the leather palette. **These two values are intentionally outside the in-app palette** — they live only in the Web icon SVG and the PWA manifest `theme_color`.
 
 | Name | Hex | Where |
 |---|---|---|
@@ -98,7 +100,7 @@ Roboto with sans-serif fallbacks. From `BookTrackerTheme.cs:55–58`:
 FontFamily = new[] { "Roboto", "Helvetica", "Arial", "sans-serif" }
 ```
 
-Mobile inherits the Android system font by default (Roboto on most devices, the OEM equivalent otherwise). No custom font is loaded on Mobile — the OS rendering of Roboto matches Web within tolerance.
+Mobile loads OpenSans (`OpenSans-Regular`, `OpenSans-Semibold`) and the Tabler icon font in `MauiProgram.cs`; the implicit styles in `Resources/Styles/Styles.xaml` set `OpenSansRegular` as the text font, so Mobile text is OpenSans rather than Web's Roboto.
 
 ### Size scale
 
@@ -114,17 +116,18 @@ html { font-size: 14px; }
 
 So all `rem`-based MudBlazor sizes scale 14:16 between mobile and tablet+.
 
-Mobile uses explicit `FontSize` values on each Label / Button. Recurring scale (sampled across `MainPage.xaml`, `ScanPage.xaml`):
+Mobile uses explicit `FontSize` values on each Label / Button, in XAML and in the page code-behind that builds rows. Recurring scale (sampled across `BookTracker.Mobile/Pages/` and `Resources/Styles/Styles.xaml`):
 
 | Size | Use | Examples |
 |---|---|---|
-| 24 | Page title in header banner | `MainPage.xaml:30` |
-| 18 | Primary CTA button text | `MainPage.xaml:65` (Scan ISBN) |
-| 16 | Standard button text | `MainPage.xaml:53` (Sign in / Load catalog) |
-| 15 | Panel content text | `MainPage.xaml:108` (cache stats line) |
-| 14 | Status / body labels, outlined buttons | `MainPage.xaml:120, 137` |
-| 13 | Subtitle, hint text | `MainPage.xaml:33` (header subtitle) |
-| 12 | Microcopy (timestamps, footnotes, "Cached catalog" panel label) | `MainPage.xaml:103, 111` |
+| 24 | Page title | `FindPage.xaml:35` (Find banner), `StatusSheetPage.xaml:17` |
+| 18 | Result-card title | `ResultPage.xaml:60` |
+| 16 | Standard button text | `PrimaryButton` style (`Styles.xaml:461`) |
+| 15 | Panel content text | `StatusSheetPage.xaml:39` (cache stats line), `ResultPage.xaml:31` (wishlist flag) |
+| 14 | Body labels, outlined buttons | `OutlinedButton` style (`Styles.xaml:474`), `ResultPage.xaml:62` (authors), `FindPage.xaml:76` (Scan) |
+| 13 | Secondary and status text | `StatusSheetPage.xaml:53`, `ResultPage.xaml:64`, the scope buttons at `FindPage.xaml:115–117` |
+| 12 | Microcopy (timestamps, section labels, ISBN in Courier New) | `StatusSheetPage.xaml:35, 42`, `ResultPage.xaml:66`, the sync chip at `FindPage.xaml:47` |
+| 11 | Footnotes | `StatusSheetPage.xaml:71` (build footer) |
 
 When adding a new size, snap to the nearest existing rung rather than introducing intermediate values.
 
@@ -143,23 +146,24 @@ Recurring values across both surfaces. Use these rungs unless there's a specific
 
 | Value | Use |
 |---|---|
-| 4 | Tight vertical spacing inside a label group (e.g. timestamp under stats) |
-| 6 | Inner spacing inside result cards (`ScanPage.xaml:46`) |
-| 8 | CornerRadius on Borders / buttons; small element gaps |
-| 12 | Standard component padding (`ScanPage.xaml:42`); standard element spacing in stacks |
-| 14 | Vertical spacing between primary actions (`MainPage.xaml:23`) |
-| 16 | Panel inner padding (`MainPage.xaml:92`) |
-| 20 | Page content padding (`MainPage.xaml:23`, ScrollView padding) |
-| 24 | Header banner padding (`MainPage.xaml:27`); top spacing for fresh action groups |
-| 32 | Separator-spacing above low-emphasis actions (`MainPage.xaml:138`, Sign out top margin) |
+| 4 | Tight vertical spacing inside a label group (`StatusSheetPage.xaml:33`, timestamp under stats) |
+| 6 | Inner spacing inside result cards (`ResultPage.xaml:59`) |
+| 8 | CornerRadius on Borders / buttons; small element gaps (`FindPage.xaml:53`) |
+| 12 | Standard component padding (the `Card` style, `Styles.xaml:486`; `ResultPage.xaml:42`); standard element spacing in stacks (`ResultPage.xaml:14`) |
+| 14 | Horizontal padding of code-built rows (`FindPage.xaml.cs:272`, `SeriesGapsPage.xaml.cs:151`) |
+| 16 | Spacing between sections of a sheet (`StatusSheetPage.xaml:13`); top padding under a header (`FindPage.xaml:53`, `WishlistPage.xaml:26`) |
+| 20 | Page content padding (`StatusSheetPage.xaml:13`, `ResultPage.xaml:14`, `FindPage.xaml:120`) |
+| 24 | Header banner horizontal padding (`FindPage.xaml:32`) |
+| 32 | No current use on Mobile |
 
 ### Touch / click target heights (Mobile)
 
 | Size | Use |
 |---|---|
-| 44 dp | Low-emphasis outlined buttons (Sign out) — sits at Material's minimum |
-| 56 dp | Standard primary action buttons |
-| 64 dp | High-emphasis in-bookshop actions (Scan ISBN) — slightly above the rest of the action stack so it stands out as the killer feature |
+| 44 dp | Low-emphasis outlined buttons (`OutlinedButton` style; Close, Sign in / Sign out on the status sheet) — sits at Material's minimum |
+| 48 dp | The Find tab's Scan button (`FindPage.xaml:72`), sized to sit beside the search field |
+| 56 dp | Standard primary action buttons (`PrimaryButton` style) |
+| 64 dp | High-emphasis in-bookshop actions (`KillerButton` style) — the style exists in `Styles.xaml` but no page uses it |
 
 Web targets default to MudBlazor's `Medium` size on `MudButton`; switch to `Large` for primary CTA on dense pages.
 
@@ -173,7 +177,7 @@ Cross-surface implementations of the recurring UI shapes. Each pattern's referen
 
 ### Primary CTA button
 
-The standard "do the main thing on this screen" button. Leather background, parchment text, bold.
+The standard "do the main thing on this screen" button. Leather background, parchment text (bold on Web).
 
 **Web** (MudBlazor):
 ```razor
@@ -181,26 +185,19 @@ The standard "do the main thing on this screen" button. Leather background, parc
     Save
 </MudButton>
 ```
-Reference: `Components/Pages/Books/Edit.razor` (multiple sites).
+Reference: the Save button in `Components/Shared/BookEditDialog.razor` (and the other edit dialogs under `Components/Shared/`).
 
-**Mobile** (MAUI):
+**Mobile** (MAUI) — the `PrimaryButton` style (`Resources/Styles/Styles.xaml:457–464`: `LeatherL`/`LeatherD` background, `OnLeather` text, 16, 56 dp, corner radius 8):
 ```xml
-<Button Text="Sign in"
-        HeightRequest="56"
-        BackgroundColor="#6B2737"
-        TextColor="#FAF6EC"
-        FontSize="16"
-        FontAttributes="Bold"
-        CornerRadius="8"
-        HorizontalOptions="Fill" />
+<Button Text="Refresh now" Style="{StaticResource PrimaryButton}" />
 ```
-Reference: `BookTracker.Mobile/MainPage.xaml:46–56`.
+References: `BookTracker.Mobile/Pages/StatusSheetPage.xaml:58–61` (Refresh now), `Pages/ResultPage.xaml:68–69` (Open in app).
 
 ### Brass-accent CTA (in-bookshop killer action)
 
 A step up from primary — used sparingly for the action that defines the page. Brass background, ink text, larger height.
 
-**Mobile**: Scan ISBN on the home screen. `MainPage.xaml:60–69`.
+**Mobile**: the `KillerButton` style (`Styles.xaml:447–454`, 64 dp, bold 18) defines this treatment, but no page uses it. The Find tab's Scan button (`Pages/FindPage.xaml:68–78`) carries the brass fill and ink text inline at 48 dp beside the search field.
 
 **Web equivalent** doesn't yet exist as a distinct treatment — the `/bookshop` scan action uses the same primary-button shape. When `/bookshop` next gets touched, consider whether the Scan button there should pop the same way.
 
@@ -215,19 +212,13 @@ Surface for showing state to the user — cached counts, scan results, status in
 </MudPaper>
 ```
 
-**Mobile** (MAUI):
+**Mobile** (MAUI) — the `Card` style (`Resources/Styles/Styles.xaml:480–488`: `SurfaceL`/`SurfaceD` background, `BorderL`/`BorderD` 1 px stroke, padding 12, corner radius 8):
 ```xml
-<Border Stroke="#A67B3A"
-        StrokeThickness="1"
-        BackgroundColor="#F2EADB"
-        Padding="16,12">
-    <Border.StrokeShape>
-        <RoundRectangle CornerRadius="8" />
-    </Border.StrokeShape>
+<Border Style="{StaticResource Card}">
     <!-- content -->
 </Border>
 ```
-References: `MainPage.xaml:88–106` (cache stats panel), `ScanPage.xaml:37–53` (FoundFrame), `ScanPage.xaml:56–70` (MissingFrame — neutral variant with light-grey instead of brass).
+References: `Pages/StatusSheetPage.xaml:32–45` (cached-catalog panel). The result cards in `Pages/ResultPage.xaml` keep the same shape with their own tokens: `FoundFrame` (lines 38–85, below) and `MissingFrame` (lines 88–103, the neutral `MissBg` / `MissBorder` variant).
 
 ### Result card — found state
 
@@ -235,36 +226,27 @@ Same shape as the generic panel above, but tints to communicate success:
 - Border: `#A3D9A5` light / `#356735` dark
 - Background: `#E8F5E9` light / `#1B3320` dark
 
-References: `BookTracker.Mobile/Pages/ScanPage.xaml:37–53`. The MAUI version uses `AppThemeBinding` to switch between light + dark; Web is light-mode-only at the time of writing.
+These are the `FoundBorderL`/`FoundBorderD` and `FoundBgL`/`FoundBgD` tokens. Reference: `BookTracker.Mobile/Pages/ResultPage.xaml:38–85`. The MAUI version uses `AppThemeBinding` to switch between light + dark; Web is light-mode only.
 
 ### Outlined low-emphasis button
 
 For actions that should be available but not invitational (Sign out, dismissive Cancel, "open advanced settings").
 
-**Mobile**:
+**Mobile** — the `OutlinedButton` style (`Resources/Styles/Styles.xaml:467–477`: transparent, `BorderL`/`BorderD` 1 px border, `TextMutedL`/`TextMutedD` text, 14, 44 dp, corner radius 8):
 ```xml
-<Button Text="Sign out"
-        HeightRequest="44"
-        BackgroundColor="Transparent"
-        TextColor="#6B5D4A"
-        BorderColor="#A67B3A"
-        BorderWidth="1"
-        FontSize="14"
-        CornerRadius="8"
-        HorizontalOptions="Center"
-        WidthRequest="160" />
+<Button Style="{StaticResource OutlinedButton}" HorizontalOptions="Center" WidthRequest="160" />
 ```
-Reference: `MainPage.xaml:124–138`.
+References: `Pages/StatusSheetPage.xaml:63–68` (Sign in / Sign out), `StatusSheetPage.xaml:21–25` (Close).
 
 **Web**: `<MudButton Variant="Variant.Outlined" Color="Color.Secondary">`.
 
-### Header banner (Mobile root pages)
+### Header banner (Mobile Find tab)
 
-In-content header that replaces the system nav bar on root pages where there's nothing to navigate back from. Espresso bg, parchment-text title + brass-text subtitle.
+In-content header that replaces the Shell navigation bar. Espresso (`HeaderL`/`HeaderD`) background, parchment (`OnLeather`) title, and a brass-bordered sync chip on the right.
 
-Reference: `MainPage.xaml:24–35`. The page sets `NavigationPage.HasNavigationBar="False"` to hide the system bar, then renders this banner as the topmost grid row.
+Reference: `Pages/FindPage.xaml:29–50`. The page sets `Shell.NavBarIsVisible="False"` to hide the Shell bar, then renders this banner as the topmost grid row. Find is the only page with a banner.
 
-Child pages (e.g. `ScanPage`) keep the system nav bar because the back button is important; they don't render their own banner.
+The other pages (Wishlist and Gaps tabs, `ResultPage`, `AuthorWorksPage`) keep the Shell navigation bar with a title; on the drill-down pages it carries the back button. The status sheet is pushed modally (`PushModalAsync`) as a bare `ContentPage`, so it draws its own "Sync & account" heading and Close button instead of a navigation bar.
 
 ### Web nav bar (themed)
 
@@ -274,27 +256,24 @@ References: `Components/Layout/MainLayout.razor:24–73`, `wwwroot/css/site.css:
 
 ## Layout patterns
 
-### Root page (Mobile)
+### Find tab (Mobile)
 
 ```
 ┌──────────────────────────────┐
-│  [espresso banner]           │  ← Grid.Row="0", Auto height
-│  BookTracker                 │
-│  Offline-capable companion   │
+│  [espresso banner] [sync chip]│  ← row 0, Auto
 ├──────────────────────────────┤
-│  [parchment scrollview]      │  ← Grid.Row="1", *
-│    [primary CTA buttons]     │
-│    [stats panel]             │
-│    [status label]            │
-│    [outlined low-emph btn]   │
+│  [search field]  [Scan]      │  ← row 1, Auto
+│  [inline camera, collapsed]  │  ← row 2, Height 0 ↔ 220 in code
+│  [scope segment, if results] │  ← row 3, Auto
+│  [results scrollview]        │  ← row 4, *
 └──────────────────────────────┘
 ```
 
-Reference: `MainPage.xaml:18–141`. `NavigationPage.HasNavigationBar="False"` hides the system bar at the very top.
+Reference: `Pages/FindPage.xaml:15–123`. `Shell.NavBarIsVisible="False"` hides the Shell bar at the very top. The Shell bottom tab bar (`AppShell.xaml`) sits below every tab.
 
-### Child page (Mobile)
+### Other pages (Mobile)
 
-System nav bar (Title="…" + back arrow) + ContentPage. No in-content banner. Reference: `Pages/ScanPage.xaml`.
+Shell navigation bar (title, plus a back arrow on drill-downs) + `ContentPage` styled with `Page`. No in-content banner. References: `Pages/WishlistPage.xaml`, `Pages/SeriesGapsPage.xaml`, `Pages/ResultPage.xaml`, `Pages/AuthorWorksPage.xaml`.
 
 ### Web page
 
@@ -319,7 +298,7 @@ Camera viewfinder + letterbox overlay + green-bordered scan target window in the
 
 **Web**: html5-qrcode library renders its own qrbox at 280×80 px. Reference: `BookTracker.Web/wwwroot/js/barcode-scanner.js:23`.
 
-**Mobile**: hand-rolled XAML overlay layered above the ZXing CameraBarcodeReaderView. Star sizing (`1.5*:1*:1.5*` rows × `*:6*:*` cols) gives ~75% width × 25% height; `#B3000000` (70% opacity black) letterbox; `#4CAF50` Material-green 3px stroke on the scan target. Reference: `BookTracker.Mobile/Pages/ScanPage.xaml:20–58`.
+**Mobile**: an inline scanner on the Find tab, a hand-rolled XAML overlay layered above the ZXing CameraBarcodeReaderView in a 220 dp grid row that the Scan button expands. Star sizing (`1.5*:1*:1.5*` rows × `*:6*:*` cols) gives ~75% width × 25% height; no letterbox dimming (at the inline size it read as a grey box); the `ScanReticle` token (`#4CAF50`, Material green) as a 3 px stroke on the scan target. Reference: `BookTracker.Mobile/Pages/FindPage.xaml:81–106`.
 
 Note: the Mobile scan target uses Material green rather than the leather palette because "scan UI" is a recognised cross-app convention (green = recognised barcode area). Diverging from convention for brand consistency would be net-negative.
 
@@ -352,13 +331,15 @@ When designing or updating the Mobile launcher foreground SVG, the visible desig
 
 ### In-app glyphs
 
-Mobile uses emoji glyphs inline in button text where a glyph aids recognition (📚 for catalog, 📷 for camera). Web uses MudBlazor's `MudIcon` with Material icons (`Icons.Material.Filled.Search`, etc.) where icons are needed inline. Don't mix Material font icons with emoji on the same surface — pick one per page.
+Web uses MudBlazor's `MudIcon` with Material icons (`Icons.Material.Filled.Search`, etc.) where icons are needed inline. Don't mix Material font icons with emoji on the same surface — pick one per page.
+
+Mobile's target is the Tabler outline icon font (registered in `MauiProgram.cs`, glyphs in `Theming/TablerIcons.cs`), not emoji (see `docs/BOOKSHELF-UI-REDESIGN.md` §3). The code does not meet that yet: Tabler supplies only the three tab icons in `AppShell.xaml.cs`, and the pages use emoji and symbol characters — the `📖` cover placeholder, `⭐ On your wishlist` in `ResultPage.xaml`, and `⟳` / `⚠ offline` on the Find sync chip. Moving them to Tabler is tracked in the backlog.
 
 ## Accessibility
 
 ### Touch targets
 
-- Mobile: 44 dp minimum per Material guidelines; 56 dp for standard primary actions; 64 dp for in-bookshop killer actions (Scan).
+- Mobile: 44 dp minimum per Material guidelines; 48 dp for the Find tab's Scan button; 56 dp for standard primary actions; 64 dp for in-bookshop killer actions (the `KillerButton` style, which no page uses).
 - Web: MudBlazor's `Size="Size.Large"` ≈ 48 px height; matches the touch-target floor when the page is used on a phone.
 
 ### Contrast (light theme)
@@ -397,12 +378,10 @@ Web inherits Bootstrap / MudBlazor semantics by default. The `.clickable-tile` c
 
 ### Mobile (MAUI Android)
 
-- **Android-only for v1.** iOS deferred until / unless an Apple developer account materialises; the design is platform-agnostic enough to add `net10.0-ios` later without restructuring. See `BookTracker.Mobile.csproj:1–8`.
-- **No theme provider.** MAUI doesn't have an equivalent of `MudThemeProvider` for hex-token resolution at the time of writing. Palette values are hex literals inline in XAML, mirrored manually from `BookTrackerTheme.cs`. See [Known inconsistencies](#known-inconsistencies) for the long-term plan.
-- **System nav bar is per-page.** `NavigationPage.HasNavigationBar="False"` on root pages (MainPage) where there's nothing to navigate from; left default-true on child pages (ScanPage) so the back button is visible.
-- **`AppThemeBinding` for light/dark variants.** Used on result-card colours (`ScanPage.xaml:40–41`) — when the system theme is dark, the card swaps to a darker green pair. Not yet applied to the leather/brass palette generally; would be the v1.1 work.
+- **Android-only.** iOS deferred until / unless an Apple developer account materialises; the design is platform-agnostic enough to add `net10.0-ios` later without restructuring. See `BookTracker.Mobile.csproj:1–8`.
+- **Design tokens, not a theme provider.** MAUI has no equivalent of `MudThemeProvider`. Bookshelf uses a token set (listed in `docs/BOOKSHELF-UI-REDESIGN.md` §2) whose light/dark pairs resolve via `AppThemeBinding`; `Theming/ThemeColors` bridges them into code. Values are mirrored manually from `BookTrackerTheme.cs` — see [Known inconsistencies](#known-inconsistencies).
+- **Shell + bottom TabBar.** Find / Wishlist / Gaps tabs; drill-downs push within the active tab's stack. See `docs/BOOKSHELF-UI-REDESIGN.md` §1.
 - **Adaptive icon safe zone.** Foreground SVG design must live in the inner 66% (≈ 300×300 of a 456×456 canvas) to survive launcher masks. See [Iconography](#iconography).
-- **Page-size native lib warnings (XA0141).** Upstream `xamarin.androidx.camera.core` and `SQLitePCLRaw.lib.e_sqlite3.android` packages haven't shipped 16 KB-page-aligned native libs yet. Documented as forward-compat noise; can't be fixed at our level.
 
 ## Known inconsistencies
 
@@ -410,27 +389,26 @@ The honest version: not everything is consistent yet. These are the gaps the doc
 
 ### Brand-mark purple vs in-app leather palette
 
-The Bookcase PWA launcher icon and `theme_color` use Material You purple (`#6750A4` / `#4F378B`) — a holdover from before the leather/brass palette was decided for the in-app UI. Tap the purple icon, land on a parchment-and-leather screen: not visually continuous.
+The Bookcase PWA launcher icon and `theme_color` use Material You purple (`#6750A4` / `#4F378B`), which is outside the leather/brass palette of the in-app UI. Tap the purple icon, land on a parchment-and-leather screen: not visually continuous.
 
-**Bookshelf MAUI was rebranded** to the in-app palette (espresso bg + brass spine + parchment text lines) when Drew installed both apps and the two purple icons sat next to each other in the launcher. So the inconsistency is now half-resolved — Bookshelf is consistent end-to-end; Bookcase still has the purple gap.
+**Bookshelf MAUI uses the in-app palette** for its launcher icon (espresso bg + brass spine + parchment text lines), so two purple icons don't sit side by side in the launcher. Bookshelf is consistent end-to-end; Bookcase has the purple gap.
 
-Options for the remaining Bookcase resolution (deferred):
+Options for the Bookcase resolution (deferred, TODO #38):
 
-1. **Rebrand the Bookcase icon** to the leather palette (matching Bookshelf's new design or its own variant). Touches `BookTracker.Web/wwwroot/icons/icon.svg`, the PNG renders via the regen script, `wwwroot/manifest.webmanifest` `theme_color`, `Components/App.razor` `theme-color` meta.
-2. **Adopt the icon palette in-app** — invert the choice: use the purple as the actual brand identity, retheme the in-app palette. Wider blast radius than (1) and would walk back Bookshelf's just-shipped alignment.
+1. **Rebrand the Bookcase icon** to the leather palette (matching Bookshelf's design or its own variant). Touches `BookTracker.Web/wwwroot/icons/icon.svg`, the PNG renders via the regen script, `wwwroot/manifest.webmanifest` `theme_color`, `Components/App.razor` `theme-color` meta.
+2. **Adopt the icon palette in-app** — invert the choice: use the purple as the actual brand identity, retheme the in-app palette. Wider blast radius than (1) and would walk back Bookshelf's alignment.
 3. **Accept and document** — current state. The purple is brand-mark only; the parchment-and-leather is the product palette. Many apps do this (e.g. Slack's neon icon vs muted desktop chrome).
 
 (3) is the current state. Revisit if the inconsistency causes confusion in real use.
 
 ### Mobile palette is manually mirrored from Web
 
-`BookTracker.Mobile/MainPage.xaml` and `Pages/ScanPage.xaml` hard-code hex literals. The canonical source is `BookTrackerTheme.cs`, but there's no language-level enforcement that Mobile stays in sync. The two surfaces have drifted exactly zero times so far (because the gap is small and the Mobile arc is recent), but the risk increases over time.
+Bookshelf's token dictionary holds hex values copied from `BookTrackerTheme.cs`. The canonical source is `BookTrackerTheme.cs`, but there's no language-level enforcement that Mobile stays in sync, and the drift risk grows over time.
 
 Long-term resolution options:
 
-1. **`Resources/Styles/Colors.xaml` ResourceDictionary on Mobile** — declare each colour as a `<Color x:Key="Leather">#6B2737</Color>` entry, reference via `{StaticResource Leather}`. Same drift risk against Web; just moves the single source within Mobile.
-2. **Shared palette file** — generate both `BookTrackerTheme.cs` and a MAUI ResourceDictionary from a single source-of-truth file (YAML / JSON / etc.). Real fix; over-engineered for one colour set.
-3. **Status quo + style-audit skill** (recommended) — keep manual mirroring, build a future style-audit skill (see new TODO row) that diffs Mobile XAML hex literals against `BookTrackerTheme.cs` values and flags drift as a finding.
+1. **Shared palette file** — generate both `BookTrackerTheme.cs` and a MAUI ResourceDictionary from a single source-of-truth file (YAML / JSON / etc.). Real fix; over-engineered for one colour set.
+2. **Status quo + style-audit skill** (recommended) — keep manual mirroring, build a style-audit skill (TODO #36) that diffs the `Colors.xaml` token values against `BookTrackerTheme.cs` and flags drift as a finding.
 
 ### MudBlazor migration in flight
 
@@ -438,8 +416,4 @@ Some Web pages are still Bootstrap-shaped; some are MudBlazor; some are hybrids.
 
 ### Web's `/bookshop` scan UX vs Mobile's
 
-The Web `/bookshop` scan page uses html5-qrcode's default qrbox styling — green target inside a dark letterbox, all rendered by the library. Mobile's ScanPage hand-rolls an equivalent overlay in XAML to match the same visual shape. Both look approximately the same on device, but they're independently maintained — a styling change to one won't automatically apply to the other. Likely acceptable: the two implementations are short and the visual contract is documented above.
-
-### Mobile dark-mode coverage is partial
-
-Result cards (`ScanPage.xaml:37–70`) use `AppThemeBinding` for light/dark variants. The home page palette is light-only (`MainPage.xaml`). Switching the device to dark mode currently renders the home page in its light palette, which clashes with the system chrome. A v1.1 pass to apply `AppThemeBinding` across the leather/brass values would close this gap.
+The Web `/bookshop` scan page uses html5-qrcode's default qrbox styling — green target inside a dark letterbox, all rendered by the library. Mobile's scanner hand-rolls an equivalent overlay in XAML to match the same visual shape. Both look approximately the same on device, but they're independently maintained — a styling change to one won't automatically apply to the other. Likely acceptable: the two implementations are short and the visual contract is documented above.
