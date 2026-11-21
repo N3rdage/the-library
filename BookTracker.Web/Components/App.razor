@@ -23,7 +23,7 @@
     @* Content-Security-Policy — baseline defence against XSS + data exfiltration.
        'unsafe-inline' / 'unsafe-eval' on script-src are a concession to Blazor
        Server's framework internals; a nonce-based tightening is tracked in
-       SECURITY-AUDIT.md § Deferred items. img-src allows any HTTPS source
+       TODO.md (Nonce-based CSP middleware). img-src allows any HTTPS source
        because cover art comes from many external providers (Open Library,
        Google Books, etc.) and locking to specific hosts would break the
        lookup pipeline. Frame-ancestors / X-Frame-Options / X-Content-Type-Options /
