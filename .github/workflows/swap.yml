@@ -130,6 +130,9 @@ jobs:
         # If this step fails, the swap below does NOT run — prod stays on
         # both old code AND old schema (clean abort, no partial state).
         env:
+          # Authenticate through the Azure CLI session from azure/login only;
+          # see the same setting in deploy.yml for why.
+          AZURE_TOKEN_CREDENTIALS: AzureCliCredential
           PROD_CONN: Server=tcp:${{ steps.sql-fw.outputs.sql_fqdn }},1433;Database=booktracker;Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False;
         run: |
           chmod +x ./migrate
