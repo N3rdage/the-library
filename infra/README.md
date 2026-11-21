@@ -1,6 +1,8 @@
 # Azure infrastructure
 
-Provisions the Azure footprint for BookTracker into a single resource group. Everything reachable from the App Service is locked behind Private Endpoints; the only public surface is the App Service itself (gated by Easy Auth).
+Provisions the Azure footprint for BookTracker into a single resource group. SQL, Key Vault and Azure OpenAI are locked behind Private Endpoints. Two things are public: the App Service (gated by Easy Auth) and the cover-storage account, whose cover containers allow anonymous blob reads so cover URLs render directly (see the Storage Account row below).
+
+Some names in this file are placeholders: `<resource-group>`, `<sign-in-app-registration>` (the Entra app registration Easy Auth uses), `<ci-app-registration>`, `<apk-upload-app-registration>`, `<mobile-app-registration>`, `<subscription-offer-type>`, `<dns-registrar>`, and the signing-certificate SHA-1 and signature hash. The real values are Drew's to supply when he runs a command or opens the portal.
 
 ## What gets created
 
@@ -8,7 +10,7 @@ All tagged with `Client = Drew` and `Environment = Production`.
 
 | Resource | Name pattern | Region | Notes |
 |---|---|---|---|
-| Resource group | `rg-booktracker-prod` | `australiaeast` | holds everything; tags inherited |
+| Resource group | `<resource-group>` | `australiaeast` | holds everything; tags inherited |
 | Primary VNet | `booktracker-vnet` (`10.0.0.0/16`) | `australiaeast` | `app-integration` (`10.0.1.0/24`, delegated to App Service) + `private-endpoints` (`10.0.2.0/24`) |
 | Secondary VNet | `booktracker-vnet-eastus2` (`10.1.0.0/16`) | `eastus2` | `private-endpoints` (`10.1.2.0/24`); hosts the OpenAI PE |
 | VNet peering | `to-…` (both directions) | — | bidirectional pair so the App Service can reach the OpenAI PE |
@@ -29,13 +31,13 @@ All tagged with `Client = Drew` and `Environment = Production`.
 | Application Insights | `booktracker-ai` | `australiaeast` | workspace-based, wired to the App Service |
 | Storage Account (covers) | `booktrackercovers<hash>` | `australiaeast` | Standard_LRS, `book-covers` container with `publicAccess = Blob` so cover URLs render in `<img src>` without SAS tokens. Connection string lands in KV as `CoverStorageConnectionString`. Also holds the private `bookshelf-builds` container (no anonymous access) that `.github/workflows/bookshelf-apk.yml` uploads on-demand Bookshelf APKs to, downloaded by Drew with his own Azure login (no link or artifact is published). |
 
-The App Service uses **Easy Auth v2** pointed at the `Library-Patrons` Entra app registration. With `appRoleAssignmentRequired = true` set on its service principal, only users/groups assigned to the enterprise app can sign in.
+The App Service uses **Easy Auth v2** pointed at the `<sign-in-app-registration>` Entra app registration. With `appRoleAssignmentRequired = true` set on its service principal, only users/groups assigned to the enterprise app can sign in.
 
 ### Why eastus2
 
-The Azure OpenAI account lives in `eastus2`, not `australiaeast`. Microsoft is retiring `gpt-4o` in `australiaeast` on 2026-06-03 with no announced successor, so a second region is required regardless. The eastus2 VNet exists solely to host the OpenAI PE; cross-region traffic from the App Service flows through the VNet peering.
+The Azure OpenAI account lives in `eastus2`, not `australiaeast`. `gpt-4o` is retired in `australiaeast` with no successor there, so a second region is required. The eastus2 VNet exists solely to host the OpenAI PE; cross-region traffic from the App Service flows through the VNet peering.
 
-Microsoft Foundry (Claude on Azure) is **not provisioned** — Drew's subscription is `Sponsored_2016-01-01`, which Microsoft excludes from Claude eligibility on Foundry. The `MicrosoftFoundry` provider therefore won't appear in the app's runtime picker; direct Anthropic API (public, no Azure resource) remains the way to reach Claude. See `TODO.md` for the follow-up to add Foundry once on an EA / MCA-E subscription.
+Microsoft Foundry (Claude on Azure) is **not provisioned** — the subscription's offer type (`<subscription-offer-type>`, Drew's to confirm in the portal) is one Microsoft excludes from Claude eligibility on Foundry. The `MicrosoftFoundry` provider therefore won't appear in the app's runtime picker; direct Anthropic API (public, no Azure resource) remains the way to reach Claude. See `TODO.md` for the follow-up to add Foundry once on an EA / MCA-E subscription.
 
 ## Network topology
 
@@ -84,23 +86,14 @@ The following app settings are marked `slotConfigNames.appSettingNames` so they 
 
 The connection string `DefaultConnection` is also slot-sticky (`slotConfigNames.connectionStringNames`). Prod points at `booktracker`, staging points at `booktracker-staging`; without the pin a swap would land the formerly-staging code on the prod URL still pointing at the staging DB, an immediate prod outage.
 
-Reason: swap-then-redeploy-without-the-key previously let the Anthropic key drift between slots and eventually get lost. Making keys and AI config slot-bound means swaps are purely code-shaped — secrets, environment, and database all stay where they were configured.
+Reason: if keys moved with the code, a swap followed by a redeploy without the key would let the Anthropic key drift between slots and get lost. Making keys and AI config slot-bound means swaps are purely code-shaped — secrets, environment, and database all stay where they were configured.
 
-### Staging is a real environment now
+### Staging is a real environment
 
 Prod and staging hit **separate databases** (`booktracker` vs `booktracker-staging` on the same SQL server). Each slot's managed identity is granted only on its own DB. Implications:
 
-- Schema migrations are tested on staging *before* they hit prod data — the `swap.yml` slot-swap is now a real rollback story for code, not a fictional one against a shared DB.
-- Staging starts **empty** on first deploy of this change; the deploy-time migration bundle (TODO #21 — see `.github/workflows/deploy.yml`) builds the schema. Empty staging catches schema syntax errors but **misses every data-shape failure** (NOT NULL with existing nulls, unique-index dedup violations, FK orphans, type-conversion failures, performance-on-real-data). For migrations tagged `review:` the safe pattern is to refresh staging from prod first — see `TODO.md` for the bacpac-sync follow-up.
-
-### Order of operations after this lands
-
-The first time this Bicep runs against an existing deployment:
-
-1. **Run `deploy.ps1`** — Bicep creates `booktracker-staging`, repoints the staging slot's connection string at it, marks the CS slot-sticky, and `deploy.ps1` grants the staging managed identity on the new DB (and drops the orphan staging-identity grant from the prod DB).
-2. **Redeploy the app** to staging (push to `main`) so the deploy-time migration bundle in `deploy.yml` runs against the empty staging DB and creates the schema before the slot deploy step.
-3. **Verify staging URL** loads — empty library, but the app should be alive.
-4. Prod is unaffected throughout — the prod slot's CS still points at the prod DB.
+- Schema migrations are tested on staging *before* they hit prod data — the `swap.yml` slot-swap is a real rollback story for code.
+- A newly created staging DB starts **empty**; the deploy-time migration bundle (see `.github/workflows/deploy.yml`) builds the schema. Empty staging catches schema syntax errors but **misses every data-shape failure** (NOT NULL with existing nulls, unique-index dedup violations, FK orphans, type-conversion failures, performance-on-real-data). For migrations tagged `review:` the safe pattern is to refresh staging from prod first — see `TODO.md` for the bacpac-sync follow-up.
 
 ## Prereqs
 
@@ -124,7 +117,7 @@ Optional parameters:
 |---|---|---|
 | `-Location` | `australiaeast` | primary region |
 | `-AppName` | `booktracker` | base name for resources |
-| `-EnterpriseAppName` | `Library-Patrons` | enterprise app name for Easy Auth |
+| `-EnterpriseAppName` | `<sign-in-app-registration>` | enterprise app name for Easy Auth |
 | `-CustomDomain` | _empty_ | bind a custom hostname (e.g. `books.silly.ninja`) — see below |
 | `-SecondaryLocation` | `eastus2` | region for the AI VNet + OpenAI account |
 | `-DevClientIp` | _empty_ | optional IPv4 to whitelist on the SQL firewall for ad-hoc local EF migrations; leave blank to keep SQL fully private |
@@ -133,13 +126,13 @@ Optional parameters:
 
 What the script does:
 1. Signs you in to Azure + Microsoft Graph.
-2. Creates the `Library-Patrons` app registration + service principal if missing; sets `appRoleAssignmentRequired = true`.
+2. Creates the `<sign-in-app-registration>` app registration + service principal if missing; sets `appRoleAssignmentRequired = true`.
 3. Rotates a 2-year client secret for Easy Auth.
 4. Runs `main.bicep` at subscription scope (creates the RG + everything else).
 5. Registers the App Service's Easy Auth callback URL on the app registration.
-6. Temporarily flips SQL `publicNetworkAccess` on, opens a temp firewall rule for the script's public IP, connects with AAD auth, grants the prod managed identity `db_datareader/writer` on the prod DB and the staging managed identity the same on the staging DB (each identity only sees its own DB; the prod-DB grant also drops any orphan staging-identity grant from a pre-split deploy; idempotent revoke removes any pre-2026-05-18 `db_ddladmin` grant), then restores SQL back to private. If `-GitHubOidcAppName` is supplied, the script also grants that identity `db_datareader/writer/ddladmin` on both DBs — that's the identity the deploy-time migration bundle authenticates as.
+6. Temporarily flips SQL `publicNetworkAccess` on, opens a temp firewall rule for the script's public IP, connects with AAD auth, grants the prod managed identity `db_datareader/writer` on the prod DB and the staging managed identity the same on the staging DB (each identity only sees its own DB; the prod-DB grant also drops any staging-identity grant found on the prod DB, and an idempotent revoke removes any `db_ddladmin` grant from the app identities), then restores SQL back to private. If `-GitHubOidcAppName` is supplied, the script also grants that identity `db_datareader/writer/ddladmin` on both DBs — that's the identity the deploy-time migration bundle authenticates as.
 
-### Local EF migrations after the cutover
+### Local EF migrations
 
 With SQL on a Private Endpoint by default, `dotnet ef database update` from a developer laptop won't reach the server. Two options:
 
@@ -156,7 +149,7 @@ For realistic local testing (dedup UI, bulk scans, AI features against real data
 
 What it does:
 
-1. Signs in to Azure, locates the prod SQL server (`booktracker-sql-<suffix>` in `rg-booktracker-prod`).
+1. Signs in to Azure, locates the prod SQL server (`booktracker-sql-<suffix>` in `<resource-group>`).
 2. Temporarily enables SQL public network access + opens a firewall rule for the caller's IP (same pattern `deploy.ps1` uses).
 3. Runs `SqlPackage /a:Export` with AAD auth; lands the `.bacpac` in `./artifacts/` (gitignored).
 4. Restores the firewall state in `finally` even if the export aborts.
@@ -216,32 +209,36 @@ After the first `deploy.ps1` run, set up the GitHub → Azure OIDC link:
     -GitHubOrg 'N3rdage' -GitHubRepo 'the-library'
 ```
 
-The script creates a `booktracker-ci` app registration with federated identity credentials (one for pushes to `main` and one for the `production` GitHub Environment used by `swap.yml`; deliberately none for pull requests, and a re-run removes the one earlier versions created, because a pull request runs its own branch's workflow files and must not be able to sign in to Azure), assigns it Contributor on `rg-booktracker-prod`, and prints six GitHub repository variables for you to configure at `Settings → Secrets and variables → Actions → Variables`.
+The script creates a `<ci-app-registration>` app registration with federated identity credentials (one for pushes to `main` and one for the `production` GitHub Environment used by `swap.yml`; deliberately none for pull requests, and a re-run removes any it finds, because a pull request runs its own branch's workflow files and must not be able to sign in to Azure), assigns it Contributor on `<resource-group>`, and prints six GitHub repository variables for you to configure at `Settings → Secrets and variables → Actions → Variables`.
 
-**The APK workflow uses its own identity, not `booktracker-ci`.** `.github/workflows/bookshelf-apk.yml` runs on pull-request branches, so it must not hold production rights. `infra/setup-bookshelf-apk-identity.ps1` (same parameters as above, minus the main-branch one) creates `booktracker-apk-upload` with one federated credential, for the GitHub Environment `bookshelf-apk`, and one role, Storage Blob Data Contributor on the `bookshelf-builds` container. The environment requires Drew's approval and holds the keystore and AAD values as environment secrets. Never add an environment credential for that workflow to `booktracker-ci`.
+**The APK workflow uses its own identity, not `<ci-app-registration>`.** `.github/workflows/bookshelf-apk.yml` runs on pull-request branches, so it must not hold production rights. `infra/setup-bookshelf-apk-identity.ps1` (same parameters as above, minus the main-branch one) creates `<apk-upload-app-registration>` with one federated credential, for the GitHub Environment `bookshelf-apk`, and one role, Storage Blob Data Contributor on the `bookshelf-builds` container. The environment requires Drew's approval and holds the keystore and AAD values as environment secrets. Never add an environment credential for that workflow to `<ci-app-registration>`.
 
-> **Heads-up on environment FICs.** Any workflow that opts into a GitHub Environment (`environment: production` on a job) presents a different OIDC subject claim shape — `repo:<org>/<repo>:environment:<env-name>` instead of `…:ref:refs/heads/<branch>`. If you add a new Environment to a workflow without a matching FIC on `booktracker-ci`, dispatch fails with `AADSTS700213: No matching federated identity record found`. Re-run `setup-github-oidc.ps1` after adding new environments — the `$desiredFics` block in the script is the source of truth.
+> **Heads-up on environment FICs.** Any workflow that opts into a GitHub Environment (`environment: production` on a job) presents a different OIDC subject claim shape — `repo:<org>/<repo>:environment:<env-name>` instead of `…:ref:refs/heads/<branch>`. If you add a new Environment to a workflow without a matching FIC on `<ci-app-registration>`, dispatch fails with `AADSTS700213: No matching federated identity record found`. Re-run `setup-github-oidc.ps1` after adding new environments — the `$desiredFics` block in the script is the source of truth.
 
 The script also grants the CI SP the narrow permissions needed by the scheduled Easy Auth secret rotation:
 - **Key Vault Secrets Officer** on the single KV in the RG (write access to `AuthClientSecret`).
-- **Owner** of the `Library-Patrons` app registration (so it can rotate passwords on that specific app reg).
+- **Owner** of the `<sign-in-app-registration>` app registration (so it can rotate passwords on that specific app reg).
 - **Microsoft Graph `Application.ReadWrite.OwnedBy`** as an app role (narrow — only apps the SP owns). This is the "admin consent" — the user running the script needs `Application.ReadWrite.All` or Global Admin to issue it.
 
 The KV role assignment and app-reg ownership require the KV + app reg to already exist. If you run `setup-github-oidc.ps1` before `deploy.ps1`, those steps are skipped with a warning; re-run it after the first deploy to fill them in.
 
 Workflows under `.github/workflows/`:
-- `ci.yml` — build on PRs.
-- `deploy.yml` — on push to `main`: build, **apply pending EF migrations to `booktracker-staging` via the deploy-time bundle** (`dotnet ef migrations bundle` + AAD-auth apply behind a temp firewall rule), then publish + deploy to the **staging** slot. Migration apply failure blocks the slot deploy — clean fail signal, no startup-probe ambiguity. Two jobs: `package` compiles, publishes and bundles with no Azure rights and hands the package and the bundle on as an artifact; `deploy` alone can sign in to Azure and compiles nothing (security sweep LIB-016).
-- `swap.yml` — manual: **apply pending EF migrations to `booktracker` via the same bundle pattern**, then `az webapp deployment slot swap staging -> production`. Migration apply failure aborts the swap (prod stays on old code + old schema). (Adding a GitHub Environment with required reviewers is tracked in `TODO.md`.)
-- `rotate-easy-auth-secret.yml` — cron (twice yearly, 1st of every 6th month at 02:00 UTC) + manual dispatch: generates a new password on the `Library-Patrons` app registration, writes it to KV, trims old passwords to keep the latest 2. App Service picks up the new secret via the KV reference within ~24h. Manual dispatch: `gh workflow run rotate-easy-auth-secret.yml`.
+- `ci.yml` — on PRs: build the solution and run the Unit, Component and Integration test categories.
+- `mobile-build.yml` — on PRs that touch Bookshelf or what it builds on: compile `BookTracker.Mobile` for Android (the required `mobile-build` check).
+- `bookshelf-apk.yml` — manual, in the `bookshelf-apk` environment: build and sign a Release APK and upload it to the private `bookshelf-builds` container (uses the APK identity described above).
+- `security-scan.yml` — on PRs, pushes and weekly: gitleaks secret scan.
+- `notify-drew-blog.yml` — on pushes to `main` that touch `blog/**`: asks the blog repo to re-sync (skips when its token secret is absent).
+- `deploy.yml` — on push to `main`: build, **apply pending EF migrations to `booktracker-staging` via the deploy-time bundle** (`dotnet ef migrations bundle` + AAD-auth apply behind a temp firewall rule), then publish + deploy to the **staging** slot. Migration apply failure blocks the slot deploy — clean fail signal, no startup-probe ambiguity. Two jobs: `package` compiles, publishes and bundles with no Azure rights and hands the package and the bundle on as an artifact; `deploy` alone can sign in to Azure and compiles nothing.
+- `swap.yml` — manual: **apply pending EF migrations to `booktracker` via the same bundle pattern**, then `az webapp deployment slot swap staging -> production`. Migration apply failure aborts the swap (prod stays on old code + old schema).
+- `rotate-easy-auth-secret.yml` — cron (twice yearly, 1st of every 6th month at 02:00 UTC) + manual dispatch: generates a new password on the `<sign-in-app-registration>` app registration, writes it to KV, trims old passwords to keep the latest 2. App Service picks up the new secret via the KV reference within ~24h. Manual dispatch: `gh workflow run rotate-easy-auth-secret.yml`.
 
-Schema migrations apply via the deploy-time bundle in `deploy.yml` / `swap.yml` (TODO #21, shipped 2026-05-18 in PR #275 + PR B). Local dev keeps `db.Database.MigrateAsync()` at startup under the `IsDevelopment` gate in `Program.cs` so `dotnet watch` Just Works without a separate `dotnet ef database update`.
+Schema migrations apply via the deploy-time bundle in `deploy.yml` / `swap.yml`. Local dev keeps `db.Database.MigrateAsync()` at startup under the `IsDevelopment` gate in `Program.cs` so `dotnet watch` Just Works without a separate `dotnet ef database update`.
 
 ## Post-deploy
 
 Assign users/groups to the enterprise app so they can sign in:
 
-`https://entra.microsoft.com` → **Identity** → **Applications** → **Enterprise applications** → **Library-Patrons** → **Users and groups** → **Add user/group**.
+`https://entra.microsoft.com` → **Identity** → **Applications** → **Enterprise applications** → **`<sign-in-app-registration>`** → **Users and groups** → **Add user/group**.
 
 Unassigned users attempting to sign in will see `AADSTS501051`.
 
@@ -250,11 +247,11 @@ Unassigned users attempting to sign in will see `AADSTS501051`.
 Bind a custom hostname (e.g. `books.silly.ninja`) to the production slot with a free App Service Managed Certificate:
 
 1. Run `./deploy.ps1 -TenantId … -SubscriptionId …` **without** `-CustomDomain`. The last block of output shows the `asuid.<subdomain>` TXT value and the CNAME target.
-2. At your DNS host (Gandi in our case), add:
+2. At your DNS host (`<dns-registrar>`), add:
    - `TXT  asuid.books  <customDomainVerificationId>`
    - `CNAME books  <app>.azurewebsites.net`
 3. Wait for DNS to propagate (a few minutes to an hour; `nslookup books.silly.ninja` should resolve).
-4. Re-run `./deploy.ps1 -TenantId … -SubscriptionId … -CustomDomain books.silly.ninja`. Bicep adds the hostname binding, issues the managed cert, and binds SSL. The script also registers the custom-domain redirect URI on the `Library-Patrons` app registration.
+4. Re-run `./deploy.ps1 -TenantId … -SubscriptionId … -CustomDomain books.silly.ninja`. Bicep adds the hostname binding, issues the managed cert, and binds SSL. The script also registers the custom-domain redirect URI on the `<sign-in-app-registration>` app registration.
 
 Works for CNAME-pointed subdomains only. Apex domains (`silly.ninja`) need a different cert issuance path (A record + ALIAS or equivalent) — not covered here.
 
@@ -319,11 +316,11 @@ Then edit `BookTracker.Mobile/AppConfig.cs` with the real `TenantId`, `MobileCli
 
 **Why this isn't fully automated by `deploy.ps1`:** native / public client app registrations have a couple of properties (the redirect URI scheme, the API permission grant) that need values which only exist later in the build pipeline — the Android signing-key SHA-1 hash for the `msauth://` redirect URI is derived from the dev keystore, which doesn't exist yet at infra-deploy time. Could automate the *initial* app reg, but you'd still come back to the portal once for the redirect URI. One trip is fine.
 
-**Note on Bicep:** the existing `validation.allowedAudiences` in `app-config.bicep` (`['api://${authClientId}', authClientId]`) already accepts the audience MSAL produces when acquiring tokens for the API scope below. No infra change is needed for this PR.
+**Note on Bicep:** the existing `validation.allowedAudiences` in `app-config.bicep` (`['api://${authClientId}', authClientId]`) already accepts the audience MSAL produces when acquiring tokens for the API scope below. No infra change is needed.
 
-### Step 1 — Expose the API scope on the existing `Library-Patrons` app reg
+### Step 1 — Expose the API scope on the existing `<sign-in-app-registration>` app reg
 
-Azure Portal → Microsoft Entra ID → App registrations → `Library-Patrons` → **Expose an API**:
+Azure Portal → Microsoft Entra ID → App registrations → `<sign-in-app-registration>` → **Expose an API**:
 
 1. Confirm the **Application ID URI** is set to `api://<authClientId>` (where `<authClientId>` is the same App (client) ID used for `-authClientId` in `deploy.ps1`). It usually is — `validation.allowedAudiences` references this exact form.
 2. **Add a scope:**
@@ -341,21 +338,21 @@ Azure Portal → Microsoft Entra ID → App registrations → `Library-Patrons` 
 
 Azure Portal → Microsoft Entra ID → App registrations → **New registration**:
 
-- Name: `BookTracker Mobile`
-- Supported account types: **Single tenant** (matches `Library-Patrons`)
+- Name: `<mobile-app-registration>`
+- Supported account types: **Single tenant** (matches `<sign-in-app-registration>`)
 - Redirect URI: leave blank for now — set it in step 4 once the Android signing-key hash is known.
 
 After creation, record the **Application (client) ID** — this is the `mobileClientId` MAUI's `PublicClientApplicationBuilder.Create(...)` will use.
 
 ### Step 3 — Grant API permission
 
-Still on the new `BookTracker Mobile` app reg, **API permissions** → **Add a permission** → **APIs my organization uses** → search by the Library-Patrons clientId GUID (the value used for `-authClientId` in `deploy.ps1`) → select it → **Delegated permissions** → tick `access_as_user` → **Add permissions**.
+Still on the new `<mobile-app-registration>` app reg, **API permissions** → **Add a permission** → **APIs my organization uses** → search by the sign-in app registration's client ID GUID (the value used for `-authClientId` in `deploy.ps1`) → select it → **Delegated permissions** → tick `access_as_user` → **Add permissions**.
 
 (Searching by clientId hits more reliably than searching by display name — some portal builds don't index display names on this tab.)
 
-(The **My APIs** tab only shows apps the signed-in user *owns* — if you didn't run `deploy.ps1` from the same identity, `Library-Patrons` won't appear there. **APIs my organization uses** lists every API visible in the tenant regardless of ownership, and is the right tab for this step.)
+(The **My APIs** tab only shows apps the signed-in user *owns* — if you didn't run `deploy.ps1` from the same identity, `<sign-in-app-registration>` won't appear there. **APIs my organization uses** lists every API visible in the tenant regardless of ownership, and is the right tab for this step.)
 
-If `Library-Patrons` doesn't appear under **APIs my organization uses** either, the scope from Step 1 didn't fully save — go back and verify (Step 1.4 above).
+If `<sign-in-app-registration>` doesn't appear under **APIs my organization uses** either, the scope from Step 1 didn't fully save — go back and verify (Step 1.4 above).
 
 If your tenant requires admin consent for delegated scopes, click **Grant admin consent for `<tenant>`**.
 
@@ -377,8 +374,8 @@ $apk = ".\BookTracker.Mobile\bin\Debug\net10.0-android\com.thelibrary.mobile-Sig
     ForEach-Object { ($_ -split ':\s+')[1] }
 
 # 2. Convert the colon-separated hex to raw base64.
-# Replace $hex below with the value printed above (no colons).
-$hex = '74C7564DCC3C85FE5354F11F441FA6D093F2503B'  # example only
+# Set $hex to the SHA-1 printed above, without colons (Drew supplies it from his keystore).
+$hex = '<sha1-hex-from-step-1>'
 $bytes = [byte[]]::new($hex.Length / 2)
 for ($i = 0; $i -lt $hex.Length; $i += 2) {
     $bytes[$i/2] = [Convert]::ToByte($hex.Substring($i, 2), 16)
@@ -389,20 +386,20 @@ Write-Output "msauth://com.thelibrary.mobile/$b64"
 
 **Then update three places to match:**
 
-1. **BookTracker Mobile AAD app reg** → Authentication → Add a platform. The portal has two tiles that both work but differ in UX:
-   - **Android (dedicated)** — recommended on the current portal. Asks for **Package name** (`com.thelibrary.mobile`) and **Signature hash** (the raw base64 from the recipe above, e.g. `dMdWTcw8hf5TVPEfRB+m0JPyUDs=`) as separate fields. AAD constructs the `msauth://...` URI for you. Cleaner — no room for typos in the URI itself.
+1. **The mobile app registration (`<mobile-app-registration>`)** → Authentication → Add a platform. The portal has two tiles that both work but differ in UX:
+   - **Android (dedicated)** — recommended on the current portal. Asks for **Package name** (`com.thelibrary.mobile`) and **Signature hash** (the raw base64 from the recipe above) as separate fields. AAD constructs the `msauth://...` URI for you. Cleaner — no room for typos in the URI itself.
    - **Mobile and desktop applications (generic)** — older path. Custom redirect URIs → paste the full `msauth://com.thelibrary.mobile/<raw-base64-hash>` value.
-   - Note on the new portal: if you later go back to **Edit** the URI you added via either path, the editor now shows it broken down into Package name + Signature hash rather than the original URI string. Same URL underneath; only the editor changed (Microsoft rolled this out around 2026-05).
+   - Note on the new portal: if you later go back to **Edit** the URI you added via either path, the editor now shows it broken down into Package name + Signature hash rather than the original URI string. Same URL underneath; only the editor differs.
 2. **`BookTracker.Mobile/Platforms/Android/AndroidManifest.xml`** — the `android:path` value on the `BrowserTabActivity` intent-filter (raw base64, no URL encoding).
 3. **`BookTracker.Mobile/Services/AuthService.cs`** — the `WithRedirectUri` call (same raw form).
 
-If any of the three diverge, sign-in fails with `redirect_uri_mismatch` from AAD or hangs on the "Are you trying to sign in to BookTracker Mobile?" prompt with no return to the app (intent-filter doesn't match). The symptom tells you which one's out of sync.
+If any of the three diverge, sign-in fails with `redirect_uri_mismatch` from AAD or hangs on the "Are you trying to sign in to …?" prompt (naming the mobile app registration) with no return to the app (intent-filter doesn't match). The symptom tells you which one's out of sync.
 
-When swapping dev machines or moving to a CI/release keystore, repeat this step. The hash currently in `AndroidManifest.xml` and `AuthService.cs` is for Drew's dev-machine debug keystore as of 2026-05-11.
+When swapping dev machines or moving to a CI/release keystore, repeat this step. The hash currently in `AndroidManifest.xml` and `AuthService.cs` is for Drew's dev-machine debug keystore.
 
 ### Step 5 — Validate end-to-end (smoke test)
 
-Once steps 1–3 are done, you can verify the API accepts a bearer token from a non-browser caller without writing any MAUI code yet:
+Once steps 1–3 are done, you can verify the API accepts a bearer token from a non-browser caller without the MAUI app:
 
 ```powershell
 # Acquire an access token for the API scope. The first run prompts
@@ -422,5 +419,5 @@ A 401 means the token's `aud` doesn't match `validation.allowedAudiences` — co
 
 **If `az account get-access-token` fails with `AADSTS65001: consent_required`** — expected, az CLI hasn't been pre-authorized to call this custom API. Two paths:
 
-- **Pre-authorize az CLI** (one portal click, makes the smoke work ever after). Library-Patrons → Expose an API → **Authorized client applications** → **Add a client application** → Client ID `04b07795-8ddb-461a-bbee-02f9e1bf7b46` (Microsoft Azure CLI) → tick `access_as_user` → Save. Re-run the `az account get-access-token` command.
-- **Skip step 5 entirely.** The real smoke is PR 3's first `MSAL.AcquireTokenInteractive(...)` call — if MAUI sign-in works, the auth chain is correct end-to-end. CLI smoke is a nice-to-have, not a gate.
+- **Pre-authorize az CLI** (one portal click, makes the smoke work ever after). `<sign-in-app-registration>` → Expose an API → **Authorized client applications** → **Add a client application** → Client ID `04b07795-8ddb-461a-bbee-02f9e1bf7b46` (Microsoft Azure CLI) → tick `access_as_user` → Save. Re-run the `az account get-access-token` command.
+- **Skip step 5 entirely.** The real smoke is Bookshelf's `MSAL.AcquireTokenInteractive(...)` sign-in — if MAUI sign-in works, the auth chain is correct end-to-end. CLI smoke is a nice-to-have, not a gate.
