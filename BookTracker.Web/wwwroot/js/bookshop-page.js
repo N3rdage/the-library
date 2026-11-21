@@ -225,8 +225,9 @@
         // Found
         const b = result.book;
         const status = b.status != null ? String(b.status) : '';
-        const authorLine = (b.allAuthors && b.allAuthors.length > 1)
-            ? window.catalogCache.authorRoleNames(b).join(', ')
+        const authorNames = window.catalogCache.authorRoleNames(b);
+        const authorLine = authorNames.length > 1
+            ? authorNames.join(', ')
             : (b.primaryAuthor || '');
         const ratingHtml = renderStarRow(b.rating);
         const statusBadge = status ? `<span class="badge bg-light text-dark border ms-1">${esc(status)}</span>` : '';
