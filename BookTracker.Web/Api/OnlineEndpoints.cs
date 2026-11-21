@@ -10,7 +10,7 @@ namespace BookTracker.Web.Api;
 // misses. The phone calls Bookcase rather than the providers so the provider
 // keys stay server-side and the owned-work match can read the whole library.
 // Auth: the same Easy Auth platform-layer gate as every other /api route
-// (SECURITY-AUDIT.md, SEC-006).
+// (configured in infra/modules/app-config.bicep).
 public static class OnlineEndpoints
 {
     // Each call fans out to the providers, so one window is shared by all

@@ -6,8 +6,8 @@ namespace BookTracker.Web.Api;
 
 // Second member of the *Endpoints.cs convention started by
 // CatalogEndpoints.cs. Auth: same Easy Auth platform-layer gate as
-// every other route in the app — see SECURITY-AUDIT.md (SEC-006)
-// for the verification.
+// every other route in the app; Easy Auth is configured in
+// infra/modules/app-config.bicep.
 public static class WishlistEndpoints
 {
     public static IEndpointRouteBuilder MapWishlistEndpoints(this IEndpointRouteBuilder app)
