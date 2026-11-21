@@ -33,9 +33,9 @@ Three layers, none of which require an active SignalR circuit:
 
 1. **`/bookshop` route** — Razor page with no Blazor interactivity (the app's global InteractiveServer rendermode still opens a circuit, but the page doesn't use it). The HTML is plain markup; interactivity is pure JavaScript reading from IndexedDB. Auth-gated by Easy Auth at first visit; SW caches the rendered HTML for offline access thereafter.
 
-2. **Service worker** — `wwwroot/service-worker.js` applies **route-specific caching strategies**. Cache-first for `/bookshop*` and `/api/catalog-snapshot`; network-first-with-cache-fallback for everything else.
+2. **Service worker** — `wwwroot/service-worker.js` applies **route-specific caching strategies**. `/_blazor` (SignalR) passes straight through. `/bookshop*` navigations and `/api/catalog-snapshot` are cache-first with stale-while-revalidate, except that a snapshot request carrying the `X-Catalog-Refresh: 1` header is network-first and overwrites the cache. Other navigations, non-GET requests and cross-origin requests pass through; every remaining same-origin GET (assets) is network-first with cache fallback.
 
-3. **IndexedDB catalog cache** — stores a slim snapshot of the catalog: books (id, title, primary author, all authors, status, rating, ISBNs), authors (id, name, canonical id, book ids). Indexed for ISBN lookup (multi-entry on `isbns`) and primary-author lookup. Module at `wwwroot/js/catalog-cache.js` exposes `init()`, `lookupByIsbn()`, `lookupByAuthor()`, `searchAuthors()`, `refresh()`, `getMeta()`. Stores: `books` (key=id, multiEntry index on `isbns`, index on `primaryAuthor`, the author's name), `authors` (key=id, index on `canonicalId`), `meta` (key/value for sync timestamp, version).
+3. **IndexedDB catalog cache** — stores a slim snapshot of the catalog: books (id, title, primary author, all authors, status, rating, ISBNs), authors (id, name, canonical id, book count). Indexed for ISBN lookup (multi-entry on `isbns`) and primary-author lookup. Module at `wwwroot/js/catalog-cache.js` exposes `init()`, `lookupByIsbn()`, `lookupByAuthor()`, `searchAuthors()`, `refresh()`, `getMeta()`. Stores: `books` (key=id, multiEntry index on `isbns`, index on `primaryAuthor`, the author's name), `authors` (key=id, index on `canonicalId`), `meta` (key/value for sync timestamp, version).
 
 The page's JS reads from IndexedDB on `DOMContentLoaded`, wires up event handlers in plain JS, and does not depend on Blazor's circuit being alive. Server-side methods on the Razor page are reachable when online (e.g. for "open in app" links) but not required for the offline lookup paths.
 
@@ -155,13 +155,13 @@ Offline indicator uses `navigator.onLine` + visibilitychange events. Unauthentic
 
 ## Open decisions
 
-- **Result card cover image** — the snapshot already carries one: `BookSnapshot.CoverUrl` (and `EditionSnapshot.CoverUrl`), which Bookshelf's cover cache uses. `/bookshop` ignores it; its result cards (`wwwroot/js/bookshop-page.js`) are text only, with no image or placeholder icon. Showing the cover would cost an image fetch per result, not snapshot size; the open question is whether that is worth it on a shop's cellular connection.
+- **Result card cover image** — the snapshot already carries one: `BookSnapshot.CoverUrl`, which Bookshelf's cover cache uses (`EditionSnapshot.CoverUrl` is also there; Bookshelf loads edition covers directly, without the cache). `/bookshop` ignores it; its result cards (`wwwroot/js/bookshop-page.js`) are text only, with no image or placeholder icon. Showing the cover would cost an image fetch per result, not snapshot size; the open question is whether that is worth it on a shop's cellular connection.
 - **Service worker BackgroundSync API** — Chrome supports it; iOS doesn't. The page refreshes on visit; if actual usage shows a daily background refresh while the phone is in a pocket is wanted, revisit.
 - **Author canonical-vs-alias UI** — when search hits both Stephen King and Richard Bachman, surface only the canonical, or both? Leaning canonical-only in the result list, with alias awareness through the search itself (typing "Bachman" matches King's row).
 
 ## What this is explicitly NOT
 
-- **Not a full WebAssembly Blazor migration.** Reuses Blazor Server for everything except `/bookshop`. The static-SSR + JS approach for one route doesn't propagate.
+- **Not a full WebAssembly Blazor migration.** Reuses Blazor Server for everything except `/bookshop`. The plain-markup + JS approach for one route (the page renders under the app's global InteractiveServer mode but doesn't use the circuit) doesn't propagate.
 - **Not a sync-back / offline-write model.** Bookshop mode is read-only-lookup. Adds, edits, status changes all require an online round-trip via the existing edit flows. (v2 could explore "queue offline adds and replay when online," but the use case for that is much narrower than the lookup case.)
 - **Not a replacement for the existing PWA install.** The whole BookTracker app stays installable as one PWA; `/bookshop` is just the route within it that's offline-first.
 - **Not a generic offline-first refactor of every page.** Only the lookup paths (ISBN check, author search) need offline. Edit pages are deliberately online-only — adding a book is a network-required event by design.

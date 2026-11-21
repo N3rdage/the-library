@@ -256,7 +256,7 @@ These are binding for all Application-layer work.
 - **Transaction ownership.** The rule: a command handler's writes go through one
   `SaveChanges`, or through an explicit transaction when there is more than one, so they commit
   or fail together. Every command handler makes at most one `SaveChangesAsync` call
-  (`CreateSeries` and `UpdateSeries` make it through `SeriesNameGuard.SaveTranslatingDuplicateAsync`),
+  (`CreateSeries`, `UpdateSeries` and `CreateSeriesFromSuggestion` make it through `SeriesNameGuard.SaveTranslatingDuplicateAsync`),
   and EF Core runs one `SaveChanges` as one transaction. Several handlers write to more than one
   aggregate in that one call, for example `DeleteBook` and
   `RemoveWorkFromBook` (the Book's Work membership and any Work it orphans), `AttachWorkToBook`

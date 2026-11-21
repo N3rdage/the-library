@@ -32,7 +32,7 @@ The physical-object grouping. Carries reading state + cover art + series members
 | `Id` | int (PK) | |
 | `Title` | string (≤300, required) | For single-Work books, mirrors the sole Work's title. For compendiums, this is the *volume* title — distinct from Work titles inside. |
 | `Category` | enum `BookCategory` | `Fiction` / `NonFiction`. Display-level only — orthogonal to genre. |
-| `Status` | enum `BookStatus` | `Unread` / `Reading` / `Read` / `Reference`. Default `Unread` (the entity, the Add form and Bulk Add all start there; `Read` is set by `Book.MarkRead`). `Reference` marks reference books (dictionaries, encyclopaedias, atlases), where read-state is meaningless. |
+| `Status` | enum `BookStatus` | `Unread` / `Reading` / `Read` / `Reference`. Default `Unread` (the entity, the Add form and Bulk Add all start there; `Book.Create` takes the status from the Add form, `Book.ChangeStatus` sets it from the Book Detail status chips, and the Library quick-set uses `Book.MarkRead` to set `Read`). `Reference` marks reference books (dictionaries, encyclopaedias, atlases), where read-state is meaningless. |
 | `Rating` | int 0–5 | 0 = unrated, 1–5 = stars. |
 | `Notes` | string (nullable, MAX) | Personal reading notes ("recommended by X, finished in two days, didn't love the ending"). High-signal for analysis but personal. |
 | `DateAdded` | DateTime (UTC) | When the row was created. |

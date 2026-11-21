@@ -127,7 +127,7 @@ Mobile uses explicit `FontSize` values on each Label / Button, in XAML and in th
 | 14 | Body labels, outlined buttons | `OutlinedButton` style (`Styles.xaml:474`), `ResultPage.xaml:62` (authors), `FindPage.xaml:76` (Scan) |
 | 13 | Secondary and status text | `StatusSheetPage.xaml:53`, `ResultPage.xaml:64`, the scope buttons at `FindPage.xaml:115–117` |
 | 12 | Microcopy (timestamps, section labels, ISBN in Courier New) | `StatusSheetPage.xaml:35, 42`, `ResultPage.xaml:66`, the sync chip at `FindPage.xaml:47` |
-| 11 | Footnotes | `StatusSheetPage.xaml:71` (build footer) |
+| 11 | Footnotes | `StatusSheetPage.xaml:77-78` (build footer) |
 
 When adding a new size, snap to the nearest existing rung rather than introducing intermediate values.
 
@@ -150,7 +150,7 @@ Recurring values across both surfaces. Use these rungs unless there's a specific
 | 6 | Inner spacing inside result cards (`ResultPage.xaml:59`) |
 | 8 | CornerRadius on Borders / buttons; small element gaps (`FindPage.xaml:53`) |
 | 12 | Standard component padding (the `Card` style, `Styles.xaml:486`; `ResultPage.xaml:42`); standard element spacing in stacks (`ResultPage.xaml:14`) |
-| 14 | Horizontal padding of code-built rows (`FindPage.xaml.cs:272`, `SeriesGapsPage.xaml.cs:151`) |
+| 14 | Horizontal padding of code-built rows (`FindPage.xaml.cs:274`, `SeriesGapsPage.xaml.cs:151`) |
 | 16 | Spacing between sections of a sheet (`StatusSheetPage.xaml:13`); top padding under a header (`FindPage.xaml:53`, `WishlistPage.xaml:26`) |
 | 20 | Page content padding (`StatusSheetPage.xaml:13`, `ResultPage.xaml:14`, `FindPage.xaml:120`) |
 | 24 | Header banner horizontal padding (`FindPage.xaml:32`) |
@@ -294,7 +294,7 @@ Reference: `Components/Layout/MainLayout.razor`. The version-SHA footer link is 
 
 ### Scan UX (both surfaces)
 
-Camera viewfinder + letterbox overlay + green-bordered scan target window in the centre. Aspect ratio approximately 3.5:1 (width:height) — book barcode shape.
+Camera viewfinder with a scan target window in the centre. Aspect ratio approximately 3.5:1 (width:height) — book barcode shape.
 
 **Web**: html5-qrcode library renders its own qrbox at 280×80 px. Reference: `BookTracker.Web/wwwroot/js/barcode-scanner.js:23`.
 
@@ -333,7 +333,7 @@ When designing or updating the Mobile launcher foreground SVG, the visible desig
 
 Web uses MudBlazor's `MudIcon` with Material icons (`Icons.Material.Filled.Search`, etc.) where icons are needed inline. Don't mix Material font icons with emoji on the same surface — pick one per page.
 
-Mobile's target is the Tabler outline icon font (registered in `MauiProgram.cs`, glyphs in `Theming/TablerIcons.cs`), not emoji (see `docs/BOOKSHELF-UI-REDESIGN.md` §3). The code does not meet that yet: Tabler supplies only the three tab icons in `AppShell.xaml.cs`, and the pages use emoji and symbol characters — the `📖` cover placeholder, `⭐ On your wishlist` in `ResultPage.xaml`, and `⟳` / `⚠ offline` on the Find sync chip. Moving them to Tabler is tracked in the backlog.
+Mobile's target is the Tabler outline icon font (registered in `MauiProgram.cs`, glyphs in `Theming/TablerIcons.cs`), not emoji (see `docs/BOOKSHELF-UI-REDESIGN.md` §3). The code does not meet that yet: Tabler supplies only the three tab icons in `AppShell.xaml.cs` and the online answer card's cover placeholder in `ResultPage`, and the pages use emoji and symbol characters — the `📖` cover placeholder, `⭐ On your wishlist` in `ResultPage.xaml`, and `⟳` / `⚠ offline` on the Find sync chip. Moving them to Tabler is tracked in the backlog.
 
 ## Accessibility
 
@@ -416,4 +416,4 @@ Some Web pages are still Bootstrap-shaped; some are MudBlazor; some are hybrids.
 
 ### Web's `/bookshop` scan UX vs Mobile's
 
-The Web `/bookshop` scan page uses html5-qrcode's default qrbox styling — green target inside a dark letterbox, all rendered by the library. Mobile's scanner hand-rolls an equivalent overlay in XAML to match the same visual shape. Both look approximately the same on device, but they're independently maintained — a styling change to one won't automatically apply to the other. Likely acceptable: the two implementations are short and the visual contract is documented above.
+The Web `/bookshop` scan page uses html5-qrcode's default qrbox styling, drawn entirely by the library (the repo's CSS only sizes `.scanner-container` and its video, and sets no colours). Mobile's scanner hand-rolls an overlay in XAML with the same 3.5:1 target shape but its own look: a green `ScanReticle` stroke and no dimming around it. The two differ in styling and are independently maintained — a styling change to one won't automatically apply to the other. Likely acceptable: the two implementations are short and the visual contract is documented above.

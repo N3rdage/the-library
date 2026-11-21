@@ -171,7 +171,7 @@ Politics & Current Affairs   (top-level, no sub-genres yet)
 Media Studies                (top-level, no sub-genres yet)
 ```
 
-> **Memoir** lives under Biography and **Popular Science** under Science. Both rows were first seeded under Reference and re-parented by `SeedNonFictionExpansion` with their Genre row IDs unchanged (see Provenance).
+> **Memoir** lives under Biography and **Popular Science** under Science. Migration `20260522052911_SeedNonFictionExpansion` sets their parents (see Provenance).
 
 ---
 
