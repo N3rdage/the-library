@@ -1,78 +1,54 @@
-# Bookshelf (Mobile) — UI Redesign Brief
+# Bookshelf (Mobile) — UI Design
 
-**Audience:** Claude Code, implementing the redesign.
-**Status:** Design-locked from the planning session of 2026-06. Supersedes the *visual/IA* portions of `docs/MOBILE-UI-SPEC.md`; the hard constraints in that doc's §2 still hold except the one deliberate deviation noted in §1 below.
-**Scope:** .NET MAUI, `net10.0-android`. Read-only app; mutations deep-link to Bookcase (one new local-write exception is parked, see §9).
+**Audience:** Claude Code, working on Bookshelf's UI.
+**Scope:** .NET MAUI, `net10.0-android` (Android only; layouts stay platform-agnostic). Offline-first against the local SQLite cache. Read-only app; mutations deep-link to Bookcase (one local-write exception is parked, see §10).
 
-> **How to read this.** §1 is the locked IA decision (incl. the one constraint break and its justification). §2 is the token set — implement first. §3 is the component kit. §4–§8 are per-surface specs with states and data sources. §9 is motion. §10 is open/parked items. §11 is suggested PR sequencing.
+> **How to read this.** This is the design for Bookshelf's UI. Parts of it are built and parts are not; each section says plainly what the app does today (**Built today:**), and the code in `BookTracker.Mobile/` is the ground truth. §1 is the IA decision and its justification. §2 is the token set. §3 is the component kit. §4–§8 are per-surface specs with states and data sources. §9 is motion. §10 is open/parked items.
 
 ---
 
 ## 1. Locked decisions & IA
 
-### 1.1 Navigation model — **constraint deviation, justified**
+### 1.1 Navigation model
 
-The current `NavigationPage` hub-and-spoke is replaced by a **`Shell` with a bottom `TabBar`**. This is the single deviation from the original §2 ("`NavigationPage` stack — *not* Shell").
+Navigation is a **`Shell` with a bottom `TabBar`**, not a `NavigationPage` hub-and-spoke.
 
-**Justification (the "good reason"):** the four in-shop tasks are *co-equal and rapidly interleaved against a single physical book* — scan it, check the author's other works, check series gaps, check the want-list, all for the book in hand. Hub-and-spoke makes that loop an in→back→in→back dance. Bottom tabs make each task one tap with no back-stack churn, which is the ergonomic core of the in-shop moment.
+**Justification:** the four in-shop tasks are *co-equal and rapidly interleaved against a single physical book* — scan it, check the author's other works, check series gaps, check the want-list, all for the book in hand. Hub-and-spoke makes that loop an in→back→in→back dance. Bottom tabs make each task one tap with no back-stack churn, which is the ergonomic core of the in-shop moment.
 
 **Tabs (3, co-equal):**
 
-| Tab | Icon (Tabler) | Lands as | Subsumes |
+| Tab | Icon (Tabler) | Lands as | Covers |
 |---|---|---|---|
-| **Find** | `ti-search` | default tab | old ScanPage + AuthorSearchPage + TitleSearchPage |
-| **Wishlist** | `ti-star` | — | old WishlistPage |
-| **Gaps** | `ti-books` | — | old SeriesGapsPage |
+| **Find** | `ti-search` | default tab | ISBN scan + author search + title search |
+| **Wishlist** | `ti-star` | — | the wishlist |
+| **Gaps** | `ti-books` | — | series gaps |
 
 - **Do not land on a live camera.** Find opens to a search-ready surface; scanning is one tap from there.
 - **Sync is not a tab.** It is an ambient header **chip** (age + entry point) plus a **status sheet** behind it (§8).
 - **Gaps is the quiet tab** — kept separate for now, candidate for later deprecation (missing items increasingly flow to Wishlist). Keep it self-contained so removal is cheap.
 
+**Built today:** as above. The tabs are Find (`FindPage`), Wishlist (`WishlistPage`) and Gaps (`SeriesGapsPage`).
+
 ### 1.2 Navigation mechanics under Shell
 
-```xml
-<!-- AppShell.xaml -->
-<Shell ... FlyoutBehavior="Disabled">
-  <TabBar>
-    <ShellContent Title="Find"     Icon="tab_find.png"     Route="find"     ContentTemplate="{DataTemplate p:FindPage}" />
-    <ShellContent Title="Wishlist" Icon="tab_wishlist.png" Route="wishlist" ContentTemplate="{DataTemplate p:WishlistPage}" />
-    <ShellContent Title="Gaps"     Icon="tab_gaps.png"     Route="gaps"     ContentTemplate="{DataTemplate p:GapsPage}" />
-  </TabBar>
-</Shell>
-```
+**Built today:** `AppShell.xaml` declares a `TabBar` with three `ShellContent` entries (routes `find`, `wishlist`, `gaps`) and sets the tab-bar colours as attributes on the `Shell` element: `HeaderL/D` background, `BrassTextL/D` for the active icon and title, `OnLeather` / `TextMutedD` for inactive. `AppShell.xaml.cs` takes the three tab pages from DI (they are singletons) and assigns each `ShellContent.Content` in code, because a `DataTemplate` `ContentTemplate` would construct the page without its dependencies; it also sets the tab icons in code as Tabler `FontImageSource`s (`TablerIcons.Search`, `Star`, `Books`).
 
-Drill-downs push **within the active tab's stack** (the tab bar stays visible), via registered routes + `GoToAsync`:
+There are no registered routes and no `GoToAsync`. Drill-downs push onto the active tab's stack with `Navigation.PushAsync` (the tab bar stays visible):
 
-- `find` → `find/result` (ISBN/title resolved to a single book) — `ResultPage`
-- `find` → `find/author` (tap an author in results) — `AuthorWorksPage`
-- Status sheet is **modal**: `GoToAsync("status")` registered as a modal route (or `Navigation.PushModalAsync`).
+- Find → `ResultPage` (an ISBN typed and submitted, or a barcode scanned).
+- Find → `AuthorWorksPage` (tap an author in results).
 
-```csharp
-Routing.RegisterRoute("find/result", typeof(ResultPage));
-Routing.RegisterRoute("find/author", typeof(AuthorWorksPage));
-Routing.RegisterRoute("status",      typeof(StatusSheetPage)); // presented modally
-```
-
-Tab-bar styling (espresso bar, brass active, muted inactive):
-
-```xml
-<Style TargetType="TabBar">
-  <Setter Property="Shell.TabBarBackgroundColor"
-    Value="{AppThemeBinding Light={StaticResource HeaderL}, Dark={StaticResource HeaderD}}" />
-  <Setter Property="Shell.TabBarForegroundColor"
-    Value="{AppThemeBinding Light={StaticResource BrassTextL}, Dark={StaticResource BrassTextD}}" />
-  <Setter Property="Shell.TabBarUnselectedColor"
-    Value="{AppThemeBinding Light={StaticResource OnLeather}, Dark={StaticResource TextMutedD}}" />
-</Shell>
-```
+The status sheet is modal: `StatusSheetPage.OpenAsync` resolves it from DI and calls `Navigation.PushModalAsync`.
 
 ---
 
-## 2. Design tokens (implement first)
+## 2. Design tokens
 
-Replaces the hand-mirrored inline hex (closes old TODO #37 and gaps §8.1/§8.7). All colour pairs resolve via `AppThemeBinding`. Spacing rungs (4/6/8/12/14/16/20/24/32), 8 dp corner radius, and touch-target rungs (44/56/64 dp) are **unchanged** from the original spec.
+Pages use these tokens, not inline hex. All colour pairs resolve via `AppThemeBinding` (in XAML) or `ThemeColors.SetThemeColor` (in code-behind). Spacing rungs (4/6/8/12/14/16/20/24/32), 8 dp corner radius, and touch-target rungs (44/56/64 dp).
 
 ### 2.1 `Colors.xaml`
+
+The design token set. `Resources/Styles/Colors.xaml` defines every token below except `CoverTileL/D` and `InfoTxL/D`, which are design-only and not in the file.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8" ?>
@@ -90,7 +66,7 @@ Replaces the hand-mirrored inline hex (closes old TODO #37 and gaps §8.1/§8.7)
   <Color x:Key="SurfaceL">#F2EADB</Color>     <Color x:Key="SurfaceD">#30211A</Color>
   <Color x:Key="HeaderL">#3E2723</Color>      <Color x:Key="HeaderD">#2A1A13</Color>
   <Color x:Key="InputBgL">#FAF6EC</Color>     <Color x:Key="InputBgD">#2A2018</Color>
-  <Color x:Key="CoverTileL">#3E2723</Color>   <Color x:Key="CoverTileD">#1A130D</Color>
+  <Color x:Key="CoverTileL">#3E2723</Color>   <Color x:Key="CoverTileD">#1A130D</Color>  <!-- design only -->
   <Color x:Key="CoverMissL">#E2D8C4</Color>   <Color x:Key="CoverMissD">#1A130D</Color>
 
   <!-- Text -->
@@ -131,12 +107,14 @@ Replaces the hand-mirrored inline hex (closes old TODO #37 and gaps §8.1/§8.7)
   <!-- Sync states -->
   <Color x:Key="OnlineBgL">#E8F1E4</Color>    <Color x:Key="OnlineBgD">#1B3320</Color>
   <Color x:Key="OnlineTxL">#4F6B3D</Color>    <Color x:Key="OnlineTxD">#8DB36E</Color>
-  <Color x:Key="InfoTxL">#3A6B7A</Color>      <Color x:Key="InfoTxD">#7FB3C0</Color>
+  <Color x:Key="InfoTxL">#3A6B7A</Color>      <Color x:Key="InfoTxD">#7FB3C0</Color>      <!-- design only -->
   <Color x:Key="ChipBgL">#EFE4CC</Color>      <Color x:Key="ChipBgD">#30211A</Color>
 </ResourceDictionary>
 ```
 
 ### 2.2 `Styles.xaml` (key semantic styles)
+
+**Built today:** `Resources/Styles/Styles.xaml` defines these five styles (its `PrimaryButton` and `OutlinedButton` also set `FontSize` 16 and 14) plus `GapProgress` (a `ProgressBar` style that no page uses; see §10).
 
 ```xml
 <Style x:Key="Page" TargetType="ContentPage">
@@ -183,9 +161,9 @@ Replaces the hand-mirrored inline hex (closes old TODO #37 and gaps §8.1/§8.7)
 </Style>
 ```
 
-### 2.3 Type rungs (unchanged, explicit `FontSize` per control)
+### 2.3 Type rungs (explicit `FontSize` per control)
 
-24 page title · 18 killer CTA · 16 standard button / card title (bold) · 15 panel / wishlist title · 14 body / outlined · 13 secondary · 12 microcopy / ISBN (Courier New) · 11 footnotes. Two weights only (Bold for titles & CTAs, Regular otherwise). Fonts remain **OpenSans-Regular / OpenSans-Semibold**.
+24 page title · 18 killer CTA · 16 standard button / card title (bold) · 15 panel / wishlist title · 14 body / outlined · 13 secondary · 12 microcopy / ISBN (Courier New) · 11 footnotes. Two weights only (Bold for titles & CTAs, Regular otherwise). Fonts are **OpenSans-Regular / OpenSans-Semibold** (registered in `MauiProgram.cs`, alongside the `Tabler` icon font).
 
 ### 2.4 Contrast caveats to verify on-device
 
@@ -196,23 +174,23 @@ Replaces the hand-mirrored inline hex (closes old TODO #37 and gaps §8.1/§8.7)
 
 ## 3. Component kit
 
-Build these as reusable `ContentView`s (closes gap §8.3 — no more imperative code-behind cards). Every one consumes §2 tokens only.
+The design is a kit of reusable `ContentView`s, each consuming §2 tokens only. **Built today:** `BookTracker.Mobile` has no `ContentView` and no `BookRow`, `ResultCard`, `SyncChip`, `Badge` or `EmptyState` type. The button and card entries exist as styles in `Resources/Styles/Styles.xaml` (`PrimaryButton`, `OutlinedButton`, `Card`); the rest are built per page, mostly in code-behind (the rows in `FindPage`, `AuthorWorksPage` and `WishlistPage`, the badges in `WishlistPage`, the progress bars and missing-volume pills in `SeriesGapsPage`) and partly in page XAML (the result cards in `ResultPage.xaml`, the sync chip in `FindPage.xaml`). Extracting the kit is tracked in the backlog.
 
-| Component | Spec |
-|---|---|
-| `KillerButton` | Brass fill, ink text, 64 dp, bold 18. Leading Tabler icon. Mode-stable. |
-| `PrimaryButton` | Leather fill, parchment text, 56 dp. (e.g. "Open in app →", "Refresh now"). |
-| `OutlinedButton` | Transparent, brass border, muted text, 44 dp. (e.g. "Sign out"). |
-| `BookRow` | Cover tile (placeholder→async image) + title (14–15 bold) + optional author/meta + trailing slot (tag / chevron / action). Used in Recent, search Works, Wishlist, Author-works. |
-| `ResultCard` | Variants: **Found** (FoundBg/Border, "In your library" pill) and **NotFound** (MissBg/Border, red text pill, no red fill). Cover 64×96, title 18 bold, authors, `★★★★☆ · Read`, mono ISBN. |
-| `WorkEditionPanel` | Card-styled list: header "You own this work as", checked edition rows. The "Other editions of this work" row belongs to the online answer card, not to this panel (§4.3). |
-| `Badge` | Pill. Variants: priority **High** (MissTag pair), **Medium** (Warn pair), **Low** (Owned pair); **Series `#N`** (Surface bg, brass border, brass text); **Owned/Missing** tags; **Wishlist** (brass fill, ink). |
-| `SyncChip` | Header-right pill. States: **synced Xh ago** (ChipBg/muted, `ti-refresh`) and **offline** (MissTag pair, `ti-wifi-off`). Tappable → status sheet. Icon spins while syncing. |
-| `ScopeSegment` | Segmented control. Container Surface + brass border; active segment leather + parchment; inactive muted. Used for Find scope (All/Authors/Works) and Author-works (All/Missing only). |
-| `ProgressBar` | Track `BarTrack`, fill green-leather. Used in Gaps. |
-| `EmptyState` | Centered muted Tabler glyph (~30 px, 50% opacity) + one line. For zero results / empty wishlist / no gaps (closes gap §8.4). |
+| Component | Design spec | Built today |
+|---|---|---|
+| `KillerButton` | Brass fill, ink text, 64 dp, bold 18. Leading Tabler icon. Mode-stable. | Style exists, no consumer. |
+| `PrimaryButton` | Leather fill, parchment text, 56 dp. (e.g. "Open in app →", "Refresh now"). | Used by `ResultPage` and `StatusSheetPage`. |
+| `OutlinedButton` | Transparent, brass border, muted text, 44 dp. (e.g. "Sign out"). | Used by `StatusSheetPage` (Close, Sign in / Sign out, Reset local cache). |
+| `BookRow` | Cover tile (placeholder→async image) + title (14–15 bold) + optional author/meta + trailing slot (tag / chevron / action). Used in Recent, search Works, Wishlist, Author-works. | Per-page rows in `FindPage`, `AuthorWorksPage`, `WishlistPage`: cover slot with a `📖` placeholder, title, meta line. No trailing tag or chevron. |
+| `ResultCard` | Variants: **Found** (FoundBg/Border, "In your library" pill) and **NotFound** (MissBg/Border, red text pill, no red fill). Cover 64×96, title 18 bold, authors, `★★★★☆ · Read`, mono ISBN. | `FoundFrame`, `MissingFrame` and `OnlineFrame` in `ResultPage.xaml`: Found/Miss colours, 80×120 cover, title 18 bold, authors, stars · status (Found) or provider title, byline and details (Online), mono ISBN. No pill on any; Not found shows "Not in your library." `OnlineFrame` is the online answer (§4.3): a headline, the provider's cover or the `ti-book` placeholder, a note, an "Editions you own" list, the other-editions row, and Open in app / Sync / Add in app buttons shown by state. |
+| `WorkEditionPanel` | Card-styled list: header "You own this work as", checked edition rows. The "Other editions of this work" row belongs to the online answer card, not to this panel (§4.3). | The Found card shows "Works in this book" (only for a multi-Work book) and "Editions you own" (only when more than one is owned); `OnlineFrame` shows "Editions you own" for the owned Book and the "Other editions of this work" row (§4.3). |
+| `Badge` | Pill. Variants: priority **High** (MissTag pair), **Medium** (Warn pair), **Low** (Owned pair); **Series `#N`** (Surface bg, brass border, brass text); **Owned/Missing** tags; **Wishlist** (brass fill, ink). | Priority pills (High/Medium/Low pairs) and a series `#N` pill (ChipBg + brass text, no border) on Wishlist rows. No Owned/Missing or Wishlist badge. |
+| `SyncChip` | Header-right pill. States: **synced Xh ago** (ChipBg/muted, `ti-refresh`) and **offline** (MissTag pair, `ti-wifi-off`). Tappable → status sheet. Icon spins while syncing. | Find only: a `Border` in the header (ChipBg, brass stroke) with a label reading `⟳ {age}` online or `⚠ offline` offline, in brass text in both states. Tappable → status sheet. No spin. Wishlist and Gaps have a "Sync" toolbar item that opens the sheet. |
+| `ScopeSegment` | Segmented control. Container Surface + brass border; active segment leather + parchment; inactive muted. Used for Find scope (All/Authors/Works) and Author-works (All/Missing only). | Three buttons on Find (All/Authors/Works) and the same shape for the Wishlist sort (Priority/Author/Series): active brass fill + ink, inactive Surface + muted text. `AuthorWorksPage` has an All / Missing only pair of the same shape, shown once the online list has arrived. |
+| `ProgressBar` | Track `BarTrack`, fill green-leather. Used in Gaps. | As specified, coloured in `SeriesGapsPage` code-behind. |
+| `EmptyState` | Centered muted Tabler glyph (~30 px, 50% opacity) + one line. For zero results / empty wishlist / no gaps. | A centred muted line of text, no glyph. |
 
-**Icons:** replace all emoji with the Tabler outline set, one surface at a time, never mixed (gap §8.2). Star rating stays as `★★★★☆` text.
+**Icons:** the design is the Tabler outline set, not emoji, never mixed on one surface. Star rating stays as `★★★★☆` text. **Built today:** `TablerIcons` carries four glyphs: the three tab glyphs (`Search`, `Star`, `Books`, used by `AppShell`) and `Book` (the online answer card's cover placeholder in `ResultPage`). The pages otherwise use emoji and symbol characters: the `📖` cover placeholder in `FindPage`, `ResultPage`, `AuthorWorksPage` and `WishlistPage`; `⭐  On your wishlist` in `ResultPage.xaml`; the `→` on the "Open in app →" and "Add in app →" buttons in `ResultPage.xaml`; the `▸` / `▾` chevron and `✓ You own this` on the other-editions rows in `ResultPage`; `⟳` / `⚠ offline` on the Find sync chip; `↻  Refresh wishlist` in `WishlistPage.xaml`; `● Online` / `● Offline` and the `→` before the top stack frame in the failure line in `StatusSheetPage`; and `Synced ✓` in the status lines `SyncService.SyncCatalogAsync` returns. Moving them to Tabler glyphs is tracked in the backlog.
 
 ---
 
@@ -222,27 +200,32 @@ Build these as reusable `ContentView`s (closes gap §8.3 — no more imperative 
 
 ### 4.1 State: ready (no query)
 - Unified search field (`InputBg`, 1.5 px brass border, `ti-search` leading, brass scan button `ti-barcode` trailing 40×40). Placeholder "Title, author or ISBN…". Auto-focus.
-- **Recent** list — last few look-ups as `BookRow`s tagged in-library (Owned) / not (Missing).
-- **No "updates available" prompt** — explicitly removed (peeking the delta costs ~the same as syncing). Sync is auto and/or manual-via-status-sheet.
+- **Recent** list — last few look-ups as `BookRow`s tagged in-library (Owned) / not (Missing). **Parked** (§10): Find opens to an empty search-ready state.
+- **No "updates available" prompt** (peeking the delta costs ~the same as syncing). Sync is auto and/or manual-via-status-sheet.
+
+**Built today:** the header, the field (`InputBg`, 1.5 px brass border, no leading icon) with the placeholder above and auto-focus, and a brass text button "Scan" (48 dp, no icon) that opens an inline camera strip (220 dp, with a green `ScanReticle` outline) and changes to "Cancel" while it is open. No Recent list.
 
 ### 4.2 State: live results
-Debounced (250 ms / 2-char floor, cancellation-guarded — keep existing behaviour). Results **grouped** + a **`ScopeSegment` (All · Authors · Works)** directly under the field, default **All**:
+Debounced (250 ms / 2-char floor, cancellation-guarded). Results **grouped** + a **`ScopeSegment` (All · Authors · Works)** directly under the field, default **All**:
 - **Authors · N** group → rows: initials avatar (leather) + name + "N books" + chevron → `find/author`.
 - **Works · N** group → `BookRow`s with Owned/Missing tag → `find/result`.
 - **ISBN auto-detect:** a purely numeric input (10/13 digits, optional check-digit) **skips grouping** and goes straight to `find/result`. ISBN is therefore *not* a fourth segment.
 - Scope filter re-scopes results instantly (no re-query needed if both already fetched).
 - **Data:** `SearchAuthors` (Authors group), `SearchBooksByTitle` (Works group), `LookupByIsbn` (numeric path).
 
-### 4.3 State: result (`find/result` → `ResultPage`)
+**Built today:** debounce, floor, grouping, scope segment and data sources as above (up to 30 results per group). Author rows are cards with the name and "N books", no avatar or chevron, and push `AuthorWorksPage`. Work rows are cards with a cover, title and stars · status line, no tag (every hit is owned), and a tap opens the book's web page (`/books/{id}`) in the browser rather than `ResultPage`. An input of 10–13 digits (an `X` allowed last) shows "Press Enter to look up this ISBN." and pushes `ResultPage` on Enter; a scanned barcode pushes it directly.
+
+### 4.3 State: result (`ResultPage`)
 - **Found:** `ResultCard` (Found) + `WorkEditionPanel` + `PrimaryButton` "Open in app →" (deep-link `/books/{id}`).
   - Answer at **work** level: "In your library" is true if the *work* is owned in any edition, even when the scanned ISBN is a different printing. The owned-edition(s) are listed; other editions of the work appear only on the online answer card (below).
   - **Data:** `GetBookEnrichedDetail` (works + editions), `IsWishlistedIsbn` (wishlist flag, may pop in late — never block the card on it).
-- **Not found:** `ResultCard` (NotFound) + line "You don't own this work in any edition." + **`Badge`/Wishlist button "Add to wishlist"** (brass — **inert for v1**, see §10) + `PrimaryButton` "Add in app →" (deep-link to web add-book with ISBN prefilled).
-- **Built today:** a cache hit answers at the edition level. A cache miss shows "Not in your library." at once; when the phone is online, "Checking online…" appears and Bookcase's `GET /api/online/isbn/{isbn}` answers at work level, replacing the card with "You have this work, not this edition" (owned editions listed from the cache), "In your library" (the cache is behind; a Sync button opens the status sheet) or "Not in your library" (the provider's title, author, publisher and year), each with the provider's cover or the `ti-book` placeholder. Offline, or with no online answer, the "not found" card stays. The decision and copy live in `OnlineResultFormatter`. When that answer carries a work key, its card also shows an "Other editions of this work" row: disabled with an "online only" caption at first, then (once `GET /api/online/work-editions` answers) it expands to the work's editions, owned ones (by Bookcase's flag or an ISBN in the cache) marked and first, then newest publish date first, undated last, one row per ISBN (`WorkEditionsOrdering`). With no key or a failed fetch the row stays disabled; the fetch is cancelled when the page goes away. The cache-hit card has no such row.
+- **Not found:** `ResultCard` (NotFound) + line "You don't own this work in any edition." + **`Badge`/Wishlist button "Add to wishlist"** (brass — **inert**, see §10) + `PrimaryButton` "Add in app →" (deep-link to web add-book with ISBN prefilled).
+
+**Built today:** a cache hit answers at the edition level (`LookupByIsbn` against the cache): the Found card with "Open in app →", plus "Works in this book" and "Editions you own" lists when there is more than one of each (`GetBookEnrichedDetail`). A cache miss shows "Not in your library." at once; when the phone is online, "Checking online…" appears and Bookcase's `GET /api/online/isbn/{isbn}` answers at work level, replacing the card with `OnlineFrame`: "You have this work, not this edition" (owned editions listed from the cache, with "Open in app →"), "In your library" (the cache is behind; a Sync button opens the status sheet) or "Not in your library" (the provider's title, author, publisher and year, with "Add in app →"), each with the provider's cover or the `ti-book` placeholder. Offline, or with no online answer, the "not found" card stays with the ISBN and "Add in app →". The decision and copy live in `OnlineResultFormatter`. When that answer carries a work key, `OnlineFrame` also shows an "Other editions of this work" row: disabled with an "online only" caption at first, then (once `GET /api/online/work-editions` answers) it expands to the work's editions, owned ones (an edition ISBN of the owned book, matched only when Bookcase's answer carries an owned book id) marked and first, then newest publish date first, undated last, one row per ISBN (`WorkEditionsOrdering`). With no key or a failed fetch the row stays disabled; the fetch is cancelled when the page goes away. The cache-hit card has no such row. A `⭐  On your wishlist` banner appears above either card when `IsWishlistedIsbn` is true. There is no "Add to wishlist" button.
 
 ---
 
-## 5. Author → works (`find/author` → `AuthorWorksPage`)
+## 5. Author → works (`AuthorWorksPage`)
 
 The screen that answers "what does this author have, and do I own it?" — one of the four core in-shop questions.
 
@@ -252,8 +235,9 @@ The screen that answers "what does this author have, and do I own it?" — one o
 - **Rows (`BookRow`):**
   - Owned → `★★★★☆ · Read` meta + Owned tag.
   - Not owned → muted (≈80% opacity), "Not owned" + a brass `ti-star` quick action (the **same inert Add-to-wishlist** as §4.3 / §10 — wiring it lights up everywhere at once).
-- **Data:** `LookupByAuthor`. Pen-name aliases roll up to the canonical author (keep existing behaviour; hint text explains it).
-- **Built today:** the owned works render first from the cache under "N books in your library". When the phone is online, Bookcase's `GET /api/online/author-works` is then asked for the author's Open Library bibliography; the works the library does not own are added after the owned ones, muted (≈80% opacity) with "Not owned" and the first-publish year, the header becomes "N works · M owned", and the `ScopeSegment` (All · Missing only) appears. A work Bookcase reports as owned that the phone's cache does not hold yet lists as owned with "sync to see it here". Offline, on failure, or while the call is in flight, the owned list stands alone with no segment. The merge (by owned Book id first, then normalised title, so a stale cache does not double-list) and the filter live in `AuthorWorksMerger`. Missing rows carry the cover placeholder and no action: the brass `ti-star` quick action is not built.
+- **Data:** `LookupByAuthor`. Pen-name aliases roll up to the canonical author (hint text explains it).
+
+**Built today:** the page title is the author's name. `LookupByAuthor` is called with the canonical author id, so alias credits roll up; there is no hint text. Each owned row is a card with a cover, title and stars · status line, and a tap opens the book's web page. The owned works render first from the cache under "N books in your library". When the phone is online, Bookcase's `GET /api/online/author-works` is then asked for the author's Open Library bibliography; the works the library does not own are added after the owned ones, muted (≈80% opacity) with "Not owned" and the first-publish year, the header becomes "N works · M owned", and the `ScopeSegment` (All · Missing only) appears. A work Bookcase reports as owned that the phone's cache does not hold yet lists as owned with "sync to see it here". Offline, on failure, or while the call is in flight, the owned list stands alone with no segment. The merge (by owned Book id first, then normalised title, so a stale cache does not double-list) and the filter live in `AuthorWorksMerger`. Missing rows carry the cover placeholder and no action: the brass `ti-star` quick action is not built.
 
 ---
 
@@ -262,11 +246,13 @@ The screen that answers "what does this author have, and do I own it?" — one o
 **Route:** `wishlist`. Framed for **proactive recall** (scenario 2: "what am I after today" / shop-owner conversations), not just reactive flagging.
 
 - **Header:** "Wishlist" + `SyncChip`.
-- **Controls:** count + a sort control (`ti-arrows-sort`). *Proposal* (layout change from §5.6 flat list): default sort **Priority** with light group headers (High / Medium / Low). Offer **Author** and **Series order** as alternate sorts — Author/Series is likely the better default for the shop-owner case; confirm preferred default.
+- **Controls:** count + a sort control (`ti-arrows-sort`). Default sort **Priority** with light group headers (High / Medium / Low); **Author** and **Series order** are the alternate sorts.
 - **Rows (`BookRow`):** cover 36×52 + title 14 bold + author 12 + `Badge`s (priority pill + optional series `#N`) + **Bought** button (brass, 40 dp).
-- **Bought** sets the existing **local** flag — hides the row, survives cache refresh, reconciles on sync. Animate the collapse (§9).
+- **Bought** sets the **local** flag — hides the row, survives cache refresh, reconciles on sync. Animate the collapse (§9).
 - **Empty:** `EmptyState`.
-- **Data:** wishlist snapshot read + local bought flag (existing). Refresh pulls `/api/wishlist-snapshot`.
+- **Data:** wishlist snapshot read + local bought flag. Refresh pulls `/api/wishlist-snapshot`.
+
+**Built today:** the page title "Wishlist" with a "Sync" toolbar item (no chip); a leather "↻  Refresh wishlist" button that pulls `/api/wishlist-snapshot` into the cache; a count line; a three-button sort segment (Priority / Author / Series, default Priority with High / Medium / Low headers). Rows: cover 48×68, title 15 bold, author 13, priority and series badges, and a brass "Bought" button (40 dp) that fades the row out, sets the local bought flag and reloads. Empty: a line of text.
 
 ---
 
@@ -275,40 +261,43 @@ The screen that answers "what does this author have, and do I own it?" — one o
 **Route:** `gaps`. Read-only.
 
 - **Header:** "Gaps" + `SyncChip`. Summary "N series with gaps".
-- **One card per series:** name (16 bold) + progress "X of Y owned" + **`ProgressBar`** (*proposal*, scannability improvement over §5.5/§8.5) + missing volumes:
+- **One card per series:** name (16 bold) + progress "X of Y owned" + **`ProgressBar`** + missing volumes:
   - Numbered as leather `vol` pills: `#3`, `#7`.
   - Runs collapse: `#5–#6`.
   - **Interquels render with their display label in muted ink**, never a numbered pill: `Dawnshard (#4.5)` — must not appear to claim a numbered slot.
 - **Empty:** `EmptyState` ("No gaps — you're complete").
 - **Data:** `GetSeriesGaps`.
 
+**Built today:** the page title "Series gaps" with a "Sync" toolbar item (no chip); the summary line; one `Card` per series with name, "X of Y owned", the progress bar and a "Missing" header over pills. Pills are Surface with a brass border and brass text; a run of three or more missing slots collapses to one `#N–#M` pill (`SeriesGapFormatter.MissingParts`). Missing slots are whole numbers, so interquels never appear. Empty: a line of text.
+
 ---
 
 ## 8. Status sheet (modal, behind the SyncChip)
 
-**Route:** `status` (modal). The home for sync detail; **not a tab**.
+The home for sync detail; **not a tab**. Presented modally.
 
 - **Connectivity row:** Online (Online pair, `ti-wifi`) / Offline (MissTag pair, `ti-wifi-off`) + sub-label.
 - **Stats card:** Last synced (age) · Books cached · Authors · Editions · Wishlist count. **No pre-counted "pending updates"** — the count is reported *after* a refresh as a result ("synced · 12 new items"), not polled ahead of time.
-- **`PrimaryButton` "Refresh now"** (56 dp) — fires the existing `?since` watermark delta-sync.
+- **`PrimaryButton` "Refresh now"** (56 dp) — fires the `?since` watermark delta-sync.
 - **`OutlinedButton` "Reset local cache"** — confirms ("Reset local cache?"), then `WipeAsync` clears the catalog, wishlist, meta and cover files; stays signed in; the next refresh is a full load. Disabled while a sync runs.
 - **Footer:** build/version (11 px).
 - **Data:** `GetMeta` (counts + last-synced), `Connectivity` (state).
 
+**Built today:** `StatusSheetPage` has a "Sync & account" title with a Close button; a `● Online` / `● Offline` line in the OnlineTx / MissTagTx colour; a "Cached catalog" card showing books and authors counts and "Last synced {age}"; "Refresh now" (enabled when signed in and online), which runs `SyncService.SyncCatalogAsync` and shows its result line (full, or delta with updated and removed counts); a Sign in / Sign out button; "Reset local cache" behind a confirm (disabled while a sync runs); and the build footer.
+
 ### 8.1 Sync behaviour
-- **On start:** `Connectivity.Current.NetworkAccess == Internet` → trigger the chosen sync mode. **Open decision (§10):** auto-sync silently, or leave to manual refresh. Either way, no prompt.
+- **On start:** `Connectivity.Current.NetworkAccess == Internet` → fire the delta sync silently in the background. No prompt.
 - **While open:** subscribe to `ConnectivityChanged` → flip `SyncChip` between "synced Xh ago" and "offline".
 
-```csharp
-Connectivity.Current.ConnectivityChanged += (_, e) =>
-    _state.IsOnline = e.NetworkAccess == NetworkAccess.Internet;
-```
+**Built today:** `AppShell.OnAppearing` runs once per launch: it opens the cache, refreshes sign-in state and meta, and when the user is signed in and online calls `SyncCatalogAsync`, swallowing any failure. `SyncService` subscribes to `Connectivity.ConnectivityChanged`, updates `IsOnline` and raises `StateChanged`, which the Find chip listens to.
 
 ---
 
 ## 9. Motion layer
 
 **Principle: motion decorates the result, never gates it.** Animate containers *as* data binds, so a fast tap still feels instant. Durations 150–220 ms, decelerating, skippable. No third-party lib — `ViewExtensions` + the `Animation` class cover everything.
+
+**Built today:** `Theming/Motion.cs` provides `InAsync` (fade + rise) and `PulseAsync` (scale pulse), both no-ops when `Motion.Enabled` is false:
 
 ```csharp
 public static class Motion
@@ -320,28 +309,27 @@ public static class Motion
         if (!Enabled) { v.Opacity = 1; v.TranslationY = 0; return Task.CompletedTask; }
         v.Opacity = 0; v.TranslationY = rise;
         return Task.WhenAll(
-            v.FadeTo(1, ms, Easing.CubicOut),
-            v.TranslateTo(0, 0, ms, Easing.CubicOut));
+            v.FadeToAsync(1, ms, Easing.CubicOut),
+            v.TranslateToAsync(0, 0, ms, Easing.CubicOut));
     }
 }
 ```
 
-| Moment | Treatment |
-|---|---|
-| **Result reveal** | `await resultCard.InAsync();` right after binding — answer + motion land together. |
-| **Cover cross-fade** | `cover.Opacity = 0; cover.Source = src; await cover.FadeTo(1, 250, Easing.CubicInOut);` — dissolves over the placeholder (upgrades the §6 async-cover swap). |
-| **Barcode recognised** | `HapticFeedback.Default.Perform(HapticFeedbackType.Click);` then reticle pulse `ScaleTo(1.06,90,CubicOut)`→`ScaleTo(1.0,110,CubicIn)`. Fire *before* the result renders. |
-| **Tab cross-fade** | `await ContentRoot.InAsync(rise: 6)` in each tab's `OnAppearing` — softens Shell's instant tab switch. |
-| **Incremental search** | per row `row.InAsync(rise: 8)` with `Task.Delay(i * 25)` stagger as debounced results stream in. |
-| **Refresh spin** | `new Animation(v => icon.Rotation = v, 0, 360).Commit(icon, "spin", length: 800, repeat: () => IsSyncing);` |
-| **Bought toggle** | collapse (`FadeTo(0)` + height→0) instead of yanking the row. |
+| Moment | Design treatment | Built today |
+|---|---|---|
+| **Result reveal** | `await resultCard.InAsync();` right after binding — answer + motion land together. | `ResultPage` calls `InAsync` on the Found or Not-found card. |
+| **Cover cross-fade** | `cover.Opacity = 0; cover.Source = src; await cover.FadeTo(1, 250, Easing.CubicInOut);` — dissolves over the placeholder. | Not built: the image replaces the placeholder without a fade. |
+| **Barcode recognised** | `HapticFeedback.Default.Perform(HapticFeedbackType.Click);` then reticle pulse `ScaleTo(1.06,90,CubicOut)`→`ScaleTo(1.0,110,CubicIn)`. Fire *before* the result renders. | As designed, in `FindPage.OnBarcodesDetected` (`PulseAsync`). |
+| **Tab cross-fade** | `await ContentRoot.InAsync(rise: 6)` in each tab's `OnAppearing` — softens Shell's instant tab switch. | As designed on all three tabs; `AuthorWorksPage` also fades in on push. |
+| **Incremental search** | per row `row.InAsync(rise: 8)` with `Task.Delay(i * 25)` stagger as debounced results stream in. | The whole results list fades in once (`ResultsLayout.InAsync(rise: 8)`); no per-row stagger. |
+| **Refresh spin** | `new Animation(v => icon.Rotation = v, 0, 360).Commit(icon, "spin", length: 800, repeat: () => IsSyncing);` | Not built: the status sheet shows an `ActivityIndicator` while busy. |
+| **Bought toggle** | collapse (`FadeTo(0)` + height→0) instead of yanking the row. | The row fades out (160 ms) before the list reloads; no height collapse. |
 
-**Reduced-motion guard** (Android system animator scale; 0 ⇒ off):
+**Reduced-motion guard** (Android system animator scale; 0 ⇒ off), built in `Platforms/Android/MainActivity.OnCreate`:
 
 ```csharp
-// Platforms/Android/MainActivity, once at startup
 var scale = Settings.Global.GetFloat(ContentResolver, Settings.Global.AnimatorDurationScale, 1f);
-Motion.Enabled = scale > 0f;
+Theming.Motion.Enabled = scale > 0f;
 ```
 
 **Caveat:** Shell page-level push/pop transitions are not very customisable in MAUI — element-level entrances above are the deliberate, pragmatic route.
@@ -352,30 +340,17 @@ Motion.Enabled = scale > 0f;
 
 | Item | State | Notes |
 |---|---|---|
-| **Add to wishlist (local write)** | **Parked — button present but inert** | Appears on Not-found (§4.3) and Author-works missing rows (§5). Wire as a local write like the Bought flag (survives refresh, reconciles on sync). When implemented, lights up in all locations at once. No layout change needed to activate. |
-| **Sync mode on start** | **Decided (2026-06-16): auto-sync silently** | When online at launch, fire the delta sync in the background — no prompt. Wire in PR4. |
-| **Wishlist default sort** | **Decided (2026-06-16): Priority default** | Keep High/Medium/Low grouping as default; offer Author/Series as alternate sorts. PR4. |
+| **Add to wishlist (local write)** | **Parked — not built** | Designed for Not-found (§4.3) and Author-works missing rows (§5); no button exists today. Wire as a local write like the Bought flag (survives refresh, reconciles on sync), in all locations at once. |
+| **Unconsumed styles and tokens** | **Parked** | `Styles.xaml` defines `KillerButton` and `GapProgress`, and `Colors.xaml` defines `FoundPillBgL/D`, `FoundPillTxL/D` and `OnlineBgL/D`, with no consumer (`SeriesGapsPage` colours its progress bars in code-behind instead of using `GapProgress`). `TablerIcons` holds four glyphs (the three tab glyphs and `Book`); the full Tabler font is bundled, so other glyphs are a one-line addition. They stay for the surfaces §3 specifies; delete any that the component kit does not end up using. |
 | **Gaps tab longevity** | **Watch** | Candidate for later deprecation as missing→wishlist grows. Keep self-contained. |
-| **Recent-lookups list** (§4.1) | **Deferred from v1 — decide this arc or push (2026-06-16)** | Find opens to an empty search-ready state for now. Adding it needs a lookup-history store (in-memory resets on restart; persisted = new SQLite table). Decide before the arc closes whether it earns a slot or moves to TODO. |
-| **Online layer (work-level ownership · author Missing · other editions)** | **Built** | The cache holds only the owned library, so all "what am I *missing*" features need online catalogue data. Built: on a cache miss while online, the Result page asks Bookcase's `GET /api/online/isbn/{isbn}` and answers at work level (§4.3); while online, the Author-works page asks `GET /api/online/author-works` and adds the works the library does not own, with the All · Missing only segment (§5); and the Result page's online answer asks `GET /api/online/work-editions` for the other-editions row (§4.3). |
-| **Transitional stragglers — recheck at arc end** | **Accepted as transitional (2026-06-16 arc review F3/F4/F5)** | (F3) `MainPage`/`ScanPage`/Author/Title still light-only inline hex → dark mode looks broken on the default Find tab + pushed search pages until PR3 rebuilds them. (F4) `KillerButton`/`PrimaryButton`/`OutlinedButton`/`GapProgress` styles + (F5) ~24 tokens and 13/16 `TablerIcons` glyphs have no consumers yet (defined ahead of the surfaces that use them; icon codepoints unverified-until-rendered). **All deliberately deferred** — the surfaces that consume them are built in PR3–5. **At end of arc, recheck:** any page still on inline hex, any style/token/glyph still unconsumed → migrate or delete. Don't let the foundation's unused half calcify. |
+| **Recent-lookups list** (§4.1) | **Parked** | Find opens to an empty search-ready state. Adding it needs a lookup-history store (in-memory resets on restart; persisted = new SQLite table). |
+| **Online layer (work-level ownership · author Missing · other editions)** | **Built** | The cache holds only the owned library, so all "what am I *missing*" features need online catalogue data. On a cache miss while online, the Result page asks Bookcase's `GET /api/online/isbn/{isbn}` and answers at work level (§4.3); while online, the Author-works page asks `GET /api/online/author-works` and adds the works the library does not own, with the All · Missing only segment (§5); and the Result page's online answer asks `GET /api/online/work-editions` for the other-editions row (§4.3). |
 
 ---
 
-## 11. Suggested PR sequencing
+## 11. References
 
-1. **PR 1 — Tokens + component kit.** `Colors.xaml` / `Styles.xaml` (§2) and the `ContentView` kit (§3). No behaviour change; existing pages can adopt incrementally. Closes old TODO #37 and gaps §8.1/§8.3/§8.7.
-2. **PR 2 — Shell migration.** `NavigationPage` → `Shell` + `TabBar` + routes (§1.2). IA change; drill-downs become registered routes.
-3. **PR 3 — Find rework + Author-works.** Unified search, grouped results + `ScopeSegment`, ISBN auto-detect, `ResultCard` + `WorkEditionPanel`, `AuthorWorksPage` with All/Missing filter (§4–§5).
-4. **PR 4 — Wishlist / Gaps / Status + ambient sync.** Sort+grouping, `ProgressBar` + run/interquel rendering, status sheet, `SyncChip` + connectivity check, **remove the update prompt** (§6–§8).
-5. **PR 5 — Motion + dark completion.** Motion layer + reduced-motion guard (§9); verify dark mode across *all* pages (closes gap §8.1).
-6. **Later** — live Add-to-wishlist write; online edition enrichment (§10).
-
----
-
-## 12. References
-
-- Ground truth: `docs/MOBILE-UI-SPEC.md`, `BookTracker.Web/Theme/BookTrackerTheme.cs`, `BookTracker.Mobile/**`.
+- Ground truth: `BookTracker.Web/Theme/BookTrackerTheme.cs`, `BookTracker.Mobile/**`.
 - Shell tabs: <https://learn.microsoft.com/en-us/dotnet/maui/fundamentals/shell/tabs>
 - Shell navigation/routes: <https://learn.microsoft.com/en-us/dotnet/maui/fundamentals/shell/navigation>
 - Theming / `AppThemeBinding`: <https://learn.microsoft.com/en-us/dotnet/maui/user-interface/system-theme-changes>
