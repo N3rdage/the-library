@@ -17,9 +17,8 @@ namespace BookTracker.Web.Telemetry;
 /// back to <c>User.Identity.Name</c> when a handler did populate it.
 /// Server (request) Activities that lack <c>server.address</c> get it, and
 /// <c>url.scheme</c>, from the request so the exporter can build a URL with a host.
-/// The stamp happens in <see cref="OnEnd"/>: the server Activity for a
-/// request starts before authentication runs, so the user is only known
-/// by the time it ends.
+/// The stamp happens in <see cref="OnEnd"/> so it sees the finished request,
+/// including its host.
 /// </summary>
 public class UserActivityProcessor(IHttpContextAccessor httpContextAccessor) : BaseProcessor<Activity>
 {
