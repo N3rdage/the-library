@@ -70,8 +70,9 @@ public static class ProgramSetup
     /// one (local dev, tests) nothing is registered, because the exporter refuses to
     /// start with no connection string. UserActivityProcessor stamps the authenticated
     /// user onto every Activity as enduser.id (Application Insights' authenticated user
-    /// id); processors run in the order they are added, so it is registered before the
-    /// exporter and the tag is on the Activity before the export processor sees it end.
+    /// id); QueryRedactionProcessor redacts query-string values on the URL tags. Processors
+    /// run in the order they are added, so both are registered before the exporter and
+    /// their changes are on the Activity before the export processor sees it end.
     /// </summary>
     internal static bool AddApplicationInsights(WebApplicationBuilder builder)
     {
@@ -82,7 +83,9 @@ public static class ProgramSetup
             return false;
         }
 
-        builder.Services.ConfigureOpenTelemetryTracerProvider(tracing => tracing.AddProcessor<UserActivityProcessor>());
+        builder.Services.ConfigureOpenTelemetryTracerProvider(tracing => tracing
+            .AddProcessor<UserActivityProcessor>()
+            .AddProcessor<QueryRedactionProcessor>());
         builder.Services.AddApplicationInsightsTelemetry();
         return true;
     }
