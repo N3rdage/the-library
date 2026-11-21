@@ -9,6 +9,7 @@ using BookTracker.Web.Services.Covers;
 using BookTracker.Web.Telemetry;
 using BookTracker.Web.ViewModels;
 using Microsoft.AspNetCore.HttpsPolicy;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Options;
@@ -48,6 +49,21 @@ public static class ProgramSetup
         var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<BookTrackerDbContext>>();
         await using var db = await dbFactory.CreateDbContextAsync();
         await db.Database.MigrateAsync();
+    }
+
+    /// <summary>
+    /// One fixed window shared by every /api/online/* call (see
+    /// OnlineEndpoints): beyond it the answer is 429, with no queueing.
+    /// </summary>
+    internal static void ConfigureRateLimiter(RateLimiterOptions options)
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        options.AddFixedWindowLimiter(OnlineEndpoints.RateLimitPolicy, limiter =>
+        {
+            limiter.PermitLimit = OnlineEndpoints.PermitLimit;
+            limiter.Window = OnlineEndpoints.RateLimitWindow;
+            limiter.QueueLimit = 0;
+        });
     }
 
     /// <summary>
@@ -101,6 +117,8 @@ public static class ProgramSetup
         // HSTS policy for the UseHsts() call in ConfigureMiddleware. Without
         // this the framework default ships: 30 days, same host only.
         builder.Services.AddHsts(ConfigureHsts);
+
+        builder.Services.AddRateLimiter(ConfigureRateLimiter);
 
         // Minimal API JSON: serialize enums as strings, not their
         // underlying integers. Bookshop mode surfaces BookStatus
@@ -274,6 +292,8 @@ public static class ProgramSetup
             context.Response.Headers["Permissions-Policy"] = "camera=(self), microphone=(), geolocation=(), payment=()";
             await next();
         });
+
+        app.UseRateLimiter();
 
         app.UseAntiforgery();
 

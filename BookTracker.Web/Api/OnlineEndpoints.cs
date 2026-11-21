@@ -13,11 +13,19 @@ namespace BookTracker.Web.Api;
 // (SECURITY-AUDIT.md, SEC-006).
 public static class OnlineEndpoints
 {
+    // Each call fans out to the providers, so one window is shared by all
+    // three routes (and all callers: Bookcase has a single owner). It guards
+    // the provider quotas against a client loop, not against an attacker.
+    public const string RateLimitPolicy = "online-lookups";
+    public const int PermitLimit = 60;
+    public static readonly TimeSpan RateLimitWindow = TimeSpan.FromMinutes(1);
+
     public static IEndpointRouteBuilder MapOnlineEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/online/isbn/{isbn}", HandleAsync);
-        app.MapGet("/api/online/author-works", HandleAuthorWorksAsync);
-        app.MapGet("/api/online/work-editions", HandleWorkEditionsAsync);
+        var online = app.MapGroup("/api/online").RequireRateLimiting(RateLimitPolicy);
+        online.MapGet("/isbn/{isbn}", HandleAsync);
+        online.MapGet("/author-works", HandleAuthorWorksAsync);
+        online.MapGet("/work-editions", HandleWorkEditionsAsync);
         return app;
     }
 
