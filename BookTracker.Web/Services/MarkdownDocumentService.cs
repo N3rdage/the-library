@@ -77,13 +77,32 @@ public sealed class MarkdownDocumentService : IMarkdownDocumentService
 
         var ast = Markdown.Parse(File.ReadAllText(path), Pipeline);
 
-        // The app has <base href="/">, so a bare "#anchor" link would resolve to
-        // the home page; put the document's route in front of it.
         foreach (var link in ast.Descendants<LinkInline>())
         {
-            if (link.Url is { } url && url.StartsWith('#'))
+            if (link.Url is not { } url)
             {
+                continue;
+            }
+
+            if (!IsAllowedUrl(url))
+            {
+                link.Url = "#";
+            }
+            else if (url.StartsWith('#'))
+            {
+                // The app has <base href="/">, so a bare "#anchor" link would
+                // resolve to the home page; put the document's route in front of it.
                 link.Url = route + url;
+            }
+        }
+
+        // A "<scheme:...>" autolink has no separate text, so a disallowed one
+        // becomes the plain text it would have shown.
+        foreach (var autolink in ast.Descendants<AutolinkInline>().ToList())
+        {
+            if (!IsAllowedUrl(autolink.Url))
+            {
+                autolink.ReplaceBy(new LiteralInline(autolink.Url));
             }
         }
 
@@ -100,6 +119,25 @@ public sealed class MarkdownDocumentService : IMarkdownDocumentService
         }
 
         return new MarkdownDocument(name, ast.ToHtml(Pipeline), headings);
+    }
+
+    // Markdig does not filter link schemes. A URL is allowed when it is relative
+    // or its scheme is http, https or mailto. Browsers ignore ASCII whitespace
+    // and control characters inside a scheme ("java\tscript:"), so those are
+    // dropped before looking for a ':' ahead of any '/', '?' or '#'.
+    private static bool IsAllowedUrl(string url)
+    {
+        var compact = string.Concat(url.Where(c => c > ' ' && c != '\u007f'));
+        var colon = compact.IndexOfAny([':', '/', '?', '#']);
+        if (colon < 0 || compact[colon] != ':')
+        {
+            return true;
+        }
+
+        var scheme = compact[..colon];
+        return scheme.Equals("http", StringComparison.OrdinalIgnoreCase)
+            || scheme.Equals("https", StringComparison.OrdinalIgnoreCase)
+            || scheme.Equals("mailto", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string PlainText(HeadingBlock heading) =>
