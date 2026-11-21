@@ -45,7 +45,7 @@ The endpoint `GET /api/catalog-snapshot` returns the slim catalog. Easy-Auth-gat
 
 ### Data shape
 
-The shape is the `CatalogSnapshot` record family in `BookTracker.Shared/Catalog/` (see `ARCHITECTURE.md` › GetCatalogSnapshot), shared with Bookshelf. `/bookshop` reads the books (title, authors, status, rating, ISBNs) and the authors (name, canonical id, book count) from it.
+The shape is the `CatalogSnapshot` record family in `BookTracker.Shared/Catalog/` (see `ARCHITECTURE.md` › GetCatalogSnapshot), shared with Bookshelf. `/bookshop` reads the books (title, authors as `{ name, role }` contributors, status, rating, ISBNs) and the authors (name, canonical id, book count) from it.
 
 ### Size estimate at the 3000+ books target
 
