@@ -186,10 +186,11 @@
     }
 
     function renderStarRow(rating) {
-        if (!rating || rating < 1) return '';
-        const filled = '★'.repeat(Math.max(0, Math.min(5, rating)));
-        const empty = '☆'.repeat(Math.max(0, 5 - rating));
-        return `<span class="text-warning" aria-label="Rating ${rating} of 5">${filled}<span class="text-muted">${empty}</span></span>`;
+        const n = Math.min(5, Math.floor(Number(rating)) || 0);
+        if (n < 1) return '';
+        const filled = '★'.repeat(n);
+        const empty = '☆'.repeat(5 - n);
+        return `<span class="text-warning" aria-label="Rating ${n} of 5">${filled}<span class="text-muted">${empty}</span></span>`;
     }
 
     function renderResult(result) {
