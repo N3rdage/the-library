@@ -154,10 +154,13 @@ jobs:
 
       - name: Apply migrations to staging DB
         env:
-          # `Active Directory Default` picks up the OIDC token via
-          # Azure.Identity's WorkloadIdentityCredential — the env vars
-          # azure/login@v2 set (AZURE_CLIENT_ID / AZURE_TENANT_ID /
-          # AZURE_FEDERATED_TOKEN_FILE) provide the chain.
+          # `Active Directory Default` authenticates through the Azure CLI
+          # session that azure/login opened (AzureCliCredential). Narrowing
+          # the chain to that one credential stops DefaultAzureCredential
+          # probing the runner's own metadata endpoint: on a GitHub-hosted
+          # runner that probe sometimes answers 401, which Azure.Identity
+          # treats as a failure and ends the chain before the CLI is tried.
+          AZURE_TOKEN_CREDENTIALS: AzureCliCredential
           STAGING_CONN: Server=tcp:${{ steps.sql-fw.outputs.sql_fqdn }},1433;Database=booktracker-staging;Authentication=Active Directory Default;Encrypt=True;TrustServerCertificate=False;
         run: |
           chmod +x ./migrate
