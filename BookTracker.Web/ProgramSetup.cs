@@ -69,7 +69,7 @@ public static class ProgramSetup
     /// <summary>
     /// HSTS: one year, including subdomains. Preload is deliberately off —
     /// it is a browser preload-list submission, not a header setting, and
-    /// is Drew's call. See audit rule BOOK-007.
+    /// is Drew's call. HstsOptionsTests pins this policy.
     /// </summary>
     internal static void ConfigureHsts(HstsOptions options)
     {

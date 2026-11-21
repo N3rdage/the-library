@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 
 namespace BookTracker.Tests.Security;
 
-// Guards the HSTS policy (audit rule BOOK-007).
+// Guards the HSTS policy set by ProgramSetup.ConfigureHsts.
 // The wiring test builds the real host through ProgramSetup.Build in the
 // Production environment and resolves the registered HstsOptions, so
 // dropping the AddHsts(ConfigureHsts) registration fails it: the framework
