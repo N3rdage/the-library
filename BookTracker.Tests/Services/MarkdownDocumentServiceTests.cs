@@ -109,6 +109,37 @@ public sealed class MarkdownDocumentServiceTests : IDisposable
         Assert.All(doc.Headings, heading => Assert.Contains(heading.Id, ids));
     }
 
+    [Theory]
+    [InlineData("[x](javascript:alert(1))")]
+    [InlineData("[x](JavaScript:alert(1))")]
+    [InlineData("[x]( javascript:alert(1))")]
+    [InlineData("[x](java&#9;script:alert(1))")]
+    [InlineData("[x](data:text/html,hi)")]
+    [InlineData("![i](javascript:x)")]
+    [InlineData("<javascript:alert(1)>")]
+    public void DisallowedSchemes_areNeutralised(string markdown)
+    {
+        var doc = ServiceWith(markdown).Get("user-guide");
+
+        Assert.NotNull(doc);
+        Assert.DoesNotMatch("(?i)(href|src)=\"[^\"]*(javascript|data):", doc.Html);
+    }
+
+    [Theory]
+    [InlineData("[a](manual#section)", "href=\"manual#section\"")]
+    [InlineData("[b](#top)", "href=\"manual#top\"")]
+    [InlineData("[c](https://example.com)", "href=\"https://example.com\"")]
+    [InlineData("[d](mailto:a@example.com)", "href=\"mailto:a@example.com\"")]
+    [InlineData("[e](/help)", "href=\"/help\"")]
+    [InlineData("[f](docs/x.md?a=b:c)", "href=\"docs/x.md?a=b:c\"")]
+    public void AllowedLinks_keepTheirHref(string markdown, string expected)
+    {
+        var doc = ServiceWith(markdown).Get("user-guide");
+
+        Assert.NotNull(doc);
+        Assert.Contains(expected, doc.Html);
+    }
+
     [Fact]
     public void PipeTables_render()
     {
