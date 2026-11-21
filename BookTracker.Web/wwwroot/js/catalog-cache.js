@@ -22,6 +22,7 @@
 //                                                    or any of its aliases
 //   await catalogCache.searchAuthors(q, limit)   — canonical author rows matching name
 //   await catalogCache.getMeta()                 — { version, syncedAt, bookCount, authorCount }
+//   catalogCache.authorRoleNames(book)           — names of the book's Author-role contributors
 //
 // Manual test (browser DevTools console, on any BookTracker page):
 //   await catalogCache.init();
@@ -177,12 +178,30 @@
         });
     }
 
+    // A book's allAuthors entries are { name, role } objects. A cache
+    // written before that shape holds plain name strings until the next
+    // refresh, so both are accepted.
+    function contributorName(entry) {
+        return typeof entry === 'string' ? entry : entry && entry.name;
+    }
+
+    // Names of the contributors credited in the Author role (a plain
+    // string entry counts as Author).
+    function authorRoleNames(book) {
+        if (!book || !Array.isArray(book.allAuthors)) return [];
+        return book.allAuthors
+            .filter(e => typeof e === 'string'
+                || (e && typeof e.role === 'string' && e.role.toLowerCase() === 'author'))
+            .map(contributorName);
+    }
+
     async function lookupByAuthor(canonicalId) {
         if (canonicalId == null) return [];
         const db = await openDb();
 
-        // Names to match against book.allAuthors: the canonical's own
-        // name plus every alias's name. Walks the authors store once.
+        // Names to match against the contributors in book.allAuthors (any
+        // role): the canonical's own name plus every alias's name. Walks
+        // the authors store once.
         const allAuthors = await getAll(db, STORE_AUTHORS);
         const matchNames = new Set(
             allAuthors
@@ -198,7 +217,7 @@
         // a multiEntry index.
         const allBooks = await getAll(db, STORE_BOOKS);
         return allBooks
-            .filter(b => Array.isArray(b.allAuthors) && b.allAuthors.some(n => matchNames.has(n)))
+            .filter(b => Array.isArray(b.allAuthors) && b.allAuthors.some(e => matchNames.has(contributorName(e))))
             .sort((a, b) => a.title.localeCompare(b.title));
     }
 
@@ -254,5 +273,6 @@
         lookupByAuthor,
         searchAuthors,
         getMeta,
+        authorRoleNames,
     };
 })();

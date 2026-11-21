@@ -226,7 +226,7 @@
         const b = result.book;
         const status = b.status != null ? String(b.status) : '';
         const authorLine = (b.allAuthors && b.allAuthors.length > 1)
-            ? b.allAuthors.join(', ')
+            ? window.catalogCache.authorRoleNames(b).join(', ')
             : (b.primaryAuthor || '');
         const ratingHtml = renderStarRow(b.rating);
         const statusBadge = status ? `<span class="badge bg-light text-dark border ms-1">${esc(status)}</span>` : '';
