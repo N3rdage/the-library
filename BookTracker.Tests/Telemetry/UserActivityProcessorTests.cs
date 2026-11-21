@@ -9,37 +9,92 @@ namespace BookTracker.Tests.Telemetry;
 [Trait("Category", TestCategories.Unit)]
 public class UserActivityProcessorTests
 {
-    [Fact]
-    public void OnEnd_WithAuthenticatedUser_SetsEndUserIdTag()
+    private static UserActivityProcessor ProcessorFor(HttpContext? context)
     {
         var accessor = Substitute.For<IHttpContextAccessor>();
+        accessor.HttpContext.Returns(context);
+        return new UserActivityProcessor(accessor);
+    }
+
+    // Activity.Kind can only be set by ActivitySource.StartActivity, which
+    // returns null unless a listener samples the source; one source and one
+    // listener serve the whole class.
+    private static readonly ActivitySource Source = CreateSampledSource();
+
+    private static ActivitySource CreateSampledSource()
+    {
+        var source = new ActivitySource(nameof(UserActivityProcessorTests));
+        ActivitySource.AddActivityListener(new ActivityListener
+        {
+            ShouldListenTo = s => s == source,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+        });
+        return source;
+    }
+
+    private static Activity StartActivity(ActivityKind kind) => Source.StartActivity("test", kind)!;
+
+    [Fact]
+    public void EndUserIdTag_IsTheKeyTheAzureMonitorExporterMapsToAuthenticatedUserId()
+    {
+        // The Azure Monitor exporter's ActivityTagsProcessor treats the
+        // OpenTelemetry semantic-convention key "enduser.id" as the end user
+        // and writes it to the ai.user.authUserId context tag.
+        Assert.Equal("enduser.id", UserActivityProcessor.EndUserIdTag);
+    }
+
+    [Fact]
+    public void OnEnd_WithEasyAuthHeader_SetsEndUserIdTag()
+    {
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Headers[UserActivityProcessor.PrincipalNameHeader] = "user@example.com";
+
+        var activity = new Activity("test");
+        ProcessorFor(ctx).OnEnd(activity);
+
+        Assert.Equal("user@example.com", activity.GetTagItem(UserActivityProcessor.EndUserIdTag));
+    }
+
+    [Fact]
+    public void OnEnd_HeaderWinsOverIdentityName()
+    {
+        var ctx = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim(ClaimTypes.Name, "identity@example.com")],
+                authenticationType: "TestAuth"))
+        };
+        ctx.Request.Headers[UserActivityProcessor.PrincipalNameHeader] = "header@example.com";
+
+        var activity = new Activity("test");
+        ProcessorFor(ctx).OnEnd(activity);
+
+        Assert.Equal("header@example.com", activity.GetTagItem(UserActivityProcessor.EndUserIdTag));
+    }
+
+    [Fact]
+    public void OnEnd_WithoutHeaderButAuthenticatedUser_SetsEndUserIdTag()
+    {
         var ctx = new DefaultHttpContext
         {
             User = new ClaimsPrincipal(new ClaimsIdentity(
                 [new Claim(ClaimTypes.Name, "user@example.com")],
                 authenticationType: "TestAuth"))
         };
-        accessor.HttpContext.Returns(ctx);
 
-        var processor = new UserActivityProcessor(accessor);
         var activity = new Activity("test");
-        processor.OnEnd(activity);
+        ProcessorFor(ctx).OnEnd(activity);
 
-        Assert.Equal("user@example.com", activity.GetTagItem("enduser.id"));
+        Assert.Equal("user@example.com", activity.GetTagItem(UserActivityProcessor.EndUserIdTag));
     }
 
     [Fact]
-    public void OnEnd_WithAnonymousUser_LeavesEndUserIdTagUnset()
+    public void OnEnd_WithNoHeaderAndAnonymousUser_LeavesEndUserIdTagUnset()
     {
-        var accessor = Substitute.For<IHttpContextAccessor>();
-        // Anonymous: no authentication type → Identity.Name is null.
-        accessor.HttpContext.Returns(new DefaultHttpContext());
-
-        var processor = new UserActivityProcessor(accessor);
         var activity = new Activity("test");
-        processor.OnEnd(activity);
+        ProcessorFor(new DefaultHttpContext()).OnEnd(activity);
 
-        Assert.Null(activity.GetTagItem("enduser.id"));
+        Assert.Null(activity.GetTagItem(UserActivityProcessor.EndUserIdTag));
     }
 
     [Fact]
@@ -48,14 +103,51 @@ public class UserActivityProcessorTests
         // Background services / startup tasks emit activities outside any
         // request — HttpContextAccessor returns null then. The processor
         // must no-op rather than NRE the export pipeline.
-        var accessor = Substitute.For<IHttpContextAccessor>();
-        accessor.HttpContext.Returns((HttpContext?)null);
-
-        var processor = new UserActivityProcessor(accessor);
         var activity = new Activity("test");
-        var ex = Record.Exception(() => processor.OnEnd(activity));
+        var ex = Record.Exception(() => ProcessorFor(null).OnEnd(activity));
 
         Assert.Null(ex);
-        Assert.Null(activity.GetTagItem("enduser.id"));
+        Assert.Null(activity.GetTagItem(UserActivityProcessor.EndUserIdTag));
+    }
+
+    [Fact]
+    public void OnEnd_ServerActivityWithoutServerAddress_TakesHostAndSchemeFromRequest()
+    {
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Scheme = "https";
+        ctx.Request.Host = new HostString("books-staging.example.com", 443);
+
+        using var activity = StartActivity(ActivityKind.Server);
+        ProcessorFor(ctx).OnEnd(activity);
+
+        Assert.Equal("books-staging.example.com", activity.GetTagItem(UserActivityProcessor.ServerAddressTag));
+        Assert.Equal("https", activity.GetTagItem(UserActivityProcessor.UrlSchemeTag));
+    }
+
+    [Fact]
+    public void OnEnd_ServerActivityWithServerAddress_KeepsIt()
+    {
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Host = new HostString("other.example.com");
+
+        using var activity = StartActivity(ActivityKind.Server);
+        activity.SetTag(UserActivityProcessor.ServerAddressTag, "set.example.com");
+        ProcessorFor(ctx).OnEnd(activity);
+
+        Assert.Equal("set.example.com", activity.GetTagItem(UserActivityProcessor.ServerAddressTag));
+    }
+
+    [Fact]
+    public void OnEnd_ClientActivity_HostTagsUntouched()
+    {
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Scheme = "https";
+        ctx.Request.Host = new HostString("books-staging.example.com");
+
+        using var activity = StartActivity(ActivityKind.Client);
+        ProcessorFor(ctx).OnEnd(activity);
+
+        Assert.Null(activity.GetTagItem(UserActivityProcessor.ServerAddressTag));
+        Assert.Null(activity.GetTagItem(UserActivityProcessor.UrlSchemeTag));
     }
 }
