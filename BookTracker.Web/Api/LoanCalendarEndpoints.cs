@@ -8,7 +8,7 @@ namespace BookTracker.Web.Api;
 // due date, written by LoanCalendar. Nothing is stored, sent or scheduled; the
 // phone or desktop calendar that opens the file owns the reminder. Auth: the
 // same Easy Auth platform-layer gate as every other /api route
-// (SECURITY-AUDIT.md, SEC-006).
+// (configured in infra/modules/app-config.bicep).
 public static class LoanCalendarEndpoints
 {
     /// <summary>Host used in event UIDs when the request carries none.</summary>

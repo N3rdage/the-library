@@ -69,7 +69,7 @@ public static class ProgramSetup
     /// <summary>
     /// HSTS: one year, including subdomains. Preload is deliberately off —
     /// it is a browser preload-list submission, not a header setting, and
-    /// is Drew's call. SECURITY-AUDIT.md §11 / audit rule BOOK-007.
+    /// is Drew's call. See audit rule BOOK-007.
     /// </summary>
     internal static void ConfigureHsts(HstsOptions options)
     {
@@ -317,8 +317,8 @@ public static class ProgramSetup
 
         // API endpoints (Minimal API). Each domain gets its own
         // *Endpoints.cs class + Map* call here. These endpoints are
-        // gated by Easy Auth at the platform layer (SECURITY-AUDIT.md
-        // §SEC-006).
+        // gated by Easy Auth at the platform layer (configured in
+        // infra/modules/app-config.bicep).
         app.MapCatalogEndpoints();
         app.MapWishlistEndpoints();
         app.MapOnlineEndpoints();
