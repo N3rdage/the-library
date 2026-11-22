@@ -110,23 +110,25 @@ jobs:
       - name: Azure login (OIDC)
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID || vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID || vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID || vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Resolve SQL server + open temp firewall
         id: sql-fw
         env:
-          AZURE_RG: ${{ vars.AZURE_RG }}
+          AZURE_RG: ${{ secrets.AZURE_RG || vars.AZURE_RG }}
         run: |
           set -euo pipefail
           SQL_SERVER=$(az sql server list \
             --resource-group "$AZURE_RG" \
             --query "[?starts_with(name, 'booktracker-sql-')].name | [0]" -o tsv)
           if [ -z "$SQL_SERVER" ]; then
-            echo "::error::No SQL server matching booktracker-sql-* in $AZURE_RG"
+            echo "::error::No SQL server matching booktracker-sql-* in the resource group"
             exit 1
           fi
+          # Masked for the rest of the job: the log is public.
+          echo "::add-mask::$SQL_SERVER"
           echo "sql_server=$SQL_SERVER" >> "$GITHUB_OUTPUT"
           echo "sql_fqdn=$SQL_SERVER.database.windows.net" >> "$GITHUB_OUTPUT"
 
@@ -172,7 +174,7 @@ jobs:
         # public-network-access state.
         if: always() && steps.sql-fw.outputs.rule_name != ''
         env:
-          AZURE_RG: ${{ vars.AZURE_RG }}
+          AZURE_RG: ${{ secrets.AZURE_RG || vars.AZURE_RG }}
           SQL_SERVER: ${{ steps.sql-fw.outputs.sql_server }}
           RULE_NAME: ${{ steps.sql-fw.outputs.rule_name }}
           PUBLIC_ACCESS_WAS: ${{ steps.sql-fw.outputs.public_access_was }}
@@ -190,6 +192,6 @@ jobs:
       - name: Deploy to staging slot
         uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383 # v3
         with:
-          app-name: ${{ vars.AZURE_APP_NAME }}
+          app-name: ${{ secrets.AZURE_APP_NAME || vars.AZURE_APP_NAME }}
           slot-name: ${{ vars.AZURE_SLOT_NAME }}
           package: ./app.zip
