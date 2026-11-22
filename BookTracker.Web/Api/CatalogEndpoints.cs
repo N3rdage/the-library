@@ -16,8 +16,7 @@ namespace BookTracker.Web.Api;
 // authentication / authorization middleware (the project doesn't register
 // AddAuthentication / AddAuthorization) — Easy Auth + the
 // `globalValidation.requireAuthentication: true` setting in
-// infra/modules/app-config.bicep handle the gate. See SECURITY-AUDIT.md
-// (SEC-006) for the verification.
+// infra/modules/app-config.bicep handle the gate.
 public static class CatalogEndpoints
 {
     public static IEndpointRouteBuilder MapCatalogEndpoints(this IEndpointRouteBuilder app)

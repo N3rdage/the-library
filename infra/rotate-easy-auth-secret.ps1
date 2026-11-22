@@ -19,6 +19,10 @@
 # Both are granted to the booktracker-ci OIDC service principal by
 # infra/setup-github-oidc.ps1.
 #
+# Nothing identifying is printed: the workflow's log is public, so the script never
+# writes the vault's name, the app registration's ids, the tenant or a resource path,
+# only the passwords' display names (easyauth-<date>) and counts.
+#
 # The rotation keeps the latest $KeepLatest passwords on the app registration
 # and deletes older ones. Default 2 — so a fresh rotation never leaves the
 # previously-active secret orphaned before App Service picks up the new one
@@ -72,16 +76,16 @@ function Remove-AppPasswordWithRetry {
 # Single KV per RG by convention (matches the Bicep). Fail loudly if we find
 # zero or more than one so the caller is forced to disambiguate.
 if ([string]::IsNullOrEmpty($KeyVaultName)) {
-    Write-Host "Discovering Key Vault in resource group '$ResourceGroupName'..."
+    Write-Host "Discovering the Key Vault in the resource group..."
     $kvs = Get-AzKeyVault -ResourceGroupName $ResourceGroupName
     if ($null -eq $kvs -or $kvs.Count -eq 0) {
-        throw "No Key Vault found in $ResourceGroupName. Pass -KeyVaultName explicitly."
+        throw "No Key Vault found in the resource group. Pass -KeyVaultName explicitly."
     }
     if ($kvs.Count -gt 1) {
-        throw "Expected exactly one Key Vault in $ResourceGroupName, found $($kvs.Count). Pass -KeyVaultName explicitly."
+        throw "Expected exactly one Key Vault in the resource group, found $($kvs.Count). Pass -KeyVaultName explicitly."
     }
     $KeyVaultName = $kvs[0].VaultName
-    Write-Host "  Using $KeyVaultName"
+    Write-Host "  Found it."
 }
 
 # ---- Connect to Microsoft Graph using the existing Azure auth session -------
@@ -96,12 +100,12 @@ $graphToken = ConvertTo-SecureString $graphTokenJson.accessToken -AsPlainText -F
 Connect-MgGraph -AccessToken $graphToken -NoWelcome
 
 # ---- Find the target app registration ---------------------------------------
-Write-Host "Finding app registration '$AppRegistrationDisplayName'..."
+Write-Host "Finding the app registration..."
 $app = Get-MgApplication -Filter "displayName eq '$AppRegistrationDisplayName'" -ConsistencyLevel eventual -CountVariable c | Select-Object -First 1
 if (-not $app) {
-    throw "App registration '$AppRegistrationDisplayName' not found in tenant $TenantId."
+    throw "The app registration was not found (check the AppRegistrationDisplayName parameter)."
 }
-Write-Host "  ObjectId = $($app.Id), AppId = $($app.AppId)"
+Write-Host "  Found it."
 
 # ---- Add a fresh password ---------------------------------------------------
 $displayName = "easyauth-$(Get-Date -Format yyyyMMdd)"
@@ -118,7 +122,7 @@ $newPwd = Add-MgApplicationPassword -ApplicationId $app.Id -PasswordCredential @
 # before the script stops: a password nobody holds the value of must never be
 # left on the app registration, because the trim below keeps the newest
 # $KeepLatest and would then delete the one the site is actually using.
-Write-Host "Writing new secret to Key Vault '$KeyVaultName' as '$KeyVaultSecretName' (via Azure Resource Manager)..."
+Write-Host "Writing the new secret to Key Vault as '$KeyVaultSecretName' (via Azure Resource Manager)..."
 try {
     $secretPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.KeyVault/vaults/$KeyVaultName/secrets/${KeyVaultSecretName}?api-version=2023-07-01"
     $payload = @{
@@ -132,8 +136,10 @@ try {
     } | ConvertTo-Json -Depth 5 -Compress
     $response = Invoke-AzRestMethod -Method PUT -Path $secretPath -Payload $payload
     if ($response.StatusCode -notin 200, 201) {
-        # The body of a failed write holds an error message, never the secret.
-        throw "Key Vault secret write returned HTTP $($response.StatusCode): $($response.Content)"
+        # Only the status and the error code: the body names the vault and the resource path.
+        $code = 'unknown'
+        try { $code = ($response.Content | ConvertFrom-Json).error.code } catch { }
+        throw "Key Vault secret write returned HTTP $($response.StatusCode) ($code)."
     }
 }
 catch {
@@ -144,31 +150,71 @@ catch {
         Write-Host "  Removed."
     }
     catch {
-        Write-Host "::error::Could not remove password '$displayName' (KeyId $($newPwd.KeyId)). Delete it by hand on the app registration BEFORE running this again."
+        Write-Host "::error::Could not remove password '$displayName'. Delete it by hand on the app registration (Certificates & secrets) BEFORE running this again."
     }
     throw $writeError
 }
 
-# ---- Trim old passwords -----------------------------------------------------
-# Re-fetch to include the new one, sort newest-first, keep the top $KeepLatest,
-# delete the rest. A KeepLatest of 2 means the new one plus the previous-active
-# one stay alive — the previous stays valid until App Service's KV reference
-# refresh picks up the new value (up to ~24h).
-Write-Host "Trimming old passwords (keeping latest $KeepLatest)..."
-$refreshed = Get-MgApplication -ApplicationId $app.Id
-$sorted = $refreshed.PasswordCredentials | Sort-Object StartDateTime -Descending
-$toKeep = $sorted | Select-Object -First $KeepLatest
-$toDelete = $sorted | Select-Object -Skip $KeepLatest
+# ---- Trim old passwords, one at a time ---------------------------------------
+# Keep the password just added plus the newest ($KeepLatest - 1) others; remove the
+# rest one by one, and confirm each removal before the next. The new password is
+# kept by its KeyId, not by sorting: Graph can return the application without it
+# for a few seconds after the add, and a sort over that list would keep the two
+# older passwords and leave three behind (the run of 19 Nov 2026 did exactly that).
+function Get-AppPasswords {
+    param([Parameter(Mandatory)] [string] $ApplicationId)
+    @((Get-MgApplication -ApplicationId $ApplicationId).PasswordCredentials)
+}
 
-foreach ($pwd in $toDelete) {
-    Write-Host "  Removing '$($pwd.DisplayName)' (start $($pwd.StartDateTime.ToString('yyyy-MM-dd')))"
-    Remove-AppPasswordWithRetry -ApplicationId $app.Id -KeyId $pwd.KeyId
+function Wait-ForPasswordState {
+    # Polls until the predicate holds for the application's passwords; returns them.
+    param(
+        [Parameter(Mandatory)] [string] $ApplicationId,
+        [Parameter(Mandatory)] [scriptblock] $Until,
+        [Parameter(Mandatory)] [string] $What,
+        [int] $MaxAttempts = 12
+    )
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        $passwords = Get-AppPasswords -ApplicationId $ApplicationId
+        if (& $Until $passwords) { return $passwords }
+        Start-Sleep -Seconds 5
+    }
+    throw "Timed out after $($MaxAttempts * 5) s waiting for: $What."
+}
+
+Write-Host "Trimming old passwords (keeping the new one and the newest $($KeepLatest - 1) other)..."
+$current = Wait-ForPasswordState -ApplicationId $app.Id -What "the new password to appear" -Until {
+    param($p) $p.KeyId -contains $newPwd.KeyId
+}
+$others = $current | Where-Object { $_.KeyId -ne $newPwd.KeyId } | Sort-Object StartDateTime -Descending
+$toDelete = @($others | Select-Object -Skip ([Math]::Max($KeepLatest - 1, 0)))
+$keepIds = @($newPwd.KeyId) + @($others | Select-Object -First ([Math]::Max($KeepLatest - 1, 0)) | ForEach-Object KeyId)
+
+$removed = 0
+foreach ($cred in $toDelete) {
+    Write-Host "  Removing '$($cred.DisplayName)' (start $($cred.StartDateTime.ToString('yyyy-MM-dd')))..."
+    Remove-AppPasswordWithRetry -ApplicationId $app.Id -KeyId $cred.KeyId
+    $keyId = $cred.KeyId
+    Wait-ForPasswordState -ApplicationId $app.Id -What "'$($cred.DisplayName)' to be gone" -Until {
+        param($p) $p.KeyId -notcontains $keyId
+    } | Out-Null
+    $removed++
+    Write-Host "    Confirmed removed."
+}
+
+# The end state must be exactly the passwords meant to stay; anything else fails the run.
+$final = Get-AppPasswords -ApplicationId $app.Id
+$unexpected = @($final | Where-Object { $keepIds -notcontains $_.KeyId })
+$missing = @($keepIds | Where-Object { $final.KeyId -notcontains $_ })
+if ($unexpected.Count -gt 0 -or $missing.Count -gt 0) {
+    $names = ($unexpected | ForEach-Object DisplayName) -join ', '
+    throw "After trimming, the app registration holds $($final.Count) password(s), expected $($keepIds.Count). Unexpected: $names. Missing: $($missing.Count)."
 }
 
 Write-Host ""
-Write-Host "Passwords retained:"
-foreach ($pwd in $toKeep) {
-    Write-Host "  $($pwd.DisplayName): start $($pwd.StartDateTime.ToString('yyyy-MM-dd')), expires $($pwd.EndDateTime.ToString('yyyy-MM-dd'))"
+Write-Host "Removed $removed; $($final.Count) retained:"
+foreach ($cred in ($final | Sort-Object StartDateTime -Descending)) {
+    Write-Host "  $($cred.DisplayName): start $($cred.StartDateTime.ToString('yyyy-MM-dd')), expires $($cred.EndDateTime.ToString('yyyy-MM-dd'))"
 }
 
 Write-Host ""

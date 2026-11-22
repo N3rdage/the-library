@@ -228,7 +228,7 @@ jobs:
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ secrets.BOOKSHELF_APK_CLIENT_ID || vars.BOOKSHELF_APK_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID || vars.AZURE_TENANT_ID }}
           # The upload identity holds one data role on one container and no subscription-level role.
           allow-no-subscriptions: true
 
@@ -247,10 +247,32 @@ jobs:
           az storage blob upload --account-name "$ACCOUNT" --container-name "$container" \
             --name "$NAME" --file "$APK" --content-type application/vnd.android.package-archive \
             --overwrite --auth-mode login --output none
-          # Keep old builds from piling up: anything older than 14 days goes.
-          cutoff=$(date -u -d '-14 days' '+%Y-%m-%dT%H:%MZ')
-          az storage blob delete-batch --account-name "$ACCOUNT" --source "$container" \
-            --if-unmodified-since "$cutoff" --auth-mode login --output none || true
+          # Keep old builds from piling up: anything older than 14 days goes. Each blob is
+          # compared here and only the old ones are deleted, so the log says how many were
+          # kept and removed instead of a "condition not met" warning for every recent build.
+          # A failed list or delete is a warning, never a failed run: the APK is already uploaded.
+          cutoff=$(date -u -d '-14 days' +%s)
+          listing=$(az storage blob list --account-name "$ACCOUNT" --container-name "$container" \
+            --auth-mode login --query "[].[name, properties.lastModified]" --output tsv) \
+            || { echo "::warning::Could not list the container, so no old builds were pruned."; listing=""; }
+          kept=0; removed=0; failed=0
+          while IFS=$'\t' read -r blob modified; do
+            [ -n "$blob" ] || continue
+            if [ "$(date -u -d "$modified" +%s)" -lt "$cutoff" ]; then
+              if az storage blob delete --account-name "$ACCOUNT" --container-name "$container" \
+                  --name "$blob" --auth-mode login --output none 2>/dev/null; then
+                removed=$((removed + 1))
+              else
+                failed=$((failed + 1))
+              fi
+            else
+              kept=$((kept + 1))
+            fi
+          done <<< "$listing"
+          echo "Builds in the container: kept $kept, removed $removed (older than 14 days)."
+          if [ "$failed" -gt 0 ]; then
+            echo "::warning::$failed old build(s) could not be removed; the next run tries again."
+          fi
 
       - name: Summary
         env:

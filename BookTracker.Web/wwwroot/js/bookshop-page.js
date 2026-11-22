@@ -186,10 +186,11 @@
     }
 
     function renderStarRow(rating) {
-        if (!rating || rating < 1) return '';
-        const filled = '★'.repeat(Math.max(0, Math.min(5, rating)));
-        const empty = '☆'.repeat(Math.max(0, 5 - rating));
-        return `<span class="text-warning" aria-label="Rating ${rating} of 5">${filled}<span class="text-muted">${empty}</span></span>`;
+        const n = Math.min(5, Math.floor(Number(rating)) || 0);
+        if (n < 1) return '';
+        const filled = '★'.repeat(n);
+        const empty = '☆'.repeat(5 - n);
+        return `<span class="text-warning" aria-label="Rating ${n} of 5">${filled}<span class="text-muted">${empty}</span></span>`;
     }
 
     function renderResult(result) {
@@ -225,8 +226,9 @@
         // Found
         const b = result.book;
         const status = b.status != null ? String(b.status) : '';
-        const authorLine = (b.allAuthors && b.allAuthors.length > 1)
-            ? b.allAuthors.join(', ')
+        const authorNames = window.catalogCache.authorRoleNames(b);
+        const authorLine = authorNames.length > 1
+            ? authorNames.join(', ')
             : (b.primaryAuthor || '');
         const ratingHtml = renderStarRow(b.rating);
         const statusBadge = status ? `<span class="badge bg-light text-dark border ms-1">${esc(status)}</span>` : '';

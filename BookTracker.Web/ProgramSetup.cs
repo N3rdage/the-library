@@ -9,6 +9,7 @@ using BookTracker.Web.Services.Covers;
 using BookTracker.Web.Telemetry;
 using BookTracker.Web.ViewModels;
 using Microsoft.AspNetCore.HttpsPolicy;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Options;
@@ -51,9 +52,24 @@ public static class ProgramSetup
     }
 
     /// <summary>
+    /// One fixed window shared by every /api/online/* call (see
+    /// OnlineEndpoints): beyond it the answer is 429, with no queueing.
+    /// </summary>
+    internal static void ConfigureRateLimiter(RateLimiterOptions options)
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        options.AddFixedWindowLimiter(OnlineEndpoints.RateLimitPolicy, limiter =>
+        {
+            limiter.PermitLimit = OnlineEndpoints.PermitLimit;
+            limiter.Window = OnlineEndpoints.RateLimitWindow;
+            limiter.QueueLimit = 0;
+        });
+    }
+
+    /// <summary>
     /// HSTS: one year, including subdomains. Preload is deliberately off —
     /// it is a browser preload-list submission, not a header setting, and
-    /// is Drew's call. SECURITY-AUDIT.md §11 / audit rule BOOK-007.
+    /// is Drew's call. HstsOptionsTests pins this policy.
     /// </summary>
     internal static void ConfigureHsts(HstsOptions options)
     {
@@ -70,8 +86,9 @@ public static class ProgramSetup
     /// one (local dev, tests) nothing is registered, because the exporter refuses to
     /// start with no connection string. UserActivityProcessor stamps the authenticated
     /// user onto every Activity as enduser.id (Application Insights' authenticated user
-    /// id); processors run in the order they are added, so it is registered before the
-    /// exporter and the tag is on the Activity before the export processor sees it end.
+    /// id); QueryRedactionProcessor redacts query-string values on the URL tags. Processors
+    /// run in the order they are added, so both are registered before the exporter and
+    /// their changes are on the Activity before the export processor sees it end.
     /// </summary>
     internal static bool AddApplicationInsights(WebApplicationBuilder builder)
     {
@@ -82,7 +99,9 @@ public static class ProgramSetup
             return false;
         }
 
-        builder.Services.ConfigureOpenTelemetryTracerProvider(tracing => tracing.AddProcessor<UserActivityProcessor>());
+        builder.Services.ConfigureOpenTelemetryTracerProvider(tracing => tracing
+            .AddProcessor<UserActivityProcessor>()
+            .AddProcessor<QueryRedactionProcessor>());
         builder.Services.AddApplicationInsightsTelemetry();
         return true;
     }
@@ -98,6 +117,8 @@ public static class ProgramSetup
         // HSTS policy for the UseHsts() call in ConfigureMiddleware. Without
         // this the framework default ships: 30 days, same host only.
         builder.Services.AddHsts(ConfigureHsts);
+
+        builder.Services.AddRateLimiter(ConfigureRateLimiter);
 
         // Minimal API JSON: serialize enums as strings, not their
         // underlying integers. Bookshop mode surfaces BookStatus
@@ -272,6 +293,8 @@ public static class ProgramSetup
             await next();
         });
 
+        app.UseRateLimiter();
+
         app.UseAntiforgery();
 
         // MapStaticAssets resolves a manifest file named after the entry
@@ -294,8 +317,8 @@ public static class ProgramSetup
 
         // API endpoints (Minimal API). Each domain gets its own
         // *Endpoints.cs class + Map* call here. These endpoints are
-        // gated by Easy Auth at the platform layer (SECURITY-AUDIT.md
-        // §SEC-006).
+        // gated by Easy Auth at the platform layer (configured in
+        // infra/modules/app-config.bicep).
         app.MapCatalogEndpoints();
         app.MapWishlistEndpoints();
         app.MapOnlineEndpoints();
