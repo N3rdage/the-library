@@ -137,15 +137,38 @@ jobs:
             --query "publicNetworkAccess" -o tsv)
           echo "public_access_was=$PUBLIC_ACCESS_WAS" >> "$GITHUB_OUTPUT"
 
+          # The runner's public address comes from an outside service, and the firewall is
+          # about to be opened to whatever it says. Accept only one public IPv4 address, and
+          # check it before anything on the server changes.
+          MY_IP=$(curl -fsSL --max-time 15 https://api.ipify.org)
+          if ! [[ "$MY_IP" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]]; then
+            echo "::error::The address lookup did not return a single IPv4 address"
+            exit 1
+          fi
+          O1=$((10#${BASH_REMATCH[1]})); O2=$((10#${BASH_REMATCH[2]}))
+          O3=$((10#${BASH_REMATCH[3]})); O4=$((10#${BASH_REMATCH[4]}))
+          if [ "$O1" -gt 255 ] || [ "$O2" -gt 255 ] || [ "$O3" -gt 255 ] || [ "$O4" -gt 255 ] \
+            || [ "$O1" -eq 0 ] || [ "$O1" -eq 10 ] || [ "$O1" -eq 127 ] || [ "$O1" -ge 224 ] \
+            || { [ "$O1" -eq 100 ] && [ "$O2" -ge 64 ] && [ "$O2" -le 127 ]; } \
+            || { [ "$O1" -eq 169 ] && [ "$O2" -eq 254 ]; } \
+            || { [ "$O1" -eq 172 ] && [ "$O2" -ge 16 ] && [ "$O2" -le 31 ]; } \
+            || { [ "$O1" -eq 192 ] && [ "$O2" -eq 168 ]; }; then
+            echo "::error::The address lookup returned an address that is not a public IPv4 address"
+            exit 1
+          fi
+          MY_IP="$O1.$O2.$O3.$O4"
+
+          # Written before the server is touched, so the close step runs after any failure
+          # from here on and restores the public-network-access setting.
+          RULE_NAME="ghactions-deploy-${{ github.run_id }}-${{ github.run_attempt }}"
+          echo "rule_name=$RULE_NAME" >> "$GITHUB_OUTPUT"
+
           if [ "$PUBLIC_ACCESS_WAS" != "Enabled" ]; then
             az sql server update \
               --resource-group "$AZURE_RG" --name "$SQL_SERVER" \
               --set publicNetworkAccess=Enabled --output none
           fi
 
-          MY_IP=$(curl -fsSL https://api.ipify.org)
-          RULE_NAME="ghactions-deploy-${{ github.run_id }}-${{ github.run_attempt }}"
-          echo "rule_name=$RULE_NAME" >> "$GITHUB_OUTPUT"
           az sql server firewall-rule create \
             --resource-group "$AZURE_RG" --server "$SQL_SERVER" \
             --name "$RULE_NAME" \
