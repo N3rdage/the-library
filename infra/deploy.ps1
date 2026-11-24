@@ -31,10 +31,11 @@ param(
     [SecureString] $TroveApiKey,
     # Optional: display name (in this tenant) of the Azure AD app
     # registration / SP that GitHub Actions OIDC authenticates as.
-    # When supplied, the script grants that identity db_ddladmin on both
-    # databases so the deploy.yml / swap.yml workflows can apply EF
-    # migrations against staging + prod via the deploy-time bundle (see
-    # TODO #21). Leave blank to skip the CI grant on this run.
+    # When supplied, the script grants that identity db_owner on both
+    # databases: the deploy.yml / swap.yml workflows apply EF migrations
+    # with it, and refresh-staging-db.yml sets the database users in the
+    # copy of production it puts on staging. Leave blank to skip the CI
+    # grant on this run.
     [string] $GitHubOidcAppName = ''
 )
 
@@ -277,21 +278,32 @@ IF IS_ROLEMEMBER('db_ddladmin', '$stagingSlotSqlUserName') = 1
     Write-Host "  Granting staging identity on '$stagingSqlDb'..."
     Invoke-Sqlcmd -ServerInstance $sqlFqdn -Database $stagingSqlDb -AccessToken $token -Query $stagingGrantSql -Encrypt Mandatory
 
-    # GitHub Actions OIDC identity (TODO #21 — deploy-time migrations).
-    # Grants db_ddladmin so the deploy.yml/swap.yml workflows can apply
-    # the EF migration bundle. The runtime managed identities above will
-    # eventually downgrade to db_datareader + db_datawriter (PR B of the
-    # TODO #21 arc); for now they retain db_ddladmin while migrate-on-
-    # startup is still gated to local-dev only.
+    # GitHub Actions OIDC identity. It applies the EF migration bundle
+    # (deploy.yml, swap.yml), which db_ddladmin with reader and writer
+    # covers, and it prepares the copy of production that
+    # refresh-staging-db.yml puts on staging: it reads the staging slot
+    # identity's SID from the current staging database, creates that user
+    # in the copy, adds it to db_datareader and db_datawriter, and drops
+    # production's runtime user from the copy. Seeing other users, creating
+    # one, and changing a fixed role's members each need db_owner. The grant
+    # is made on production too because the copy carries production's users:
+    # it is production's grant that the workflow uses inside the copy.
+    #
+    # Each statement stands alone so a re-run upgrades an identity that was
+    # created by an earlier version of this script.
     if ($GitHubOidcAppName) {
         $ghGrantSql = @"
 IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = '$GitHubOidcAppName')
-BEGIN
     CREATE USER [$GitHubOidcAppName] FROM EXTERNAL PROVIDER;
+
+IF ISNULL(IS_ROLEMEMBER('db_datareader', '$GitHubOidcAppName'), 0) = 0
     ALTER ROLE db_datareader ADD MEMBER [$GitHubOidcAppName];
+IF ISNULL(IS_ROLEMEMBER('db_datawriter', '$GitHubOidcAppName'), 0) = 0
     ALTER ROLE db_datawriter ADD MEMBER [$GitHubOidcAppName];
-    ALTER ROLE db_ddladmin  ADD MEMBER [$GitHubOidcAppName];
-END
+IF ISNULL(IS_ROLEMEMBER('db_ddladmin', '$GitHubOidcAppName'), 0) = 0
+    ALTER ROLE db_ddladmin ADD MEMBER [$GitHubOidcAppName];
+IF ISNULL(IS_ROLEMEMBER('db_owner', '$GitHubOidcAppName'), 0) = 0
+    ALTER ROLE db_owner ADD MEMBER [$GitHubOidcAppName];
 "@
         Write-Host "  Granting GitHub OIDC identity '$GitHubOidcAppName' on '$sqlDb'..."
         Invoke-Sqlcmd -ServerInstance $sqlFqdn -Database $sqlDb -AccessToken $token -Query $ghGrantSql -Encrypt Mandatory

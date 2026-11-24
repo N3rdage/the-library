@@ -93,7 +93,7 @@ Reason: if keys moved with the code, a swap followed by a redeploy without the k
 Prod and staging hit **separate databases** (`booktracker` vs `booktracker-staging` on the same SQL server). Each slot's managed identity is granted only on its own DB. Implications:
 
 - Schema migrations are tested on staging *before* they hit prod data — the `swap.yml` slot-swap is a real rollback story for code.
-- A newly created staging DB starts **empty**; the deploy-time migration bundle (see `.github/workflows/deploy.yml`) builds the schema. Empty staging catches schema syntax errors but **misses every data-shape failure** (NOT NULL with existing nulls, unique-index dedup violations, FK orphans, type-conversion failures, performance-on-real-data). For migrations tagged `review:` the safe pattern is to refresh staging from prod first — see `TODO.md` for the bacpac-sync follow-up.
+- A newly created staging DB starts **empty**; the deploy-time migration bundle (see `.github/workflows/deploy.yml`) builds the schema. Empty staging catches schema syntax errors but **misses every data-shape failure** (NOT NULL with existing nulls, unique-index dedup violations, FK orphans, type-conversion failures, performance-on-real-data). For migrations tagged `review:` the safe pattern is to refresh staging from prod first with the `refresh-staging-db.yml` workflow (see GitHub Actions CI/CD below), then run the staging deploy so the migration meets the copied data.
 
 ## Prereqs
 
@@ -123,6 +123,7 @@ Optional parameters:
 | `-DevClientIp` | _empty_ | optional IPv4 to whitelist on the SQL firewall for ad-hoc local EF migrations; leave blank to keep SQL fully private |
 | `-AnthropicApiKey` | _not set_ | optional `sk-ant-…` as a `SecureString` (`Read-Host -AsSecureString`), so the key never sits in shell history or a process listing; when supplied it's stored in Key Vault and exposed via a KV ref |
 | `-TroveApiKey` | _not set_ | optional NLA Trove API key as a `SecureString`, same handling; when supplied it's stored in Key Vault and exposed via a KV ref |
+| `-GitHubOidcAppName` | _empty_ | display name of the app registration GitHub Actions signs in as; when supplied it is granted `db_owner` on both databases (step 6 below). Needed once before `refresh-staging-db.yml` can run, and again only if that identity is recreated |
 
 What the script does:
 1. Signs you in to Azure + Microsoft Graph.
@@ -130,7 +131,7 @@ What the script does:
 3. Rotates a 2-year client secret for Easy Auth.
 4. Runs `main.bicep` at subscription scope (creates the RG + everything else).
 5. Registers the App Service's Easy Auth callback URL on the app registration.
-6. Temporarily flips SQL `publicNetworkAccess` on, opens a temp firewall rule for the script's public IP, connects with AAD auth, grants the prod managed identity `db_datareader/writer` on the prod DB and the staging managed identity the same on the staging DB (each identity only sees its own DB; the prod-DB grant also drops any staging-identity grant found on the prod DB, and an idempotent revoke removes any `db_ddladmin` grant from the app identities), then restores SQL back to private. If `-GitHubOidcAppName` is supplied, the script also grants that identity `db_datareader/writer/ddladmin` on both DBs — that's the identity the deploy-time migration bundle authenticates as.
+6. Temporarily flips SQL `publicNetworkAccess` on, opens a temp firewall rule for the script's public IP, connects with AAD auth, grants the prod managed identity `db_datareader/writer` on the prod DB and the staging managed identity the same on the staging DB (each identity only sees its own DB; the prod-DB grant also drops any staging-identity grant found on the prod DB, and an idempotent revoke removes any `db_ddladmin` grant from the app identities), then restores SQL back to private. If `-GitHubOidcAppName` is supplied, the script also grants that identity `db_owner` (with `db_datareader/writer/ddladmin`) on both DBs — that's the identity the deploy-time migration bundle authenticates as, and the one `refresh-staging-db.yml` uses to set the database users in the copy of production it puts on staging.
 
 ### Local EF migrations
 
@@ -230,6 +231,7 @@ Workflows under `.github/workflows/`:
 - `notify-drew-blog.yml` — on pushes to `main` that touch `blog/**`: asks the blog repo to re-sync (skips when its token secret is absent).
 - `deploy.yml` — on push to `main`: build, **apply pending EF migrations to `booktracker-staging` via the deploy-time bundle** (`dotnet ef migrations bundle` + AAD-auth apply behind a temp firewall rule), then publish + deploy to the **staging** slot. Migration apply failure blocks the slot deploy — clean fail signal, no startup-probe ambiguity. Two jobs: `package` compiles, publishes and bundles with no Azure rights and hands the package and the bundle on as an artifact; `deploy` alone can sign in to Azure and compiles nothing.
 - `swap.yml` — manual: **apply pending EF migrations to `booktracker` via the same bundle pattern**, then `az webapp deployment slot swap staging -> production`. Migration apply failure aborts the swap (prod stays on old code + old schema).
+- `refresh-staging-db.yml` — manual: replaces `booktracker-staging` with a copy of `booktracker`, so a migration meets real data shapes on staging before a swap. It uses Azure SQL's database copy onto the same server (no bacpac, no storage), then, in the copy, creates the staging slot identity's user with reader and writer and drops production's runtime user. With the staging slot stopped it renames the current staging database aside and the copy into place, starts the slot, and waits for `/warmup` to answer; only then is the old database deleted. A failure after the first rename puts the old database back. It shares the `sql-firewall-window` concurrency group with `deploy.yml` and `swap.yml`. Afterwards run `deploy.yml` (it has a manual trigger) to apply pending migrations to the copy. Needs the CI identity to be `db_owner` on both databases, which `deploy.ps1 -GitHubOidcAppName` grants. Staging then holds production's data behind the same sign-in.
 - `rotate-easy-auth-secret.yml` — cron (twice yearly, 1st of every 6th month at 02:00 UTC) + manual dispatch: generates a new password on the `<sign-in-app-registration>` app registration, writes it to KV, trims old passwords to keep the latest 2. App Service picks up the new secret via the KV reference within ~24h. Manual dispatch: `gh workflow run rotate-easy-auth-secret.yml`.
 
 Schema migrations apply via the deploy-time bundle in `deploy.yml` / `swap.yml`. Local dev keeps `db.Database.MigrateAsync()` at startup under the `IsDevelopment` gate in `Program.cs` so `dotnet watch` Just Works without a separate `dotnet ef database update`.

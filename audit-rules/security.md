@@ -51,11 +51,11 @@ BookTracker is a single-user (Drew) Blazor Server + Azure SQL + Easy Auth app. S
   - Adding a CHECK constraint
   - `ALTER COLUMN ... <new-type>` (especially numeric → narrower numeric, string → typed)
 - Also flag any `ALTER TABLE` that would rebuild a large table (could time-out on prod's data, even if instant on empty staging).
-- Cross-reference: TODO #1 (Bacpac sync from prod → staging) is the durable mitigation. Until that ships, the audit can flag the risk per migration.
+- Cross-reference: the `refresh-staging-db.yml` workflow (staging replaced by a copy of production) is the mitigation; the audit flags the migrations that need it run first.
 
-**How to verify pass:** List migrations added since last audit; for each, classify as "schema-only safe" / "data-shape sensitive — bacpac-validate before prod" / "no new migrations."
+**How to verify pass:** List migrations added since last audit; for each, classify as "schema-only safe" / "data-shape sensitive — refresh staging from production and deploy there before prod" / "no new migrations."
 
-**Fix guidance:** Run a bacpac sync from prod to staging before merging migrations in the data-shape-sensitive category, then validate the migration applies cleanly. Long-term fix is TODO #1 (automate the bacpac sync).
+**Fix guidance:** Before merging a migration in the data-shape-sensitive category, run `refresh-staging-db.yml`. The staging deploy that follows the merge then applies the migration to a copy of production's data, and a failure there stops before the swap to production.
 
 **References:** Blog post `2026-04-27-01-empty-staging-catches-schema-not-data.md`; retro `retro_staging_db_separation.md`.
 

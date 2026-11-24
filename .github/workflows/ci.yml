@@ -50,6 +50,23 @@ jobs:
         if: steps.filter.outputs.code != 'false'
       - run: dotnet build BookTracker.slnx --configuration Release --no-restore
         if: steps.filter.outputs.code != 'false'
+      - name: Install dotnet-ef
+        # For the model check below. Pinned to the same version deploy.yml and
+        # swap.yml install.
+        if: steps.filter.outputs.code != 'false'
+        run: dotnet tool install --global dotnet-ef --version 10.0.7
+      - name: Model has a migration
+        # Fails when BookTracker.Data's model differs from the last migration's
+        # snapshot: a model change ships with its migration in the same PR.
+        # Compares the compiled model to the snapshot; no database connection
+        # is made. Runs before the tests so the cheaper failure reports first.
+        if: steps.filter.outputs.code != 'false'
+        run: >
+          dotnet ef migrations has-pending-model-changes
+          --project BookTracker.Data
+          --startup-project BookTracker.Web
+          --configuration Release
+          --no-build
       # Whitelist of test categories the PR job runs. E2E (Playwright) is
       # deliberately excluded — it'll get its own job once the Playwright
       # POC lands. Adding a new category is opt-in: append it here when
