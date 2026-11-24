@@ -1,0 +1,272 @@
+name: Refresh staging database from production
+
+# Replaces the staging database with a copy of production, so the next staging deploy runs its
+# migrations against real data shapes (existing nulls, duplicates, orphans, real volumes) before
+# a swap takes them to production. Run it by hand before merging a migration that is sensitive
+# to the data it meets; afterwards run "Deploy to staging slot" to apply pending migrations to
+# the copy.
+#
+# How: Azure SQL's own database copy (production -> a new database on the same server), then two
+# renames while the staging slot is stopped. No bacpac, no file in storage, nothing downloaded to
+# the runner. The copy carries production's database users, so before it goes live the staging
+# slot's identity is added to it and production's runtime identity is removed from it. If the
+# staging app cannot read the new database, the renames are undone and the run fails.
+on:
+  workflow_dispatch:
+
+# Shared with deploy.yml and swap.yml: all three open a temporary SQL firewall rule and restore
+# the server's public-network-access setting afterwards, and must never overlap. Sharing the
+# group also keeps a deploy from applying migrations to a database that is mid-rename.
+concurrency:
+  group: sql-firewall-window
+  cancel-in-progress: false
+
+# Read-only by default. Only the job below may request an OIDC token for Azure.
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    # The Azure identity only trusts runs from main; say so here rather than fail at sign-in.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      id-token: write
+      contents: read
+    # No checkout and no build: this job runs only the Azure CLI and the inline script below,
+    # so no project code executes with the Azure identity.
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID || vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID || vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID || vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve SQL server + open temp firewall
+        id: sql-fw
+        env:
+          AZURE_RG: ${{ secrets.AZURE_RG || vars.AZURE_RG }}
+        run: |
+          set -euo pipefail
+          SQL_SERVER=$(az sql server list \
+            --resource-group "$AZURE_RG" \
+            --query "[?starts_with(name, 'booktracker-sql-')].name | [0]" -o tsv)
+          if [ -z "$SQL_SERVER" ]; then
+            echo "::error::No SQL server matching booktracker-sql-* in the resource group"
+            exit 1
+          fi
+          # Masked for the rest of the job: the log is public.
+          echo "::add-mask::$SQL_SERVER"
+          echo "sql_server=$SQL_SERVER" >> "$GITHUB_OUTPUT"
+          echo "sql_fqdn=$SQL_SERVER.database.windows.net" >> "$GITHUB_OUTPUT"
+
+          PUBLIC_ACCESS_WAS=$(az sql server show \
+            --resource-group "$AZURE_RG" --name "$SQL_SERVER" \
+            --query "publicNetworkAccess" -o tsv)
+          echo "public_access_was=$PUBLIC_ACCESS_WAS" >> "$GITHUB_OUTPUT"
+
+          if [ "$PUBLIC_ACCESS_WAS" != "Enabled" ]; then
+            az sql server update \
+              --resource-group "$AZURE_RG" --name "$SQL_SERVER" \
+              --set publicNetworkAccess=Enabled --output none
+          fi
+
+          MY_IP=$(curl -fsSL https://api.ipify.org)
+          RULE_NAME="ghactions-refresh-${{ github.run_id }}-${{ github.run_attempt }}"
+          echo "rule_name=$RULE_NAME" >> "$GITHUB_OUTPUT"
+          az sql server firewall-rule create \
+            --resource-group "$AZURE_RG" --server "$SQL_SERVER" \
+            --name "$RULE_NAME" \
+            --start-ip-address "$MY_IP" --end-ip-address "$MY_IP" \
+            --output none
+          # Server-side propagation lags the API response.
+          sleep 10
+
+      - name: Copy production over staging
+        env:
+          AZURE_RG: ${{ secrets.AZURE_RG || vars.AZURE_RG }}
+          AZURE_APP_NAME: ${{ secrets.AZURE_APP_NAME || vars.AZURE_APP_NAME }}
+          AZURE_SLOT_NAME: ${{ vars.AZURE_SLOT_NAME }}
+          SQL_SERVER: ${{ steps.sql-fw.outputs.sql_server }}
+          SQL_FQDN: ${{ steps.sql-fw.outputs.sql_fqdn }}
+          PROD_DB: booktracker
+          STAGING_DB: booktracker-staging
+          NEW_DB: booktracker-staging-new
+          OLD_DB: booktracker-staging-old
+        run: |
+          set -euo pipefail
+
+          # The SQL user of each runtime identity, as infra/deploy.ps1 names them.
+          export PROD_USER="$AZURE_APP_NAME"
+          export SLOT_USER="$AZURE_APP_NAME/slots/$AZURE_SLOT_NAME"
+
+          db_exists() {
+            [ -n "$(az sql db list --resource-group "$AZURE_RG" --server "$SQL_SERVER" \
+              --query "[?name=='$1'].name | [0]" -o tsv)" ]
+          }
+          rename_db() {
+            az sql db rename --resource-group "$AZURE_RG" --server "$SQL_SERVER" \
+              --name "$1" --new-name "$2" --output none
+          }
+          slot() {
+            az webapp "$1" --resource-group "$AZURE_RG" --name "$AZURE_APP_NAME" \
+              --slot "$AZURE_SLOT_NAME" --output none
+          }
+
+          # Taken now, while the sign-in is fresh: the copy below can outlast the window in
+          # which the federated sign-in can mint a token for a new resource.
+          SQL_TOKEN=$(az account get-access-token \
+            --resource https://database.windows.net/ --query accessToken -o tsv)
+          echo "::add-mask::$SQL_TOKEN"
+          export SQL_TOKEN
+
+          # ---- Starting state ------------------------------------------------
+          if ! db_exists "$STAGING_DB"; then
+            echo "::error::$STAGING_DB does not exist. An earlier run may have stopped mid-rename; look at the server's databases before running this again."
+            exit 1
+          fi
+          if db_exists "$OLD_DB"; then
+            echo "::error::$OLD_DB exists. An earlier run did not finish cleaning up. Check that $STAGING_DB is the database you want, delete $OLD_DB by hand, then run this again."
+            exit 1
+          fi
+          if db_exists "$NEW_DB"; then
+            echo "Removing $NEW_DB left by an earlier run that failed before going live."
+            az sql db delete --resource-group "$AZURE_RG" --server "$SQL_SERVER" \
+              --name "$NEW_DB" --yes --output none
+          fi
+
+          # ---- Copy ------------------------------------------------------------
+          echo "Copying $PROD_DB to $NEW_DB (same server, same service objective)..."
+          az sql db copy --resource-group "$AZURE_RG" --server "$SQL_SERVER" \
+            --name "$PROD_DB" --dest-name "$NEW_DB" --output none
+
+          # ---- Database users in the copy -----------------------------------
+          # The copy has production's users: production's runtime identity and this CI identity.
+          # The staging slot's identity is created with the SID it has in the current staging
+          # database, which avoids a directory lookup this identity is not allowed to make.
+          # PowerShell ships System.Data.SqlClient, so nothing is installed on the runner.
+          cat > "$RUNNER_TEMP/set-users.ps1" <<'PWSH'
+          $ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName System.Data.SqlClient
+
+          function Invoke-Sql([string] $Database, [string] $Sql, [hashtable] $Parameters = @{}) {
+              $conn = [System.Data.SqlClient.SqlConnection]::new(
+                  "Server=tcp:$($env:SQL_FQDN),1433;Database=$Database;Encrypt=True;TrustServerCertificate=False;Connect Timeout=60")
+              $conn.AccessToken = $env:SQL_TOKEN
+              $conn.Open()
+              try {
+                  $cmd = $conn.CreateCommand()
+                  $cmd.CommandText = $Sql
+                  $cmd.CommandTimeout = 120
+                  foreach ($name in $Parameters.Keys) {
+                      [void] $cmd.Parameters.AddWithValue($name, $Parameters[$name])
+                  }
+                  return $cmd.ExecuteScalar()
+              }
+              finally { $conn.Dispose() }
+          }
+
+          $sid = [string] (Invoke-Sql $env:STAGING_DB `
+              'SELECT CONVERT(varchar(200), sid, 1) FROM sys.database_principals WHERE name = @name' `
+              @{ '@name' = $env:SLOT_USER })
+          if ($sid -notmatch '^0x[0-9A-Fa-f]+$') {
+              throw "The staging slot's identity was not found in $($env:STAGING_DB). Either this CI identity is not db_owner there (run infra/deploy.ps1 with -GitHubOidcAppName once) or the slot identity was never granted (the same script grants it)."
+          }
+
+          # Names go into the statement as bracketed identifiers; the SID was checked above.
+          $slotUser = $env:SLOT_USER.Replace(']', ']]')
+          $prodUser = $env:PROD_USER.Replace(']', ']]')
+          $slotName = $env:SLOT_USER.Replace("'", "''")
+
+          [void] (Invoke-Sql $env:NEW_DB @"
+          IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'$slotName')
+              CREATE USER [$slotUser] WITH SID = $sid, TYPE = E;
+          ALTER ROLE db_datareader ADD MEMBER [$slotUser];
+          ALTER ROLE db_datawriter ADD MEMBER [$slotUser];
+          DROP USER IF EXISTS [$prodUser];
+          "@)
+
+          $tables = Invoke-Sql $env:NEW_DB 'SELECT COUNT(*) FROM sys.tables'
+          Write-Host "Users set in the copy. It has $tables tables."
+          PWSH
+          pwsh -NoProfile -NonInteractive -File "$RUNNER_TEMP/set-users.ps1"
+
+          # ---- Go live ---------------------------------------------------------
+          # From the first rename on, any failure puts things back: the copy returns to its
+          # working name (the next run deletes it) and the old staging database is restored.
+          STAGE=0
+          restore() {
+            rc=$?
+            if [ "$rc" -ne 0 ] && [ "$STAGE" -gt 0 ]; then
+              set +e
+              echo "::warning::The refresh failed after the rename began. Putting the old staging database back."
+              slot stop
+              if [ "$STAGE" -ge 2 ]; then rename_db "$STAGING_DB" "$NEW_DB"; fi
+              rename_db "$OLD_DB" "$STAGING_DB"
+              slot start
+            fi
+            exit "$rc"
+          }
+          trap restore EXIT
+
+          echo "Stopping the staging slot for the rename..."
+          slot stop
+          STAGE=1
+          rename_db "$STAGING_DB" "$OLD_DB"
+          STAGE=2
+          rename_db "$NEW_DB" "$STAGING_DB"
+          slot start
+
+          # /warmup is anonymous and, on a freshly started process, reads one row through the
+          # slot's own identity. A 200 means the staging app can sign in to and read the copy.
+          STAGING_HOST=$(az webapp show --resource-group "$AZURE_RG" --name "$AZURE_APP_NAME" \
+            --slot "$AZURE_SLOT_NAME" --query defaultHostName -o tsv)
+          echo "::add-mask::$STAGING_HOST"
+          echo "Waiting for the staging app to read the new database..."
+          WARM=0
+          for attempt in $(seq 1 40); do
+            if curl -fsS --max-time 60 -o /dev/null "https://$STAGING_HOST/warmup"; then
+              WARM=1
+              break
+            fi
+            sleep 15
+          done
+          if [ "$WARM" -ne 1 ]; then
+            echo "::error::The staging app did not answer /warmup within about 10 minutes of the rename."
+            exit 1
+          fi
+
+          # Live and readable: nothing to put back from here, whatever the delete does.
+          STAGE=0
+          az sql db delete --resource-group "$AZURE_RG" --server "$SQL_SERVER" \
+            --name "$OLD_DB" --yes --output none
+
+          {
+            echo "### Staging database refreshed"
+            echo ""
+            echo "Staging now holds a copy of production taken at $(date -u '+%Y-%m-%d %H:%M') UTC, and the staging app has read it."
+            echo ""
+            echo "Next: run **Deploy to staging slot** so pending migrations apply to the copy."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Close temp firewall
+        # `if: always()` so a failed refresh still removes the firewall rule and restores the
+        # SQL server's prior public-network-access state.
+        if: always() && steps.sql-fw.outputs.rule_name != ''
+        env:
+          AZURE_RG: ${{ secrets.AZURE_RG || vars.AZURE_RG }}
+          SQL_SERVER: ${{ steps.sql-fw.outputs.sql_server }}
+          RULE_NAME: ${{ steps.sql-fw.outputs.rule_name }}
+          PUBLIC_ACCESS_WAS: ${{ steps.sql-fw.outputs.public_access_was }}
+        run: |
+          az sql server firewall-rule delete \
+            --resource-group "$AZURE_RG" --server "$SQL_SERVER" \
+            --name "$RULE_NAME" --output none || true
+          if [ "$PUBLIC_ACCESS_WAS" != "Enabled" ]; then
+            az sql server update \
+              --resource-group "$AZURE_RG" --name "$SQL_SERVER" \
+              --set publicNetworkAccess="$PUBLIC_ACCESS_WAS" \
+              --output none || true
+          fi
