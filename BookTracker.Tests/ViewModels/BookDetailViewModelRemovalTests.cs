@@ -175,6 +175,42 @@ public class BookDetailViewModelRemovalTests
     }
 
     [Fact]
+    public async Task AddToWishlistAsync_noAuthor_checksAndAddsWithTheWishlistsFallbackAuthor()
+    {
+        var detail = new BookDetail(
+            BookId, "Dune", BookCategory.Fiction, BookStatus.Unread, 0, null, null, new DateTime(2026, 1, 1),
+            Works: [],
+            Editions: [new EditionDetail(3, null, BookFormat.Hardcover, "Hardcover", null, "", null, false, [Gone(10, CopyDisposition.Lost)])],
+            Tags: [],
+            Series: null);
+        _dispatcher.Query(Arg.Any<GetBookDetail>(), Arg.Any<CancellationToken>()).Returns(detail);
+        var vm = new BookDetailViewModel(
+            new CoverPhotoUploader(Substitute.For<IBookCoverStorage>(), NullLogger<CoverPhotoUploader>.Instance),
+            _dispatcher, TimeProvider.System);
+        await vm.InitializeAsync(BookId);
+
+        await vm.AddToWishlistAsync(10);
+
+        var fallback = WishlistItem.NormaliseAuthor(null);
+        await _dispatcher.Received(1).Query(
+            Arg.Is<GetWishlistItemExists>(q => q!.Title == "Dune" && q.Author == fallback), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).Send(Arg.Is<AddWishlistItem>(c => c!.Author == fallback), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AddToWishlistAsync_refused_setsError_andReturnsNotAdded()
+    {
+        var vm = await LoadedVmAsync(Gone(10, CopyDisposition.Lost));
+        _dispatcher.Send(Arg.Any<AddWishlistItem>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DomainRuleException("A wishlist item needs a title."));
+
+        var outcome = await vm.AddToWishlistAsync(10);
+
+        Assert.Equal(WishlistOfferOutcome.NotAdded, outcome);
+        Assert.Equal("A wishlist item needs a title.", vm.Error);
+    }
+
+    [Fact]
     public async Task AddToWishlistAsync_unknownCopy_addsNothing()
     {
         var vm = await LoadedVmAsync(Owned(11));

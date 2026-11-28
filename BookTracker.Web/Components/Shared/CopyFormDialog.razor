@@ -46,6 +46,19 @@
         <ActionError Message="@VM.Error" />
     </DialogContent>
     <DialogActions>
+        @if (VM.CanRestore)
+        {
+            <MudButton OnClick="RestoreAsync" Disabled="@saving" Color="Color.Primary">Restore</MudButton>
+        }
+        @if (VM.CanRemove)
+        {
+            <MudButton OnClick="RequestRemove" Disabled="@(saving || VM.IsDirty)">Remove from collection</MudButton>
+            @if (VM.IsDirty)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Save your changes before removing.</MudText>
+            }
+        }
+        <MudSpacer />
         <MudButton OnClick="Cancel">Cancel</MudButton>
         <MudButton Color="Color.Primary"
                    Variant="Variant.Filled"
@@ -91,6 +104,22 @@
             saving = false;
         }
     }
+
+    private async Task RestoreAsync()
+    {
+        saving = true;
+        try
+        {
+            if (await VM.RestoreAsync()) MudDialog.Close(DialogResult.Ok(CopyFormOutcome.Restored));
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    // The page runs the remove dialog; this one only asks for it.
+    private void RequestRemove() => MudDialog.Close(DialogResult.Ok(CopyFormOutcome.RemoveRequested));
 
     private void Cancel() => MudDialog.Cancel();
 

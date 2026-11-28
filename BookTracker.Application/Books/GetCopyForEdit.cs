@@ -16,7 +16,9 @@ public record CopyForEdit(
     DateTime? DateAcquired,
     string? Notes,
     CopyDisposition Disposition = CopyDisposition.Owned,
-    DateOnly? RemovedOn = null);
+    DateOnly? RemovedOn = null,
+    // An open loan exists, so the copy cannot be removed until it is returned.
+    bool IsLent = false);
 
 public sealed class GetCopyForEditHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
     : IQueryHandler<GetCopyForEdit, CopyForEdit?>
@@ -28,7 +30,7 @@ public sealed class GetCopyForEditHandler(IDbContextFactory<BookTrackerDbContext
             .AsNoTracking()
             .Where(c => c.Id == query.CopyId)
             .Select(c => new CopyForEdit(c.Id, c.EditionId, c.Condition, c.DateAcquired, c.Notes,
-                c.Disposition, c.RemovedOn))
+                c.Disposition, c.RemovedOn, c.Loans.Any(l => l.ReturnedOn == null)))
             .FirstOrDefaultAsync(ct);
     }
 }

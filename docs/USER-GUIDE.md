@@ -278,7 +278,7 @@ A single-Work book shows a **Details** card with first-published date, series (w
 
 - **Edit edition** and **Add copy**.
 - **Upload photo** (or **Replace photo**) uploads your own cover image from a file or the camera, cropped with the same draggable box as on Add book. A **your photo** chip marks an uploaded cover. The edition form (**Edit edition** and **Add edition**) has the same photo picker; its photo replaces the cover URL when you save.
-- Per copy: **Lend** or **Returned**, **Remove**, **Edit** and **Delete**. Delete asks "Delete this copy?" first. Edit changes Condition, Date acquired and Notes.
+- Per copy: **Lend** or **Returned**, **Remove**, **Edit** and **Delete**. Delete asks "Delete this copy?" first. Edit changes Condition, Date acquired and Notes, and also has **Remove from collection** or, for a removed copy, **Restore**.
 
 The header counts only the copies you still have, and adds "N removed" when some have left.
 
@@ -291,6 +291,8 @@ The header counts only the copies you still have, and adds "N removed" when some
 - **Note (optional)**: up to 500 characters, with a counter.
 
 A copy that is on loan has to be returned first: it shows **Returned** instead of **Remove** until then. A removed copy stays on the book's page, struck through, with its reason, date and note, and it cannot be lent. **Restore** on it brings it back into the collection.
+
+The copy's **Edit** dialog has the same two actions. **Remove from collection** there opens the dialog above, and is switched off while the form has unsaved changes, so save first. It is not shown for a copy on loan. A removed copy's Edit dialog says why and when it was removed and has **Restore**.
 
 When a book has no owned copy left, it leaves the Library, the Home counts, Series gaps and Duplicates. It shows in the Library when you switch on **Removed**. A book with one owned copy and one removed copy stays in the library as normal.
 

@@ -203,22 +203,29 @@ public class BookDetailViewModel(
 
     /// <summary>Adds the book of a removed copy to the wishlist at medium
     /// priority, with the copy's ISBN and the book's cover, unless an entry for
-    /// that ISBN or that title and author is already there.</summary>
+    /// that ISBN or that title and author is already there. A refusal sets
+    /// <see cref="DispatchingViewModel.Error"/> and returns NotAdded.</summary>
     public async Task<WishlistOfferOutcome> AddToWishlistAsync(int copyId, CancellationToken ct = default)
     {
         if (Book is null || Find(copyId) is not var (edition, _)) return WishlistOfferOutcome.NotAdded;
+        var book = Book;
 
-        var author = Book.Works.FirstOrDefault()?.AuthorName ?? "";
-        var duplicate = edition.Isbn is { } isbn
-            && (await dispatcher.Query(new GetWishlistDuplicate(isbn), ct)).WishlistedItemId is not null;
-        if (duplicate || await dispatcher.Query(new GetWishlistItemExists(Book.Title, author), ct))
-            return WishlistOfferOutcome.AlreadyOnWishlist;
+        // The wishlist stores a normalised author, so the duplicate check asks with the same one.
+        var author = WishlistItem.NormaliseAuthor(book.Works.FirstOrDefault()?.AuthorName);
+        var outcome = await DispatchAsync<WishlistOfferOutcome?>(async () =>
+        {
+            var duplicate = edition.Isbn is { } isbn
+                && (await dispatcher.Query(new GetWishlistDuplicate(isbn), ct)).WishlistedItemId is not null;
+            if (duplicate || await dispatcher.Query(new GetWishlistItemExists(book.Title, author), ct))
+                return WishlistOfferOutcome.AlreadyOnWishlist;
 
-        await dispatcher.Send(new AddWishlistItem(
-            Book.Title, author, WishlistPriority.Medium,
-            edition.Isbn is { } code ? [code] : [],
-            Book.CoverUrl ?? edition.CoverUrl), ct);
-        return WishlistOfferOutcome.Added;
+            await dispatcher.Send(new AddWishlistItem(
+                book.Title, author, WishlistPriority.Medium,
+                edition.Isbn is { } code ? [code] : [],
+                book.CoverUrl ?? edition.CoverUrl), ct);
+            return WishlistOfferOutcome.Added;
+        });
+        return outcome ?? WishlistOfferOutcome.NotAdded;
     }
 
     /// <summary>Marks every open loan on the book returned today, then reloads

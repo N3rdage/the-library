@@ -2,7 +2,9 @@ using BookTracker.Application;
 using BookTracker.Application.Books;
 using BookTracker.Data.Models;
 using BookTracker.Web.ViewModels;
+using BookTracker.Data;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace BookTracker.Tests.ViewModels;
 
@@ -66,6 +68,85 @@ public class CopyFormDialogViewModelTests
         await vm.InitializeForEditAsync(CopyId);
 
         Assert.Null(vm.RemovalLabel);
+    }
+
+    private async Task<CopyFormDialogViewModel> EditVmAsync(
+        CopyDisposition disposition = CopyDisposition.Owned, bool isLent = false)
+    {
+        GivenCopy(new CopyForEdit(CopyId, EditionId, BookCondition.Good, null, null,
+            disposition, disposition == CopyDisposition.Owned ? null : new DateOnly(2026, 11, 3), isLent));
+        var vm = new CopyFormDialogViewModel(_dispatcher);
+        await vm.InitializeForEditAsync(CopyId);
+        return vm;
+    }
+
+    [Fact]
+    public async Task CanRemove_onlyForAnOwnedCopyNotOnLoan()
+    {
+        Assert.True((await EditVmAsync()).CanRemove);
+        Assert.False((await EditVmAsync(isLent: true)).CanRemove);
+        Assert.False((await EditVmAsync(CopyDisposition.Lost)).CanRemove);
+    }
+
+    [Fact]
+    public void CanRemoveAndCanRestore_notOfferedInAddMode()
+    {
+        var vm = new CopyFormDialogViewModel(_dispatcher);
+        vm.InitializeForAdd(EditionId);
+
+        Assert.False(vm.CanRemove);
+        Assert.False(vm.CanRestore);
+    }
+
+    [Fact]
+    public async Task CanRestore_onlyForARemovedCopy()
+    {
+        Assert.True((await EditVmAsync(CopyDisposition.Sold)).CanRestore);
+        Assert.False((await EditVmAsync()).CanRestore);
+    }
+
+    [Fact]
+    public async Task IsDirty_tracksEditsAgainstTheLoadedCopy()
+    {
+        var vm = await EditVmAsync();
+        Assert.False(vm.IsDirty);
+
+        vm.Notes = "signed";
+        Assert.True(vm.IsDirty);
+
+        vm.Notes = "";
+        Assert.False(vm.IsDirty);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_sendsRestoreCopyToCollection()
+    {
+        var vm = await EditVmAsync(CopyDisposition.Donated);
+
+        Assert.True(await vm.RestoreAsync());
+
+        await _dispatcher.Received(1).Send(Arg.Is<RestoreCopyToCollection>(c => c!.CopyId == CopyId), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RestoreAsync_refused_setsError_andReturnsFalse()
+    {
+        var vm = await EditVmAsync(CopyDisposition.Donated);
+        _dispatcher.Send(Arg.Any<RestoreCopyToCollection>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DomainRuleException("This copy is already in the collection."));
+
+        Assert.False(await vm.RestoreAsync());
+
+        Assert.Equal("This copy is already in the collection.", vm.Error);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_ownedCopy_sendsNothing()
+    {
+        var vm = await EditVmAsync();
+
+        Assert.False(await vm.RestoreAsync());
+        await _dispatcher.DidNotReceive().Send(Arg.Any<RestoreCopyToCollection>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

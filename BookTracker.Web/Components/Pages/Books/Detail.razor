@@ -979,10 +979,21 @@
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
         var dialog = await DialogService.ShowAsync<CopyFormDialog>("Edit copy", parameters, options);
         var result = await dialog.Result;
-        if (result is not null && !result.Canceled)
+        if (result is null || result.Canceled) return;
+
+        switch (result.Data)
         {
-            Snackbar.Add("Copy saved", Severity.Success);
-            await VM.InitializeAsync(BookId);
+            case CopyFormOutcome.RemoveRequested:
+                await RemoveCopyAsync(copyId);
+                break;
+            case CopyFormOutcome.Restored:
+                Snackbar.Add("Copy restored", Severity.Success);
+                await VM.InitializeAsync(BookId);
+                break;
+            default:
+                Snackbar.Add("Copy saved", Severity.Success);
+                await VM.InitializeAsync(BookId);
+                break;
         }
     });
 
@@ -1019,7 +1030,10 @@
     // The page's own RemoveCopyDialogViewModel, seeded with the clicked copy.
     // A lost or damaged copy is followed by an offer to put the book on the
     // wishlist; VM decides whether to offer and does the add.
-    private Task OpenRemoveCopyDialog(int copyId) => OpenDialogGuardedAsync(async () =>
+    private Task OpenRemoveCopyDialog(int copyId) => OpenDialogGuardedAsync(() => RemoveCopyAsync(copyId));
+
+    // Also run, inside the edit dialog's guard, when that dialog asks for a removal.
+    private async Task RemoveCopyAsync(int copyId)
     {
         var label = VM.CopyLabelFor(copyId);
         if (label is null) return;
@@ -1060,7 +1074,7 @@
                     Snackbar.Add("Already on your wishlist", Severity.Info);
             }
         }
-    });
+    }
 
     private Task RestoreCopyAsync(int copyId) => OpenDialogGuardedAsync(async () =>
     {
