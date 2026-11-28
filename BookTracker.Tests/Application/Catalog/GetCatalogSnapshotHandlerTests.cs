@@ -1,4 +1,5 @@
 using BookTracker.Application.Catalog;
+using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Shared.Catalog;
 using Microsoft.EntityFrameworkCore;
@@ -730,16 +731,16 @@ public class GetCatalogSnapshotHandlerTests
         Assert.Empty(delta.DeletedIds);
     }
 
-    private async Task<int> SeedBookWithCopies(string title, Author author, params Copy[] copies)
+    // Adds the book to the caller's context, so the author and the book are
+    // saved together by one context.
+    private static Book AddBookWithCopies(BookTrackerDbContext db, string title, Author author, params Copy[] copies)
     {
-        using var db = _factory.CreateDbContext();
         var book = TestBooks.Book(
             title,
             works: [TestWorks.Work(title, author)],
             editions: copies.Length == 0 ? [] : [TestEditions.Edition(copies: copies)]);
         db.Books.Add(book);
-        await db.SaveChangesAsync();
-        return book.Id;
+        return book;
     }
 
     private async Task SetCopyOwnership(int bookId, bool owned)
@@ -764,10 +765,11 @@ public class GetCatalogSnapshotHandlerTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
+            var gone = AddBookWithCopies(db, "Gone", asimov, TestEditions.RemovedCopy());
+            AddBookWithCopies(db, "No copies", asimov);
+            AddBookWithCopies(db, "Mixed", asimov, TestEditions.Copy(), TestEditions.RemovedCopy());
             await db.SaveChangesAsync();
-            removedId = await SeedBookWithCopies("Gone", asimov, TestEditions.RemovedCopy());
-            await SeedBookWithCopies("No copies", asimov);
-            await SeedBookWithCopies("Mixed", asimov, TestEditions.Copy(), TestEditions.RemovedCopy());
+            removedId = gone.Id;
         }
 
         var snapshot = await GetSnapshot();
@@ -786,8 +788,9 @@ public class GetCatalogSnapshotHandlerTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
+            var book = AddBookWithCopies(db, "Leaving", asimov, TestEditions.Copy());
             await db.SaveChangesAsync();
-            bookId = await SeedBookWithCopies("Leaving", asimov, TestEditions.Copy());
+            bookId = book.Id;
         }
 
         await Task.Delay(20);
@@ -812,8 +815,8 @@ public class GetCatalogSnapshotHandlerTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
+            AddBookWithCopies(db, "Long gone", asimov, TestEditions.RemovedCopy());
             await db.SaveChangesAsync();
-            await SeedBookWithCopies("Long gone", asimov, TestEditions.RemovedCopy());
         }
 
         await Task.Delay(20);
@@ -834,8 +837,9 @@ public class GetCatalogSnapshotHandlerTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
+            var book = AddBookWithCopies(db, "Returning", asimov, TestEditions.RemovedCopy());
             await db.SaveChangesAsync();
-            bookId = await SeedBookWithCopies("Returning", asimov, TestEditions.RemovedCopy());
+            bookId = book.Id;
         }
 
         await Task.Delay(20);
@@ -858,9 +862,9 @@ public class GetCatalogSnapshotHandlerTests
         {
             var asimov = Author.Create("Isaac Asimov");
             db.Authors.Add(asimov);
+            AddBookWithCopies(db, "Kept", asimov, TestEditions.Copy());
+            AddBookWithCopies(db, "Gone", asimov, TestEditions.RemovedCopy());
             await db.SaveChangesAsync();
-            await SeedBookWithCopies("Kept", asimov, TestEditions.Copy());
-            await SeedBookWithCopies("Gone", asimov, TestEditions.RemovedCopy());
         }
 
         var snapshot = await GetSnapshot();
