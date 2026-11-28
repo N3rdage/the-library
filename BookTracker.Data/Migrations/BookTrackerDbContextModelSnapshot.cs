@@ -198,11 +198,21 @@ namespace BookTracker.Data.Migrations
                     b.Property<DateTime?>("DateAcquired")
                         .HasColumnType("datetime2");
 
+                    b.Property<int>("Disposition")
+                        .HasColumnType("int");
+
                     b.Property<int>("EditionId")
                         .HasColumnType("int");
 
                     b.Property<string>("Notes")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("RemovalNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateOnly?>("RemovedOn")
+                        .HasColumnType("date");
 
                     b.HasKey("Id");
 
