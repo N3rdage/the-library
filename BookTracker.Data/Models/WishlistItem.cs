@@ -102,6 +102,10 @@ public class WishlistItem
     // Author is normalised to a non-blank value ("Unknown" fallback) since the
     // column is Required. See docs/BACKEND-REFACTOR-DESIGN.md.
 
+    /// <summary>The author as stored: trimmed, and "Unknown" when blank.</summary>
+    public static string NormaliseAuthor(string? author) =>
+        string.IsNullOrWhiteSpace(author) ? "Unknown" : author.Trim();
+
     /// <summary>Creates a wishlist item from a search candidate or a quick-add:
     /// title (required), author (blank → "Unknown"), priority, the known ISBNs
     /// (dual-written via <see cref="SetIsbns"/>), and an optional cover URL.</summary>
@@ -115,7 +119,7 @@ public class WishlistItem
         var item = new WishlistItem
         {
             Title = title.Trim(),
-            Author = string.IsNullOrWhiteSpace(author) ? "Unknown" : author.Trim(),
+            Author = NormaliseAuthor(author),
             Priority = priority,
             CoverUrl = coverUrl.TrimToNull(),
         };
@@ -132,7 +136,7 @@ public class WishlistItem
         return new WishlistItem
         {
             Title = $"{seriesName} #{slot}",
-            Author = string.IsNullOrWhiteSpace(seriesAuthor) ? "Unknown" : seriesAuthor.Trim(),
+            Author = NormaliseAuthor(seriesAuthor),
             Priority = WishlistPriority.Medium,
             SeriesId = seriesId,
             SeriesOrder = slot,

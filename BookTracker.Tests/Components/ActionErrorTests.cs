@@ -36,6 +36,7 @@ public class ActionErrorTests : ComponentTestBase
         Services.AddTransient<CoverPhotoUploader>();
         Services.AddTransient<CopyFormDialogViewModel>();
         Services.AddTransient<LendDialogViewModel>();
+        Services.AddTransient<RemoveCopyDialogViewModel>();
         Services.AddTransient<BookDetailViewModel>();
     }
 
@@ -59,6 +60,47 @@ public class ActionErrorTests : ComponentTestBase
             < markup.IndexOf("mud-dialog-actions", StringComparison.Ordinal));
         Assert.Contains("Date acquired", markup);
         Assert.False(reference.Result.IsCompleted);
+    }
+
+    [Fact]
+    public async Task Dialog_refusedRestore_showsAlert_andStaysOpen()
+    {
+        _dispatcher.Query(Arg.Any<GetCopyForEdit>(), Arg.Any<CancellationToken>())
+            .Returns(new CopyForEdit(10, 5, BookCondition.Good, null, null,
+                CopyDisposition.Donated, new DateOnly(2026, 11, 3)));
+        _dispatcher.Send(Arg.Any<RestoreCopyToCollection>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DomainRuleException("This copy is already in the collection."));
+        Render<MudPopoverProvider>();
+        var dialogs = Render<MudDialogProvider>();
+        var dialogService = Services.GetRequiredService<IDialogService>();
+        var parameters = new DialogParameters<CopyFormDialog> { { x => x.CopyId, (int?)10 }, { x => x.IsNew, false } };
+
+        var reference = await dialogs.InvokeAsync(() => dialogService.ShowAsync<CopyFormDialog>("Edit copy", parameters));
+        dialogs.WaitForAssertion(() => Assert.Contains("Donated · 3 Nov 2026", dialogs.Markup));
+        Assert.DoesNotContain(dialogs.FindAll("button"), b => b.TextContent.Trim() == "Remove from collection");
+        await dialogs.InvokeAsync(() => dialogs.FindAll("button").Single(b => b.TextContent.Trim() == "Restore").Click());
+
+        dialogs.WaitForAssertion(() => Assert.Contains("This copy is already in the collection.", dialogs.Markup));
+        Assert.False(reference.Result.IsCompleted);
+    }
+
+    [Fact]
+    public async Task Dialog_removeFromCollection_closesAskingThePageToRemove()
+    {
+        _dispatcher.Query(Arg.Any<GetCopyForEdit>(), Arg.Any<CancellationToken>())
+            .Returns(new CopyForEdit(10, 5, BookCondition.Good, null, null));
+        Render<MudPopoverProvider>();
+        var dialogs = Render<MudDialogProvider>();
+        var dialogService = Services.GetRequiredService<IDialogService>();
+        var parameters = new DialogParameters<CopyFormDialog> { { x => x.CopyId, (int?)10 }, { x => x.IsNew, false } };
+
+        var reference = await dialogs.InvokeAsync(() => dialogService.ShowAsync<CopyFormDialog>("Edit copy", parameters));
+        dialogs.WaitForAssertion(() => Assert.Contains("Remove from collection", dialogs.Markup));
+        await dialogs.InvokeAsync(() => dialogs.FindAll("button").Single(b => b.TextContent.Trim() == "Remove from collection").Click());
+
+        var result = await reference.Result;
+        Assert.False(result!.Canceled);
+        Assert.Equal(CopyFormOutcome.RemoveRequested, result.Data);
     }
 
     [Fact]

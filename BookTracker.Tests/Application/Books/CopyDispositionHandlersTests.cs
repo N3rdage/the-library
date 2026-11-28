@@ -110,6 +110,44 @@ public class CopyDispositionHandlersTests
     }
 
     [Fact]
+    public async Task GetBookDetail_projectsTheDisposition_andKeepsTheRemovedCopyVisible()
+    {
+        var (bookId, copyId) = await SeedBookAsync();
+        await using (var db = _factory.CreateDbContext())
+        {
+            var edition = await db.Editions.SingleAsync(e => e.BookId == bookId);
+            edition.AddCopy(BookCondition.Good, null, null);
+            await db.SaveChangesAsync();
+        }
+        await Remove(copyId, CopyDisposition.Sold, "eBay");
+
+        var detail = await new GetBookDetailHandler(_factory).HandleAsync(new GetBookDetail(bookId));
+
+        var copies = Assert.Single(detail!.Editions).Copies.ToDictionary(c => c.Id);
+        Assert.Equal(2, copies.Count);
+        var removed = copies[copyId];
+        Assert.Equal(CopyDisposition.Sold, removed.Disposition);
+        Assert.Equal(Removed, removed.RemovedOn);
+        Assert.Equal("eBay", removed.RemovalNote);
+        Assert.False(removed.IsOwned);
+        var owned = copies.Values.Single(c => c.Id != copyId);
+        Assert.True(owned.IsOwned);
+        Assert.Null(owned.RemovedOn);
+    }
+
+    [Fact]
+    public async Task GetCopyForEdit_projectsTheDisposition()
+    {
+        var (_, copyId) = await SeedBookAsync();
+        await Remove(copyId, CopyDisposition.Lost);
+
+        var copy = await new GetCopyForEditHandler(_factory).HandleAsync(new GetCopyForEdit(copyId));
+
+        Assert.Equal(CopyDisposition.Lost, copy!.Disposition);
+        Assert.Equal(Removed, copy.RemovedOn);
+    }
+
+    [Fact]
     public async Task RestoreCopyToCollection_missingCopy_throwsNotFound()
     {
         await Assert.ThrowsAsync<NotFoundException>(() =>

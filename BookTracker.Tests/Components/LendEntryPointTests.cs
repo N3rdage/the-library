@@ -35,6 +35,7 @@ public class LendEntryPointTests : ComponentTestBase
         Services.AddTransient<CoverPhotoUploader>();
         Services.AddTransient<LoansViewModel>();
         Services.AddTransient<LendDialogViewModel>();
+        Services.AddTransient<RemoveCopyDialogViewModel>();
         Services.AddTransient<BookDetailViewModel>();
     }
 
@@ -105,6 +106,54 @@ public class LendEntryPointTests : ComponentTestBase
 
         Assert.Contains("Lend", ButtonTexts(cut));
         Assert.DoesNotContain("Lent to", cut.Markup);
+    }
+
+    private static IEnumerable<string> RowButtonTexts(IRenderedComponent<BooksDetail> cut) =>
+        cut.FindAll("button.mud-button-text").Select(b => b.TextContent.Trim());
+
+    [Fact]
+    public void Detail_ownedCopy_offersRemove_butNotRestore()
+    {
+        var cut = RenderDetail(Free(11));
+
+        Assert.Contains("Remove", RowButtonTexts(cut));
+        Assert.DoesNotContain("Restore", RowButtonTexts(cut));
+    }
+
+    [Fact]
+    public void Detail_lentCopy_hasNoRemove()
+    {
+        var cut = RenderDetail(Out(10, 1, "Ann"));
+
+        Assert.DoesNotContain("Remove", RowButtonTexts(cut));
+    }
+
+    [Fact]
+    public void Detail_removedCopy_showsReasonDateAndNote_offersRestore_andIsNotLendable()
+    {
+        var removed = new CopyDetail(12, BookCondition.Good, null, null, null,
+            CopyDisposition.Donated, new DateOnly(2026, 11, 3), "To the school fete");
+
+        var cut = RenderDetail(Free(11), removed);
+
+        Assert.Contains("Donated · 3 Nov 2026", cut.Markup);
+        Assert.Contains("To the school fete", cut.Markup);
+        Assert.Contains("1 removed", cut.Markup);
+        Assert.Single(RowButtonTexts(cut), t => t == "Restore");
+        Assert.Single(RowButtonTexts(cut), t => t == "Lend");
+        Assert.Single(RowButtonTexts(cut), t => t == "Remove");
+    }
+
+    [Fact]
+    public void Detail_onlyRemovedCopies_hasNoHeaderLend()
+    {
+        var removed = new CopyDetail(12, BookCondition.Good, null, null, null,
+            CopyDisposition.Lost, new DateOnly(2026, 11, 3), null);
+
+        var cut = RenderDetail(removed);
+
+        Assert.DoesNotContain("Lend", ButtonTexts(cut));
+        Assert.DoesNotContain("Lend", RowButtonTexts(cut));
     }
 
     [Fact]
