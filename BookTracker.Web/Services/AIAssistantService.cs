@@ -17,6 +17,14 @@ public class AnthropicAIAssistantService(
     private AnthropicClient? _client;
     private bool _usageMissingWarned;
 
+    /// <summary>Test seam: routes the SDK through a caller-supplied <see cref="HttpClient"/>.</summary>
+    internal AnthropicAIAssistantService(
+        IDispatcher dispatcher, AnthropicOptions options, ILogger<AnthropicAIAssistantService> logger, HttpClient httpClient)
+        : this(dispatcher, options, logger)
+    {
+        _client = new AnthropicClient(options.ApiKey, httpClient);
+    }
+
     public int CallCount { get; private set; }
 
     private AnthropicClient GetClient()
@@ -87,6 +95,25 @@ public class AnthropicAIAssistantService(
             responseText, cleaned, cleaned.Length, accepted);
 
         return accepted ? cleaned : null;
+    }
+
+    public async Task<BookPhotoReading?> ReadBookFromImageAsync(string base64Jpeg, CancellationToken ct = default)
+    {
+        var messages = new List<Message>
+        {
+            new()
+            {
+                Role = RoleType.User,
+                Content = new List<ContentBase>
+                {
+                    new ImageContent { Source = new ImageSource { MediaType = "image/jpeg", Data = base64Jpeg } },
+                    new TextContent { Text = SharedParsers.BookPhotoPrompt }
+                }
+            }
+        };
+
+        var response = await CallAsync(messages, options.FastModel, 1024, "ReadBookFromImage", ct);
+        return SharedParsers.ParseBookPhotoReading(response.Message?.ToString() ?? "");
     }
 
     public async Task<GenreSuggestionResult> SuggestGenresAsync(

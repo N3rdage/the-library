@@ -1,4 +1,5 @@
 using System.ClientModel;
+using System.ClientModel.Primitives;
 using Azure.AI.OpenAI;
 using BookTracker.Application;
 using BookTracker.Application.Ai;
@@ -15,8 +16,17 @@ public class AzureOpenAIAssistantService(
     AzureOpenAIOptions options,
     ILogger<AzureOpenAIAssistantService> logger) : IAIAssistantService
 {
+    private readonly HttpClient? _httpClient;
     private ChatClient? _client;
     private bool _usageMissingWarned;
+
+    /// <summary>Test seam: routes the SDK through a caller-supplied <see cref="HttpClient"/>.</summary>
+    internal AzureOpenAIAssistantService(
+        IDispatcher dispatcher, AzureOpenAIOptions options, ILogger<AzureOpenAIAssistantService> logger, HttpClient httpClient)
+        : this(dispatcher, options, logger)
+    {
+        _httpClient = httpClient;
+    }
 
     public int CallCount { get; private set; }
 
@@ -24,9 +34,13 @@ public class AzureOpenAIAssistantService(
     {
         if (_client is null)
         {
+            var clientOptions = new AzureOpenAIClientOptions();
+            if (_httpClient is not null)
+                clientOptions.Transport = new HttpClientPipelineTransport(_httpClient);
             var azureClient = new AzureOpenAIClient(
                 new Uri(options.Endpoint),
-                new ApiKeyCredential(options.ApiKey));
+                new ApiKeyCredential(options.ApiKey),
+                clientOptions);
             _client = azureClient.GetChatClient(options.Deployment);
         }
         return _client;
@@ -53,6 +67,16 @@ public class AzureOpenAIAssistantService(
 
         var cleaned = new string(responseText.Where(c => char.IsDigit(c) || c == 'X' || c == 'x').ToArray());
         return cleaned.Length is 10 or 13 ? cleaned : null;
+    }
+
+    public async Task<BookPhotoReading?> ReadBookFromImageAsync(string base64Jpeg, CancellationToken ct = default)
+    {
+        var imageContent = ChatMessageContentPart.CreateImagePart(
+            BinaryData.FromBytes(Convert.FromBase64String(base64Jpeg)), "image/jpeg");
+        var textContent = ChatMessageContentPart.CreateTextPart(SharedParsers.BookPhotoPrompt);
+
+        var responseText = await CallAsync([new UserChatMessage(imageContent, textContent)], 1024, "ReadBookFromImage", ct);
+        return SharedParsers.ParseBookPhotoReading(responseText);
     }
 
     public async Task<GenreSuggestionResult> SuggestGenresAsync(

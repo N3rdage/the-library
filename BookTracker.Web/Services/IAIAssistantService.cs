@@ -1,3 +1,5 @@
+using BookTracker.Data.Models;
+
 namespace BookTracker.Web.Services;
 
 public interface IAIAssistantService
@@ -30,9 +32,43 @@ public interface IAIAssistantService
     /// </summary>
     Task<string?> ExtractIsbnFromImageAsync(string base64Jpeg, CancellationToken ct = default);
 
+    /// <summary>
+    /// Reads a book's metadata from a photo of its cover or title page, with a
+    /// confidence per field. Returns null when the model cannot read a book from
+    /// the image or its answer is unusable.
+    /// </summary>
+    Task<BookPhotoReading?> ReadBookFromImageAsync(string base64Jpeg, CancellationToken ct = default);
+
     /// <summary>Number of API calls made in this service instance's lifetime.</summary>
     int CallCount { get; }
 }
+
+/// <summary>A value read from a photo and how sure the model is of it (0.0 to 1.0).</summary>
+public record PhotoField<T>(T Value, double Confidence);
+
+/// <summary>A credited person read from a photo, with the role the model judged they hold.</summary>
+public record PhotoContributor(string Name, AuthorRole Role, double Confidence);
+
+/// <summary>
+/// Whether the photographed book looks like a reference work (dictionary,
+/// encyclopaedia, atlas, field guide, ...). <paramref name="Kind"/> names the
+/// type when the model gave one.
+/// </summary>
+public record ReferenceWorkHint(bool IsReferenceWork, string? Kind, double Confidence);
+
+/// <summary>
+/// What the model read from a cover or title page photo. A field the image does
+/// not show is null; <see cref="Contributors"/> is empty when none are credited.
+/// </summary>
+public record BookPhotoReading(
+    PhotoField<string>? Title,
+    PhotoField<string>? Subtitle,
+    IReadOnlyList<PhotoContributor> Contributors,
+    PhotoField<string>? Publisher,
+    PhotoField<int>? Year,
+    PhotoField<int>? EditionNumber,
+    PhotoField<string>? Isbn,
+    ReferenceWorkHint ReferenceWork);
 
 public record GenreSuggestionResult(
     IReadOnlyList<string> SuggestedGenres,
