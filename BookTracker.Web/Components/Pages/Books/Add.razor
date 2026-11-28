@@ -4,6 +4,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 <PageTitle>Add a book - Bookcase</PageTitle>
 
@@ -236,6 +237,24 @@
         <MudItem xs="12">
             <BookForm Input="VM.BookInput" />
         </MudItem>
+
+        @* A new book only: adding a copy to an existing one has no new edition to put a photo on. *@
+        @if (VM.ExistingBook is null)
+        {
+            <MudItem xs="12">
+                <MudCard Elevation="0" Outlined="true">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Cover photo</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <CoverPhotoPicker @bind-Photo="VM.CoverPhoto"
+                                          HeldText="This photo will be the cover. It replaces the cover URLs on this page when you save." />
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        }
 
         @if (!VM.IsCollection)
         {
@@ -566,6 +585,12 @@
     {
         var savedId = await VM.SaveAsync(selectedGenreIds);
         if (savedId is null) return;
+
+        // The book is saved either way; say so when only its cover photo failed.
+        if (VM.CoverUploadError is not null)
+        {
+            Snackbar.Add($"Book saved, but the cover photo didn't upload: {VM.CoverUploadError}", Severity.Warning);
+        }
 
         if (addAnother)
         {

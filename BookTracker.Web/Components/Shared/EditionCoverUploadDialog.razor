@@ -1,68 +1,20 @@
 @* Modal dialog for uploading a user-supplied cover photo for a specific
    Edition. Used for rare / old editions where no online cover exists. The
-   dialog routes the upload through the page's BookDetailViewModel (passed
-   in as a parameter) so post-upload state refresh is centralised — the
-   VM persists Edition.CoverUrl + IsUserSupplied and re-loads the page's
-   snapshot in one step. *@
+   photo is taken or chosen and cropped by CoverPhotoPicker; the upload then
+   goes through the page's BookDetailViewModel (passed in as a parameter) so
+   post-upload state refresh is centralised — the VM persists Edition.CoverUrl
+   + IsUserSupplied and re-loads the page's snapshot in one step. *@
 
+@using BookTracker.Web.Services.Covers
 @inject ISnackbar Snackbar
-@using Microsoft.AspNetCore.Components.Forms
 
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="2" Style="min-width: 280px;">
             <MudText Typo="Typo.body2" Color="Color.Secondary">
-                Upload a photo of this edition's cover. Mobile users get the rear camera by default. Max @(BookDetailViewModel.MaxUploadBytes / 1024 / 1024) MB.
+                Take or choose a photo of this edition's cover, then crop it. Mobile users get the rear camera by default.
             </MudText>
-
-            @* capture="environment" hints to mobile browsers that the rear
-               camera should be the default (vs. gallery picker). Without it,
-               some Android browsers don't surface the camera option at all
-               for accept="image/*" alone — they fall back to the file picker.
-               iOS Safari respects the hint by pre-selecting "Take Photo or
-               Video" in the action sheet but still allows gallery via the
-               same sheet. Passed via @attributes → MudFileUpload's captured
-               UserAttributes, which it spreads onto the underlying
-               <input type="file"> (MudBlazor 9 dropped the old InputAttributes
-               parameter). *@
-            <MudFileUpload T="IBrowserFile"
-                           FilesChanged="OnFileChanged"
-                           Accept="image/*"
-                           MaximumFileCount="1"
-                           @attributes="@(new Dictionary<string, object> { ["capture"] = "environment" })">
-                @* MudBlazor 9 replaced ActivatorContent with CustomContent,
-                   which no longer auto-wires a label to the hidden input —
-                   the activator must call OpenFilePickerAsync() itself. *@
-                <CustomContent>
-                    <MudButton Variant="Variant.Outlined"
-                               StartIcon="@Icons.Material.Filled.CameraAlt"
-                               Color="Color.Primary"
-                               FullWidth="true"
-                               Disabled="@uploading"
-                               OnClick="@(() => context.OpenFilePickerAsync())">
-                        @(picked is null ? "Choose photo" : "Choose different photo")
-                    </MudButton>
-                </CustomContent>
-            </MudFileUpload>
-
-            @if (picked is not null)
-            {
-                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                    <MudIcon Icon="@Icons.Material.Filled.Image" Color="Color.Primary" />
-                    <MudStack Spacing="0" Class="flex-grow-1" Style="min-width: 0;">
-                        <MudText Typo="Typo.body2" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">@picked.Name</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            @FormatSize(picked.Size) — @picked.ContentType
-                        </MudText>
-                    </MudStack>
-                </MudStack>
-                @if (picked.Size > BookDetailViewModel.MaxUploadBytes)
-                {
-                    <MudAlert Severity="Severity.Error" Dense="true">
-                        File too large. Max is @(BookDetailViewModel.MaxUploadBytes / 1024 / 1024) MB.
-                    </MudAlert>
-                }
-            }
+            <CoverPhotoPicker @bind-Photo="photo" />
         </MudStack>
         <ActionError Message="@ViewModel.Error" />
     </DialogContent>
@@ -71,7 +23,7 @@
         <MudButton Color="Color.Primary"
                    Variant="Variant.Filled"
                    OnClick="UploadAsync"
-                   Disabled="@(picked is null || picked.Size > BookDetailViewModel.MaxUploadBytes || uploading)">
+                   Disabled="@(photo is null || uploading)">
             @if (uploading)
             {
                 <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-2" />
@@ -90,21 +42,16 @@
     [Parameter, EditorRequired] public int EditionId { get; set; }
     [Parameter, EditorRequired] public BookDetailViewModel ViewModel { get; set; } = default!;
 
-    private IBrowserFile? picked;
+    private CoverPhoto? photo;
     private bool uploading;
-
-    private void OnFileChanged(IBrowserFile? file)
-    {
-        picked = file;
-    }
 
     private async Task UploadAsync()
     {
-        if (picked is null) return;
+        if (photo is null) return;
         uploading = true;
         try
         {
-            var result = await ViewModel.UploadEditionCoverAsync(EditionId, picked, CancellationToken.None);
+            var result = await ViewModel.UploadEditionCoverAsync(EditionId, photo, CancellationToken.None);
             if (result.Success)
             {
                 Snackbar.Add("Cover photo uploaded.", Severity.Success);
@@ -120,11 +67,4 @@
     }
 
     private void Cancel() => MudDialog.Cancel();
-
-    private static string FormatSize(long bytes)
-    {
-        if (bytes < 1024) return $"{bytes} B";
-        if (bytes < 1024 * 1024) return $"{bytes / 1024} KB";
-        return $"{bytes / 1024.0 / 1024.0:F1} MB";
-    }
 }

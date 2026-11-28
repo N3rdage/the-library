@@ -15,6 +15,7 @@ public class BookAddViewModel(
     IBookLookupService lookup,
     SeriesMatchService seriesMatch,
     IDispatcher dispatcher,
+    CoverPhotoUploader coverUploader,
     ILogger<BookAddViewModel> logger) : DispatchingViewModel
 {
     /// <summary>Search existing Works for the collection-row autocomplete.
@@ -35,6 +36,13 @@ public class BookAddViewModel(
     public string? LookupMessage { get; private set; }
     public bool LookingUp { get; private set; }
     public bool Saving { get; private set; }
+
+    /// <summary>A cropped cover photo held until the book is saved; it replaces both
+    /// cover URL fields (the upload needs the new edition's id).</summary>
+    public CoverPhoto? CoverPhoto { get; set; }
+
+    /// <summary>Set when the book saved but its cover photo did not; the book stays saved.</summary>
+    public string? CoverUploadError { get; private set; }
 
     // No-ISBN flow (web only — for pre-1974 books that predate ISBN).
     // Toggling NoIsbnMode swaps the lookup panel from ISBN entry to a
@@ -442,6 +450,8 @@ public class BookAddViewModel(
         LookupCandidates = [];
         ExistingBook = null;
         Error = null;
+        CoverPhoto = null;
+        CoverUploadError = null;
         AddCopyRefused = false;
         SeriesSuggestion = null;
         SeriesSuggestionDismissed = false;
@@ -527,6 +537,7 @@ public class BookAddViewModel(
         // inputs, so the cover URL rule is enforced here too and surfaces through
         // Error.
         Error = null;
+        CoverUploadError = null;
         AddCopyRefused = false;
         if (!CoverFetchPolicy.IsAcceptableCoverUrl(BookInput.DefaultCoverArtUrl)
             || !CoverFetchPolicy.IsAcceptableCoverUrl(EditionInput.CoverUrl))
@@ -565,11 +576,50 @@ public class BookAddViewModel(
                 CopyInput.Condition,
                 new SeriesChoice(AcceptedSeriesId, AcceptedSeriesName, AcceptedSeriesOrderLabel),
                 [])));
-            return Error is null ? bookId : null;
+            if (Error is not null) return null;
+
+            if (CoverPhoto is not null && bookId is int newBookId)
+            {
+                await AttachCoverPhotoAsync(newBookId, CoverPhoto);
+            }
+            return bookId;
         }
         finally
         {
             Saving = false;
+        }
+    }
+
+    // The book is already saved when this runs, so a failure is reported through
+    // CoverUploadError and never undoes the save. The photo becomes the cover of the
+    // new edition and of the book, which is what the library list and the Book page
+    // header show.
+    private async Task AttachCoverPhotoAsync(int bookId, CoverPhoto photo)
+    {
+        var detail = await dispatcher.Query(new GetBookDetail(bookId));
+        var editionId = detail?.Editions.FirstOrDefault()?.Id;
+        if (editionId is not int id)
+        {
+            CoverUploadError = "The book was saved but its cover photo could not be attached.";
+            return;
+        }
+
+        var upload = await coverUploader.UploadAsync(photo.Bytes, photo.ContentType, id, CancellationToken.None);
+        if (!upload.Success)
+        {
+            CoverUploadError = upload.ErrorMessage;
+            return;
+        }
+
+        var saved = await DispatchAsync(async () =>
+        {
+            await dispatcher.Send(new SetEditionCover(id, upload.NewUrl!, IsUserSupplied: true));
+            await dispatcher.Send(new SetBookCover(bookId, upload.NewUrl!));
+        });
+        if (!saved)
+        {
+            CoverUploadError = Error;
+            Error = null;
         }
     }
 

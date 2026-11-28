@@ -329,6 +329,17 @@ public class BookCommandHandlersTests
         Assert.True(edition.IsUserSupplied);
     }
 
+    [Fact]
+    public async Task SetBookCover_persists()
+    {
+        var id = await SeedBookAsync();
+
+        await new SetBookCoverHandler(_factory).HandleAsync(new SetBookCover(id, "http://cover"));
+
+        await using var db = _factory.CreateDbContext();
+        Assert.Equal("http://cover", (await db.Books.FindAsync(id))!.DefaultCoverArtUrl);
+    }
+
     // The four below carry the persistence assertions the edit-dialog VM tests
     // made against SQL before they moved to a substituted dispatcher (#264).
 

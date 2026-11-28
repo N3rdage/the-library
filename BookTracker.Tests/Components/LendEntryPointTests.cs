@@ -31,7 +31,8 @@ public class LendEntryPointTests : ComponentTestBase
         Services.AddSingleton(_dispatcher);
         Services.AddSingleton(TimeProvider.System);
         Services.AddSingleton(Substitute.For<IBookCoverStorage>());
-        Services.AddSingleton<Microsoft.Extensions.Logging.ILogger<BookDetailViewModel>>(NullLogger<BookDetailViewModel>.Instance);
+        Services.AddSingleton<Microsoft.Extensions.Logging.ILogger<CoverPhotoUploader>>(NullLogger<CoverPhotoUploader>.Instance);
+        Services.AddTransient<CoverPhotoUploader>();
         Services.AddTransient<LoansViewModel>();
         Services.AddTransient<LendDialogViewModel>();
         Services.AddTransient<BookDetailViewModel>();

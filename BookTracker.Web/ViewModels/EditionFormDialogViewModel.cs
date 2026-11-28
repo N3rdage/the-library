@@ -24,8 +24,15 @@ namespace BookTracker.Web.ViewModels;
 // pre-1974 editions save without one.
 public class EditionFormDialogViewModel(
     IBookLookupService lookup,
-    IDispatcher dispatcher) : DispatchingViewModel
+    IDispatcher dispatcher,
+    CoverPhotoUploader coverUploader) : DispatchingViewModel
 {
+    /// <summary>A cropped cover photo uploaded after the edition saves; it wins over the cover URL field.</summary>
+    public CoverPhoto? CoverPhoto { get; set; }
+
+    /// <summary>Set when the edition saved but its cover photo did not.</summary>
+    public string? CoverUploadError { get; private set; }
+
     public bool IsNew { get; private set; }
     public bool NotFound { get; private set; }
     public int BookId { get; private set; }
@@ -153,8 +160,19 @@ public class EditionFormDialogViewModel(
     /// Publisher find-or-create lives in the handler.</returns>
     public async Task<int?> SaveAsync()
     {
+        CoverUploadError = null;
         if (NotFound || !CoverUrlAcceptable) return null;
 
+        var id = await SaveEditionAsync();
+        if (id is int savedId && CoverPhoto is not null)
+        {
+            await AttachCoverPhotoAsync(savedId, CoverPhoto);
+        }
+        return id;
+    }
+
+    private async Task<int?> SaveEditionAsync()
+    {
         var datePrinted = PartialDateParser.TryParse(FirstPublishedOrPrintedDate) ?? PartialDate.Empty;
         var coverUrl = string.IsNullOrWhiteSpace(CoverUrl) ? null : CoverUrl.Trim();
         if (IsNew)
@@ -169,5 +187,24 @@ public class EditionFormDialogViewModel(
             id, Isbn, Format, datePrinted.Date, datePrinted.Precision, Publisher, coverUrl)))
             ? id
             : null;
+    }
+
+    // Runs after the edition is saved, because UpdateEdition writes CoverUrl and the
+    // photo has to win. A failure leaves the edition saved and is reported through
+    // CoverUploadError.
+    private async Task AttachCoverPhotoAsync(int editionId, CoverPhoto photo)
+    {
+        var upload = await coverUploader.UploadAsync(photo.Bytes, photo.ContentType, editionId, CancellationToken.None);
+        if (!upload.Success)
+        {
+            CoverUploadError = upload.ErrorMessage;
+            return;
+        }
+
+        if (!await DispatchAsync(() => dispatcher.Send(new SetEditionCover(editionId, upload.NewUrl!, IsUserSupplied: true))))
+        {
+            CoverUploadError = Error;
+            Error = null;
+        }
     }
 }
