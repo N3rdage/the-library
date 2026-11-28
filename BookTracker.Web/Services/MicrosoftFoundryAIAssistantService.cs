@@ -18,6 +18,14 @@ public class MicrosoftFoundryAIAssistantService(
     private AnthropicClient? _client;
     private bool _usageMissingWarned;
 
+    /// <summary>Test seam: routes the SDK through a caller-supplied <see cref="HttpClient"/>.</summary>
+    internal MicrosoftFoundryAIAssistantService(
+        IDispatcher dispatcher, MicrosoftFoundryOptions options, ILogger<MicrosoftFoundryAIAssistantService> logger, HttpClient httpClient)
+        : this(dispatcher, options, logger)
+    {
+        _client = new AnthropicClient(options.ApiKey, httpClient);
+    }
+
     public int CallCount { get; private set; }
 
     private AnthropicClient GetClient()
@@ -62,6 +70,25 @@ public class MicrosoftFoundryAIAssistantService(
 
         var cleaned = new string(responseText.Where(c => char.IsDigit(c) || c == 'X' || c == 'x').ToArray());
         return cleaned.Length is 10 or 13 ? cleaned : null;
+    }
+
+    public async Task<BookPhotoReading?> ReadBookFromImageAsync(string base64Jpeg, CancellationToken ct = default)
+    {
+        var messages = new List<Message>
+        {
+            new()
+            {
+                Role = RoleType.User,
+                Content = new List<ContentBase>
+                {
+                    new ImageContent { Source = new ImageSource { MediaType = "image/jpeg", Data = base64Jpeg } },
+                    new TextContent { Text = SharedParsers.BookPhotoPrompt }
+                }
+            }
+        };
+
+        var response = await CallAsync(messages, options.FastDeployment, 1024, "ReadBookFromImage", ct);
+        return SharedParsers.ParseBookPhotoReading(response.Message?.ToString() ?? "");
     }
 
     public async Task<GenreSuggestionResult> SuggestGenresAsync(

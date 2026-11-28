@@ -1,4 +1,5 @@
 using System.Text.Json;
+using BookTracker.Data.Models;
 
 namespace BookTracker.Web.Services;
 
@@ -123,6 +124,100 @@ internal static class SharedParsers
         }
     }
 
+    /// <summary>
+    /// Parses the model's answer to <see cref="BookPhotoPrompt"/>. Returns null for
+    /// malformed JSON, an unreadable-book answer, or an answer with no title and no
+    /// contributor. A missing field is null; a missing confidence is 0; confidences
+    /// are clamped to 0..1; an unrecognised role becomes Contributor (Author would
+    /// feed the author rollups with a guess); an ISBN that is not 10 or 13 digits
+    /// (the last may be X) is dropped.
+    /// </summary>
+    public static BookPhotoReading? ParseBookPhotoReading(string responseText)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(StripCodeFences(responseText));
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                return null;
+            if (root.TryGetProperty("readable", out var readable) && readable.ValueKind == JsonValueKind.False)
+                return null;
+
+            var title = ReadPhotoString(root, "title");
+            var contributors = new List<PhotoContributor>();
+            if (root.TryGetProperty("contributors", out var list) && list.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var c in list.EnumerateArray())
+                {
+                    if (c.ValueKind != JsonValueKind.Object) continue;
+                    var name = ReadString(c, "name");
+                    if (name is null) continue;
+                    var roleText = ReadString(c, "role");
+                    var role = roleText is not null
+                        && Enum.TryParse<AuthorRole>(roleText, ignoreCase: true, out var parsed)
+                        && Enum.IsDefined(parsed)
+                        ? parsed : AuthorRole.Contributor;
+                    contributors.Add(new PhotoContributor(name, role, ReadConfidence(c)));
+                }
+            }
+
+            if (title is null && contributors.Count == 0)
+                return null;
+
+            var isbn = ReadPhotoString(root, "isbn");
+            if (isbn is not null)
+            {
+                var cleaned = new string(isbn.Value.Where(ch => char.IsDigit(ch) || ch is 'X' or 'x').ToArray()).ToUpperInvariant();
+                var valid = cleaned.Length is 10 or 13 && cleaned[..^1].All(char.IsDigit);
+                isbn = valid ? new PhotoField<string>(cleaned, isbn.Confidence) : null;
+            }
+
+            var reference = new ReferenceWorkHint(false, null, 0);
+            if (root.TryGetProperty("reference_work", out var r) && r.ValueKind == JsonValueKind.Object)
+            {
+                var flag = r.TryGetProperty("is_reference_work", out var f) && f.ValueKind == JsonValueKind.True;
+                reference = new ReferenceWorkHint(flag, flag ? ReadString(r, "kind") : null, ReadConfidence(r));
+            }
+
+            return new BookPhotoReading(
+                title, ReadPhotoString(root, "subtitle"), contributors, ReadPhotoString(root, "publisher"),
+                ReadPhotoInt(root, "year"), ReadPhotoInt(root, "edition_number"), isbn, reference);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? ReadString(JsonElement obj, string name)
+    {
+        if (!obj.TryGetProperty(name, out var e) || e.ValueKind != JsonValueKind.String) return null;
+        var text = e.GetString()?.Trim();
+        return string.IsNullOrEmpty(text) ? null : text;
+    }
+
+    private static double ReadConfidence(JsonElement obj) =>
+        obj.TryGetProperty("confidence", out var e) && e.ValueKind == JsonValueKind.Number && e.TryGetDouble(out var d)
+            ? Math.Clamp(d, 0.0, 1.0) : 0.0;
+
+    private static PhotoField<string>? ReadPhotoString(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var field) || field.ValueKind != JsonValueKind.Object) return null;
+        var value = ReadString(field, "value");
+        return value is null ? null : new PhotoField<string>(value, ReadConfidence(field));
+    }
+
+    private static PhotoField<int>? ReadPhotoInt(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var field) || field.ValueKind != JsonValueKind.Object) return null;
+        if (!field.TryGetProperty("value", out var v)) return null;
+        var ok = false;
+        var number = 0;
+        if (v.ValueKind == JsonValueKind.Number) ok = v.TryGetInt32(out number);
+        else if (v.ValueKind == JsonValueKind.String) ok = int.TryParse(v.GetString(), out number);
+        return ok && number > 0 ? new PhotoField<int>(number, ReadConfidence(field)) : null;
+    }
+
     public static string StripCodeFences(string text)
     {
         var json = text.Trim();
@@ -151,6 +246,29 @@ internal static class SharedParsers
     }
 
     // Shared prompt templates
+
+    public const string BookPhotoPrompt = """
+        Read this photo of a book's cover or title page. Reply with JSON only, no other text, in exactly this shape:
+
+        {"readable": true,
+         "title": {"value": "Title", "confidence": 0.95},
+         "subtitle": {"value": "Subtitle", "confidence": 0.8},
+         "contributors": [{"name": "Full Name", "role": "Author", "confidence": 0.9}],
+         "publisher": {"value": "Publisher", "confidence": 0.7},
+         "year": {"value": 1998, "confidence": 0.6},
+         "edition_number": {"value": 2, "confidence": 0.9},
+         "isbn": {"value": "9780123456786", "confidence": 0.9},
+         "reference_work": {"is_reference_work": true, "kind": "dictionary", "confidence": 0.8}}
+
+        Rules:
+        - confidence is 0.0 to 1.0: how sure you are that you read that value correctly.
+        - Use null for any field the image does not show. Never guess a value that is not printed.
+        - role is one of: Author, Editor, Translator, Illustrator, Adaptor, Compiler, Foreword, Contributor.
+        - year is the publication or copyright year as a number. edition_number is the number only ("2nd edition" is 2).
+        - isbn is digits only, without hyphens or spaces; an ISBN-10 ending in X keeps the X.
+        - reference_work.is_reference_work is true for dictionaries, encyclopaedias, atlases, field guides, thesauruses, almanacs and similar; kind names which.
+        - If the image does not show a book, reply {"readable": false}.
+        """;
 
     public static string BuildCollectionSystemPrompt(string seriesText) => $@"You are a librarian helping organise a book collection into series and collections.
 
