@@ -578,6 +578,14 @@ public class BookAddViewModel(
         ExistingBook = null;
         MatchPhoto = photo;
 
+        // The Add page has no provider toggle, so when the default provider is not
+        // configured (an Anthropic default with only Azure OpenAI set up), use one that is.
+        var available = aiFactory.AvailableProviders;
+        if (available.Count > 0 && !available.Contains(aiFactory.ActiveProvider))
+        {
+            aiFactory.SwitchProvider(available[0]);
+        }
+
         try
         {
             _photoReading = await aiFactory.GetService().ReadBookFromImageAsync(Convert.ToBase64String(photo.Bytes));
@@ -701,11 +709,18 @@ public class BookAddViewModel(
 
     // The form is filled by now. A candidate's own cover is used as today; with none
     // (or none-of-these) the photo is held as the cover, pre-selected, and uploads on save.
+    // A cover photo the user already chose in the picker is theirs and stays.
     private void FinishPhotoMatch(string message)
     {
-        CoverPhoto = string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl) && coverUploader.IsEnabled
-            ? MatchPhoto
-            : null;
+        if (CoverPhoto is null && string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl) && coverUploader.IsEnabled)
+        {
+            CoverPhoto = MatchPhoto;
+        }
+
+        // The photo card says where the form came from; the ISBN and search
+        // boxes' own "Prefilled from" lines would repeat it.
+        LookupMessage = null;
+        SearchMessage = null;
 
         if (_photoReading?.ReferenceWork is { IsReferenceWork: true } hint)
         {

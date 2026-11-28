@@ -1380,14 +1380,75 @@ public class BookAddViewModelTests
             Isbn: isbn is null ? null : Sure(isbn),
             ReferenceWork: new ReferenceWorkHint(reference, kind, 0.9));
 
-    private BookAddViewModel CreatePhotoVm(BookPhotoReading? reading, bool coverStorage = true)
+    private BookAddViewModel CreatePhotoVm(BookPhotoReading? reading, bool coverStorage = true) =>
+        CreatePhotoVm(reading, new AIOptions(), out _, coverStorage);
+
+    private BookAddViewModel CreatePhotoVm(BookPhotoReading? reading, AIOptions aiOptions, out AIProviderFactory factory, bool coverStorage = true)
     {
         _storage.IsEnabled.Returns(coverStorage);
         var ai = Substitute.For<IAIAssistantService>();
         ai.ReadBookFromImageAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(reading);
-        var factory = Substitute.For<AIProviderFactory>(_dispatcher, Options.Create(new AIOptions()), NullLoggerFactory.Instance);
+        factory = Substitute.For<AIProviderFactory>(_dispatcher, Options.Create(aiOptions), NullLoggerFactory.Instance);
         factory.GetService().Returns(ai);
         return new(_lookup, new SeriesMatchService(_dispatcher), _dispatcher, _uploader, factory, NullLogger<BookAddViewModel>.Instance);
+    }
+
+    [Fact]
+    public async Task ReadPhotoAsync_WhenTheDefaultProviderIsNotConfigured_UsesOneThatIs()
+    {
+        var options = new AIOptions
+        {
+            DefaultProvider = AIProvider.Anthropic,
+            AzureOpenAI = new AzureOpenAIOptions { Endpoint = "https://example.invalid/", ApiKey = "key", Deployment = "gpt" },
+        };
+        var vm = CreatePhotoVm(Reading(), options, out var factory);
+        factory.Initialize();
+
+        await vm.ReadPhotoAsync(Photo);
+
+        Assert.Equal(AIProvider.AzureOpenAI, factory.ActiveProvider);
+    }
+
+    [Fact]
+    public async Task TakePhotoCandidateAsync_KeepsACoverPhotoTheUserAlreadyChose()
+    {
+        GivenSearch(Candidate(null));
+        var vm = CreatePhotoVm(Reading());
+        var chosen = new CoverPhoto([7], "image/jpeg");
+        vm.CoverPhoto = chosen;
+        await vm.ReadPhotoAsync(Photo);
+
+        await vm.TakePhotoCandidateAsync(vm.PhotoCandidates[0]);
+
+        Assert.Same(chosen, vm.CoverPhoto);
+    }
+
+    [Fact]
+    public async Task TakePhotoCandidateAsync_WithACover_KeepsACoverPhotoTheUserAlreadyChose()
+    {
+        GivenSearch(Candidate("https://covers.example/mort.jpg"));
+        var vm = CreatePhotoVm(Reading());
+        var chosen = new CoverPhoto([7], "image/jpeg");
+        vm.CoverPhoto = chosen;
+        await vm.ReadPhotoAsync(Photo);
+
+        await vm.TakePhotoCandidateAsync(vm.PhotoCandidates[0]);
+
+        Assert.Same(chosen, vm.CoverPhoto);
+    }
+
+    [Fact]
+    public async Task TakePhotoIsbnMatchAsync_ShowsOnePrefilledMessage()
+    {
+        GivenLookup("9780575041851", "Mort", "Terry Pratchett", null, null);
+        var vm = CreatePhotoVm(Reading(isbn: "9780575041851"));
+        await vm.ReadPhotoAsync(Photo);
+
+        await vm.TakePhotoIsbnMatchAsync();
+
+        Assert.Null(vm.LookupMessage);
+        Assert.Null(vm.SearchMessage);
+        Assert.Contains("Prefilled from", vm.PhotoMessage);
     }
 
     private static BookSearchCandidate Candidate(string? coverUrl) =>
@@ -1466,6 +1527,7 @@ public class BookAddViewModelTests
     {
         _dispatcher.Query(Arg.Any<FindEditionByIsbn>(), Arg.Any<CancellationToken>()).Returns(HobbitMatch());
         var vm = CreatePhotoVm(Reading(isbn: "9780575041851"));
+        vm.CoverPhoto = new CoverPhoto([1], "image/jpeg");
 
         await vm.ReadPhotoAsync(Photo);
 
