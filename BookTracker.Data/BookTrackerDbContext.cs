@@ -125,6 +125,8 @@ public class BookTrackerDbContext(DbContextOptions<BookTrackerDbContext> options
             .HasDatabaseName("IX_Loans_CopyId_Open");
         modelBuilder.Entity<Copy>()
             .Ignore(c => c.OpenLoan);
+        modelBuilder.Entity<Copy>()
+            .Ignore(c => c.IsOwned);
         modelBuilder.Entity<Loan>()
             .Ignore(l => l.IsOpen);
 
