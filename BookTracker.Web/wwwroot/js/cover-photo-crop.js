@@ -1,6 +1,6 @@
 // Crop box for the cover photo picker (Components/Shared/CoverPhotoPicker.razor).
 //
-// The chosen file never crosses SignalR: a listener on the file input keeps it in
+// The chosen file never crosses SignalR: a change listener on the picker's root keeps it in
 // the browser, the crop happens on a canvas, and only the cropped JPEG goes back
 // to .NET as a JS stream reference. Drawing an <img> applies its EXIF orientation,
 // which is why the crop is done here and not on the server.
@@ -52,13 +52,16 @@ window.CoverPhotoCrop = (function () {
 
     return {
         // Remember the file the moment it is chosen; MudFileUpload may reset the input afterwards.
+        // The listener sits on the root, not on the input, so it survives Blazor re-creating the input.
         attach(root) {
-            const input = root.querySelector('input[type=file]');
-            if (!input || states.has(root)) return;
-            const st = { file: null, box: { x: 0, y: 0, w: 1, h: 1 }, wired: new WeakSet(), sourceUrl: null, previewUrl: null };
+            if (states.has(root)) return;
+            const st = { file: null, box: { x: 0, y: 0, w: 1, h: 1 }, wired: new WeakSet(), sourceUrl: null };
             states.set(root, st);
-            input.addEventListener('change', () => {
-                if (input.files && input.files[0]) st.file = input.files[0];
+            root.addEventListener('change', e => {
+                const input = e.target;
+                if (input instanceof HTMLInputElement && input.type === 'file' && input.files && input.files[0]) {
+                    st.file = input.files[0];
+                }
             });
         },
 
@@ -99,22 +102,13 @@ window.CoverPhotoCrop = (function () {
 
             const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
             if (!blob) throw new Error('Could not crop the photo.');
-            if (st.previewUrl) URL.revokeObjectURL(st.previewUrl);
-            st.previewUrl = URL.createObjectURL(blob);
             return DotNet.createJSStreamReference(blob);
-        },
-
-        showPreview(root) {
-            const st = states.get(root);
-            const preview = find(root, 'preview');
-            if (st && st.previewUrl && preview) preview.src = st.previewUrl;
         },
 
         release(root) {
             const st = states.get(root);
             if (!st) return;
             if (st.sourceUrl) URL.revokeObjectURL(st.sourceUrl);
-            if (st.previewUrl) URL.revokeObjectURL(st.previewUrl);
             states.delete(root);
         },
     };

@@ -8,6 +8,7 @@ using BookTracker.Web.Services;
 using BookTracker.Web.Services.Covers;
 using BookTracker.Web.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 
@@ -47,7 +48,7 @@ public class BookAddViewModelTests
     }
 
     private BookAddViewModel CreateVm() =>
-        new(_lookup, new SeriesMatchService(_dispatcher), _dispatcher, _uploader, NullLogger<BookAddViewModel>.Instance);
+        new(_lookup, new SeriesMatchService(_dispatcher), _dispatcher, _uploader, Substitute.For<AIProviderFactory>(_dispatcher, Options.Create(new AIOptions()), NullLoggerFactory.Instance), NullLogger<BookAddViewModel>.Instance);
 
     private static ExistingBookMatch HobbitMatch() =>
         new(BookId: 4, EditionId: 5, Title: "The Hobbit", Authors: "Tolkien", CopyCount: 1,
@@ -1342,5 +1343,329 @@ public class BookAddViewModelTests
         Assert.Null(vm.AcceptedSeriesId);
         Assert.Null(vm.AcceptedSeriesName);
         Assert.Empty(SentEnsureSeries());
+    }
+
+    [Fact]
+    public async Task LookupAsync_WhenTheIsbnIsAlreadyOwned_DropsAHeldCoverPhoto()
+    {
+        _dispatcher.Query(Arg.Any<FindEditionByIsbn>(), Arg.Any<CancellationToken>()).Returns(HobbitMatch());
+        var vm = CreateVm();
+        vm.CoverPhoto = new CoverPhoto([1], "image/jpeg");
+        vm.LookupIsbn = "9780261102217";
+
+        await vm.LookupAsync();
+
+        Assert.NotNull(vm.ExistingBook);
+        Assert.Null(vm.CoverPhoto);
+    }
+
+    // Capture from a photo.
+
+    private static readonly CoverPhoto Photo = new([9, 9, 9], "image/jpeg");
+
+    private static PhotoField<T> Sure<T>(T value) => new(value, 0.9);
+
+    private static BookPhotoReading Reading(
+        string? isbn = null, bool reference = false, string? kind = null, double titleConfidence = 0.9) =>
+        new(Title: new PhotoField<string>("Mort", titleConfidence),
+            Subtitle: Sure("A Discworld Novel"),
+            Contributors:
+            [
+                new PhotoContributor("Terry Pratchett", AuthorRole.Author, 0.9),
+                new PhotoContributor("Paul Kidby", AuthorRole.Illustrator, 0.8),
+            ],
+            Publisher: Sure("Gollancz"),
+            Year: Sure(1987),
+            EditionNumber: null,
+            Isbn: isbn is null ? null : Sure(isbn),
+            ReferenceWork: new ReferenceWorkHint(reference, kind, 0.9));
+
+    private BookAddViewModel CreatePhotoVm(BookPhotoReading? reading, bool coverStorage = true) =>
+        CreatePhotoVm(reading, new AIOptions(), out _, coverStorage);
+
+    private BookAddViewModel CreatePhotoVm(BookPhotoReading? reading, AIOptions aiOptions, out AIProviderFactory factory, bool coverStorage = true)
+    {
+        _storage.IsEnabled.Returns(coverStorage);
+        var ai = Substitute.For<IAIAssistantService>();
+        ai.ReadBookFromImageAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(reading);
+        factory = Substitute.For<AIProviderFactory>(_dispatcher, Options.Create(aiOptions), NullLoggerFactory.Instance);
+        factory.GetService().Returns(ai);
+        return new(_lookup, new SeriesMatchService(_dispatcher), _dispatcher, _uploader, factory, NullLogger<BookAddViewModel>.Instance);
+    }
+
+    [Fact]
+    public async Task ReadPhotoAsync_WhenTheDefaultProviderIsNotConfigured_UsesOneThatIs()
+    {
+        var options = new AIOptions
+        {
+            DefaultProvider = AIProvider.Anthropic,
+            AzureOpenAI = new AzureOpenAIOptions { Endpoint = "https://example.invalid/", ApiKey = "key", Deployment = "gpt" },
+        };
+        var vm = CreatePhotoVm(Reading(), options, out var factory);
+        factory.Initialize();
+
+        await vm.ReadPhotoAsync(Photo);
+
+        Assert.Equal(AIProvider.AzureOpenAI, factory.ActiveProvider);
+    }
+
+    [Fact]
+    public async Task TakePhotoCandidateAsync_KeepsACoverPhotoTheUserAlreadyChose()
+    {
+        GivenSearch(Candidate(null));
+        var vm = CreatePhotoVm(Reading());
+        var chosen = new CoverPhoto([7], "image/jpeg");
+        vm.CoverPhoto = chosen;
+        await vm.ReadPhotoAsync(Photo);
+
+        await vm.TakePhotoCandidateAsync(vm.PhotoCandidates[0]);
+
+        Assert.Same(chosen, vm.CoverPhoto);
+    }
+
+    [Fact]
+    public async Task TakePhotoCandidateAsync_WithACover_KeepsACoverPhotoTheUserAlreadyChose()
+    {
+        GivenSearch(Candidate("https://covers.example/mort.jpg"));
+        var vm = CreatePhotoVm(Reading());
+        var chosen = new CoverPhoto([7], "image/jpeg");
+        vm.CoverPhoto = chosen;
+        await vm.ReadPhotoAsync(Photo);
+
+        await vm.TakePhotoCandidateAsync(vm.PhotoCandidates[0]);
+
+        Assert.Same(chosen, vm.CoverPhoto);
+    }
+
+    [Fact]
+    public async Task TakePhotoIsbnMatchAsync_ShowsOnePrefilledMessage()
+    {
+        GivenLookup("9780575041851", "Mort", "Terry Pratchett", null, null);
+        var vm = CreatePhotoVm(Reading(isbn: "9780575041851"));
+        await vm.ReadPhotoAsync(Photo);
+
+        await vm.TakePhotoIsbnMatchAsync();
+
+        Assert.Null(vm.LookupMessage);
+        Assert.Null(vm.SearchMessage);
+        Assert.Contains("Prefilled from", vm.PhotoMessage);
+    }
+
+    private static BookSearchCandidate Candidate(string? coverUrl) =>
+        new("OL1W", "Mort", "Terry Pratchett", 1987, 40, coverUrl, null);
+
+    private void GivenSearch(params BookSearchCandidate[] candidates) =>
+        _lookup.SearchByTitleAuthorAsync(Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(candidates);
+
+    [Fact]
+    public async Task ReadPhotoAsync_WithAnIsbn_LooksItUp_AndOffersTheMatch()
+    {
+        GivenLookup("9780575041851", "Mort", "Terry Pratchett", null, null);
+        var vm = CreatePhotoVm(Reading(isbn: "9780575041851"));
+
+        await vm.ReadPhotoAsync(Photo);
+
+        Assert.Equal("Mort", vm.PhotoIsbnMatch!.Title);
+        Assert.Empty(vm.PhotoCandidates);
+        await _lookup.Received(1).LookupByIsbnAsync("9780575041851", Arg.Any<CancellationToken>());
+        await _lookup.DidNotReceive().SearchByTitleAuthorAsync(Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        Assert.True(string.IsNullOrEmpty(vm.BookInput.Title));
+    }
+
+    [Fact]
+    public async Task ReadPhotoAsync_WithoutAnIsbn_SearchesByTitleAndAuthor()
+    {
+        GivenSearch(Candidate(null));
+        var vm = CreatePhotoVm(Reading());
+
+        await vm.ReadPhotoAsync(Photo);
+
+        Assert.Single(vm.PhotoCandidates);
+        Assert.Null(vm.PhotoIsbnMatch);
+        await _lookup.Received(1).SearchByTitleAuthorAsync("Mort", "Terry Pratchett", Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReadPhotoAsync_WhenTheIsbnLookupFindsNothingOrThrows_FallsBackToSearch(bool throws)
+    {
+        if (throws)
+        {
+            _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).ThrowsAsync(new HttpRequestException());
+        }
+        else
+        {
+            _lookup.LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((BookLookupResult?)null);
+        }
+        GivenSearch(Candidate(null));
+        var vm = CreatePhotoVm(Reading(isbn: "9780575041851"));
+
+        await vm.ReadPhotoAsync(Photo);
+
+        Assert.Null(vm.PhotoIsbnMatch);
+        Assert.Single(vm.PhotoCandidates);
+    }
+
+    [Fact]
+    public async Task ReadPhotoAsync_WhenSearchThrows_KeepsThePhotoForNoneOfThese()
+    {
+        _lookup.SearchByTitleAuthorAsync(Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new HttpRequestException());
+        var vm = CreatePhotoVm(Reading());
+
+        await vm.ReadPhotoAsync(Photo);
+        vm.UsePhotoReading();
+
+        Assert.Empty(vm.PhotoCandidates);
+        Assert.Equal("Mort", vm.BookInput.Title);
+    }
+
+    [Fact]
+    public async Task ReadPhotoAsync_WhenTheIsbnIsOwned_ShowsTheExistingBookInstead()
+    {
+        _dispatcher.Query(Arg.Any<FindEditionByIsbn>(), Arg.Any<CancellationToken>()).Returns(HobbitMatch());
+        var vm = CreatePhotoVm(Reading(isbn: "9780575041851"));
+        vm.CoverPhoto = new CoverPhoto([1], "image/jpeg");
+
+        await vm.ReadPhotoAsync(Photo);
+
+        Assert.NotNull(vm.ExistingBook);
+        Assert.Null(vm.MatchPhoto);
+        Assert.Null(vm.CoverPhoto);
+        await _lookup.DidNotReceive().LookupByIsbnAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReadPhotoAsync_WhenTheAiReadsNothing_ReportsItAndOffersNothing()
+    {
+        var vm = CreatePhotoVm(null);
+
+        await vm.ReadPhotoAsync(Photo);
+
+        Assert.Contains("Couldn't read a book", vm.PhotoMessage);
+        Assert.Null(vm.MatchPhoto);
+        Assert.Null(vm.PhotoIsbnMatch);
+        Assert.Empty(vm.PhotoCandidates);
+        await _lookup.DidNotReceive().SearchByTitleAuthorAsync(Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TakePhotoCandidateAsync_WithACover_UsesItAndHoldsNoPhoto()
+    {
+        GivenSearch(Candidate("https://covers.example.org/mort.jpg"));
+        var vm = CreatePhotoVm(Reading());
+        await vm.ReadPhotoAsync(Photo);
+
+        await vm.TakePhotoCandidateAsync(vm.PhotoCandidates[0]);
+
+        Assert.Equal("https://covers.example.org/mort.jpg", vm.BookInput.DefaultCoverArtUrl);
+        Assert.Null(vm.CoverPhoto);
+        Assert.Equal("Mort", vm.BookInput.Title);
+        Assert.Null(vm.MatchPhoto);
+    }
+
+    [Fact]
+    public async Task TakePhotoCandidateAsync_WithoutACover_PreSelectsThePhoto()
+    {
+        GivenSearch(Candidate(null));
+        var vm = CreatePhotoVm(Reading());
+        await vm.ReadPhotoAsync(Photo);
+
+        await vm.TakePhotoCandidateAsync(vm.PhotoCandidates[0]);
+
+        Assert.Same(Photo, vm.CoverPhoto);
+    }
+
+    [Fact]
+    public async Task TakePhotoCandidateAsync_WhenCoverStorageIsOff_HoldsNoPhoto()
+    {
+        GivenSearch(Candidate(null));
+        var vm = CreatePhotoVm(Reading(), coverStorage: false);
+        await vm.ReadPhotoAsync(Photo);
+
+        await vm.TakePhotoCandidateAsync(vm.PhotoCandidates[0]);
+
+        Assert.Null(vm.CoverPhoto);
+    }
+
+    [Fact]
+    public async Task TakePhotoIsbnMatchAsync_FillsTheFormFromTheLookup()
+    {
+        GivenLookup("9780575041851", "Mort", "Terry Pratchett", null, null);
+        var vm = CreatePhotoVm(Reading(isbn: "9780575041851"));
+        await vm.ReadPhotoAsync(Photo);
+
+        await vm.TakePhotoIsbnMatchAsync();
+
+        Assert.Equal("Mort", vm.WorkInput.Title);
+        Assert.Equal("9780575041851", vm.EditionInput.Isbn);
+        Assert.Same(Photo, vm.CoverPhoto);
+    }
+
+    [Fact]
+    public async Task UsePhotoReading_FillsTheFormFromThePhoto_AndHoldsItAsTheCover()
+    {
+        GivenSearch(Candidate(null));
+        var vm = CreatePhotoVm(Reading(isbn: "9780575041851"));
+        await vm.ReadPhotoAsync(Photo);
+
+        vm.UsePhotoReading();
+
+        Assert.Equal("Mort", vm.BookInput.Title);
+        Assert.Equal("Mort", vm.WorkInput.Title);
+        Assert.Equal("A Discworld Novel", vm.WorkInput.Subtitle);
+        Assert.Equal(["Terry Pratchett"], vm.WorkInput.Authors);
+        var illustrator = Assert.Single(vm.WorkInput.Contributors);
+        Assert.Equal(("Paul Kidby", AuthorRole.Illustrator), (illustrator.Name, illustrator.Role));
+        Assert.Equal("Gollancz", vm.EditionInput.Publisher);
+        Assert.Equal("1987", vm.EditionInput.DatePrinted);
+        Assert.Equal("9780575041851", vm.EditionInput.Isbn);
+        Assert.Same(Photo, vm.CoverPhoto);
+        Assert.Null(vm.MatchPhoto);
+    }
+
+    [Fact]
+    public async Task UsePhotoReading_LeavesOutFieldsTheAiWasUnsureOf()
+    {
+        GivenSearch();
+        var vm = CreatePhotoVm(Reading(titleConfidence: 0.2));
+        await vm.ReadPhotoAsync(Photo);
+
+        vm.UsePhotoReading();
+
+        Assert.True(string.IsNullOrEmpty(vm.BookInput.Title));
+        Assert.Equal("Gollancz", vm.EditionInput.Publisher);
+    }
+
+    [Theory]
+    [InlineData("dictionary", "Dictionaries")]
+    [InlineData("Field guide", "Field Guides")]
+    [InlineData("gazetteer", "Reference")]
+    [InlineData(null, "Reference")]
+    public async Task TakingAMatch_ForAReferenceWork_PreSelectsTheStatusAndSuggestsAGenre(string? kind, string genre)
+    {
+        GivenSearch(Candidate(null));
+        var vm = CreatePhotoVm(Reading(reference: true, kind: kind));
+        await vm.ReadPhotoAsync(Photo);
+
+        await vm.TakePhotoCandidateAsync(vm.PhotoCandidates[0]);
+
+        Assert.Equal(BookStatus.Reference, vm.BookInput.Status);
+        Assert.Equal(genre, vm.PhotoGenreHint);
+    }
+
+    [Fact]
+    public async Task TakingAMatch_ForAnOrdinaryBook_LeavesStatusAndGenreAlone()
+    {
+        GivenSearch(Candidate(null));
+        var vm = CreatePhotoVm(Reading());
+        await vm.ReadPhotoAsync(Photo);
+
+        await vm.TakePhotoCandidateAsync(vm.PhotoCandidates[0]);
+
+        Assert.Equal(BookStatus.Unread, vm.BookInput.Status);
+        Assert.Null(vm.PhotoGenreHint);
     }
 }
