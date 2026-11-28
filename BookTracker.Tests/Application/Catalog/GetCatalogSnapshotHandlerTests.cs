@@ -729,4 +729,142 @@ public class GetCatalogSnapshotHandlerTests
         Assert.NotNull(delta.DeletedIds);
         Assert.Empty(delta.DeletedIds);
     }
+
+    private async Task<int> SeedBookWithCopies(string title, Author author, params Copy[] copies)
+    {
+        using var db = _factory.CreateDbContext();
+        var book = TestBooks.Book(
+            title,
+            works: [TestWorks.Work(title, author)],
+            editions: copies.Length == 0 ? [] : [TestEditions.Edition(copies: copies)]);
+        db.Books.Add(book);
+        await db.SaveChangesAsync();
+        return book.Id;
+    }
+
+    private async Task SetCopyOwnership(int bookId, bool owned)
+    {
+        using var db = _factory.CreateDbContext();
+        var book = await db.Books
+            .Include(b => b.Editions).ThenInclude(e => e.Copies)
+            .FirstAsync(b => b.Id == bookId);
+        foreach (var copy in book.Editions.SelectMany(e => e.Copies))
+        {
+            if (owned) copy.RestoreToCollection();
+            else copy.RemoveFromCollection(CopyDisposition.Donated, new DateOnly(2026, 3, 3), null);
+        }
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_Full_ExcludesRemovedBook_KeepsNoCopyAndPartlyRemovedBooks()
+    {
+        int removedId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = Author.Create("Isaac Asimov");
+            db.Authors.Add(asimov);
+            await db.SaveChangesAsync();
+            removedId = await SeedBookWithCopies("Gone", asimov, TestEditions.RemovedCopy());
+            await SeedBookWithCopies("No copies", asimov);
+            await SeedBookWithCopies("Mixed", asimov, TestEditions.Copy(), TestEditions.RemovedCopy());
+        }
+
+        var snapshot = await GetSnapshot();
+
+        Assert.DoesNotContain(snapshot.Books, b => b.Id == removedId);
+        Assert.Equal(["Mixed", "No copies"], snapshot.Books.Select(b => b.Title).Order().ToList());
+        Assert.NotNull(snapshot.DeletedIds);
+        Assert.Empty(snapshot.DeletedIds);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_DeltaWithRemovedBook_EmitsIdAndAdvancesLatest()
+    {
+        int bookId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = Author.Create("Isaac Asimov");
+            db.Authors.Add(asimov);
+            await db.SaveChangesAsync();
+            bookId = await SeedBookWithCopies("Leaving", asimov, TestEditions.Copy());
+        }
+
+        await Task.Delay(20);
+        var midpoint = DateTime.UtcNow;
+        await Task.Delay(20);
+
+        await SetCopyOwnership(bookId, owned: false);
+
+        var delta = await GetSnapshot(since: midpoint);
+
+        Assert.Empty(delta.Books);
+        Assert.NotNull(delta.DeletedIds);
+        Assert.Equal(bookId, Assert.Single(delta.DeletedIds));
+        Assert.True(delta.LatestUpdatedAt > midpoint,
+            $"LatestUpdatedAt must advance past the removal. midpoint={midpoint:O}, latest={delta.LatestUpdatedAt:O}");
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_DeltaAfterEarlierRemoval_DoesNotEmitId()
+    {
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = Author.Create("Isaac Asimov");
+            db.Authors.Add(asimov);
+            await db.SaveChangesAsync();
+            await SeedBookWithCopies("Long gone", asimov, TestEditions.RemovedCopy());
+        }
+
+        await Task.Delay(20);
+        var afterRemoval = DateTime.UtcNow;
+
+        var delta = await GetSnapshot(since: afterRemoval);
+
+        Assert.Empty(delta.Books);
+        Assert.NotNull(delta.DeletedIds);
+        Assert.Empty(delta.DeletedIds);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_DeltaAfterRestore_ReturnsBookAndNoDeletion()
+    {
+        int bookId;
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = Author.Create("Isaac Asimov");
+            db.Authors.Add(asimov);
+            await db.SaveChangesAsync();
+            bookId = await SeedBookWithCopies("Returning", asimov, TestEditions.RemovedCopy());
+        }
+
+        await Task.Delay(20);
+        var midpoint = DateTime.UtcNow;
+        await Task.Delay(20);
+
+        await SetCopyOwnership(bookId, owned: true);
+
+        var delta = await GetSnapshot(since: midpoint);
+
+        Assert.Equal(bookId, Assert.Single(delta.Books).Id);
+        Assert.NotNull(delta.DeletedIds);
+        Assert.Empty(delta.DeletedIds);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_AuthorBookCount_ExcludesRemovedBook()
+    {
+        using (var db = _factory.CreateDbContext())
+        {
+            var asimov = Author.Create("Isaac Asimov");
+            db.Authors.Add(asimov);
+            await db.SaveChangesAsync();
+            await SeedBookWithCopies("Kept", asimov, TestEditions.Copy());
+            await SeedBookWithCopies("Gone", asimov, TestEditions.RemovedCopy());
+        }
+
+        var snapshot = await GetSnapshot();
+
+        Assert.Equal(1, snapshot.Authors.Single(a => a.Name == "Isaac Asimov").BookCount);
+    }
 }
