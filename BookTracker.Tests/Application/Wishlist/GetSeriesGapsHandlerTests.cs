@@ -14,12 +14,38 @@ public class GetSeriesGapsHandlerTests
     private Task<SeriesGapsResult> Load() =>
         new GetSeriesGapsHandler(_factory).HandleAsync(new GetSeriesGaps());
 
-    private static Book NewBook(Series series, string title, int? order, string? orderDisplay = null) => TestBooks.Book(
+    private static Book NewBook(Series series, string title, int? order, string? orderDisplay = null, params Copy[] copies) => TestBooks.Book(
         title,
         series: series,
         seriesOrder: order,
         seriesOrderDisplay: orderDisplay,
-        works: [TestWorks.Work(title)]);
+        works: [TestWorks.Work(title)],
+        editions: copies.Length == 0 ? null : [TestEditions.Edition(copies: copies)]);
+
+    [Fact]
+    public async Task FullyRemovedBook_doesNotOccupyItsSlot()
+    {
+        using (var db = _factory.CreateDbContext())
+        {
+            var foundation = TestSeries.Series("Foundation", SeriesType.Series, expectedCount: 3);
+            var open = TestSeries.Series("Open", SeriesType.Series);
+            db.Series.AddRange(foundation, open);
+            db.Books.AddRange(
+                NewBook(foundation, "One", 1),
+                NewBook(foundation, "Two", 2, null, TestEditions.RemovedCopy()),
+                NewBook(foundation, "Three", 3, null, TestEditions.RemovedCopy(), TestEditions.Copy()),
+                NewBook(open, "Solo", 1, null, TestEditions.RemovedCopy()));
+            await db.SaveChangesAsync();
+        }
+
+        var result = await Load();
+
+        var gap = Assert.Single(result.Gaps);
+        Assert.Equal(new[] { 2 }, gap.MissingPositions);
+        Assert.Equal(2, gap.OwnedCount);
+        Assert.Equal(new[] { "One", "Three" }, gap.OwnedBooks.Select(b => b.Title));
+        Assert.Empty(result.OpenSeries);
+    }
 
     [Fact]
     public async Task StructuredSeries_ReportsMissingSlots_OwnedCount_AndOwnedBooksInSeriesOrder()

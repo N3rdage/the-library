@@ -1,4 +1,5 @@
 using BookTracker.Application.Authors;
+using BookTracker.Application.Books;
 using BookTracker.Application.Genres;
 using BookTracker.Data;
 using Microsoft.EntityFrameworkCore;
@@ -29,7 +30,7 @@ public sealed class GetHomeDashboardHandler(IDbContextFactory<BookTrackerDbConte
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
-        var totalBooks = await db.Books.CountAsync(ct);
+        var totalBooks = await db.Books.InCollection().CountAsync(ct);
 
         // "Authors" counts canonical Author entities — pen-name aliases roll
         // up under their canonical (e.g. Bachman titles count toward King).
@@ -42,7 +43,7 @@ public sealed class GetHomeDashboardHandler(IDbContextFactory<BookTrackerDbConte
         // no surviving books so a works-but-all-tombstoned author can't land a
         // "0 books" row in the headline, order by count then id for a
         // deterministic boundary, then sort for display (count desc, name asc).
-        var perAuthorBooks = await AuthorRollups.PerAuthorBookCountAsync(db, ct);
+        var perAuthorBooks = await AuthorRollups.PerAuthorBookCountAsync(db, ct, CollectionMembership.IsInCollection);
         // One pass over Authors carries both the canonical membership (for the
         // rollup) and the names (for the display lookup) — no second round-trip
         // just to resolve the top-10 canonical names.

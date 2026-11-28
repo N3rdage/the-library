@@ -51,6 +51,27 @@ public class GetHomeDashboardHandlerTests
     }
 
     [Fact]
+    public async Task FullyRemovedBook_isNotCounted_butOneWithAnOwnedCopyIs()
+    {
+        using (var db = _factory.CreateDbContext())
+        {
+            var author = Author.Create("Author 1");
+            var gone = TestBooks.Book("Gone", works: [TestWorks.Work("Gone", author)],
+                editions: [TestEditions.Edition(copies: [TestEditions.RemovedCopy()])]);
+            var mixed = TestBooks.Book("Mixed", works: [TestWorks.Work("Mixed", author)],
+                editions: [TestEditions.Edition(copies: [TestEditions.RemovedCopy(), TestEditions.Copy()])]);
+            var bare = TestBooks.Book("Bare", works: [TestWorks.Work("Bare", author)]);
+            db.Books.AddRange(gone, mixed, bare);
+            await db.SaveChangesAsync();
+        }
+
+        var dashboard = await Load();
+
+        Assert.Equal(2, dashboard.TotalBooks);
+        Assert.Equal(2, Assert.Single(dashboard.TopAuthors).Count);
+    }
+
+    [Fact]
     public async Task PenNamesRollUpUnderCanonical()
     {
         // Stephen King is canonical; Richard Bachman is an alias whose
