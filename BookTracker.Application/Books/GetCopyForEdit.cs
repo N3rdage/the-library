@@ -14,7 +14,9 @@ public record CopyForEdit(
     int EditionId,
     BookCondition Condition,
     DateTime? DateAcquired,
-    string? Notes);
+    string? Notes,
+    CopyDisposition Disposition = CopyDisposition.Owned,
+    DateOnly? RemovedOn = null);
 
 public sealed class GetCopyForEditHandler(IDbContextFactory<BookTrackerDbContext> dbFactory)
     : IQueryHandler<GetCopyForEdit, CopyForEdit?>
@@ -25,7 +27,8 @@ public sealed class GetCopyForEditHandler(IDbContextFactory<BookTrackerDbContext
         return await db.Copies
             .AsNoTracking()
             .Where(c => c.Id == query.CopyId)
-            .Select(c => new CopyForEdit(c.Id, c.EditionId, c.Condition, c.DateAcquired, c.Notes))
+            .Select(c => new CopyForEdit(c.Id, c.EditionId, c.Condition, c.DateAcquired, c.Notes,
+                c.Disposition, c.RemovedOn))
             .FirstOrDefaultAsync(ct);
     }
 }

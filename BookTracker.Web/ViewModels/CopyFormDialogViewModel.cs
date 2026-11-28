@@ -17,6 +17,10 @@ public class CopyFormDialogViewModel(IDispatcher dispatcher) : DispatchingViewMo
     public DateTime? DateAcquired { get; set; }
     public string? Notes { get; set; }
 
+    /// <summary>"Donated · 3 Nov 2026" when the copy has left the collection;
+    /// null while it is owned.</summary>
+    public string? RemovalLabel { get; private set; }
+
     public void InitializeForAdd(int editionId)
     {
         IsNew = true;
@@ -37,6 +41,9 @@ public class CopyFormDialogViewModel(IDispatcher dispatcher) : DispatchingViewMo
         Condition = copy.Condition;
         DateAcquired = copy.DateAcquired;
         Notes = copy.Notes;
+        RemovalLabel = copy.Disposition == CopyDisposition.Owned
+            ? null
+            : RemoveCopyDialogViewModel.RemovalLabel(copy.Disposition, copy.RemovedOn);
     }
 
     /// <returns>The copy id; null when the dialog state is stale or the domain

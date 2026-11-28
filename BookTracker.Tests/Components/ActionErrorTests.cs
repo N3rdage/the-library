@@ -36,6 +36,7 @@ public class ActionErrorTests : ComponentTestBase
         Services.AddTransient<CoverPhotoUploader>();
         Services.AddTransient<CopyFormDialogViewModel>();
         Services.AddTransient<LendDialogViewModel>();
+        Services.AddTransient<RemoveCopyDialogViewModel>();
         Services.AddTransient<BookDetailViewModel>();
     }
 

@@ -46,6 +46,29 @@ public class CopyFormDialogViewModelTests
     }
 
     [Fact]
+    public async Task InitializeForEditAsync_RemovedCopy_SetsTheRemovalLabel()
+    {
+        GivenCopy(new CopyForEdit(CopyId, EditionId, BookCondition.Good, null, null,
+            CopyDisposition.Donated, new DateOnly(2026, 11, 3)));
+        var vm = new CopyFormDialogViewModel(_dispatcher);
+
+        await vm.InitializeForEditAsync(CopyId);
+
+        Assert.Equal("Donated · 3 Nov 2026", vm.RemovalLabel);
+    }
+
+    [Fact]
+    public async Task InitializeForEditAsync_OwnedCopy_HasNoRemovalLabel()
+    {
+        GivenCopy(new CopyForEdit(CopyId, EditionId, BookCondition.Good, null, null));
+        var vm = new CopyFormDialogViewModel(_dispatcher);
+
+        await vm.InitializeForEditAsync(CopyId);
+
+        Assert.Null(vm.RemovalLabel);
+    }
+
+    [Fact]
     public async Task InitializeForEditAsync_LoadsCopyFields()
     {
         GivenCopy(new CopyForEdit(CopyId, EditionId, BookCondition.VeryGood, new DateTime(2024, 3, 15), "From a charity shop"));

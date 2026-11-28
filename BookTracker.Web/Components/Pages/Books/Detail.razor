@@ -6,6 +6,7 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject LendDialogViewModel LendVM
+@inject RemoveCopyDialogViewModel RemoveVM
 @inject IBrowserViewportService Viewport
 
 @* Book detail / View page — browse-first, MudBlazor pilot continuation.
@@ -367,7 +368,7 @@
                     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
                         <MudText Typo="Typo.h6">Editions &amp; copies</MudText>
                         <MudText Typo="Typo.body2" Color="Color.Secondary">
-                            @VM.TotalEditions @(VM.TotalEditions == 1 ? "edition" : "editions") · @VM.TotalCopies @(VM.TotalCopies == 1 ? "copy" : "copies")
+                            @VM.TotalEditions @(VM.TotalEditions == 1 ? "edition" : "editions") · @VM.TotalCopies @(VM.TotalCopies == 1 ? "copy" : "copies")@(VM.RemovedCopies > 0 ? $" · {VM.RemovedCopies} removed" : "")
                         </MudText>
                     </MudStack>
                 </CardHeaderContent>
@@ -395,7 +396,8 @@
                                         </MudText>
                                         <MudSpacer />
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                            @edition.Copies.Count @(edition.Copies.Count == 1 ? "copy" : "copies")
+                                            @{ var ownedCount = edition.Copies.Count(c => c.IsOwned); }
+                                            @ownedCount @(ownedCount == 1 ? "copy" : "copies")
                                         </MudText>
                                     </MudStack>
                                 </TitleContent>
@@ -459,7 +461,17 @@
                                                     <b>Copy @(idx + 1)</b>
                                                 </MudText>
                                                 <MudStack Spacing="0" Class="flex-grow-1">
-                                                    <MudText Typo="Typo.body2">@ConditionLabel(copy.Condition)</MudText>
+                                                    <MudText Typo="Typo.body2" Style="@(copy.IsOwned ? null : "text-decoration: line-through;")">@ConditionLabel(copy.Condition)</MudText>
+                                                    @if (!copy.IsOwned)
+                                                    {
+                                                        <MudText Typo="Typo.body2" Color="Color.Warning">
+                                                            Removed: @RemoveCopyDialogViewModel.RemovalLabel(copy.Disposition, copy.RemovedOn)
+                                                        </MudText>
+                                                        @if (!string.IsNullOrEmpty(copy.RemovalNote))
+                                                        {
+                                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="white-space: pre-wrap;">@copy.RemovalNote</MudText>
+                                                        }
+                                                    }
                                                     @if (copy.DateAcquired.HasValue)
                                                     {
                                                         <MudText Typo="Typo.caption" Color="Color.Secondary">
@@ -503,7 +515,7 @@
                                                                     Returned
                                                                 </MudButton>
                                                             }
-                                                            else
+                                                            else if (copy.IsOwned)
                                                             {
                                                                 <MudButton OnClick="@(() => OpenLendDialog(copyId))"
                                                                            Disabled="@dialogOpening"
@@ -512,6 +524,24 @@
                                                                            Size="Size.Small"
                                                                            StartIcon="@Icons.Material.Filled.Outbox">
                                                                     Lend
+                                                                </MudButton>
+                                                                <MudButton OnClick="@(() => OpenRemoveCopyDialog(copyId))"
+                                                                           Disabled="@dialogOpening"
+                                                                           Variant="Variant.Text"
+                                                                           Size="Size.Small"
+                                                                           StartIcon="@Icons.Material.Filled.Inventory2">
+                                                                    Remove
+                                                                </MudButton>
+                                                            }
+                                                            else
+                                                            {
+                                                                <MudButton OnClick="@(() => RestoreCopyAsync(copyId))"
+                                                                           Disabled="@dialogOpening"
+                                                                           Variant="Variant.Text"
+                                                                           Color="Color.Primary"
+                                                                           Size="Size.Small"
+                                                                           StartIcon="@Icons.Material.Filled.Restore">
+                                                                    Restore
                                                                 </MudButton>
                                                             }
                                                             <MudButton OnClick="@(() => OpenEditCopyDialog(copyId))"
@@ -984,6 +1014,57 @@
             Snackbar.Add(LendVM.LentMessage, Severity.Success);
             await VM.InitializeAsync(BookId);
         }
+    });
+
+    // The page's own RemoveCopyDialogViewModel, seeded with the clicked copy.
+    // A lost or damaged copy is followed by an offer to put the book on the
+    // wishlist; VM decides whether to offer and does the add.
+    private Task OpenRemoveCopyDialog(int copyId) => OpenDialogGuardedAsync(async () =>
+    {
+        var label = VM.CopyLabelFor(copyId);
+        if (label is null) return;
+        RemoveVM.Initialize(copyId, label);
+
+        var parameters = new DialogParameters<RemoveCopyDialog>
+        {
+            { x => x.VM, RemoveVM },
+        };
+        var breakpoint = await Viewport.GetCurrentBreakpointAsync();
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseButton = true,
+            FullScreen = breakpoint == Breakpoint.Xs,
+        };
+        var dialog = await DialogService.ShowAsync<RemoveCopyDialog>("Remove copy", parameters, options);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled) return;
+
+        Snackbar.Add("Copy removed", Severity.Success);
+        await VM.InitializeAsync(BookId);
+
+        if (RemoveVM.Reason is { } reason && BookDetailViewModel.ShouldOfferWishlist(reason))
+        {
+            var add = await DialogService.ShowMessageBoxAsync(
+                "Add to wishlist?",
+                $"\"{VM.Book!.Title}\" is gone from your collection. Add it to your wishlist?",
+                yesText: "Add to wishlist",
+                cancelText: "No thanks");
+            if (add == true)
+            {
+                var outcome = await VM.AddToWishlistAsync(copyId);
+                if (outcome == WishlistOfferOutcome.Added)
+                    Snackbar.Add("Added to your wishlist", Severity.Success);
+                else if (outcome == WishlistOfferOutcome.AlreadyOnWishlist)
+                    Snackbar.Add("Already on your wishlist", Severity.Info);
+            }
+        }
+    });
+
+    private Task RestoreCopyAsync(int copyId) => OpenDialogGuardedAsync(async () =>
+    {
+        if (await VM.RestoreCopyAsync(copyId)) Snackbar.Add("Copy restored", Severity.Success);
     });
 
     private Task ReturnLoanAsync(int loanId) => ReturnGuardedAsync(() => VM.ReturnLoanAsync(loanId));

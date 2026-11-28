@@ -12,6 +12,10 @@
         else
         {
             <MudStack Spacing="3" Style="min-width: 280px;">
+                @if (VM.RemovalLabel is { } removal)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Warning">Removed from the collection: @removal</MudText>
+                }
                 <MudSelect T="BookCondition"
                            @bind-Value="VM.Condition"
                            Label="Condition"

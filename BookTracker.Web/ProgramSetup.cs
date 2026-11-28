@@ -243,6 +243,7 @@ public static class ProgramSetup
         builder.Services.AddTransient<BookAddViewModel>();
         builder.Services.AddTransient<BookDetailViewModel>();
         builder.Services.AddTransient<LendDialogViewModel>();
+        builder.Services.AddTransient<RemoveCopyDialogViewModel>();
         builder.Services.AddTransient<BookEditDialogViewModel>();
         builder.Services.AddTransient<WorkEditDialogViewModel>();
         builder.Services.AddTransient<EditionFormDialogViewModel>();

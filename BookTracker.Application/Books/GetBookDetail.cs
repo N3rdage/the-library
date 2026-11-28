@@ -56,7 +56,15 @@ public record EditionDetail(
 public record CopyDetail(
     int Id, BookCondition Condition, DateTime? DateAcquired, string? Notes,
     // The loan not yet returned; null when the copy is on the shelf.
-    CopyLoanDetail? OpenLoan = null);
+    CopyLoanDetail? OpenLoan = null,
+    // Owned while the copy is in the collection; otherwise why it left, when,
+    // and the optional note.
+    CopyDisposition Disposition = CopyDisposition.Owned,
+    DateOnly? RemovedOn = null,
+    string? RemovalNote = null)
+{
+    public bool IsOwned => Disposition == CopyDisposition.Owned;
+}
 
 public record CopyLoanDetail(int LoanId, string BorrowerName, DateOnly LentOn, DateOnly? DueOn);
 
@@ -130,6 +138,9 @@ public sealed class GetBookDetailHandler(IDbContextFactory<BookTrackerDbContext>
                         c.Condition,
                         c.DateAcquired,
                         c.Notes,
+                        c.Disposition,
+                        c.RemovedOn,
+                        c.RemovalNote,
                         OpenLoan = c.Loans
                             .Where(l => l.ReturnedOn == null)
                             .Select(l => new { l.Id, l.BorrowerName, l.LentOn, l.DueOn })
@@ -183,7 +194,8 @@ public sealed class GetBookDetailHandler(IDbContextFactory<BookTrackerDbContext>
                     .Select(c => new CopyDetail(c.Id, c.Condition, c.DateAcquired, c.Notes,
                         c.OpenLoan is null
                             ? null
-                            : new CopyLoanDetail(c.OpenLoan.Id, c.OpenLoan.BorrowerName, c.OpenLoan.LentOn, c.OpenLoan.DueOn)))
+                            : new CopyLoanDetail(c.OpenLoan.Id, c.OpenLoan.BorrowerName, c.OpenLoan.LentOn, c.OpenLoan.DueOn),
+                        c.Disposition, c.RemovedOn, c.RemovalNote))
                     .ToList(),
                 e.EditionNumber))
             .ToList();

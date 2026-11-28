@@ -1,0 +1,70 @@
+@* Modal dialog for taking one copy out of the collection. The page seeds a
+   RemoveCopyDialogViewModel with the copy whose "Remove" was pressed and passes
+   it in (dialogs that need page state take the VM as a parameter). Confirm
+   sends RemoveCopyFromCollection; a refused rule shows its message here and
+   leaves the dialog open. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width: 280px;">
+            <MudText Typo="Typo.body2" Style="word-break: break-word;">@VM.CopyLabel</MudText>
+
+            <MudSelect T="CopyDisposition?"
+                       @bind-Value="VM.Reason"
+                       Label="Reason"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"
+                       Required="true"
+                       Disabled="@VM.Saving">
+                @foreach (var reason in RemoveCopyDialogViewModel.Reasons)
+                {
+                    <MudSelectItem T="CopyDisposition?" Value="@((CopyDisposition?)reason)">@reason</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudDatePicker Label="Removed on"
+                           Date="@VM.RemovedOn"
+                           DateChanged="@((DateTime? d) => VM.RemovedOn = d)"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Required="true"
+                           Disabled="@VM.Saving" />
+
+            <MudTextField T="string"
+                          @bind-Value="VM.Note"
+                          Label="Note (optional)"
+                          Lines="3"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Counter="@RemoveCopyDialogViewModel.NoteMaxLength"
+                          MaxLength="@RemoveCopyDialogViewModel.NoteMaxLength"
+                          Immediate="true"
+                          Disabled="@VM.Saving" />
+        </MudStack>
+        <ActionError Message="@VM.Error" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="@VM.Saving">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Disabled="@(!VM.CanConfirm)"
+                   OnClick="ConfirmAsync">
+            @(VM.Saving ? "Removing..." : "Remove")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter, EditorRequired] public RemoveCopyDialogViewModel VM { get; set; } = default!;
+
+    private async Task ConfirmAsync()
+    {
+        if (await VM.ConfirmAsync())
+        {
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

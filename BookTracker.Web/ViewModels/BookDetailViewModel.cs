@@ -1,6 +1,7 @@
 using BookTracker.Application;
 using BookTracker.Application.Books;
 using BookTracker.Application.Loans;
+using BookTracker.Application.Wishlist;
 using BookTracker.Application.Works;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
@@ -21,6 +22,8 @@ namespace BookTracker.Web.ViewModels;
 // RemoveTagFromBook) routes through BookTracker.Application via IDispatcher.
 // The VM keeps only presentation state (the Current* inline-edit fields and
 // the loaded BookDetail snapshot).
+public enum WishlistOfferOutcome { Added, AlreadyOnWishlist, NotAdded }
+
 public class BookDetailViewModel(
     CoverPhotoUploader coverUploader,
     IDispatcher dispatcher,
@@ -45,7 +48,9 @@ public class BookDetailViewModel(
 
     public bool IsSingleWork => Book is not null && Book.Works.Count == 1;
     public int TotalEditions => Book?.Editions.Count ?? 0;
-    public int TotalCopies => Book?.Editions.Sum(e => e.Copies.Count) ?? 0;
+    // Copies still in the collection; removed ones are counted apart.
+    public int TotalCopies => OwnedCopies.Count();
+    public int RemovedCopies => AllCopies.Count(c => !c.IsOwned);
 
     public async Task InitializeAsync(int bookId)
     {
@@ -142,30 +147,79 @@ public class BookDetailViewModel(
     /// when the copy is not on this book.</summary>
     public LendDialogViewModel.LendCopyOption? LendOptionFor(int copyId)
     {
-        if (Book is null) return null;
-        foreach (var edition in Book.Editions)
+        if (Book is null || Find(copyId) is not var (edition, copy) || !copy.IsOwned) return null;
+        return new(copy.Id, Book.Title, EditionLabels.For(edition.Format, edition.Isbn), copy.Condition);
+    }
+
+    /// <summary>"Dune · Hardcover · 9780441013593": names the copy in the remove
+    /// dialog; null when the copy is not on this book.</summary>
+    public string? CopyLabelFor(int copyId) =>
+        Book is not null && Find(copyId) is var (edition, _)
+            ? $"{Book.Title} · {EditionLabels.For(edition.Format, edition.Isbn)}"
+            : null;
+
+    private (EditionDetail Edition, CopyDetail Copy)? Find(int copyId)
+    {
+        foreach (var edition in Book?.Editions ?? [])
         {
             var copy = edition.Copies.FirstOrDefault(c => c.Id == copyId);
-            if (copy is not null)
-                return new(copy.Id, Book.Title, EditionLabels.For(edition.Format, edition.Isbn), copy.Condition);
+            if (copy is not null) return (edition, copy);
         }
         return null;
     }
 
     private IEnumerable<CopyDetail> AllCopies => Book?.Editions.SelectMany(e => e.Copies) ?? [];
 
-    /// <summary>The copy the header "Lend" seeds the dialog with: the first copy
-    /// not on loan; null when every copy is out or the book has none.</summary>
-    public int? FirstFreeCopyId => AllCopies.FirstOrDefault(c => c.OpenLoan is null)?.Id;
+    private IEnumerable<CopyDetail> OwnedCopies => AllCopies.Where(c => c.IsOwned);
 
-    /// <summary>True when the book has copies and every one of them is on loan.</summary>
+    /// <summary>The copy the header "Lend" seeds the dialog with: the first owned
+    /// copy not on loan; null when every owned copy is out or the book has none.</summary>
+    public int? FirstFreeCopyId => OwnedCopies.FirstOrDefault(c => c.OpenLoan is null)?.Id;
+
+    /// <summary>True when the book has owned copies and every one of them is on loan.</summary>
     public bool AllCopiesLent => TotalCopies > 0 && FirstFreeCopyId is null;
 
     /// <summary>"Lent to Ann, Bob": the distinct borrowers in copy order; null
-    /// unless every copy is on loan.</summary>
+    /// unless every owned copy is on loan.</summary>
     public string? LentToLabel => AllCopiesLent
-        ? "Lent to " + string.Join(", ", AllCopies.Select(c => c.OpenLoan!.BorrowerName).Distinct(StringComparer.Ordinal))
+        ? "Lent to " + string.Join(", ", OwnedCopies.Select(c => c.OpenLoan!.BorrowerName).Distinct(StringComparer.Ordinal))
         : null;
+
+    /// <summary>Brings a removed copy back into the collection and reloads the
+    /// detail. False, with <see cref="DispatchingViewModel.Error"/> set, when
+    /// the restore was refused.</summary>
+    public async Task<bool> RestoreCopyAsync(int copyId)
+    {
+        if (Book is null) return false;
+        if (!await DispatchAsync(() => dispatcher.Send(new RestoreCopyToCollection(copyId)))) return false;
+        await InitializeAsync(Book.Id);
+        return true;
+    }
+
+    /// <summary>A copy lost or damaged is probably wanted again, so the page
+    /// offers the wishlist for those two reasons only.</summary>
+    public static bool ShouldOfferWishlist(CopyDisposition reason) =>
+        reason is CopyDisposition.Lost or CopyDisposition.Damaged;
+
+    /// <summary>Adds the book of a removed copy to the wishlist at medium
+    /// priority, with the copy's ISBN and the book's cover, unless an entry for
+    /// that ISBN or that title and author is already there.</summary>
+    public async Task<WishlistOfferOutcome> AddToWishlistAsync(int copyId, CancellationToken ct = default)
+    {
+        if (Book is null || Find(copyId) is not var (edition, _)) return WishlistOfferOutcome.NotAdded;
+
+        var author = Book.Works.FirstOrDefault()?.AuthorName ?? "";
+        var duplicate = edition.Isbn is { } isbn
+            && (await dispatcher.Query(new GetWishlistDuplicate(isbn), ct)).WishlistedItemId is not null;
+        if (duplicate || await dispatcher.Query(new GetWishlistItemExists(Book.Title, author), ct))
+            return WishlistOfferOutcome.AlreadyOnWishlist;
+
+        await dispatcher.Send(new AddWishlistItem(
+            Book.Title, author, WishlistPriority.Medium,
+            edition.Isbn is { } code ? [code] : [],
+            Book.CoverUrl ?? edition.CoverUrl), ct);
+        return WishlistOfferOutcome.Added;
+    }
 
     /// <summary>Marks every open loan on the book returned today, then reloads
     /// the detail once (also when one return is refused, so the page shows what
