@@ -10,7 +10,7 @@ Bookcase is a web app for the books you own. You record each book once, then sea
 
 **Edition.** One printing of a Book: its ISBN, format (Hardcover, Trade paperback, Mass market paperback or Large print), publisher, print date and optional cover. A Book can have several Editions. An ISBN can belong to only one Edition. Leave it blank for old or self-published printings.
 
-**Copy.** One physical item of an Edition. If you own two of the same printing, that is one Edition with two Copies. A Copy has a condition (As New, Fine, Very Good, Good, Fair or Poor), an acquired date and notes.
+**Copy.** One physical item of an Edition. If you own two of the same printing, that is one Edition with two Copies. A Copy has a condition (As New, Fine, Very Good, Good, Fair or Poor), an acquired date and notes. A Copy you donate, lose, damage or sell is removed from the collection rather than deleted, and can be restored.
 
 **Series and Collection.** A Series is a numbered run with a known order, such as a trilogy. A Collection is a looser grouping with no fixed order. You attach a Book to either one, and give it a position in the Series. A Series can have an expected number of books, which is what lets Bookcase tell you what is missing.
 
@@ -47,6 +47,7 @@ The Library lists every book. Use it to find a book, change its status or rating
 - **Group by** is Author, Genre or "None (flat list)".
 - **Category** is All, Fiction or Non-Fiction.
 - **Genre** includes "(no genre)". **Series** includes "(no series)". **Tag**, **Status** and **Author** narrow the list further.
+- **Removed** switches to the books you no longer have a copy of. See Removing and restoring a copy.
 - The clear button (the X) resets every filter. On a phone, the **Filters** button shows or hides the secondary filters, and **Clear** resets them.
 
 The filters live in the page address. If you open a book and press Back, you return to the same filtered list.
@@ -277,7 +278,23 @@ A single-Work book shows a **Details** card with first-published date, series (w
 
 - **Edit edition** and **Add copy**.
 - **Upload photo** (or **Replace photo**) uploads your own cover image from a file or the camera, cropped with the same draggable box as on Add book. A **your photo** chip marks an uploaded cover. The edition form (**Edit edition** and **Add edition**) has the same photo picker; its photo replaces the cover URL when you save.
-- Per copy: **Lend** or **Returned**, **Edit** and **Delete**. Delete asks "Delete this copy?" first. Edit changes Condition, Date acquired and Notes.
+- Per copy: **Lend** or **Returned**, **Remove**, **Edit** and **Delete**. Delete asks "Delete this copy?" first. Edit changes Condition, Date acquired and Notes.
+
+The header counts only the copies you still have, and adds "N removed" when some have left.
+
+### Removing and restoring a copy
+
+**Remove** on a copy records that it has left your collection, without deleting it. The dialog asks for:
+
+- **Reason**: Donated, Lost, Damaged or Sold.
+- **Removed on**: the date, which starts as today.
+- **Note (optional)**: up to 500 characters, with a counter.
+
+A copy that is on loan has to be returned first, and the dialog says so if you try. A removed copy stays on the book's page, struck through, with its reason, date and note, and it cannot be lent. **Restore** on it brings it back into the collection.
+
+When a book has no owned copy left, it leaves the Library, the Home counts, Series gaps and Duplicates. It shows in the Library when you switch on **Removed**. A book with one owned copy and one removed copy stays in the library as normal.
+
+After you remove a copy as Lost or Damaged, Bookcase asks whether to add the book to your wishlist. Accepting adds it at Medium priority with its author, ISBN and cover, unless it is already on the wishlist.
 
 **Add edition** at the foot adds another printing. It has a **Lookup** button that fills the form from an ISBN, and a first-copy condition.
 
