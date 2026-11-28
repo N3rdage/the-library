@@ -2,6 +2,7 @@ using BookTracker.Application;
 using BookTracker.Application.Books;
 using BookTracker.Application.Series;
 using BookTracker.Application.Works;
+using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.Services.Covers;
 using BookTracker.Web.Validation;
@@ -16,6 +17,7 @@ public class BookAddViewModel(
     SeriesMatchService seriesMatch,
     IDispatcher dispatcher,
     CoverPhotoUploader coverUploader,
+    AIProviderFactory aiFactory,
     ILogger<BookAddViewModel> logger) : DispatchingViewModel
 {
     /// <summary>Search existing Works for the collection-row autocomplete.
@@ -343,6 +345,7 @@ public class BookAddViewModel(
             if (ExistingBook is not null)
             {
                 LookupMessage = null;
+                CoverPhoto = null;
                 return;
             }
 
@@ -353,65 +356,71 @@ public class BookAddViewModel(
                 return;
             }
 
-            // The Add page creates a Book with one Work. Lookup result
-            // populates both: Book.Title mirrors the Work title, plus
-            // cover; Work gets title/subtitle/author/genres. In Collection
-            // mode the work-specific fields are skipped because the lookup
-            // result describes the *collection*, not its constituent works.
-            if (string.IsNullOrWhiteSpace(BookInput.Title)) BookInput.Title = result.Title ?? "";
-            if (string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl)) BookInput.DefaultCoverArtUrl = result.CoverUrl;
-            if (!IsCollection)
-            {
-                if (string.IsNullOrWhiteSpace(WorkInput.Title)) WorkInput.Title = result.Title ?? "";
-                if (string.IsNullOrWhiteSpace(WorkInput.Subtitle)) WorkInput.Subtitle = result.Subtitle;
-                // Lookup gives a single author string — seed the chip list with it
-                // when empty. User can add additional co-authors via the picker
-                // before saving.
-                if (WorkInput.Authors.Count == 0 && !string.IsNullOrWhiteSpace(result.Author))
-                {
-                    WorkInput.Authors = [result.Author];
-                }
-            }
-            if (string.IsNullOrWhiteSpace(EditionInput.Isbn)) EditionInput.Isbn = result.Isbn;
-            if (string.IsNullOrWhiteSpace(EditionInput.Publisher)) EditionInput.Publisher = result.Publisher;
-            if (string.IsNullOrWhiteSpace(EditionInput.DatePrinted) && result.DatePrinted is DateOnly d)
-            {
-                EditionInput.DatePrinted = PartialDateParser.Format(d, result.DatePrintedPrecision);
-            }
-
-            // Genre candidates and series suggestions are work-level; not
-            // meaningful in Collection mode where each work has its own.
-            if (!IsCollection)
-            {
-                LookupCandidates = result.GenreCandidates.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                // Picker reads LookupCandidates via parameter binding; the
-                // page calls picker.ApplyCandidatesAsync explicitly after
-                // this method returns so the fuzzy-match auto-select runs
-                // once per lookup (not on every re-render — keeps manual
-                // genre removals sticky).
-
-                SeriesSuggestion = await seriesMatch.FindMatchAsync(result);
-                SeriesSuggestionDismissed = false;
-                // Fresh lookup → clear any acceptance carried over from a prior
-                // ISBN attempt in this session (e.g. user typed wrong ISBN,
-                // accepted a Discworld suggestion, then corrected to a non-series
-                // book — the prior accept must not silently apply).
-                ClearSeriesSelection();
-            }
-            else
-            {
-                LookupCandidates = [];
-                SeriesSuggestion = null;
-                SeriesSuggestionDismissed = false;
-                ClearSeriesSelection();
-            }
-
-            LookupMessage = $"Prefilled from {result.Source}. Edit anything before saving.";
+            await ApplyLookupResultAsync(result);
         }
         finally
         {
             LookingUp = false;
         }
+    }
+
+    // Fills the form from a lookup result; shared by the ISBN box and the photo flow.
+    private async Task ApplyLookupResultAsync(BookLookupResult result)
+    {
+        // The Add page creates a Book with one Work. Lookup result
+        // populates both: Book.Title mirrors the Work title, plus
+        // cover; Work gets title/subtitle/author/genres. In Collection
+        // mode the work-specific fields are skipped because the lookup
+        // result describes the *collection*, not its constituent works.
+        if (string.IsNullOrWhiteSpace(BookInput.Title)) BookInput.Title = result.Title ?? "";
+        if (string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl)) BookInput.DefaultCoverArtUrl = result.CoverUrl;
+        if (!IsCollection)
+        {
+            if (string.IsNullOrWhiteSpace(WorkInput.Title)) WorkInput.Title = result.Title ?? "";
+            if (string.IsNullOrWhiteSpace(WorkInput.Subtitle)) WorkInput.Subtitle = result.Subtitle;
+            // Lookup gives a single author string — seed the chip list with it
+            // when empty. User can add additional co-authors via the picker
+            // before saving.
+            if (WorkInput.Authors.Count == 0 && !string.IsNullOrWhiteSpace(result.Author))
+            {
+                WorkInput.Authors = [result.Author];
+            }
+        }
+        if (string.IsNullOrWhiteSpace(EditionInput.Isbn)) EditionInput.Isbn = result.Isbn;
+        if (string.IsNullOrWhiteSpace(EditionInput.Publisher)) EditionInput.Publisher = result.Publisher;
+        if (string.IsNullOrWhiteSpace(EditionInput.DatePrinted) && result.DatePrinted is DateOnly d)
+        {
+            EditionInput.DatePrinted = PartialDateParser.Format(d, result.DatePrintedPrecision);
+        }
+
+        // Genre candidates and series suggestions are work-level; not
+        // meaningful in Collection mode where each work has its own.
+        if (!IsCollection)
+        {
+            LookupCandidates = result.GenreCandidates.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            // Picker reads LookupCandidates via parameter binding; the
+            // page calls picker.ApplyCandidatesAsync explicitly after
+            // this method returns so the fuzzy-match auto-select runs
+            // once per lookup (not on every re-render — keeps manual
+            // genre removals sticky).
+
+            SeriesSuggestion = await seriesMatch.FindMatchAsync(result);
+            SeriesSuggestionDismissed = false;
+            // Fresh lookup → clear any acceptance carried over from a prior
+            // ISBN attempt in this session (e.g. user typed wrong ISBN,
+            // accepted a Discworld suggestion, then corrected to a non-series
+            // book — the prior accept must not silently apply).
+            ClearSeriesSelection();
+        }
+        else
+        {
+            LookupCandidates = [];
+            SeriesSuggestion = null;
+            SeriesSuggestionDismissed = false;
+            ClearSeriesSelection();
+        }
+
+        LookupMessage = $"Prefilled from {result.Source}. Edit anything before saving.";
     }
 
     /// <summary>
@@ -460,6 +469,7 @@ public class BookAddViewModel(
         SearchAuthor = null;
         SearchCandidates = [];
         SearchMessage = null;
+        DismissPhotoMatch();
         NoIsbnMode = false;
         IsCollection = false;
         CollectionWorks = [new()];
@@ -530,6 +540,202 @@ public class BookAddViewModel(
         // No genre auto-pick for the no-ISBN flow — search results don't
         // carry subjects. User selects genres manually via the picker.
     }
+
+    // Capture from a photo. The photo of the cover or title page is read by the
+    // AI provider; what it read finds candidates (the ISBN through the normal
+    // lookup, else a title/author search). Nothing is saved: taking a candidate,
+    // or "none of these", only fills the form, like the lookup paths above.
+    private const double MinPhotoConfidence = 0.5;
+
+    private static readonly (string Stem, string Genre)[] ReferenceGenres =
+    [
+        ("dictionar", "Dictionaries"),
+        ("encyclop", "Encyclopedias"),
+        ("atlas", "Atlases"),
+        ("field guide", "Field Guides"),
+        ("style guide", "Style Guides"),
+        ("travel guide", "Travel Guides"),
+    ];
+
+    /// <summary>True when at least one AI provider is configured, so the photo can be read.</summary>
+    public bool PhotoReadAvailable => aiFactory.AvailableProviders.Count > 0;
+
+    /// <summary>The photo being matched; null once a candidate was taken or the panel dismissed.</summary>
+    public CoverPhoto? MatchPhoto { get; private set; }
+    public BookLookupResult? PhotoIsbnMatch { get; private set; }
+    public IReadOnlyList<BookSearchCandidate> PhotoCandidates { get; private set; } = [];
+    public string? PhotoMessage { get; private set; }
+
+    /// <summary>Name of the Reference genre to pick after a candidate or "none of these" was taken;
+    /// the page resolves it through the genre picker. Null when the photo is not a reference work.</summary>
+    public string? PhotoGenreHint { get; private set; }
+
+    private BookPhotoReading? _photoReading;
+
+    public async Task ReadPhotoAsync(CoverPhoto photo)
+    {
+        ClearPhotoMatch();
+        ExistingBook = null;
+        MatchPhoto = photo;
+
+        try
+        {
+            _photoReading = await aiFactory.GetService().ReadBookFromImageAsync(Convert.ToBase64String(photo.Bytes));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Reading a book from a photo failed.");
+        }
+
+        if (_photoReading is null)
+        {
+            MatchPhoto = null;
+            PhotoMessage = "Couldn't read a book from that photo. Try another one, or fill the form in by hand.";
+            return;
+        }
+
+        await FindPhotoCandidatesAsync(_photoReading);
+        if (ExistingBook is null && PhotoIsbnMatch is null && PhotoCandidates.Count == 0)
+        {
+            PhotoMessage = "No matches found. Choose \"None of these\" to fill the form from the photo.";
+        }
+    }
+
+    private async Task FindPhotoCandidatesAsync(BookPhotoReading reading)
+    {
+        // The ISBN is a model's reading with no check digit, so it only counts
+        // when the normal lookup finds a book for it.
+        if (Text(reading.Isbn) is { } isbn)
+        {
+            try
+            {
+                ExistingBook = await dispatcher.Query(new FindEditionByIsbn(isbn));
+                if (ExistingBook is not null)
+                {
+                    MatchPhoto = null;
+                    CoverPhoto = null;
+                    return;
+                }
+
+                PhotoIsbnMatch = await lookup.LookupByIsbnAsync(isbn, CancellationToken.None);
+                if (PhotoIsbnMatch is not null) return;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Looking up the ISBN read from a photo failed.");
+            }
+        }
+
+        var title = Text(reading.Title);
+        var author = reading.Contributors
+            .FirstOrDefault(c => c.Role == AuthorRole.Author && c.Confidence >= MinPhotoConfidence)?.Name;
+        if (title is null && author is null) return;
+
+        try
+        {
+            PhotoCandidates = await lookup.SearchByTitleAuthorAsync(title, author, CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Searching for the book read from a photo failed.");
+        }
+    }
+
+    public async Task TakePhotoIsbnMatchAsync()
+    {
+        if (PhotoIsbnMatch is not { } match) return;
+        await ApplyLookupResultAsync(match);
+        FinishPhotoMatch($"Prefilled from {match.Source}.");
+    }
+
+    public async Task TakePhotoCandidateAsync(BookSearchCandidate candidate)
+    {
+        await ApplyCandidateAsync(candidate);
+        FinishPhotoMatch("Prefilled from Open Library.");
+    }
+
+    /// <summary>"None of these": fills the form from what the photo said, keeping anything already typed.</summary>
+    public void UsePhotoReading()
+    {
+        if (_photoReading is not { } reading) return;
+
+        var title = Text(reading.Title);
+        if (string.IsNullOrWhiteSpace(BookInput.Title)) BookInput.Title = title ?? "";
+        if (string.IsNullOrWhiteSpace(EditionInput.Isbn)) EditionInput.Isbn = Text(reading.Isbn);
+        if (string.IsNullOrWhiteSpace(EditionInput.Publisher)) EditionInput.Publisher = Text(reading.Publisher);
+        if (string.IsNullOrWhiteSpace(EditionInput.DatePrinted) && reading.Year is { Confidence: >= MinPhotoConfidence } year)
+        {
+            EditionInput.DatePrinted = year.Value.ToString();
+        }
+        if (EditionInput.EditionNumber is null && reading.EditionNumber is { Confidence: >= MinPhotoConfidence } edition)
+        {
+            EditionInput.EditionNumber = edition.Value;
+        }
+
+        if (!IsCollection)
+        {
+            if (string.IsNullOrWhiteSpace(WorkInput.Title)) WorkInput.Title = title ?? "";
+            if (string.IsNullOrWhiteSpace(WorkInput.Subtitle)) WorkInput.Subtitle = Text(reading.Subtitle);
+            var credited = reading.Contributors.Where(c => c.Confidence >= MinPhotoConfidence).ToList();
+            if (WorkInput.Authors.Count == 0)
+            {
+                WorkInput.Authors = credited.Where(c => c.Role == AuthorRole.Author).Select(c => c.Name).ToList();
+            }
+            if (WorkInput.Contributors.Count == 0)
+            {
+                WorkInput.Contributors = credited
+                    .Where(c => c.Role != AuthorRole.Author)
+                    .Select(c => new ContributorEntry(c.Name, c.Role))
+                    .ToList();
+            }
+        }
+
+        FinishPhotoMatch("Prefilled from the photo.");
+    }
+
+    public void DismissPhotoMatch()
+    {
+        ClearPhotoMatch();
+        PhotoMessage = null;
+    }
+
+    // The form is filled by now. A candidate's own cover is used as today; with none
+    // (or none-of-these) the photo is held as the cover, pre-selected, and uploads on save.
+    private void FinishPhotoMatch(string message)
+    {
+        CoverPhoto = string.IsNullOrWhiteSpace(BookInput.DefaultCoverArtUrl) && coverUploader.IsEnabled
+            ? MatchPhoto
+            : null;
+
+        if (_photoReading?.ReferenceWork is { IsReferenceWork: true } hint)
+        {
+            BookInput.Status = BookStatus.Reference;
+            PhotoGenreHint = IsCollection ? null : ReferenceGenreFor(hint.Kind);
+        }
+
+        ClearPhotoMatch(keepGenreHint: true);
+        PhotoMessage = $"{message} Review the form, then save.";
+    }
+
+    private void ClearPhotoMatch(bool keepGenreHint = false)
+    {
+        MatchPhoto = null;
+        PhotoIsbnMatch = null;
+        PhotoCandidates = [];
+        _photoReading = null;
+        if (!keepGenreHint) PhotoGenreHint = null;
+    }
+
+    private static string ReferenceGenreFor(string? kind)
+    {
+        var match = kind is null
+            ? default
+            : ReferenceGenres.FirstOrDefault(g => kind.Contains(g.Stem, StringComparison.OrdinalIgnoreCase));
+        return match.Genre ?? "Reference";
+    }
+
+    private static string? Text(PhotoField<string>? field) =>
+        field is { Confidence: >= MinPhotoConfidence } && !string.IsNullOrWhiteSpace(field.Value) ? field.Value.Trim() : null;
 
     public async Task<int?> SaveAsync(List<int> selectedGenreIds)
     {

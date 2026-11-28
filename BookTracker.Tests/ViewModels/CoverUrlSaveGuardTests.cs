@@ -5,6 +5,7 @@ using BookTracker.Web.Services.Covers;
 using BookTracker.Web.Validation;
 using BookTracker.Web.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace BookTracker.Tests.ViewModels;
@@ -113,7 +114,8 @@ public class CoverUrlSaveGuardTests
     {
         var vm = new BookAddViewModel(
             Substitute.For<IBookLookupService>(), new SeriesMatchService(_dispatcher),
-            _dispatcher, NoUploader(), NullLogger<BookAddViewModel>.Instance);
+            _dispatcher, NoUploader(), Substitute.For<AIProviderFactory>(_dispatcher, Options.Create(new AIOptions()), NullLoggerFactory.Instance),
+            NullLogger<BookAddViewModel>.Instance);
         vm.BookInput.Title = "Mort";
         vm.BookInput.DefaultCoverArtUrl = bookCover;
         vm.EditionInput.CoverUrl = editionCover;

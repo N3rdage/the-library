@@ -64,7 +64,7 @@
         else if (Photo is not null)
         {
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mt-2">
-                <img data-crop-preview class="photo-preview" alt="Cover photo preview" />
+                <img class="photo-preview" alt="Cover photo preview" src="@PreviewSrc" />
                 <MudStack Spacing="1">
                     <MudText Typo="Typo.body2">@HeldText</MudText>
                     <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="ClearAsync">Remove photo</MudButton>
@@ -90,8 +90,25 @@
     private bool cropping;
     private bool busy;
     private bool pendingOpen;
-    private bool pendingPreview;
     private string? error;
+
+    // The held photo can also arrive from the parent (the photo match on the Add page),
+    // so the preview is drawn from its bytes rather than from the crop stage.
+    private CoverPhoto? previewOf;
+    private string? previewSrc;
+
+    private string? PreviewSrc
+    {
+        get
+        {
+            if (!ReferenceEquals(previewOf, Photo))
+            {
+                previewOf = Photo;
+                previewSrc = Photo is null ? null : $"data:{Photo.ContentType};base64,{Convert.ToBase64String(Photo.Bytes)}";
+            }
+            return previewSrc;
+        }
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -117,12 +134,6 @@
                 StateHasChanged();
             }
         }
-
-        if (pendingPreview)
-        {
-            pendingPreview = false;
-            await JS.InvokeVoidAsync("CoverPhotoCrop.showPreview", root);
-        }
     }
 
     private void OnFileChosen(IBrowserFile? file)
@@ -139,14 +150,13 @@
         error = null;
         try
         {
-            var reference = await JS.InvokeAsync<IJSStreamReference>("CoverPhotoCrop.crop", root);
+            await using var reference = await JS.InvokeAsync<IJSStreamReference>("CoverPhotoCrop.crop", root);
             await using var stream = await reference.OpenReadStreamAsync(CoverPhotoUploader.MaxUploadBytes);
             using var buffer = new MemoryStream();
             await stream.CopyToAsync(buffer);
 
             Photo = new CoverPhoto(buffer.ToArray(), "image/jpeg");
             cropping = false;
-            pendingPreview = true;
             await PhotoChanged.InvokeAsync(Photo);
         }
         catch (Exception ex) when (ex is JSException or IOException or InvalidOperationException)
