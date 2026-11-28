@@ -1,0 +1,187 @@
+@* Take or choose a photo, crop it with a draggable box, and hand the cropped JPEG
+   to the parent through Photo / PhotoChanged. It never uploads by itself: the
+   parent decides when (an edition id may not exist yet). The crop runs in the
+   browser (wwwroot/js/cover-photo-crop.js) because only the browser applies the
+   photo's EXIF orientation when it draws the image; the original never crosses
+   SignalR, only the cropped JPEG comes back, as a JS stream reference. *@
+
+@implements IAsyncDisposable
+@using BookTracker.Web.Services.Covers
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@inject CoverPhotoUploader Uploader
+@inject IJSRuntime JS
+@inject ILogger<CoverPhotoPicker> Logger
+
+<div @ref="root">
+    @if (!Uploader.IsEnabled)
+    {
+        <MudText Typo="Typo.caption" Color="Color.Secondary">Cover storage isn't configured, so a cover photo can't be added.</MudText>
+    }
+    else
+    {
+        @* capture="environment" hints to mobile browsers that the rear camera
+           should be the default (vs. gallery picker). Without it, some Android
+           browsers don't surface the camera option at all for accept="image/*"
+           alone. iOS Safari respects the hint but still allows the gallery via
+           the same sheet. Passed via @attributes, which MudFileUpload spreads onto
+           the underlying <input type="file"> (MudBlazor 9 dropped InputAttributes). *@
+        <MudFileUpload T="IBrowserFile"
+                       FilesChanged="OnFileChosen"
+                       Accept="image/*"
+                       MaximumFileCount="1"
+                       @attributes="@(new Dictionary<string, object> { ["capture"] = "environment" })">
+            @* MudBlazor 9 replaced ActivatorContent with CustomContent, which no
+               longer auto-wires a label to the hidden input: the activator must
+               call OpenFilePickerAsync() itself. *@
+            <CustomContent>
+                <MudButton Variant="Variant.Outlined"
+                           StartIcon="@Icons.Material.Filled.CameraAlt"
+                           Color="Color.Primary"
+                           Disabled="@busy"
+                           OnClick="@(() => context.OpenFilePickerAsync())">
+                    @(Photo is null && !cropping ? "Take or choose photo" : "Choose different photo")
+                </MudButton>
+            </CustomContent>
+        </MudFileUpload>
+
+        @if (cropping)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2 d-block">
+                Drag the box to move it and the corner to resize it. Only what is inside the box becomes the cover.
+            </MudText>
+            <div class="crop-stage">
+                <img data-crop-img alt="Photo to crop" />
+                <div data-crop-box class="crop-box">
+                    <div data-crop-handle class="crop-handle"></div>
+                </div>
+            </div>
+            <MudStack Row="true" Spacing="2" Class="mt-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@busy" OnClick="UseCropAsync">Use this crop</MudButton>
+                <MudButton Disabled="@busy" OnClick="CancelCrop">Cancel</MudButton>
+            </MudStack>
+        }
+        else if (Photo is not null)
+        {
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mt-2">
+                <img data-crop-preview class="photo-preview" alt="Cover photo preview" />
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body2">@HeldText</MudText>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="ClearAsync">Remove photo</MudButton>
+                </MudStack>
+            </MudStack>
+        }
+
+        @if (error is not null)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Error" Class="mt-1 d-block">@error</MudText>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public CoverPhoto? Photo { get; set; }
+    [Parameter] public EventCallback<CoverPhoto?> PhotoChanged { get; set; }
+
+    /// <summary>What the held photo will do, shown beside its preview.</summary>
+    [Parameter] public string HeldText { get; set; } = "This photo will be the cover.";
+
+    private ElementReference root;
+    private bool cropping;
+    private bool busy;
+    private bool pendingOpen;
+    private bool pendingPreview;
+    private string? error;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!Uploader.IsEnabled) return;
+
+        if (firstRender)
+        {
+            await JS.InvokeVoidAsync("CoverPhotoCrop.attach", root);
+        }
+
+        if (pendingOpen)
+        {
+            pendingOpen = false;
+            try
+            {
+                await JS.InvokeVoidAsync("CoverPhotoCrop.open", root);
+            }
+            catch (JSException ex)
+            {
+                Logger.LogWarning(ex, "The browser could not load the chosen cover photo.");
+                cropping = false;
+                error = "That file isn't an image this browser can read. Try another photo.";
+                StateHasChanged();
+            }
+        }
+
+        if (pendingPreview)
+        {
+            pendingPreview = false;
+            await JS.InvokeVoidAsync("CoverPhotoCrop.showPreview", root);
+        }
+    }
+
+    private void OnFileChosen(IBrowserFile? file)
+    {
+        if (file is null) return;
+        error = null;
+        cropping = true;
+        pendingOpen = true;
+    }
+
+    private async Task UseCropAsync()
+    {
+        busy = true;
+        error = null;
+        try
+        {
+            var reference = await JS.InvokeAsync<IJSStreamReference>("CoverPhotoCrop.crop", root);
+            await using var stream = await reference.OpenReadStreamAsync(CoverPhotoUploader.MaxUploadBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+
+            Photo = new CoverPhoto(buffer.ToArray(), "image/jpeg");
+            cropping = false;
+            pendingPreview = true;
+            await PhotoChanged.InvokeAsync(Photo);
+        }
+        catch (Exception ex) when (ex is JSException or IOException or InvalidOperationException)
+        {
+            Logger.LogWarning(ex, "Cropping the cover photo failed.");
+            error = "Couldn't crop that photo. Try again.";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private void CancelCrop()
+    {
+        cropping = false;
+        error = null;
+    }
+
+    private async Task ClearAsync()
+    {
+        Photo = null;
+        await PhotoChanged.InvokeAsync(null);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!Uploader.IsEnabled) return;
+        try
+        {
+            await JS.InvokeVoidAsync("CoverPhotoCrop.release", root);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is already gone; the browser frees the object URLs with the page.
+        }
+    }
+}

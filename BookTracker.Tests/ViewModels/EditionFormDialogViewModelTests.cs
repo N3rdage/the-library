@@ -3,8 +3,11 @@ using BookTracker.Application.Books;
 using BookTracker.Application.Publishers;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
+using BookTracker.Web.Services.Covers;
 using BookTracker.Web.ViewModels;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace BookTracker.Tests.ViewModels;
 
@@ -20,13 +23,17 @@ public class EditionFormDialogViewModelTests
     private const int BookId = 42;
     private readonly IBookLookupService _lookup = Substitute.For<IBookLookupService>();
     private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
+    private readonly IBookCoverStorage _storage = Substitute.For<IBookCoverStorage>();
+    private readonly CoverPhotoUploader _uploader;
 
     public EditionFormDialogViewModelTests()
     {
+        _uploader = new CoverPhotoUploader(_storage, NullLogger<CoverPhotoUploader>.Instance);
+        _storage.IsEnabled.Returns(true);
         GivenPublishers();
     }
 
-    private EditionFormDialogViewModel NewVm() => new(_lookup, _dispatcher);
+    private EditionFormDialogViewModel NewVm() => new(_lookup, _dispatcher, _uploader);
 
     private void GivenPublishers(params PublisherOption[] publishers) =>
         _dispatcher.Query(Arg.Any<GetPublisherOptions>(), Arg.Any<CancellationToken>())
@@ -129,6 +136,50 @@ public class EditionFormDialogViewModelTests
                 && c.DatePrintedPrecision == DatePrecision.Year
                 && c.FirstCopyCondition == BookCondition.VeryGood),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SaveAsync_Edit_WithHeldPhoto_UpdatesTheEditionFirst_ThenSetsTheCover()
+    {
+        GivenEdition(new EditionForEdit(
+            EditionId, BookId, "old", BookFormat.Hardcover, null, null, DatePrecision.Day, "https://covers.example.org/x.jpg"));
+        _storage.UploadAsync(Arg.Any<byte[]>(), "image/jpeg", $"editions/{EditionId}", Arg.Any<CancellationToken>())
+            .Returns("https://test/book-covers/editions/3.jpg");
+        var vm = NewVm();
+        await vm.InitializeForEditAsync(EditionId);
+        vm.CoverPhoto = new CoverPhoto([9, 9], "image/jpeg");
+
+        var id = await vm.SaveAsync();
+
+        Assert.Equal(EditionId, id);
+        Assert.Null(vm.CoverUploadError);
+        Received.InOrder(() =>
+        {
+            _dispatcher.Send(Arg.Any<UpdateEdition>(), Arg.Any<CancellationToken>());
+            _dispatcher.Send(
+                Arg.Is<SetEditionCover>(c => c!.EditionId == EditionId
+                    && c.Url == "https://test/book-covers/editions/3.jpg" && c.IsUserSupplied),
+                Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public async Task SaveAsync_Edit_WhenThePhotoUploadFails_KeepsTheSavedEdition_AndReportsIt()
+    {
+        GivenEdition(new EditionForEdit(
+            EditionId, BookId, "old", BookFormat.Hardcover, null, null, DatePrecision.Day, null));
+        _storage.UploadAsync(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("boom"));
+        var vm = NewVm();
+        await vm.InitializeForEditAsync(EditionId);
+        vm.CoverPhoto = new CoverPhoto([9, 9], "image/jpeg");
+
+        var id = await vm.SaveAsync();
+
+        Assert.Equal(EditionId, id);
+        Assert.Contains("Upload failed", vm.CoverUploadError);
+        await _dispatcher.Received(1).Send(Arg.Any<UpdateEdition>(), Arg.Any<CancellationToken>());
+        await _dispatcher.DidNotReceive().Send(Arg.Any<SetEditionCover>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -8,6 +8,7 @@
 @using Microsoft.Extensions.Logging
 @inject EditionFormDialogViewModel VM
 @inject IDispatcher Dispatcher
+@inject ISnackbar Snackbar
 @inject ILogger<EditionFormDialog> Logger
 
 <MudDialog>
@@ -84,6 +85,9 @@
                               Margin="Margin.Dense"
                               Validation="@(new Func<string?, string?>(VM.CoverUrlError))" />
 
+                <CoverPhotoPicker @bind-Photo="VM.CoverPhoto"
+                                  HeldText="This photo will be the cover. It replaces the cover URL when you save." />
+
                 @if (VM.IsNew)
                 {
                     <MudSelect T="BookCondition"
@@ -159,7 +163,15 @@
         try
         {
             var id = await VM.SaveAsync();
-            if (id is int) MudDialog.Close(DialogResult.Ok(id));
+            if (id is not int) return;
+
+            // Saving twice would add a second edition, so the dialog closes even
+            // when only the photo failed.
+            if (VM.CoverUploadError is not null)
+            {
+                Snackbar.Add($"Edition saved, but the cover photo didn't upload: {VM.CoverUploadError}", Severity.Warning);
+            }
+            MudDialog.Close(DialogResult.Ok(id));
         }
         finally
         {

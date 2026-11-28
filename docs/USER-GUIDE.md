@@ -81,7 +81,7 @@ Add book records one book with its first edition and copy. Fill in what you know
 
 ### The form
 
-- **Book** card: Title, Category, Status, Rating (0-5), Default cover URL and Notes. A **Cover preview** sits beside it.
+- **Book** card: Title, Category, Status, Rating (0-5), Default cover URL and Notes. A **Cover preview** sits beside it. A **Cover photo** card, under it, takes a photo with the camera or from your files; drag the box over the cover and its corner to resize it, then press **Use this crop**. When you save, the photo becomes the cover and replaces any cover URLs. If only the photo fails to upload, the book is still saved and a message says so. The card says so when cover storage is not set up.
 - **Work** card: Title, Author(s), Subtitle, First published and Other contributors (editor, translator, illustrator). Leave Author(s) blank for edited works such as dictionaries. Type an author and press Enter or comma to add them. Author names are matched to existing authors; a name you have not used before creates an author.
 - **Genres** card: type to find a genre and pick it. After a lookup, subjects that match your genre list are picked for you, and the other subjects are listed as hints.
 - **Series / collection** card: type to find an existing series. If there is no exact match, choose the **Add "..."** row to create one. Nothing is created until you choose. Once a series is chosen, an **Order / position** box appears.
@@ -274,7 +274,7 @@ A single-Work book shows a **Details** card with first-published date, series (w
 **Editions & copies** shows totals. Each edition is a panel showing its format, edition number, ISBN and copy count. Open it for publisher and print date, a cover thumbnail, and these buttons:
 
 - **Edit edition** and **Add copy**.
-- **Upload photo** (or **Replace photo**) uploads your own cover image from a file or the camera. A **your photo** chip marks an uploaded cover.
+- **Upload photo** (or **Replace photo**) uploads your own cover image from a file or the camera, cropped with the same draggable box as on Add book. A **your photo** chip marks an uploaded cover. The edition form (**Edit edition** and **Add edition**) has the same photo picker; its photo replaces the cover URL when you save.
 - Per copy: **Lend** or **Returned**, **Edit** and **Delete**. Delete asks "Delete this copy?" first. Edit changes Condition, Date acquired and Notes.
 
 **Add edition** at the foot adds another printing. It has a **Lookup** button that fills the form from an ISBN, and a first-copy condition.

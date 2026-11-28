@@ -17,9 +17,11 @@ namespace BookTracker.Tests.ViewModels;
 [Trait("Category", TestCategories.Integration)]
 public class BookDetailViewModelTests
 {
+    private static CoverPhotoUploader Uploader(IBookCoverStorage storage) =>
+        new(storage, NullLogger<CoverPhotoUploader>.Instance);
+
     private static BookDetailViewModel CreateVm(TestDbContextFactory factory, IBookCoverStorage? coverStorage = null) =>
-        new(coverStorage ?? Substitute.For<IBookCoverStorage>(),
-            NullLogger<BookDetailViewModel>.Instance,
+        new(Uploader(coverStorage ?? Substitute.For<IBookCoverStorage>()),
             BuildDispatcher(factory),
             TimeProvider.System);
 
@@ -553,17 +555,12 @@ public class BookDetailViewModelTests
         storage.UploadAsync(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns("https://test/book-covers/editions/" + editionId + ".jpg?v=42");
 
-        var fileBytes = new byte[] { 0xFF, 0xD8, 0x01, 0x02, 0x03 }; // JPEG-ish header bytes
-        var file = Substitute.For<IBrowserFile>();
-        file.Size.Returns((long)fileBytes.Length);
-        file.Name.Returns("test.jpg");
-        file.ContentType.Returns("image/jpeg");
-        file.OpenReadStream(Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(new MemoryStream(fileBytes));
+        var photo = new CoverPhoto([0xFF, 0xD8, 0x01, 0x02, 0x03], "image/jpeg"); // JPEG-ish header bytes
 
         var vm = CreateVm(factory, storage);
         await vm.InitializeAsync(bookId);
 
-        var result = await vm.UploadEditionCoverAsync(editionId, file, CancellationToken.None);
+        var result = await vm.UploadEditionCoverAsync(editionId, photo, CancellationToken.None);
 
         Assert.True(result.Success);
         Assert.Equal("https://test/book-covers/editions/" + editionId + ".jpg?v=42", result.NewUrl);
@@ -577,75 +574,6 @@ public class BookDetailViewModelTests
         var refreshedEdition = vm.Book!.Editions.Single(e => e.Id == editionId);
         Assert.Equal(saved.CoverUrl, refreshedEdition.CoverUrl);
         Assert.True(refreshedEdition.IsUserSupplied);
-    }
-
-    [Fact]
-    public async Task UploadEditionCoverAsync_FileTooLarge_ReturnsFailure_AndDoesNotUpload()
-    {
-        var factory = new TestDbContextFactory();
-        int bookId, editionId;
-        using (var db = factory.CreateDbContext())
-        {
-            var author = Author.Create("A");
-            var book = TestBooks.Book(
-                "B",
-                works: [TestWorks.Work("B", author)],
-                editions: [TestEditions.Edition(format: BookFormat.TradePaperback, copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
-            db.Books.Add(book);
-            await db.SaveChangesAsync();
-            bookId = book.Id;
-            editionId = book.Editions.Single().Id;
-        }
-
-        var storage = Substitute.For<IBookCoverStorage>();
-        storage.IsEnabled.Returns(true);
-
-        var file = Substitute.For<IBrowserFile>();
-        file.Size.Returns(BookDetailViewModel.MaxUploadBytes + 1);
-        file.Name.Returns("huge.jpg");
-        file.ContentType.Returns("image/jpeg");
-
-        var vm = CreateVm(factory, storage);
-        await vm.InitializeAsync(bookId);
-
-        var result = await vm.UploadEditionCoverAsync(editionId, file, CancellationToken.None);
-
-        Assert.False(result.Success);
-        Assert.Contains("too large", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
-        await storage.DidNotReceive().UploadAsync(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task UploadEditionCoverAsync_StorageDisabled_ReturnsFailure()
-    {
-        var factory = new TestDbContextFactory();
-        int bookId, editionId;
-        using (var db = factory.CreateDbContext())
-        {
-            var author = Author.Create("A");
-            var book = TestBooks.Book(
-                "B",
-                works: [TestWorks.Work("B", author)],
-                editions: [TestEditions.Edition(format: BookFormat.TradePaperback, copies: [TestEditions.Copy(condition: BookCondition.Good)])]);
-            db.Books.Add(book);
-            await db.SaveChangesAsync();
-            bookId = book.Id;
-            editionId = book.Editions.Single().Id;
-        }
-
-        var storage = Substitute.For<IBookCoverStorage>();
-        storage.IsEnabled.Returns(false); // configuration missing — service idle
-
-        var file = Substitute.For<IBrowserFile>();
-        file.Size.Returns(100L);
-
-        var vm = CreateVm(factory, storage);
-        await vm.InitializeAsync(bookId);
-
-        var result = await vm.UploadEditionCoverAsync(editionId, file, CancellationToken.None);
-
-        Assert.False(result.Success);
-        Assert.Contains("not configured", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1238,7 +1166,8 @@ public class BookDetailViewModelLoanTests
         _dispatcher.Query(Arg.Any<BookTracker.Application.Books.GetBookDetail>(), Arg.Any<CancellationToken>())
             .Returns(Detail(copies));
         var vm = new BookDetailViewModel(
-            Substitute.For<IBookCoverStorage>(), NullLogger<BookDetailViewModel>.Instance, _dispatcher, Clock);
+            new CoverPhotoUploader(Substitute.For<IBookCoverStorage>(), NullLogger<CoverPhotoUploader>.Instance),
+            _dispatcher, Clock);
         await vm.InitializeAsync(BookId);
         return vm;
     }

@@ -1,6 +1,7 @@
 using BookTracker.Application;
 using BookTracker.Application.Books;
 using BookTracker.Web.Services;
+using BookTracker.Web.Services.Covers;
 using BookTracker.Web.Validation;
 using BookTracker.Web.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -20,6 +21,9 @@ public class CoverUrlSaveGuardTests
     private const string HttpCover = "http://covers.example.org/x.jpg";
 
     private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
+
+    private static CoverPhotoUploader NoUploader() =>
+        new(Substitute.For<IBookCoverStorage>(), NullLogger<CoverPhotoUploader>.Instance);
 
     [Fact]
     public async Task BookEditDialog_UnacceptableCoverUrl_DoesNotDispatch()
@@ -80,7 +84,7 @@ public class CoverUrlSaveGuardTests
     [Fact]
     public void EditionFormDialog_StoredUnacceptableCoverUrl_IsAcceptableOnlyWhileUnchanged()
     {
-        var vm = new EditionFormDialogViewModel(Substitute.For<IBookLookupService>(), _dispatcher);
+        var vm = new EditionFormDialogViewModel(Substitute.For<IBookLookupService>(), _dispatcher, NoUploader());
         vm.LoadCoverUrl("https://localhost:10000/devstoreaccount1/book-covers/1.jpg");
 
         Assert.True(vm.CoverUrlAcceptable);
@@ -95,7 +99,7 @@ public class CoverUrlSaveGuardTests
     [Fact]
     public async Task EditionFormDialog_UnacceptableCoverUrl_ReturnsNullWithoutDispatching()
     {
-        var vm = new EditionFormDialogViewModel(Substitute.For<IBookLookupService>(), _dispatcher) { CoverUrl = HttpCover };
+        var vm = new EditionFormDialogViewModel(Substitute.For<IBookLookupService>(), _dispatcher, NoUploader()) { CoverUrl = HttpCover };
 
         Assert.False(vm.CoverUrlAcceptable);
         Assert.Null(await vm.SaveAsync());
@@ -109,7 +113,7 @@ public class CoverUrlSaveGuardTests
     {
         var vm = new BookAddViewModel(
             Substitute.For<IBookLookupService>(), new SeriesMatchService(_dispatcher),
-            _dispatcher, NullLogger<BookAddViewModel>.Instance);
+            _dispatcher, NoUploader(), NullLogger<BookAddViewModel>.Instance);
         vm.BookInput.Title = "Mort";
         vm.BookInput.DefaultCoverArtUrl = bookCover;
         vm.EditionInput.CoverUrl = editionCover;

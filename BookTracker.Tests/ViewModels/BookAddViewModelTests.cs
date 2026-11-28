@@ -5,6 +5,7 @@ using BookTracker.Application.Works;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
+using BookTracker.Web.Services.Covers;
 using BookTracker.Web.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -25,9 +26,13 @@ public class BookAddViewModelTests
 
     private readonly IDispatcher _dispatcher = Substitute.For<IDispatcher>();
     private readonly IBookLookupService _lookup = Substitute.For<IBookLookupService>();
+    private readonly IBookCoverStorage _storage = Substitute.For<IBookCoverStorage>();
+    private readonly CoverPhotoUploader _uploader;
 
     public BookAddViewModelTests()
     {
+        _uploader = new CoverPhotoUploader(_storage, NullLogger<CoverPhotoUploader>.Instance);
+        _storage.IsEnabled.Returns(true);
         _dispatcher.Query(Arg.Any<GetSeriesMatchCandidates>(), Arg.Any<CancellationToken>())
             .Returns(new SeriesMatchCandidates(null, [], 0));
         _dispatcher.Query(Arg.Any<FindEditionByIsbn>(), Arg.Any<CancellationToken>())
@@ -42,7 +47,7 @@ public class BookAddViewModelTests
     }
 
     private BookAddViewModel CreateVm() =>
-        new(_lookup, new SeriesMatchService(_dispatcher), _dispatcher, NullLogger<BookAddViewModel>.Instance);
+        new(_lookup, new SeriesMatchService(_dispatcher), _dispatcher, _uploader, NullLogger<BookAddViewModel>.Instance);
 
     private static ExistingBookMatch HobbitMatch() =>
         new(BookId: 4, EditionId: 5, Title: "The Hobbit", Authors: "Tolkien", CopyCount: 1,
@@ -255,6 +260,70 @@ public class BookAddViewModelTests
         Assert.Single(vm.CollectionWorks);
         Assert.Empty(vm.CollectionWorks[0].Authors);
         Assert.Empty(vm.CollectionWorks[0].GenreIds);
+    }
+
+    private const int NewEditionId = 55;
+    private const string PhotoUrl = "https://test/book-covers/editions/55.jpg";
+
+    private BookAddViewModel CreateVmWithPhoto()
+    {
+        var edition = new EditionDetail(NewEditionId, null, BookFormat.Hardcover, "Hardcover", null, "", null, false, []);
+        _dispatcher.Query(Arg.Is<GetBookDetail>(q => q!.BookId == NewBookId), Arg.Any<CancellationToken>())
+            .Returns(new BookDetail(NewBookId, "Mort", BookCategory.Fiction, BookStatus.Unread, 0, null, null,
+                new DateTime(2026, 1, 1), Works: [], Editions: [edition], Tags: [], Series: null));
+        _storage.UploadAsync(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(PhotoUrl);
+
+        var vm = CreateVm();
+        vm.BookInput.Title = "Mort";
+        vm.WorkInput.Authors = ["Terry Pratchett"];
+        vm.EditionInput.CoverUrl = "https://covers.example.org/mort.jpg";
+        vm.CoverPhoto = new CoverPhoto([1, 2, 3], "image/jpeg");
+        return vm;
+    }
+
+    [Fact]
+    public async Task SaveAsync_WithHeldPhoto_UploadsToTheNewEdition_AndSetsEditionAndBookCover()
+    {
+        var vm = CreateVmWithPhoto();
+
+        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+
+        Assert.Equal(NewBookId, bookId);
+        Assert.Null(vm.CoverUploadError);
+        await _storage.Received(1).UploadAsync(
+            Arg.Is<byte[]>(b => b.SequenceEqual(new byte[] { 1, 2, 3 })), "image/jpeg", $"editions/{NewEditionId}", Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).Send(
+            Arg.Is<SetEditionCover>(c => c!.EditionId == NewEditionId && c.Url == PhotoUrl && c.IsUserSupplied), Arg.Any<CancellationToken>());
+        await _dispatcher.Received(1).Send(
+            Arg.Is<SetBookCover>(c => c!.BookId == NewBookId && c.Url == PhotoUrl), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SaveAsync_WhenThePhotoUploadFails_StillReturnsTheSavedBook_AndReportsIt()
+    {
+        var vm = CreateVmWithPhoto();
+        _storage.UploadAsync(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("boom"));
+
+        var bookId = await vm.SaveAsync(selectedGenreIds: []);
+
+        Assert.Equal(NewBookId, bookId);
+        Assert.Null(vm.Error);
+        Assert.Contains("Upload failed", vm.CoverUploadError);
+        await _dispatcher.DidNotReceive().Send(Arg.Any<SetEditionCover>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SaveAsync_WithoutAPhoto_DoesNotTouchCoverStorage()
+    {
+        var vm = CreateVm();
+        vm.BookInput.Title = "Mort";
+
+        await vm.SaveAsync(selectedGenreIds: []);
+
+        await _storage.DidNotReceive().UploadAsync(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _dispatcher.DidNotReceive().Send(Arg.Any<SetBookCover>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

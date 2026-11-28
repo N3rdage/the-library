@@ -206,6 +206,7 @@ public static class ProgramSetup
             client.DefaultRequestHeaders.UserAgent.ParseAdd("BookTracker/0.1 (+github.com/N3rdage/the-library)");
         })
         .ConfigurePrimaryHttpMessageHandler(CoverFetchPolicy.CreateHandler);
+        builder.Services.AddTransient<CoverPhotoUploader>();
         builder.Services.AddHostedService<CoverMirrorBackgroundService>();
 
         // /warmup touches the database once per process; this flag is the

@@ -5,7 +5,6 @@ using BookTracker.Application.Works;
 using BookTracker.Data.Models;
 using BookTracker.Web.Services;
 using BookTracker.Web.Services.Covers;
-using Microsoft.AspNetCore.Components.Forms;
 using BookTracker.Application.Formatting;
 
 namespace BookTracker.Web.ViewModels;
@@ -23,16 +22,10 @@ namespace BookTracker.Web.ViewModels;
 // The VM keeps only presentation state (the Current* inline-edit fields and
 // the loaded BookDetail snapshot).
 public class BookDetailViewModel(
-    IBookCoverStorage coverStorage,
-    ILogger<BookDetailViewModel> logger,
+    CoverPhotoUploader coverUploader,
     IDispatcher dispatcher,
     TimeProvider clock) : DispatchingViewModel
 {
-    /// <summary>Server-side cap on user-uploaded cover photos. 10 MB is generous
-    /// enough to accept a 12MP phone-camera JPEG without rejection while
-    /// bounding the worst-case payload through Blazor Server's SignalR pipe
-    /// and the resize step in CoverImageProcessor.</summary>
-    public const long MaxUploadBytes = 10 * 1024 * 1024;
     public bool NotFound { get; private set; }
     public BookDetail? Book { get; private set; }
 
@@ -207,73 +200,29 @@ public class BookDetailViewModel(
         return true;
     }
 
+
     /// <summary>
     /// Uploads a user-supplied photo as the cover for a specific Edition,
     /// replacing any existing cover. Used for rare / old editions where no
-    /// online cover is available. Returns a <see cref="UploadCoverResult"/>
+    /// online cover is available. Returns a <see cref="CoverUploadResult"/>
     /// with success/error shape so the page can render the right snackbar.
     /// </summary>
-    public async Task<UploadCoverResult> UploadEditionCoverAsync(int editionId, IBrowserFile file, CancellationToken ct)
+    public async Task<CoverUploadResult> UploadEditionCoverAsync(int editionId, CoverPhoto photo, CancellationToken ct)
     {
-        if (Book is null) return UploadCoverResult.Failure("Book not loaded.");
+        if (Book is null) return CoverUploadResult.Failure("Book not loaded.");
 
-        if (file.Size > MaxUploadBytes)
-        {
-            return UploadCoverResult.Failure($"File too large ({file.Size / 1024 / 1024} MB). Max is {MaxUploadBytes / 1024 / 1024} MB.");
-        }
+        var upload = await coverUploader.UploadAsync(photo.Bytes, photo.ContentType, editionId, ct);
+        if (!upload.Success) return upload;
 
-        if (!coverStorage.IsEnabled)
+        if (!await DispatchAsync(() => dispatcher.Send(new SetEditionCover(editionId, upload.NewUrl!, IsUserSupplied: true), ct)))
         {
-            return UploadCoverResult.Failure("Cover storage is not configured.");
-        }
-
-        byte[] bytes;
-        try
-        {
-            using var stream = file.OpenReadStream(MaxUploadBytes, ct);
-            using var ms = new MemoryStream();
-            await stream.CopyToAsync(ms, ct);
-            bytes = ms.ToArray();
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to read uploaded cover stream for Edition {EditionId}.", editionId);
-            return UploadCoverResult.Failure("Couldn't read the uploaded file.");
-        }
-
-        if (CoverImageProcessor.AllowedMediaType(file.ContentType) is null)
-        {
-            logger.LogWarning("Cover upload refused for Edition {EditionId}: content type {ContentType} is not an allowed raster image type.",
-                editionId, file.ContentType);
-            return UploadCoverResult.Failure("That file type isn't supported. Use a JPEG, PNG, GIF or WebP image.");
-        }
-
-        string newUrl;
-        try
-        {
-            newUrl = await coverStorage.UploadAsync(bytes, file.ContentType, $"editions/{editionId}", ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Cover upload failed for Edition {EditionId}.", editionId);
-            return UploadCoverResult.Failure("Upload failed. Try again or check the file.");
-        }
-
-        if (!await DispatchAsync(() => dispatcher.Send(new SetEditionCover(editionId, newUrl, IsUserSupplied: true), ct)))
-        {
-            return UploadCoverResult.Failure(Error!);
+            return CoverUploadResult.Failure(Error!);
         }
 
         // Refresh the in-memory snapshot so the page re-renders against the new URL.
         await InitializeAsync(Book.Id);
 
-        return UploadCoverResult.Ok(newUrl);
-    }
-
-    public record UploadCoverResult(bool Success, string? ErrorMessage, string? NewUrl)
-    {
-        public static UploadCoverResult Ok(string url) => new(true, null, url);
-        public static UploadCoverResult Failure(string error) => new(false, error, null);
+        return upload;
     }
 
     public async Task RemoveTagAsync(int tagId)

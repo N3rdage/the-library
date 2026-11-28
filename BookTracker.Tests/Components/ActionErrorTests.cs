@@ -32,7 +32,8 @@ public class ActionErrorTests : ComponentTestBase
         Services.AddSingleton(_dispatcher);
         Services.AddSingleton(TimeProvider.System);
         Services.AddSingleton(Substitute.For<IBookCoverStorage>());
-        Services.AddSingleton<ILogger<BookDetailViewModel>>(NullLogger<BookDetailViewModel>.Instance);
+        Services.AddSingleton<ILogger<CoverPhotoUploader>>(NullLogger<CoverPhotoUploader>.Instance);
+        Services.AddTransient<CoverPhotoUploader>();
         Services.AddTransient<CopyFormDialogViewModel>();
         Services.AddTransient<LendDialogViewModel>();
         Services.AddTransient<BookDetailViewModel>();
