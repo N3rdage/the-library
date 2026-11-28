@@ -290,7 +290,7 @@ The header counts only the copies you still have, and adds "N removed" when some
 - **Removed on**: the date, which starts as today.
 - **Note (optional)**: up to 500 characters, with a counter.
 
-A copy that is on loan has to be returned first, and the dialog says so if you try. A removed copy stays on the book's page, struck through, with its reason, date and note, and it cannot be lent. **Restore** on it brings it back into the collection.
+A copy that is on loan has to be returned first: it shows **Returned** instead of **Remove** until then. A removed copy stays on the book's page, struck through, with its reason, date and note, and it cannot be lent. **Restore** on it brings it back into the collection.
 
 When a book has no owned copy left, it leaves the Library, the Home counts, Series gaps and Duplicates. It shows in the Library when you switch on **Removed**. A book with one owned copy and one removed copy stays in the library as normal.
 
