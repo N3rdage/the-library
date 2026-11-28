@@ -48,7 +48,11 @@
     <DialogActions>
         @if (VM.CanRestore)
         {
-            <MudButton OnClick="RestoreAsync" Disabled="@saving" Color="Color.Primary">Restore</MudButton>
+            <MudButton OnClick="RestoreAsync" Disabled="@(saving || VM.IsDirty)" Color="Color.Primary">Restore</MudButton>
+            @if (VM.IsDirty)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Save your changes before restoring.</MudText>
+            }
         }
         @if (VM.CanRemove)
         {

@@ -85,6 +85,28 @@ public class ActionErrorTests : ComponentTestBase
     }
 
     [Fact]
+    public async Task Dialog_unsavedEditsToARemovedCopy_disableRestore_andSayToSaveFirst()
+    {
+        _dispatcher.Query(Arg.Any<GetCopyForEdit>(), Arg.Any<CancellationToken>())
+            .Returns(new CopyForEdit(10, 5, BookCondition.Good, null, null,
+                CopyDisposition.Donated, new DateOnly(2026, 11, 3)));
+        Render<MudPopoverProvider>();
+        var dialogs = Render<MudDialogProvider>();
+        var dialogService = Services.GetRequiredService<IDialogService>();
+        var parameters = new DialogParameters<CopyFormDialog> { { x => x.CopyId, (int?)10 }, { x => x.IsNew, false } };
+
+        await dialogs.InvokeAsync(() => dialogService.ShowAsync<CopyFormDialog>("Edit copy", parameters));
+        dialogs.WaitForAssertion(() => Assert.Contains("Donated · 3 Nov 2026", dialogs.Markup));
+        Assert.DoesNotContain("Save your changes before restoring.", dialogs.Markup);
+        Assert.False(dialogs.FindAll("button").Single(b => b.TextContent.Trim() == "Restore").HasAttribute("disabled"));
+
+        await dialogs.InvokeAsync(() => dialogs.Find("textarea").Change("signed"));
+
+        dialogs.WaitForAssertion(() => Assert.Contains("Save your changes before restoring.", dialogs.Markup));
+        Assert.True(dialogs.FindAll("button").Single(b => b.TextContent.Trim() == "Restore").HasAttribute("disabled"));
+    }
+
+    [Fact]
     public async Task Dialog_removeFromCollection_closesAskingThePageToRemove()
     {
         _dispatcher.Query(Arg.Any<GetCopyForEdit>(), Arg.Any<CancellationToken>())

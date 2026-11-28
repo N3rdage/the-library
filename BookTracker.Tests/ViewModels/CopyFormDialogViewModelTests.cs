@@ -150,6 +150,16 @@ public class CopyFormDialogViewModelTests
     }
 
     [Fact]
+    public async Task RestoreAsync_withUnsavedEdits_sendsNothing()
+    {
+        var vm = await EditVmAsync(CopyDisposition.Donated);
+        vm.Notes = "signed";
+
+        Assert.False(await vm.RestoreAsync());
+        await _dispatcher.DidNotReceive().Send(Arg.Any<RestoreCopyToCollection>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task InitializeForEditAsync_LoadsCopyFields()
     {
         GivenCopy(new CopyForEdit(CopyId, EditionId, BookCondition.VeryGood, new DateTime(2024, 3, 15), "From a charity shop"));

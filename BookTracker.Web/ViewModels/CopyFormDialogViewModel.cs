@@ -70,10 +70,11 @@ public class CopyFormDialogViewModel(IDispatcher dispatcher) : DispatchingViewMo
     }
 
     /// <summary>Brings a removed copy back into the collection. False, with
-    /// <see cref="DispatchingViewModel.Error"/> set, when it was refused.</summary>
+    /// <see cref="DispatchingViewModel.Error"/> set, when it was refused; false
+    /// without dispatching while there are unsaved edits.</summary>
     public async Task<bool> RestoreAsync()
     {
-        if (!CanRestore || CopyId is not int cid) return false;
+        if (!CanRestore || IsDirty || CopyId is not int cid) return false;
         return await DispatchAsync(() => dispatcher.Send(new RestoreCopyToCollection(cid)));
     }
 
