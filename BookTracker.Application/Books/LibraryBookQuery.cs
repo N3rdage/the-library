@@ -16,6 +16,8 @@ internal static class LibraryBookQuery
     {
         IQueryable<Book> query = db.Books.AsNoTracking();
 
+        query = f.ShowRemoved ? query.Removed() : query.InCollection();
+
         if (!string.IsNullOrWhiteSpace(f.SearchTerm))
         {
             var term = f.SearchTerm.Trim();

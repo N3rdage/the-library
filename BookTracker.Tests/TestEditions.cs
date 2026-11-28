@@ -56,4 +56,12 @@ public static class TestEditions
 
         return copy;
     }
+
+    /// <summary>A copy that has left the collection.</summary>
+    public static Copy RemovedCopy(CopyDisposition reason = CopyDisposition.Donated, DateOnly? removedOn = null)
+    {
+        var copy = Copy();
+        copy.RemoveFromCollection(reason, removedOn ?? new DateOnly(2026, 3, 3), null);
+        return copy;
+    }
 }

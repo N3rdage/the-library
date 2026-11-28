@@ -1,3 +1,4 @@
+using BookTracker.Application.Books;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -202,6 +203,7 @@ public sealed class GetDuplicateReportHandler(IDbContextFactory<BookTrackerDbCon
         // explodes (the warning logged in App Insights trace 3.a).
         var books = await db.Books
             .AsNoTracking()
+            .InCollection()
             .AsSplitQuery()
             .Select(b => new
             {
@@ -281,8 +283,10 @@ public sealed class GetDuplicateReportHandler(IDbContextFactory<BookTrackerDbCon
         Dictionary<(int Lower, int Higher), DismissalInfo>? ignored,
         CancellationToken ct)
     {
+        var inCollectionBooks = db.Books.InCollection();
         var editions = await db.Editions
             .AsNoTracking()
+            .Where(e => inCollectionBooks.Any(b => b.Id == e.BookId))
             .Select(e => new EditionProjection(
                 e.Id,
                 e.Isbn,

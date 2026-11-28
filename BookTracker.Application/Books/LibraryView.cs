@@ -16,6 +16,8 @@ public enum LibraryGroupBy { None, Author, Genre }
 // filter state) down to the read queries. For GenreId/SeriesId: 0 = "all";
 // -1 = the "uncategorised" bucket (no genre / no series); > 0 = a specific id.
 // TagId has no uncategorised bucket, so it's 0 = "all" / > 0 = a specific id.
+// ShowRemoved swaps the view from the collection to only the books every copy of
+// which has left it (see CollectionMembership).
 public record LibraryFilter(
     string? SearchTerm,
     string? Category,
@@ -23,7 +25,8 @@ public record LibraryFilter(
     int TagId,
     int SeriesId,
     string? Author,
-    BookStatus? Status)
+    BookStatus? Status,
+    bool ShowRemoved = false)
 {
     // The single rule for "a specific series is selected", which means a flat,
     // reading-order view: GetLibraryBooks sorts by that series' order, and the
@@ -44,10 +47,12 @@ public record GroupRow(string Key, string Label, int Count)
 
 // LentTo is the borrower of an open loan on any copy of the book (the lowest
 // loan id when several copies are out), or null when every copy is on the shelf.
+// Removed is set only for a removed book: the reason and date of its most recent
+// removal, e.g. "Donated 3 Mar 2026".
 public record BookListItem(
     int Id, string Title, string? Subtitle, string Author, string? CoverUrl,
     BookStatus Status, int Rating, int WorkCount, List<string> Genres, List<string> Tags,
-    string? LentTo = null);
+    string? LentTo = null, string? Removed = null);
 
 public record GenreOption(int Id, string Name, int? ParentGenreId);
 public record TagOption(int Id, string Name);

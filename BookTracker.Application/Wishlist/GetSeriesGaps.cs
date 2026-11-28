@@ -1,3 +1,4 @@
+using BookTracker.Application.Books;
 using BookTracker.Application.Formatting;
 using BookTracker.Data;
 using BookTracker.Data.Models;
@@ -43,6 +44,10 @@ public sealed class GetSeriesGapsHandler(IDbContextFactory<BookTrackerDbContext>
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
 
+        // A book whose every copy has left the collection does not own its
+        // series slot (CollectionMembership).
+        var inCollection = CollectionMembership.IsInCollection;
+
         // Structured series with a known expected count where we're missing books.
         // Series membership is a per-Book concept — the Book is installment N.
         // The Books navigation is filtered by the global soft-delete query
@@ -58,7 +63,7 @@ public sealed class GetSeriesGapsHandler(IDbContextFactory<BookTrackerDbContext>
                 s.Name,
                 s.Author,
                 ExpectedCount = s.ExpectedCount!.Value,
-                Books = s.Books
+                Books = s.Books.AsQueryable().Where(inCollection)
                     .Select(b => new { b.Id, b.Title, b.SeriesOrder, b.SeriesOrderDisplay })
                     .ToList(),
             })
@@ -110,14 +115,14 @@ public sealed class GetSeriesGapsHandler(IDbContextFactory<BookTrackerDbContext>
         // all-null SeriesOrder still surface (HighestOwnedOrder=0).
         var openSeries = await db.Series
             .AsNoTracking()
-            .Where(s => s.Type == SeriesType.Series && s.ExpectedCount == null && s.Books.Any())
+            .Where(s => s.Type == SeriesType.Series && s.ExpectedCount == null && s.Books.AsQueryable().Any(inCollection))
             .Select(s => new
             {
                 s.Id,
                 s.Name,
                 s.Author,
-                BookCount = s.Books.Count,
-                Orders = s.Books
+                BookCount = s.Books.AsQueryable().Count(inCollection),
+                Orders = s.Books.AsQueryable().Where(inCollection)
                     .Where(b => b.SeriesOrder != null)
                     .Select(b => b.SeriesOrder!.Value)
                     .ToList(),

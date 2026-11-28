@@ -1,3 +1,4 @@
+using System.Globalization;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -74,6 +75,17 @@ public sealed class GetLibraryBooksHandler(IDbContextFactory<BookTrackerDbContex
                     .OrderBy(l => l.Id)
                     .Select(l => l.BorrowerName)
                     .FirstOrDefault(),
+                // The most recent removal among the copies; only the removed
+                // view renders it, so the in-collection views skip the subquery.
+                LastRemoval = f.ShowRemoved
+                    ? b.Editions
+                        .SelectMany(e => e.Copies)
+                        .Where(c => c.Disposition != CopyDisposition.Owned)
+                        .OrderByDescending(c => c.RemovedOn)
+                        .ThenByDescending(c => c.Id)
+                        .Select(c => new { c.Disposition, c.RemovedOn })
+                        .FirstOrDefault()
+                    : null,
             })
             .ToListAsync(ct);
 
@@ -93,7 +105,12 @@ public sealed class GetLibraryBooksHandler(IDbContextFactory<BookTrackerDbContex
             b.WorksCount,
             b.Works.SelectMany(w => w.Genres).Distinct().ToList(),
             b.Tags,
-            b.LentTo)).ToList();
+            b.LentTo,
+            b.LastRemoval is { } r
+                ? r.RemovedOn is { } on
+                    ? $"{r.Disposition} {on.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}"
+                    : r.Disposition.ToString()
+                : null)).ToList();
 
         return new LibraryBooksResult(items, totalCount, totalPages, page);
     }

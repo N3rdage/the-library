@@ -227,6 +227,27 @@ public class GetDuplicateReportHandlerTests
         Assert.Empty(report.Editions);
     }
 
+    [Fact]
+    public async Task FullyRemovedBook_isNotReportedAsDuplicate_butOneWithAnOwnedCopyIs()
+    {
+        var author = Author.Create("J.R.R. Tolkien");
+        var bare = TestBooks.Book("The Hobbit", works: [TestWorks.Work("The Hobbit", author)]);
+        var gone = TestBooks.Book("The Hobbit", works: [TestWorks.Work("The Hobbit", author)],
+            editions: [TestEditions.Edition(copies: [TestEditions.RemovedCopy()])]);
+        var mixed = TestBooks.Book("The Hobbit", works: [TestWorks.Work("The Hobbit", author)],
+            editions: [TestEditions.Edition(copies: [TestEditions.RemovedCopy(), TestEditions.Copy()])]);
+        using (var db = _factory.CreateDbContext())
+        {
+            db.Books.AddRange(bare, gone, mixed);
+            await db.SaveChangesAsync();
+        }
+
+        var report = await DetectAsync();
+
+        var pair = Assert.Single(report.Books);
+        Assert.Equal(new[] { bare.Id, mixed.Id }, new[] { pair.Lower.Id, pair.Higher.Id }.Order());
+    }
+
     // ─── Helpers ──────────────────────────────────────────────────────
 
     private async Task SeedAuthorsAsync(params string[] names)

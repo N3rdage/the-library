@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using BookTracker.Data;
 using BookTracker.Data.Models;
 using Microsoft.EntityFrameworkCore;
@@ -65,15 +66,20 @@ public static class AuthorRollups
     // definition is kept identical to PerAuthorAsync's Books above so /authors and
     // the snapshot can't drift (TD-17 b: their BookCounts are documented to match).
     public static async Task<Dictionary<int, int>> PerAuthorBookCountAsync(
-        BookTrackerDbContext db, CancellationToken ct)
+        BookTrackerDbContext db, CancellationToken ct,
+        Expression<Func<Book, bool>>? bookFilter = null)
     {
+        // An optional restriction on which books count (Home passes the
+        // in-collection rule); null counts every live book.
+        var keep = bookFilter ?? (b => true);
         var rows = await db.Authors
             .AsNoTracking()
             .Select(a => new
             {
                 a.Id,
                 Books = a.WorkAuthors.Where(wa => wa.Role == AuthorRole.Author)
-                    .SelectMany(wa => wa.Work.Books).Select(b => b.Id).Distinct().Count(),
+                    .SelectMany(wa => wa.Work.Books.AsQueryable().Where(keep))
+                    .Select(b => b.Id).Distinct().Count(),
             })
             .ToListAsync(ct);
 

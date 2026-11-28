@@ -1,4 +1,6 @@
+using BookTracker.Application;
 using BookTracker.Application.Books;
+using NSubstitute;
 using BookTracker.Data.Models;
 using BookTracker.Web.ViewModels;
 
@@ -219,5 +221,43 @@ public class BookListViewModelQueryStateTests
         Assert.Equal(status, rehydrated.SelectedStatus);
         Assert.Equal(author, rehydrated.SelectedAuthor);
         Assert.Equal(page, rehydrated.CurrentPage);
+    }
+
+    [Fact]
+    public void Removed_isOmittedWhenOff_andRoundTripsWhenOn()
+    {
+        var vm = NewVm();
+        Assert.Null(vm.ToQueryParameters()["removed"]);
+
+        vm.ShowRemoved = true;
+        var q = vm.ToQueryParameters();
+        Assert.Equal(true, q["removed"]);
+
+        var rehydrated = NewVm();
+        rehydrated.ApplyQueryParameters(
+            q: null, group: null, category: null, genre: null, tag: null,
+            series: null, status: null, author: null, page: null, removed: (bool?)q["removed"]);
+        Assert.True(rehydrated.ShowRemoved);
+
+        // An absent param clears it, which is how the Clear button resets the view.
+        rehydrated.ApplyQueryParameters(null, null, null, null, null, null, null, null, null);
+        Assert.False(rehydrated.ShowRemoved);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LoadBooks_passesTheRemovedFilterToTheQuery(bool showRemoved)
+    {
+        var dispatcher = Substitute.For<IDispatcher>();
+        dispatcher.Query(Arg.Any<GetLibraryBooks>(), Arg.Any<CancellationToken>())
+            .Returns(new LibraryBooksResult([], 0, 1, 1));
+        var vm = new BookListViewModel(dispatcher) { ShowRemoved = showRemoved };
+
+        await vm.LoadBooksAsync();
+
+        await dispatcher.Received(1).Query(
+            Arg.Is<GetLibraryBooks>(g => g.Filter.ShowRemoved == showRemoved),
+            Arg.Any<CancellationToken>());
     }
 }

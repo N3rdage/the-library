@@ -42,6 +42,8 @@ public class BookListViewModel(IDispatcher dispatcher) : DispatchingViewModel
     // Null = all statuses. Backs the Library status filter, which doubles as
     // the re-triage worklist (filter to Unread, work down the list).
     public BookStatus? SelectedStatus { get; set; }
+    // False = the collection; true = only the books every copy of which has left it.
+    public bool ShowRemoved { get; set; }
 
     // True when the view renders as a flat book list rather than grouped rows.
     // A *specific* series filter (SelectedSeriesId > 0) always forces the flat,
@@ -107,7 +109,7 @@ public class BookListViewModel(IDispatcher dispatcher) : DispatchingViewModel
 
     // Snapshot the bound filter fields into the query contract.
     private LibraryFilter CurrentFilter() => new(
-        SearchTerm, SelectedCategory, SelectedGenreId, SelectedTagId, SelectedSeriesId, SelectedAuthor, SelectedStatus);
+        SearchTerm, SelectedCategory, SelectedGenreId, SelectedTagId, SelectedSeriesId, SelectedAuthor, SelectedStatus, ShowRemoved);
 
     // Filter state ⇄ query string. The URL is the source of truth for the
     // Library view: every filter, the grouping, and the flat-list page live in
@@ -126,6 +128,7 @@ public class BookListViewModel(IDispatcher dispatcher) : DispatchingViewModel
         ["status"] = SelectedStatus?.ToString(),
         ["author"] = string.IsNullOrWhiteSpace(SelectedAuthor) ? null : SelectedAuthor.Trim(),
         ["page"] = CurrentPage > 1 ? CurrentPage : (int?)null,
+        ["removed"] = ShowRemoved ? true : (bool?)null,
     };
 
     // Inverse of ToQueryParameters: hydrate the filter fields from raw query
@@ -133,8 +136,10 @@ public class BookListViewModel(IDispatcher dispatcher) : DispatchingViewModel
     // serializer omits, so round-tripping an omitted param is lossless.
     public void ApplyQueryParameters(
         string? q, string? group, string? category,
-        int? genre, int? tag, int? series, string? status, string? author, int? page)
+        int? genre, int? tag, int? series, string? status, string? author, int? page,
+        bool? removed = null)
     {
+        ShowRemoved = removed == true;
         SearchTerm = q ?? "";
         SelectedGroupBy = Enum.TryParse<LibraryGroupBy>(group, ignoreCase: true, out var g)
             ? g : LibraryGroupBy.Author;

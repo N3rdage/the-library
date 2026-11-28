@@ -49,4 +49,40 @@ public class GetLibraryBooksHandlerTests
         Assert.Null(books["Emma"].LentTo);
         Assert.Null(books["Free"].LentTo);
     }
+
+    private async Task<Dictionary<string, BookListItem>> RemovedByTitle()
+    {
+        var result = await new GetLibraryBooksHandler(_factory).HandleAsync(
+            new GetLibraryBooks(NoFilter with { ShowRemoved = true }, 1));
+        return result.Books.ToDictionary(b => b.Title);
+    }
+
+    [Fact]
+    public async Task Removal_followsTheOwnedCopyRule()
+    {
+        await SeedAsync("Mixed", TestEditions.RemovedCopy(), TestEditions.Copy());
+        await SeedAsync("Gone", TestEditions.RemovedCopy(CopyDisposition.Sold), TestEditions.RemovedCopy(CopyDisposition.Lost));
+        await SeedAsync("Kept", TestEditions.Copy());
+        await SeedAsync("Bare");
+
+        var inCollection = await LibraryByTitle();
+        var removed = await RemovedByTitle();
+
+        Assert.Equal(new[] { "Bare", "Kept", "Mixed" }, inCollection.Keys.Order());
+        Assert.Equal(new[] { "Gone" }, removed.Keys);
+        Assert.All(inCollection.Values, b => Assert.Null(b.Removed));
+    }
+
+    [Fact]
+    public async Task RemovedBook_showsTheMostRecentRemovalReasonAndDate()
+    {
+        await SeedAsync(
+            "Gone",
+            TestEditions.RemovedCopy(CopyDisposition.Donated, new DateOnly(2026, 3, 3)),
+            TestEditions.RemovedCopy(CopyDisposition.Sold, new DateOnly(2026, 5, 9)));
+
+        var removed = await RemovedByTitle();
+
+        Assert.Equal("Sold 9 May 2026", removed["Gone"].Removed);
+    }
 }
