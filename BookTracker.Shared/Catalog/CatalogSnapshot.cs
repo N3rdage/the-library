@@ -26,8 +26,9 @@ public record CatalogSnapshot(
     // caller constructing CatalogSnapshot positionally without the
     // new field.
     DateTime LatestUpdatedAt = default,
-    // Book IDs that have been soft-deleted since the `since` token.
-    // Populated only on delta calls (since != null); always empty on
+    // Book IDs the client should drop since the `since` token: soft-deleted,
+    // or removed from the collection (every copy donated, lost, damaged or
+    // sold). Populated only on delta calls (since != null); always empty on
     // a full snapshot. Bookshelf clients drop these rows from their
     // local cache when applying a delta. Default empty for back-compat
     // with positional CatalogSnapshot constructions.

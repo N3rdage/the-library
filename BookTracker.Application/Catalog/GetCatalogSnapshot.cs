@@ -1,4 +1,5 @@
 using BookTracker.Application.Authors;
+using BookTracker.Application.Books;
 using BookTracker.Application.Formatting;
 using BookTracker.Data;
 using BookTracker.Data.Models;
@@ -47,7 +48,7 @@ public sealed class GetCatalogSnapshotHandler(IDbContextFactory<BookTrackerDbCon
         // When `since` is non-null, the IX_Books_UpdatedAt index makes the
         // filter a B-tree seek — at delta-typical sizes (a handful of
         // changed Books) this returns sub-millisecond.
-        var booksQuery = db.Books.AsNoTracking();
+        var booksQuery = db.Books.AsNoTracking().InCollection();
         if (since is DateTime sinceUtc)
         {
             booksQuery = booksQuery.Where(b => b.UpdatedAt > sinceUtc);
@@ -205,7 +206,7 @@ public sealed class GetCatalogSnapshotHandler(IDbContextFactory<BookTrackerDbCon
             .Select(a => new { a.Id, a.Name, CanonicalId = a.CanonicalAuthorId ?? a.Id })
             .ToListAsync(ct);
 
-        var perAuthorBooks = await AuthorRollups.PerAuthorBookCountAsync(db, ct);
+        var perAuthorBooks = await AuthorRollups.PerAuthorBookCountAsync(db, ct, CollectionMembership.IsInCollection);
         var byCanonical = AuthorRollups.RollUpToCanonical(
             perAuthorBooks, authorRows.Select(a => (a.Id, a.CanonicalId)));
 
@@ -236,41 +237,54 @@ public sealed class GetCatalogSnapshotHandler(IDbContextFactory<BookTrackerDbCon
             .OrderBy(s => s.Name)
             .ToList();
 
-        // Tombstones — soft-deleted Books since the `since` token.
-        // Only emitted on delta calls; a full snapshot returns an
-        // empty list (the client is doing a fresh load and has no
-        // local rows to drop).
+        // Deletions — Book ids the client should drop since the `since`
+        // token: soft-deleted Books, and Books removed from the collection
+        // (every copy donated, lost, damaged or sold). Only emitted on delta
+        // calls; a full snapshot returns an empty list (the client is doing
+        // a fresh load and has no local rows to drop).
         //
         // IgnoreQueryFilters() opts out of the global DeletedAt == null
-        // filter so dead husks are visible to this query. We project
-        // both Id and DeletedAt — the Id goes on the wire, the
-        // DeletedAt feeds into LatestUpdatedAt so the next-token
-        // calculation advances past a pure-tombstone delta. The
-        // IX_Books_DeletedAt filtered index covers the predicate
-        // cheaply (most rows have DeletedAt = NULL and are skipped).
+        // filter so dead husks are visible to the tombstone query. We
+        // project a stamp alongside the Id (DeletedAt for tombstones,
+        // UpdatedAt for removed Books) — the Id goes on the wire, the stamp
+        // feeds into LatestUpdatedAt so the next-token calculation advances
+        // past a pure-deletion delta. The IX_Books_DeletedAt filtered index
+        // covers the tombstone predicate cheaply (most rows have
+        // DeletedAt = NULL and are skipped). Removed Books come through the
+        // default filter, so the two sets never overlap.
         var tombstones = since is DateTime sinceForTombstones
             ? await db.Books
                 .IgnoreQueryFilters()
                 .AsNoTracking()
                 .Where(b => b.DeletedAt != null && b.DeletedAt > sinceForTombstones)
-                .Select(b => new { b.Id, b.DeletedAt })
+                .Select(b => new { b.Id, Stamp = b.DeletedAt!.Value })
                 .ToListAsync(ct)
             : [];
 
-        var deletedIds = tombstones.Select(t => t.Id).ToList();
+        var removed = since is DateTime sinceForRemoved
+            ? await db.Books
+                .AsNoTracking()
+                .Removed()
+                .Where(b => b.UpdatedAt > sinceForRemoved)
+                .Select(b => new { b.Id, Stamp = b.UpdatedAt })
+                .ToListAsync(ct)
+            : [];
+
+        var deletions = tombstones.Concat(removed).ToList();
+        var deletedIds = deletions.Select(d => d.Id).Distinct().ToList();
 
         // LatestUpdatedAt = max stamp across the rows that contributed
-        // to this response — Book.UpdatedAt for live rows, Book.DeletedAt
-        // for tombstones. Falling back to `since` (or now) when the
+        // to this response — Book.UpdatedAt for live rows, the deletion
+        // stamp for dropped ones. Falling back to `since` (or now) when the
         // delta is fully empty is fine; the client just sends the same
         // token and gets another empty response next time. Falling back
-        // when the delta has tombstones would cause an infinite re-fetch
+        // when the delta has deletions would cause an infinite re-fetch
         // loop (client keeps sending the same `since`, server keeps
         // returning the same dead IDs).
         var syncedAt = DateTime.UtcNow;
         DateTime? maxBookStamp = booksRaw.Count > 0 ? booksRaw.Max(b => b.UpdatedAt) : null;
-        DateTime? maxTombstoneStamp = tombstones.Count > 0
-            ? tombstones.Max(t => t.DeletedAt!.Value)
+        DateTime? maxTombstoneStamp = deletions.Count > 0
+            ? deletions.Max(d => d.Stamp)
             : null;
         var latestUpdatedAt = (maxBookStamp, maxTombstoneStamp) switch
         {
